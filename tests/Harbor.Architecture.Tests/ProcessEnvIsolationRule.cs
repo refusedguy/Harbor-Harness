@@ -188,14 +188,14 @@ public class ProcessEnvIsolationRule
     ///     a log message, a doc comment or this file's own constant — is not a
     ///     call.
     /// </summary>
-    private const string EnvWriteCall = "Environment.SetEnvironmentVariable(";
+    internal const string EnvWriteCall = "Environment.SetEnvironmentVariable(";
 
     /// <summary>
     ///     The matching READ, anchored on the opening paren and matched the same
     ///     way. A write that overwrites a variable the class never read cannot be
     ///     undone, so this is what rule (3) looks for alongside the write.
     /// </summary>
-    private const string EnvReadCall = "Environment.GetEnvironmentVariable(";
+    internal const string EnvReadCall = "Environment.GetEnvironmentVariable(";
 
     /// <summary>
     ///     <see cref="EnvReadCall" /> and the OTHER way a test legitimately learns
@@ -208,10 +208,10 @@ public class ProcessEnvIsolationRule
     ///     names it as a writer <c>#846</c> fixed. The two are equivalent for this
     ///     purpose: both answer "what was the ambient value".
     /// </summary>
-    private const string FolderReadCall = "Environment.GetFolderPath(";
+    internal const string FolderReadCall = "Environment.GetFolderPath(";
 
     /// <summary>Either read that yields an ambient value worth restoring.</summary>
-    private static readonly Regex AnyAmbientRead = new(
+    internal static readonly Regex AnyAmbientRead = new(
         @"(?<![.\w])(?:" + Regex.Escape(EnvReadCall) + "|" + Regex.Escape(FolderReadCall) + ")",
         RegexOptions.Compiled);
 
@@ -252,7 +252,7 @@ public class ProcessEnvIsolationRule
     ///     modifier run or line-start, so a `class` token inside an expression
     ///     does not register as a declaration.
     /// </summary>
-    private static readonly Regex TypeDeclaration = new(
+    internal static readonly Regex TypeDeclaration = new(
         @"^\s*(?:\[[^\]]*\]\s*|public\s+|internal\s+|private\s+|protected\s+|sealed\s+|abstract\s+"
         + @"|static\s+|partial\s+|file\s+|unsafe\s+)*(?:class|record|struct)\s+(?<name>[A-Za-z_]\w*)",
         RegexOptions.Compiled);
@@ -1298,6 +1298,35 @@ public class ProcessEnvIsolationRule
             : value;
 
     /// <summary>
+    ///     Whether a line names a type keyword at all — the necessary condition
+    ///     for <see cref="TypeDeclaration" /> to match it.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The pattern is
+    ///         <c>^\s*(?:\[[^\]]*\]\s*|public\s+|internal\s+|…)*(?:class|record|struct)\s+(?&lt;name&gt;…)</c>,
+    ///         so a line it matches necessarily contains one of the three
+    ///         keywords. A line that contains none of them cannot match, and
+    ///         the check is a filter: it can only SKIP lines the pattern would
+    ///         have rejected anyway.
+    ///     </para>
+    ///     <para>
+    ///         The keyword is not required to be a word: <c>className</c>
+    ///         contains <c>class</c>, and the line still goes to the pattern.
+    ///         The check is deliberately loose, because a tight one would be a
+    ///         second parser and a second thing to get wrong.
+    ///     </para>
+    /// </remarks>
+    /// <param name="line">The line to test.</param>
+    internal static bool MentionsTypeKeyword(string line)
+    {
+        ReadOnlySpan<char> span = line.AsSpan();
+        return span.Contains("class".AsSpan(), StringComparison.Ordinal)
+            || span.Contains("record".AsSpan(), StringComparison.Ordinal)
+            || span.Contains("struct".AsSpan(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     ///     Whether the extent READS the environment at all. A class that never
     ///     reads has no value it could put back, so this is the necessary condition
     ///     for rule (3) and is what the positive control exercises.
@@ -1306,7 +1335,7 @@ public class ProcessEnvIsolationRule
     {
         for (int i = from; i < to && i < code.Length; i++)
         {
-            if (AnyAmbientRead.IsMatch(StripLiterals(SourceScan.StripComments(code[i]))))
+            if (IsAmbientRead(code[i]))
             {
                 return true;
             }
@@ -1314,6 +1343,56 @@ public class ProcessEnvIsolationRule
 
         return false;
     }
+
+    /// <summary>
+    ///     Whether a line names one of the two ambient reads — the necessary
+    ///     condition for <see cref="AnyAmbientRead" /> to match it.
+    /// </summary>
+    /// <remarks>
+    ///     The pattern is the two calls, alternated, with a lookbehind. A line
+    ///     it matches necessarily contains one of them, and the check is a
+    ///     filter: it can only skip lines the pattern would have rejected.
+    /// </remarks>
+    /// <param name="line">The line to test.</param>
+    internal static bool MentionsEnvRead(string line)
+    {
+        ReadOnlySpan<char> span = line.AsSpan();
+        return span.Contains(EnvReadCall.AsSpan(), StringComparison.Ordinal)
+            || span.Contains(FolderReadCall.AsSpan(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     Whether a line reads the environment, with the cheap necessary
+    ///     condition first.
+    /// </summary>
+    /// <remarks>
+    ///     The order is the whole point: the strip costs a buffer and a string
+    ///     PER LINE, and this is asked for every line of every test project.
+    ///     The parity proof is `ProcessEnvIsolationParityTests`.
+    /// </remarks>
+    /// <param name="line">The line to ask about.</param>
+    internal static bool IsAmbientRead(string line) =>
+        MentionsEnvRead(line)
+        && AnyAmbientRead.IsMatch(StripLiterals(SourceScan.StripComments(line)));
+
+    /// <summary>
+    ///     Whether a line declares a type, with the cheap necessary condition
+    ///     first.
+    /// </summary>
+    /// <remarks>
+    ///     The order is the whole point: the pattern is a regular expression,
+    ///     and this is asked for every line of every test project. The parity
+    ///     proof is `ProcessEnvIsolationParityTests`.
+    /// </remarks>
+    /// <param name="line">The line to ask about.</param>
+    /// <returns>
+    ///     The match, or <c>null</c> when the line does not even name a type
+    ///     keyword. The match is returned rather than a boolean so that the
+    ///     caller does not have to run the pattern a SECOND time to get the
+    ///     name.
+    /// </returns>
+    internal static Match? TypeDeclarationMatch(string line) =>
+        MentionsTypeKeyword(line) ? TypeDeclaration.Match(line) : null;
 
     /// <summary>
     ///     Every test class that writes the process environment.
@@ -1452,8 +1531,11 @@ public class ProcessEnvIsolationRule
         var declarations = new List<(int Index, int Column, string Name)>();
         for (int i = 0; i < code.Length; i++)
         {
-            Match match = TypeDeclaration.Match(code[i]);
-            if (match.Success)
+            // The cheap necessary condition comes first (the allocation census,
+            // #2136): the pattern is a regular expression, and this loop runs
+            // over EVERY line of EVERY test project — the whole tree, once.
+            Match? match = TypeDeclarationMatch(code[i]);
+            if (match is { Success: true })
             {
                 declarations.Add((i, LeadingWhitespace(code[i]), match.Groups["name"].Value));
             }
@@ -1616,8 +1698,24 @@ public class ProcessEnvIsolationRule
     ///     literals itself, so no caller can get the two steps out of order and
     ///     turn a log message into a violation.
     /// </summary>
-    private static bool IsEnvWrite(string rawLine) =>
-        StripLiterals(SourceScan.StripComments(rawLine)).Contains(EnvWriteCall, StringComparison.Ordinal);
+    /// <remarks>
+    ///     The cheap necessary condition comes FIRST (the allocation census,
+    ///     #2136). The strip below costs a buffer and a string PER LINE, and
+    ///     this is called for every line of every test project. The two strips
+    ///     only ever REMOVE text — a comment becomes a space, a literal's
+    ///     contents become spaces — so a line that does not mention the call
+    ///     cannot grow one, and the answer for such a line is false whatever
+    ///     the strip would have said.
+    /// </remarks>
+    internal static bool IsEnvWrite(string rawLine)
+    {
+        if (!rawLine.Contains(EnvWriteCall, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return StripLiterals(SourceScan.StripComments(rawLine)).Contains(EnvWriteCall, StringComparison.Ordinal);
+    }
 
     /// <summary>
     ///     Replaces every character INSIDE a string, verbatim, interpolated or char
@@ -1631,7 +1729,7 @@ public class ProcessEnvIsolationRule
     ///     with the surrounding text and would be missed; the same bounded limitation
     ///     <c>UiConfigDefaultsRule</c> states for its own lexer.
     /// </remarks>
-    private static string StripLiterals(string line)
+    internal static string StripLiterals(string line)
     {
         var code = line.ToCharArray();
 

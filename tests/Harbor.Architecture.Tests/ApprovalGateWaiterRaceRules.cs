@@ -801,6 +801,60 @@ public class ApprovalGateWaiterRaceRules
     /// <param name="code">The source of one file, with its comments blanked out.</param>
     internal static IReadOnlyList<WaiterRace> FindRacesInStrippedCode(string code)
     {
+        // THE CHEAP NECESSARY CONDITION, FIRST (the allocation census, #2136).
+        //
+        // Both waiter patterns — `ParkedWaiter` and `WaiterCall` — require the
+        // literal `WaitForDecisionAsync`. A file whose text does not contain it
+        // CANNOT produce a race, and everything below this line costs a copy of
+        // the whole file (`BlankOutLiterals` builds a `StringBuilder` of it and
+        // a string of the result), a method-header scan over it, and two regex
+        // passes per method body.
+        //
+        // The tree holds hundreds of source files and a handful of them mention
+        // the call, so the check skips the rest whole. The parity test below
+        // reports how many files it skipped and what the two scans cost, so
+        // the number is measured rather than asserted here.
+        //
+        // IT CANNOT NARROW THE RULE'S SCOPE, and the reason is structural: the
+        // two patterns can only match text that contains the literal, and
+        // nothing in this method REMOVES text from the string the check reads.
+        // The check reads the comment-stripped source; the blanking of the
+        // literals happens after it, and it only ever blanks characters out —
+        // so a file that produces a race necessarily contains the literal in
+        // the text the check reads.
+        //
+        // The parity that proves it is `ApprovalGateWaiterRaceParityTests`:
+        // it runs the UNSKIPPED scan (`FindRacesInStrippedCodeUnskipped`) over
+        // every file of the live tree and requires the two to agree, file by
+        // file.
+        if (!code.Contains(WaiterCallName, StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        return FindRacesInStrippedCodeUnskipped(code);
+    }
+
+    /// <summary>
+    ///     The call the rule is about, as a literal. The two waiter patterns both
+    ///     require it, which is what makes the pre-check in
+    ///     <see cref="FindRacesInStrippedCode" /> sound.
+    /// </summary>
+    private const string WaiterCallName = "WaitForDecisionAsync";
+
+    /// <summary>
+    ///     The scan, WITHOUT the pre-check — the oracle the pre-check is proved
+    ///     against.
+    /// </summary>
+    /// <remarks>
+    ///     It is the body the method above used to be, kept as the reference the
+    ///     parity test compares against: a pre-check that is wrong shows up as a
+    ///     file whose race list differs, not as a rule that quietly stopped
+    ///     looking.
+    /// </remarks>
+    /// <param name="code">The source of one file, with its comments blanked out.</param>
+    internal static IReadOnlyList<WaiterRace> FindRacesInStrippedCodeUnskipped(string code)
+    {
         var races = new List<WaiterRace>();
 
         // A string literal could name the enum member; it is blanked so only
