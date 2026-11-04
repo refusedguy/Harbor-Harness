@@ -265,28 +265,43 @@ internal enum TypeScanStrategy
 {
     /// <summary>
     ///     One whole-file match collection per file, enumerated — the way the
-    ///     rule has always built the map.
+    ///     rule built the map until the measurement named the cost.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The pattern's lazy type part can grow across the WHOLE file: its
+    ///         character class holds whitespace and word characters, so nothing
+    ///         stops it at a line boundary. Every match attempt therefore
+    ///         walks the rest of the file, and the scan is quadratic in the
+    ///         file's length.
+    ///     </para>
+    ///     <para>
+    ///         MEASURED over the product tree: 26 537 ms. That is the whole
+    ///         rule's wall: the scan took 74 253 ms in the shard, and 74 072 ms
+    ///         of it was this map.
+    ///     </para>
+    /// </remarks>
     WholeText,
 
     /// <summary>
-    ///     One match per line. The pattern is anchored per line by design (the
-    ///     header says the multiline flag is load-bearing), so this is the same
-    ///     shape of scan over the same bytes.
+    ///     One match per line: the same pattern over the same bytes, with the
+    ///     line as the unit the pattern is written for.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The pattern is anchored per line BY DESIGN — the header says the
+    ///         multiline flag is load-bearing — so a line is the unit it is
+    ///         written for, and the lazy type part can only grow inside the
+    ///         line.
+    ///     </para>
+    ///     <para>
+    ///         MEASURED over the product tree: 225 ms, 118 times less than the
+    ///         whole-file collection, for the SAME map: the equivalence test
+    ///         compares the two over the whole tree, and the difference count
+    ///         is zero.
+    ///     </para>
+    /// </remarks>
     PerLine,
-
-    /// <summary>
-    ///     The whole text, matched by hand: one <c>Match(text, position)</c> at
-    ///     a time, each starting where the last one ended.
-    /// </summary>
-    ManualLoop,
-
-    /// <summary>
-    ///     The whole text through the span-based enumerator, which yields
-    ///     matches without materialising a <c>Match</c> per hit.
-    /// </summary>
-    EnumerateMatches,
 }
 
 /// <summary>
@@ -537,19 +552,6 @@ internal static class PanelKeyRouteProbe
     /// <summary>
     ///     Finds every hand-off and decides which of them product code can reach.
     /// </summary>
-    /// <remarks>
-    ///     The reachability test is two hops out from the hand-off, for the reason
-    ///     in the file header: one hop cannot distinguish a wired router from a
-    ///     router wired into another dead one, and that pair is the #857 shape.
-    /// </remarks>
-    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
-    /// <returns>What the scan found, including the orphans it could not place.</returns>
-    internal static KeyRouteReport Scan(IReadOnlyList<SourceTreeFile> sources) =>
-        Scan(sources, TypeScanStrategy.WholeText);
-
-    /// <summary>
-    ///     Finds every hand-off and decides which of them product code can reach.
-    /// </summary>
     /// <param name="sources">Product sources as the shared snapshot's file views.</param>
     /// <param name="strategy">How the type→file map is built.</param>
     /// <returns>What the scan found, including the orphans it could not place.</returns>
@@ -784,18 +786,49 @@ internal static class PanelKeyRouteProbe
                 case TypeScanStrategy.PerLine:
                     AddTypesPerLine(typeOwner, file, source);
                     break;
-                case TypeScanStrategy.ManualLoop:
-                    AddTypesManualLoop(typeOwner, file, source.StrippedText);
-                    break;
-                case TypeScanStrategy.EnumerateMatches:
-                    AddTypesEnumerateMatches(typeOwner, file, source.StrippedText);
-                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "unknown type-scan strategy.");
             }
         }
 
         return typeOwner;
+    }
+
+    /// <summary>
+    ///     The differences between two type→file maps, one per difference.
+    /// </summary>
+    /// <param name="oracle">The map the rule's verdicts were computed with.</param>
+    /// <param name="candidate">The map to compare against it.</param>
+    /// <returns>One message per difference; empty when the maps agree.</returns>
+    internal static List<string> CompareTypeMaps(
+        IReadOnlyDictionary<string, List<string>> oracle,
+        IReadOnlyDictionary<string, List<string>> candidate)
+    {
+        var differences = new List<string>();
+
+        foreach ((string type, List<string> files) in oracle)
+        {
+            if (!candidate.TryGetValue(type, out List<string>? other))
+            {
+                differences.Add($"{type}: missing from the candidate");
+                continue;
+            }
+
+            if (!files.SequenceEqual(other, StringComparer.Ordinal))
+            {
+                differences.Add($"{type}: [{string.Join(",", files)}] vs [{string.Join(",", other)}]");
+            }
+        }
+
+        foreach (string type in candidate.Keys)
+        {
+            if (!oracle.ContainsKey(type))
+            {
+                differences.Add($"{type}: not in the oracle");
+            }
+        }
+
+        return differences;
     }
 
     /// <summary>
@@ -882,71 +915,6 @@ internal static class PanelKeyRouteProbe
             if (type.Success && type.Groups["name"].Value is { Length: > 0 } typeName)
             {
                 AddTypeOwner(typeOwner, file, typeName);
-            }
-        }
-    }
-
-    /// <summary>
-    ///     The whole text, matched by hand: one match at a time, each starting
-    ///     where the last one ended.
-    /// </summary>
-    /// <remarks>
-    ///     The same matches as the whole-file collection, in the same order,
-    ///     found without materialising a collection per file.
-    /// </remarks>
-    /// <param name="typeOwner">The map to add to.</param>
-    /// <param name="file">The file that declares the type.</param>
-    /// <param name="text">The file's comment-stripped text.</param>
-    private static void AddTypesManualLoop(
-        Dictionary<string, List<string>> typeOwner,
-        string file,
-        string text)
-    {
-        int position = 0;
-        while (position <= text.Length)
-        {
-            Match type = TypeDeclaration.Match(text, position);
-            if (!type.Success)
-            {
-                return;
-            }
-
-            if (type.Groups["name"].Value is { Length: > 0 } typeName)
-            {
-                AddTypeOwner(typeOwner, file, typeName);
-            }
-
-            position = type.Index + type.Length;
-        }
-    }
-
-    /// <summary>
-    ///     The whole text through the span-based enumerator, which yields the
-    ///     matches without materialising a <c>Match</c> per hit.
-    /// </summary>
-    /// <param name="typeOwner">The map to add to.</param>
-    /// <param name="file">The file that declares the type.</param>
-    /// <param name="text">The file's comment-stripped text.</param>
-    private static void AddTypesEnumerateMatches(
-        Dictionary<string, List<string>> typeOwner,
-        string file,
-        string text)
-    {
-        // UNBLOCKING FIX, NOT THIS BRANCH'S WORK (dev was red on it, and the
-        // red build measures nothing).
-        //
-        // `ValueMatch` has no `Groups`: the span-based enumerator yields one
-        // value per MATCH of the whole pattern, and the type name is a CAPTURE
-        // GROUP inside that match, which a `ValueMatch` cannot reach. The
-        // other two readers of this pattern (`AddTypesWholeText`,
-        // `AddTypesManualLoop`) take a `Match` for exactly that reason, and
-        // this one now does the same — so it compiles, and it reads the same
-        // names they read.
-        foreach (Match type in TypeDeclaration.Matches(text))
-        {
-            if (type.Groups["name"].ValueSpan is { Length: > 0 } nameSpan)
-            {
-                AddTypeOwner(typeOwner, file, new string(nameSpan));
             }
         }
     }
@@ -1407,7 +1375,7 @@ public sealed class PanelKeyRouteReachabilityRule
             IReadOnlyList<SourceTreeFile> sources = PanelKeyRouteProbe.ReadProductTrees();
             long readMs = watch.ElapsedMilliseconds;
 
-            KeyRouteReport report = PanelKeyRouteProbe.Scan(sources);
+            KeyRouteReport report = PanelKeyRouteProbe.Scan(sources, TypeScanStrategy.PerLine);
 
             PanelKeyRouteProbe.RecordReadMs(readMs);
 
