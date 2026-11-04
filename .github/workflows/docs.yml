@@ -781,6 +781,18 @@ jobs:
       - name: Check that the producer rows name the tree's real call sites
         run: tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
 
+      # #2112. The compile-cost instrument: what every project of the tree
+      # costs the compiler, and what a change in one of them costs everybody
+      # who depends on it. Its failure path is the point, and it is tested
+      # here for the same reason as the others: an instrument that cannot say
+      # "this project grew past its budget" cannot keep anybody from splitting
+      # a project on a guess. The load-bearing fixture is the INFLATED
+      # PROJECT — the self-test writes a build log in which one project costs
+      # sixty seconds more than it did, and the gate MUST go red on it, and
+      # MUST stay green on the same log without the inflation.
+      - name: Compile-cost gate fails on an inflated project
+        run: tools/bin/harbor-gates-linux-x64 measure-compile-cost --self-test
+
   links:
     name: internal links
     runs-on: ubuntu-latest
