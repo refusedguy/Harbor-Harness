@@ -66,15 +66,18 @@ public class Osc8HyperlinkTests
         string plain = Frame(linksEnabled: false, attachLinks: false);
         string linked = Frame(linksEnabled: true, attachLinks: true);
 
-        // The link bytes are present and bracket the visible text.
+        // Each character is wrapped in its own open/close pair, so the link
+        // bytes are present and the visible text is recovered by stripping
+        // them. That recovered text is "hello".
         await Assert.That(linked.Contains(Open)).IsTrue();
         await Assert.That(linked.Contains(Close)).IsTrue();
-        await Assert.That(linked.Contains("hello")).IsTrue();
+        string visible = StripOsc8(linked);
+        await Assert.That(visible.Contains("hello")).IsTrue();
 
         // Strong geometry pin: remove ONLY the OSC 8 pairs and the stream is
         // byte-for-byte the frame that never had links. Cursor moves, SGR and
         // rune bytes are untouched, so a link cannot consume a column.
-        await Assert.That(StripOsc8(linked)).IsEqualTo(plain);
+        await Assert.That(visible).IsEqualTo(plain);
     }
 
     [Test]
