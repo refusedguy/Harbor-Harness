@@ -190,7 +190,9 @@ public sealed class ChildProcessPipeDrainRules
     private const string PortNeedle = "IGitQuery";
 
     /// <summary>The port implementation whose spawn must remain in scope after the widening.</summary>
-    private const string PortImplementationFile = "src/Harbor.Application/Git/ProcessGitQuery.cs";
+    // #1626: the Git probes left Harbor.Application for the first
+    // Harbor.Intelligence leaf; the port and its spawn moved with them.
+    private const string PortImplementationFile = "src/Harbor.Intelligence/Git/ProcessGitQuery.cs";
 
     /// <summary>
     ///     A file in the port's blast radius mentions the port. Deliberately a mention
