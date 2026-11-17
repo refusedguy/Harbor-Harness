@@ -36,7 +36,17 @@ internal sealed class McpJsonRpcTransport : IAsyncDisposable
             if (string.IsNullOrWhiteSpace(line)) continue;
             // Same DOM as JsonDocument.Parse, but through the source-generated
             // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
-            return JsonSerializer.Deserialize(line, McpJsonSerializerContext.Default.JsonElement);
+            JsonElement element = JsonSerializer.Deserialize(line, McpJsonSerializerContext.Default.JsonElement);
+            // #2228: a server-initiated notification (a frame with a method and
+            // no id, e.g. notifications/tools/list_changed) is not the answer to
+            // a request. Skip it so a list_changed frame can never be mistaken
+            // for the response the caller is waiting on.
+            if (element.ValueKind == JsonValueKind.Object
+                && element.TryGetProperty("method", out var methodEl)
+                && methodEl.ValueKind == JsonValueKind.String
+                && !element.TryGetProperty("id", out _))
+                continue;
+            return element;
         }
         return null;
     }

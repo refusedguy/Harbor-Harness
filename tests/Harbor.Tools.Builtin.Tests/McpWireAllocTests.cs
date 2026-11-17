@@ -184,4 +184,25 @@ public class McpWireAllocTests
         using var sent = JsonDocument.Parse(registry.LastArgsJson!);
         await Assert.That(sent.RootElement.GetProperty("uri").GetString()).IsEqualTo("file:///a\"b.md");
     }
+
+    /// <summary>
+    ///     #2228: a server-initiated tools/list_changed notification is not a
+    ///     response. The transport must skip it so the caller never receives a
+    ///     method-only frame in place of the answer to its request.
+    /// </summary>
+    [Test]
+    public async Task TransportRead_SkipsNotifications_ReturnsAddressedResponse()
+    {
+        const string frames =
+            "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/tools/list_changed\",\"params\":{\"generation\":1}}\n"
+            + "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[]}}\n";
+        using var input = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(frames));
+        using var output = new MemoryStream();
+        await using var transport = new McpJsonRpcTransport(input, output);
+
+        JsonElement? response = await transport.ReadAsync();
+        await Assert.That(response).IsNotNull();
+        await Assert.That(response!.Value.GetProperty("id").GetInt32()).IsEqualTo(7);
+        await Assert.That(response.Value.TryGetProperty("method", out _)).IsFalse();
+    }
 }

@@ -47,8 +47,13 @@ public class PluginHostJsonRpcTests
     private static McpPluginLoadHost CreateLoadHost() =>
         new(NullLoggerFactory.Instance, new NullEventBus());
 
-    private static McpStdioServer CreateServer(McpPluginLoadHost loadHost) =>
-        new(loadHost, NullLogger<McpStdioServer>.Instance);
+    private static McpStdioServer CreateServer(
+        McpPluginLoadHost loadHost,
+        int maxToolsPerPage = 50,
+        int maxPageBytes = 16 * 1024,
+        McpToolListChangeNotifier? notifier = null) =>
+        new(loadHost, NullLogger<McpStdioServer>.Instance,
+            maxToolsPerPage: maxToolsPerPage, maxPageBytes: maxPageBytes, notifier: notifier);
 
     private static async Task<JsonDocument> CallAsync(McpStdioServer server, string request)
     {
@@ -101,6 +106,150 @@ public class PluginHostJsonRpcTests
         await Assert.That(tool.GetProperty("description").GetString()).Contains("Echoes");
         await Assert.That(tool.GetProperty("inputSchema").GetProperty("properties").TryGetProperty("text", out _))
             .IsTrue();
+    }
+
+    /// <summary>
+    ///     #2228: a large catalog is walked with a bounded cursor chain. Every
+    ///     tool appears exactly once and the chain terminates instead of looping.
+    /// </summary>
+    [Test]
+    public async Task ToolsList_LargeCatalog_PaginatesAndTerminates()
+    {
+        var loadHost = CreateLoadHost();
+        const int total = 13;
+        for (int i = 0; i < total; i++)
+            loadHost.RegisterTool(new NamedTool($"tool_{i:00}", $"Description for tool {i}"));
+
+        var server = CreateServer(loadHost, maxToolsPerPage: 3);
+        var seen = new List<string>();
+        string? cursor = null;
+        int pages = 0;
+        do
+        {
+            string request = cursor is null
+                ? """{"jsonrpc":"2.0","id":2,"method":"tools/list"}"""
+                : "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{\"cursor\":\""
+                  + cursor + "\"}}";
+            using var doc = await CallAsync(server, request);
+            var result = doc.RootElement.GetProperty("result");
+            foreach (var tool in result.GetProperty("tools").EnumerateArray())
+                seen.Add(tool.GetProperty("name").GetString()!);
+            cursor = result.TryGetProperty("nextCursor", out var nc) ? nc.GetString() : null;
+            pages++;
+            await Assert.That(pages).IsLessThan(20)
+                .Because("the cursor chain must terminate rather than loop forever");
+        } while (cursor is not null);
+
+        await Assert.That(seen.Count).IsEqualTo(total);
+        await Assert.That(seen.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(total)
+            .Because("the same tool must not be served twice across pages");
+        await Assert.That(seen.Min(StringComparer.Ordinal)).IsEqualTo("tool_00");
+        await Assert.That(seen.Max(StringComparer.Ordinal)).IsEqualTo("tool_12");
+    }
+
+    /// <summary>#2228: the byte cap also bounds a page, independent of the count cap.</summary>
+    [Test]
+    public async Task ToolsList_ByteCap_BoundsPageBySize()
+    {
+        var loadHost = CreateLoadHost();
+        for (int i = 0; i < 5; i++)
+            loadHost.RegisterTool(new NamedTool($"t{i}", new string('x', 200)));
+
+        // Every entry exceeds the byte cap, so each page carries exactly one tool.
+        var server = CreateServer(loadHost, maxToolsPerPage: 50, maxPageBytes: 64);
+        using var first = await CallAsync(server, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
+        var result = first.RootElement.GetProperty("result");
+        await Assert.That(result.GetProperty("tools").GetArrayLength()).IsEqualTo(1);
+        await Assert.That(result.TryGetProperty("nextCursor", out _)).IsTrue();
+    }
+
+    [Test]
+    public async Task ToolsList_InvalidCursor_ReturnsInvalidParams()
+    {
+        var server = CreateServer(CreateLoadHost());
+        using var doc = await CallAsync(
+            server,
+            """{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"cursor":"not-a-number"}}""");
+        await Assert.That(doc.RootElement.GetProperty("error").GetProperty("code").GetInt32())
+            .IsEqualTo(-32602);
+    }
+
+    [Test]
+    public async Task ToolsList_AdvertisesOutputSchema()
+    {
+        var loadHost = CreateLoadHost();
+        loadHost.RegisterTool(new EchoTool());
+        var server = CreateServer(loadHost);
+        using var doc = await CallAsync(server, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
+
+        var tool = doc.RootElement.GetProperty("result").GetProperty("tools")[0];
+        var outputSchema = tool.GetProperty("outputSchema");
+        await Assert.That(outputSchema.GetProperty("type").GetString()).IsEqualTo("object");
+    }
+
+    [Test]
+    public async Task Initialize_AdvertisesListChangedCapability()
+    {
+        var server = CreateServer(CreateLoadHost());
+        using var doc = await CallAsync(
+            server,
+            """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"tools":{"listChanged":true}}}}""");
+
+        var caps = doc.RootElement.GetProperty("result").GetProperty("capabilities");
+        await Assert.That(caps.GetProperty("tools").GetProperty("listChanged").GetBoolean()).IsTrue();
+    }
+
+    [Test]
+    public async Task ToolsCall_StructuredContent_OmittedWithoutClientCapability()
+    {
+        var loadHost = CreateLoadHost();
+        loadHost.RegisterTool(new StructuredTool());
+        var server = CreateServer(loadHost);
+        using var doc = await CallAsync(
+            server,
+            """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"structured"}}""");
+
+        var result = doc.RootElement.GetProperty("result");
+        await Assert.That(result.TryGetProperty("structuredContent", out _)).IsFalse()
+            .Because("a client that never opted in keeps the old wire shape");
+    }
+
+    /// <summary>#2228: structuredContent reaches the client with JSON types intact.</summary>
+    [Test]
+    public async Task ToolsCall_StructuredContent_PreservedWithClientCapability()
+    {
+        var loadHost = CreateLoadHost();
+        loadHost.RegisterTool(new StructuredTool());
+        var server = CreateServer(loadHost);
+
+        using var init = await CallAsync(
+            server,
+            """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"tools":{"structuredContent":true}}}}""");
+        await Assert.That(init.RootElement.GetProperty("result").TryGetProperty("protocolVersion", out _)).IsTrue();
+
+        using var doc = await CallAsync(
+            server,
+            """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"structured"}}""");
+        var result = doc.RootElement.GetProperty("result");
+        await Assert.That(result.TryGetProperty("structuredContent", out var structured)).IsTrue();
+        await Assert.That(structured.GetProperty("count").GetInt32()).IsEqualTo(42);
+        await Assert.That(structured.GetProperty("ok").GetBoolean()).IsTrue();
+        await Assert.That(structured.GetProperty("nested").GetProperty("label").GetString()).IsEqualTo("typed");
+    }
+
+    [Test]
+    public async Task RegisteringAndUnregisteringTools_SignalsTheChangeNotifier()
+    {
+        var loadHost = CreateLoadHost();
+        var notifier = new McpToolListChangeNotifier();
+        _ = CreateServer(loadHost, notifier: notifier);
+
+        await Assert.That(notifier.CurrentGeneration).IsEqualTo(0);
+        loadHost.RegisterTool(new NamedTool("a", "A"));
+        await Assert.That(notifier.CurrentGeneration).IsEqualTo(1);
+        loadHost.UnregisterTool(ToolName.Create("a"));
+        await Assert.That(notifier.CurrentGeneration).IsEqualTo(2)
+            .Because("both add and remove must fold into the same debounced signal");
     }
 
     [Test]
@@ -281,6 +430,42 @@ public class PluginHostJsonRpcTests
 
         await Assert.That(meanMs < 100.0).IsTrue()
             .Because($"loopback dispatch must stay far below interactivity budgets (measured mean {meanMs:F3} ms)");
+    }
+
+    /// <summary>Simple named tool used to build a large catalog for pagination.</summary>
+    private sealed class NamedTool(string name, string description) : ITool
+    {
+        public ToolName Name => ToolName.Create(name);
+        public string DisplayName => name;
+        public string Description => description;
+        public JsonDocument ParameterSchema => JsonDocument.Parse("""{"type":"object"}""");
+        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+        public string? PromptSnippet => null;
+        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
+
+        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success(name));
+    }
+
+    /// <summary>Tool whose result carries typed structured metadata (#2228).</summary>
+    private sealed class StructuredTool : ITool
+    {
+        public ToolName Name => ToolName.Create("structured");
+        public string DisplayName => "Structured";
+        public string Description => "Returns structured content";
+        public JsonDocument ParameterSchema => JsonDocument.Parse("""{"type":"object"}""");
+        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+        public string? PromptSnippet => null;
+        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
+
+        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
+        {
+            using var doc = JsonDocument.Parse(
+                """{"count":42,"ok":true,"nested":{"label":"typed"}}""");
+            return Task.FromResult(ToolResult.Success("structured result", metadata: doc.RootElement.Clone()));
+        }
     }
 
     private sealed class EchoTool : ITool
