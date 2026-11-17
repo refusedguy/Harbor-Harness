@@ -910,11 +910,11 @@ public sealed class CellForgeEngineAtomicityRules
     }
 
     // =====================================================================
-    // 5. The #1620 batch-A verbatim leaf set, pinned where it landed.
+    // 5. The #1620 verbatim leaf set, pinned where it landed.
     // =====================================================================
 
     /// <summary>
-    ///     The #1620 batch-A verbatim leaf moves, as (engine path, chat path)
+    ///     The #1620 verbatim leaf moves, as (engine path, chat path)
     ///     relative to each project directory. Each of these files resolves
     ///     with BCL and the engine's own namespace family alone — that is the
     ///     property that made the move verbatim: bodies untouched, namespaces
@@ -933,6 +933,9 @@ public sealed class CellForgeEngineAtomicityRules
         ("Widgets/ToolOutputCollapse.cs", "Chat/Widgets/ToolOutputCollapse.cs"),
         ("Widgets/ThinkingSummary.cs", "Chat/Widgets/ThinkingSummary.cs"),
         ("Streaming/CommitTickPacer.cs", "Chat/Streaming/CommitTickPacer.cs"),
+        // #1620 partial slice: pure-BCL PromptHistory (zero usings, namespace
+        // unchanged) follows its Rendering peers into the engine verbatim.
+        ("Rendering/PromptHistory.cs", "Chat/Rendering/PromptHistory.cs"),
     ];
 
     /// <summary>
@@ -969,7 +972,7 @@ public sealed class CellForgeEngineAtomicityRules
 
         await Assert.That(drift).IsEmpty()
             .Because(
-                "#1620 moved nine pure-BCL chat-widget leaves into the engine verbatim (no adaptation: "
+                "#1620 moved pure-BCL chat leaves into the engine verbatim (no adaptation: "
                 + "bodies byte-equal, namespaces unchanged, zero Harbor imports in the bodies outside doc "
                 + "crefs). This file's import rule keeps grading them in their new home, and rows in "
                 + "VerbatimLeafMoves keep grading that the home and the origin do not disagree — which is "
