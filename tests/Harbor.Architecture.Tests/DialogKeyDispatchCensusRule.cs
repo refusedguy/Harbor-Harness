@@ -39,10 +39,11 @@
 //
 // THE FACT NOBODY HAS WRITTEN DOWN
 // --------------------------------
-// Of the seven `DialogKind` values, FIVE have no product caller. `ShowAlert`
-// (2 sites) and `ShowPrompt` (4), both in `OnboardingFlow`, are the only
-// `.Show*(` calls in `src/` + `apps/`. Confirm, Select, Radio, Multiline and
-// Approval are reachable from tests only.
+// Of the seven `DialogKind` values, FOUR have no product caller. `ShowAlert`
+// (2 sites) and `ShowPrompt` (4), both in `OnboardingFlow`, were the only
+// `.Show*(` calls in `src/` + `apps/` until the queued-prompt dock (#1482) made
+// `ShowSelect` product-reachable too. Confirm, Radio, Multiline and Approval
+// are still reachable from tests only.
 //
 // The sharp row is Alert: it is one of the two product-shown kinds AND it
 // appears in NEITHER key path. It is shown by product code, and every key it
@@ -470,13 +471,15 @@ public sealed class DialogKeyDispatchCensusRule
     ];
 
     /// <summary>
-    ///     The kinds product code can actually show. Both are in
-    ///     <c>Onboarding/OnboardingFlow.cs</c>. Alert is the row that matters: it
-    ///     is product-reachable and dispatched on neither key path.
+    ///     The kinds product code can actually show. Alert and Prompt are in
+    ///     <c>Onboarding/OnboardingFlow.cs</c>; Select joined them with the
+    ///     queued-prompt dock (#1482), which shows the waiting queue via
+    ///     <c>DialogOverlay.ShowSelect</c>. Alert is still the row that matters:
+    ///     it is product-reachable and dispatched on neither key path.
     /// </summary>
     private static readonly string[] ShownByProduct =
     [
-        "Alert", "Prompt",
+        "Alert", "Prompt", "Select",
     ];
 
     /// <summary>
@@ -606,11 +609,12 @@ public sealed class DialogKeyDispatchCensusRule
             + Describe(withHandler));
 
         await Assert.That(shown).IsEquivalentTo(ShownByProduct).Because(
-            "ONLY Alert and Prompt are reachable from product code (both in "
-            + "OnboardingFlow.cs). Confirm, Select, Radio, Multiline and Approval have no .Show*( "
-            + "call site in src/ or apps/ and are reachable from tests only. This is the fact "
-            + "that bounds the cost of adding an eighth kind, and the reason a split has to "
-            + "decide what happens to five kinds no product path reaches. Measured: "
+            "Alert and Prompt are reachable from product code in OnboardingFlow.cs; Select "
+            + "joined them with the queued-prompt dock (#1482), which drives ShowSelect from "
+            + "src/. Confirm, Radio, Multiline and Approval still have no .Show*( call site in "
+            + "src/ or apps/ and stay reachable from tests only. This is the fact that bounds "
+            + "the cost of adding an eighth kind, and the reason a split has to decide what "
+            + "happens to four kinds no product path reaches. Measured: "
             + Describe(shown));
     }
 
@@ -642,12 +646,12 @@ public sealed class DialogKeyDispatchCensusRule
     }
 
     /// <summary>
-    ///     The reachability claim is measured, not inferred from the enum: the two
-    ///     product-shown kinds have real call sites, and the five test-only ones do
-    ///     not.
+    ///     The reachability claim is measured, not inferred from the enum: the
+    ///     product-shown kinds have real call sites (Alert/Prompt in onboarding,
+    ///     Select in the #1482 queue dock), and the four test-only ones do not.
     /// </summary>
     [Test]
-    public async Task OnlyTwoDialogKindsHaveAProductShowCallSite()
+    public async Task OnboardingShowCallSitesStayPinned_AndConfirmHasNone()
     {
         IReadOnlyList<(string Path, string Text)> sources = ProductSources.Value;
 
@@ -683,10 +687,11 @@ public sealed class DialogKeyDispatchCensusRule
 
         await Assert.That(confirm).IsEmpty().Because(
             "ShowConfirm has NO product call site. The first Show* a product path gains for "
-            + "Confirm, Select, Radio, Multiline or Approval is the moment this census stops "
+            + "Confirm, Radio, Multiline or Approval is the moment this census stops "
             + "describing the live surface, and it should be an explicit edit to the baseline "
-            + "rather than a silent widening of what ships. A green run here is the early "
-            + "warning, not the proof that the rest are unreachable.");
+            + "rather than a silent widening of what ships. Select already crossed that line "
+            + "with #1482. A green run here is the early warning, not the proof that the rest "
+            + "are unreachable.");
     }
 
     // ── Non-vacuity controls ────────────────────────────────────────────────

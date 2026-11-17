@@ -34,8 +34,8 @@ public sealed class QueuedPromptDock
         _layer = new DialogOverlayLayer(_dialog);
     }
 
-    /// <summary>The composer-backed dock counter (null when the queue is empty).</summary>
-    public string? CounterText => _composer.QueuedCounterText();
+    /// <summary>The composer-backed dock counter (empty when the queue is empty).</summary>
+    public string CounterText => _composer.QueuedCounterText() ?? string.Empty;
 
     /// <summary>The stock dialog model this dock drives.</summary>
     public DialogOverlay Dialog => _dialog;

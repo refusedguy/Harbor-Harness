@@ -122,6 +122,6 @@ public class QueuedPromptDockTests
         await Assert.That(dock.IsOpen).IsTrue();
         await Assert.That(dock.DeleteNewest()).IsTrue();
         await Assert.That(dock.IsOpen).IsFalse();
-        await Assert.That(dock.CounterText).IsNull();
+        await Assert.That(dock.CounterText).IsEqualTo(string.Empty);
     }
 }
