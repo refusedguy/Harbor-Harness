@@ -116,7 +116,7 @@ public sealed class GenericLayoutPlan
             }
         }
 
-        for (int i = 1; i < order.Count; i++)
+        for (int i = 1; i < order.Length; i++)
         {
             string id = order[i];
             if (seated.Contains(id))
@@ -127,7 +127,7 @@ public sealed class GenericLayoutPlan
             result.Add(new GenericSplitPlan(
                 rootId,
                 SplitDir.Vertical,
-                1f - (i / (float)(order.Count + 1)),
+                1f - (i / (float)(order.Length + 1)),
                 id,
                 0));
             seated.Add(id);
