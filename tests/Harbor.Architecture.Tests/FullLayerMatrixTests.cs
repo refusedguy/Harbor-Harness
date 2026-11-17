@@ -357,7 +357,7 @@ public class FullLayerMatrixTests
         // consumer can bind a type from it and Roslyn never emits the
         // AssemblyRef — the edge was unenforceable permission. Removed; the leaf
         // Ui.Framework.* modules are the real dependencies.
-        ["Harbor.Terminal.Abstractions"] = new(Layer.Presentation, ["Harbor.Abstractions"]),
+        ["Harbor.Terminal.Abstractions"] = new(Layer.Presentation, ["Harbor.Abstractions", "Harbor.Extensions"]), // #1553 partial: Ensure.NotNull guard helper
         ["Harbor.Ui.Framework"] = new(Layer.Presentation, []),
         ["Harbor.Ui.Framework.State"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.Abstractions",

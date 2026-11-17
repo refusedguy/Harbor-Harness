@@ -27,6 +27,7 @@
                                         direct Ui.Framework reference of their own.
                                         Do NOT delete without adding those directs.)
       ✅ Harbor.Abstractions            (Domain — AgentEvent, KeyPress)
+      ✅ Harbor.Extensions              (Domain leaf — Ensure.NotNull guard helpers, #1553)
       ✅ CommunityToolkit.Mvvm          (ObservableObject for builtin view models)
       ✅ Microsoft.Extensions.Logging.Abstractions
       ❌ NO Harbor.Application / Harbor.Registries / Scripting
@@ -54,6 +55,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!-- #1553 partial: Ensure.NotNull guard helper (Domain leaf). -->
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
     <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
       <OutputItemType>Analyzer</OutputItemType>
     </ProjectReference>
