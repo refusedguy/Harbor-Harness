@@ -414,6 +414,58 @@ public sealed class LayoutTree
         _capsVer++;
     }
 
+    /// <summary>
+    /// Idempotent fixpoint normalization of the tree's split ratios. Stored
+    /// ratios are brought into the solver's canonical [0.05, 0.95] range
+    /// (non-finite values become 0.5), so a tree assembled from untrusted
+    /// specs has one representation before the first solve. The shape is
+    /// already canonical by construction — <see cref="Split"/>,
+    /// <see cref="AddStack"/> and <see cref="Remove"/> promote survivors — so
+    /// no structural rewrite is needed here. Bumps the layout cache version
+    /// only when a ratio actually changed.
+    /// </summary>
+    public void Normalize()
+    {
+        if (NormalizeNode(_root))
+        {
+            _capsVer++;
+        }
+    }
+
+    private static bool NormalizeNode(SplitNode? node)
+    {
+        if (node is null || node.Leaf is not null)
+        {
+            return false;
+        }
+
+        bool changed = false;
+        if (node.Children is not null)
+        {
+            foreach (var child in node.Children)
+            {
+                changed |= NormalizeNode(child);
+            }
+
+            return changed;
+        }
+
+        float canonical = CanonicalRatio(node.Ratio);
+        if (node.Ratio != canonical)
+        {
+            node.Ratio = canonical;
+            changed = true;
+        }
+
+        changed |= NormalizeNode(node.A);
+        changed |= NormalizeNode(node.B);
+        return changed;
+    }
+
+    /// <summary>Canonical ratio shared by tree normalize and spec normalize.</summary>
+    internal static float CanonicalRatio(float ratio) =>
+        float.IsFinite(ratio) ? Math.Clamp(ratio, 0.05f, 0.95f) : 0.5f;
+
     public void AddRoot(Panel panel)
     {
         Ensure.NotBlank(panel.Id);
