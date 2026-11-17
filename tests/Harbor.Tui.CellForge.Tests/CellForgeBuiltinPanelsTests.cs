@@ -675,9 +675,15 @@ public class CellForgeBuiltinPanelsTests
         await Assert.That(store.State.Ui.PanelDirs.ContainsKey("file-tree")).IsFalse()
             .Because("in-place expansion must not dispatch a directory change");
 
-        // A second Enter collapses it again.
+        // A second Enter on the same node collapses it again. Rebuild the visible
+        // state from the fixture (the store itself never held the listing) but with
+        // the expansion set the first dispatch produced.
         var expandedState = store.State;
-        _ = panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(expandedState, services: services));
+        var secondState = state with
+        {
+            Ui = state.Ui with { PanelExpandedDirs = expandedState.Ui.PanelExpandedDirs }
+        };
+        _ = panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(secondState, services: services));
         await Assert.That(store.State.Ui.IsFileTreeNodeExpanded("file-tree", child)).IsFalse();
     }
 
