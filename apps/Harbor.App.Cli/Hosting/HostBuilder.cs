@@ -196,7 +196,7 @@ internal static partial class HostBuilder
     /// <summary>Create ~/.harbor and its session/cache subdirectories.</summary>
     private static string EnsureHarborLayout()
     {
-        string harborDir = HarborPaths.GetHarborHome();
+        string harborDir = Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome();
         Directory.CreateDirectory(harborDir);
         Directory.CreateDirectory(Path.Combine(harborDir, "sessions"));
         Directory.CreateDirectory(Path.Combine(harborDir, "cache"));

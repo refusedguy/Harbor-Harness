@@ -12,9 +12,10 @@ using Harbor.Abstractions.Env;
 ///     <para>
 ///         The runs root is resolved through
 ///         <see cref="Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome" />
-///         (<c>HARBOR_HOME</c> or <c>~/.harbor</c>) — the same helper
-///         Harbor.Hosting forwards to (#1570). Application depends on
-///         Abstractions only, which is exactly why the helper now lives there.
+///         (<c>HARBOR_HOME</c> or <c>~/.harbor</c>) — the single helper every
+///         caller now uses directly (#1570; the Hosting forwarder was removed
+///         in #1392). Application depends on Abstractions only, which is
+///         exactly why the helper lives there.
 ///     </para>
 ///     <para>
 ///         Consumers use <see cref="WorkspacePaths.Default" /> (the process-wide

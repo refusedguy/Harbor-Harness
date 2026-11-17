@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Env;
-using Harbor.Hosting;
 using Harbor.Tools.Mcp;
 
 namespace Harbor.App.Cli.Commands;
@@ -137,7 +136,7 @@ public static class McpLoginRunner
 
     private static IReadOnlyList<(string Name, string Url, McpOAuthConfig? OAuth)> LoadRemoteEntries()
     {
-        string harborHome = HarborPaths.GetHarborHome();
+        string harborHome = Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome();
         string projectRoot = Directory.GetCurrentDirectory();
         var paths = new List<string>();
         if (HarborEnv.Get(HarborEnv.McpConfig) is { Length: > 0 } explicitConfig)
