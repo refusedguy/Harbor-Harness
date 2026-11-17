@@ -122,8 +122,9 @@ life of the process (#884).
   rest of Skills (`SkillUpdater`) still live in `Harbor.Application` and move
   into this assembly in later slices.
 - `SkillFreshnessSeeder` is BCL-only and keeps its `Harbor.Application.Skills`
-  namespace. `FrontMatter.cs` and `SkillUpdater.cs` refer to it by name in
-  `<c>` docs rather than a `cref`, so `Harbor.Application` needs no edge here.
+  namespace. It carries a small BCL-only mirror of `Harbor.Application.FrontMatter`
+  (issue #1580) because this leaf cannot take an Application edge; `FrontMatter.cs`
+  and `SkillUpdater.cs` refer to it by name in `<c>` docs rather than a `cref`.
 - `GetStatus` and `ListWorktrees` are synchronous: the port is sync and one
   caller paints a UI badge on the render thread.
 - A hung git is killed at 3 seconds and reported as "no workspace", not as an

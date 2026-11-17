@@ -1,10 +1,11 @@
 namespace Harbor.Application;
 
 /// <summary>
-///     Single parsing point for the front-matter field reads shared by
-///     <c>Harbor.Application.Sessions.WorkspaceContextSource</c> and
-///     <c>Harbor.Application.Skills.SkillFreshnessSeeder</c> (now in Harbor.Intelligence,
-///     namespace preserved): the
+///     Single parsing point for the front-matter field reads in this assembly
+///     (<c>Harbor.Application.Sessions.WorkspaceContextService</c> and
+///     <c>Harbor.SessionContext.Skills.SkillProvider</c>). The skill-freshness
+///     seeder (now in Harbor.Intelligence) keeps a BCL-only mirror because this
+///     leaf cannot take a Harbor.Application edge: the
 ///     <c>line.TrimStart() → StartsWith("name:", OrdinalIgnoreCase) →
 ///     trimmed[prefix.Length..].Trim() → empty → null</c> chain used to live
 ///     verbatim in three call sites (issue #1580) — a prefix-syntax or
