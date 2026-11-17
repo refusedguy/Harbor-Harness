@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
 
@@ -170,6 +171,7 @@ public static class AppReducer
             fl.TotalCount))),
         AppMsg.SetFileTreeFailed ff => ReduceResult.NoOp(SetFileTree(state, ff.Id, FileTreeSnapshot.Failed(ff.Directory, ff.Error))),
         AppMsg.InvalidateFileTree inv => ReduceResult.NoOp(InvalidateFileTree(state, inv.Id)),
+        AppMsg.ToggleFileTreeExpansion ex => ReduceResult.NoOp(ToggleFileTreeExpansion(state, ex.Id, ex.Path)),
         _ => ReduceResult.NoOp(state)
     };
 
@@ -367,6 +369,32 @@ public static class AppReducer
         {
             Ui = ui with { FileTrees = ui.FileTrees.SetItem(id, FileTreeSnapshot.None) }
         };
+    }
+
+    /// <summary>
+    ///     Toggle one directory node's in-place expansion (#1487). Independent of
+    ///     <see cref="FileTrees" /> on purpose: <c>r</c> invalidates the listing
+    ///     and loader re-fetches it, but which nodes the user opened is selection
+    ///     state and must survive that reload unchanged.
+    /// </summary>
+    /// <param name="state">Current snapshot.</param>
+    /// <param name="id">The panel id owning the tree.</param>
+    /// <param name="path">The full path of the directory node.</param>
+    public static UiState ToggleFileTreeExpansion(UiState state, string id, string path)
+    {
+        if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(path))
+            return state;
+
+        var ui = state.Ui;
+        ImmutableHashSet<string> current = ui.PanelExpandedDirs.TryGetValue(id, out ImmutableHashSet<string>? set)
+            ? set
+            : ImmutableHashSet<string>.Empty;
+        ImmutableHashSet<string> next = current.Contains(path) ? current.Remove(path) : current.Add(path);
+
+        if (next.SetEquals(current))
+            return state;
+
+        return state with { Ui = ui with { PanelExpandedDirs = ui.PanelExpandedDirs.SetItem(id, next) } };
     }
 
     // ── key input (generic actions only; chat actions are the extension's) ──

@@ -647,8 +647,10 @@ public class CellForgeBuiltinPanelsTests
     }
 
     [Test]
-    public async Task FileTree_Enter_DescendsIntoADirectoryFromState()
+    public async Task FileTree_Enter_TogglesInPlaceExpansionFromState()
     {
+        // #1487: Enter no longer descends. It flips expansion state in the store
+        // and leaves PanelDirs alone, so the current directory is untouched.
         var store = new UiStore();
         string dir = Path.Combine(Path.GetTempPath(), "harbor-667-descend");
         string child = Path.Combine(dir, "child");
@@ -663,13 +665,85 @@ public class CellForgeBuiltinPanelsTests
             },
         };
 
+        var panel = new CellForgeFileTreePanel();
         var services = new PanelServices { Store = store };
-        bool consumed = new CellForgeFileTreePanel().OnKey(
-            new UiKey(UiKeyCode.Enter),
-            Ctx(state, services: services));
+        bool consumed = panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(state, services: services));
 
         await Assert.That(consumed).IsTrue();
-        await Assert.That(store.State.Ui.PanelDirs["file-tree"]).IsEqualTo(child);
+        await Assert.That(store.State.Ui.IsFileTreeNodeExpanded("file-tree", child)).IsTrue()
+            .Because("Enter must open the directory node in place");
+        await Assert.That(store.State.Ui.PanelDirs.ContainsKey("file-tree")).IsFalse()
+            .Because("in-place expansion must not dispatch a directory change");
+
+        // A second Enter on the same node collapses it again. Rebuild the visible
+        // state from the fixture (the store itself never held the listing) but with
+        // the expansion set the first dispatch produced.
+        var expandedState = store.State;
+        var secondState = state with
+        {
+            Ui = state.Ui with { PanelExpandedDirs = expandedState.Ui.PanelExpandedDirs }
+        };
+        _ = panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(secondState, services: services));
+        await Assert.That(store.State.Ui.IsFileTreeNodeExpanded("file-tree", child)).IsFalse();
+    }
+
+    [Test]
+    public async Task FileTree_ExpandedChildRows_ShowGuides_AndSurviveRefresh()
+    {
+        // Golden frame of a three-level tree (#1487): the open nodes' loaded
+        // children are visible with box-drawing guides, and `r` invalidates only
+        // the listing, never the expansion set.
+        const string root = "/tree";
+        string leaf = root + "/a/a1/leaf.txt";
+        var a1 = new FileTreeEntry("a1", root + "/a/a1", true, false,
+            [new FileTreeEntry("leaf.txt", leaf, false, false)]);
+        var a = new FileTreeEntry("a", root + "/a", true, false,
+            [a1, new FileTreeEntry("b.txt", root + "/a/b.txt", false, false)]);
+        var snapshot = FileTreeSnapshot.Completed(root, [a, new FileTreeEntry("c.txt", root + "/c.txt", false, false)]);
+
+        var store = new UiStore();
+        store.Dispatch(new AppMsg.ToggleFileTreeExpansion("file-tree", root + "/a"));
+        store.Dispatch(new AppMsg.ToggleFileTreeExpansion("file-tree", root + "/a/a1"));
+
+        var state = new UiState
+        {
+            Ui = new TerminalUiState
+            {
+                PanelDirs = ImmutableDictionary<string, string>.Empty.Add("file-tree", root),
+                FileTrees = ImmutableDictionary<string, FileTreeSnapshot>.Empty.Add("file-tree", snapshot),
+                PanelExpandedDirs = store.State.Ui.PanelExpandedDirs,
+            },
+        };
+
+        string text = WidgetFixtures.Joined(new CellForgeFileTreePanel().Build(Ctx(state)));
+        await Assert.That(text).Contains("├── a1");
+        await Assert.That(text).Contains("└── b.txt");
+        await Assert.That(text).Contains("│   └── leaf.txt");
+
+        _ = new CellForgeFileTreePanel().OnKey(UiKey.ForChar('r'), Ctx(state, services: new PanelServices { Store = store }));
+        await Assert.That(store.State.Ui.IsFileTreeNodeExpanded("file-tree", root + "/a")).IsTrue()
+            .Because("refresh invalidates the listing, not which nodes the user opened");
+    }
+
+    [Test]
+    public async Task FileTree_LongNames_AreCutWithEllipsis()
+    {
+        string longName = new string('x', 120);
+        var snapshot = FileTreeSnapshot.Completed(
+            "/long",
+            [new FileTreeEntry(longName, "/long/" + longName, false, false)]);
+        var state = new UiState
+        {
+            Ui = new TerminalUiState
+            {
+                PanelDirs = ImmutableDictionary<string, string>.Empty.Add("file-tree", "/long"),
+                FileTrees = ImmutableDictionary<string, FileTreeSnapshot>.Empty.Add("file-tree", snapshot),
+            },
+        };
+
+        string text = WidgetFixtures.Joined(new CellForgeFileTreePanel().Build(Ctx(state, width: 30)));
+        await Assert.That(text).DoesNotContain(longName);
+        await Assert.That(text).Contains("…");
     }
 
     [Test]
