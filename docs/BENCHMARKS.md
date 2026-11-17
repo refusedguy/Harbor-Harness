@@ -275,6 +275,42 @@ Wall and RSS as above. Publish dir: 41 MB (41 868 731 bytes); binary: 29 MB, sel
 
 Answer to the #411 decision question, quantified: AOT buys **7.7x / 7.1x / 7.9x** spawn-to-exit on `--version` / `--help` / `providers`, **1.5x** RSS on the light verbs (43 → 29 MB) and **2.7x** on the DI-heavy verb (94 → 35 MB), with a 29 MB self-contained binary replacing a 40 MB framework-dependent apphost. The §4.1 target (<100 ms cold start) is met as a measurement on all three verbs (18 / 19 / 58 ms). On this workload the trade of #48 answers **yes**: the startup win is measured, and the thing given up for it — in-process Roslyn plugin compile — already has its default out-of-process route (#1055, 0.021 ms mean loopback dispatch). What this table still does not cover, for either mode: time-to-first-frame, steady-state allocs/op, and input-latency p50/p95 from the #411 criteria — spawn-to-exit plus RSS peak is the evidence that exists.
 
+### 4.5 Interactive render metrics: measured vs not yet measured (#2221)
+
+The terminal-interactivity metrics that kitty and Ghostty publish are not all in this file yet. This subsection records the boundary honestly. Every number in Table 1 is copied from a measurement that already has a run and a machine in this document. No estimate is written in place of a missing measurement. Where a metric has no run, the method to produce it is described and the item stays open.
+
+Table 1: already measured, evidence in this file
+
+| Metric | Value | Provenance | Machine and method |
+|---|---|---|---|
+| Spawn-to-exit, JIT `--version` / `--help` / `providers` | 138 / 134 / 459 ms median | §4.4, Actions run 37935894413, 2026-10-09, commit `eebc9be3` | AMD EPYC 7763, 4 vCPU, Ubuntu 24.04.5, .NET SDK 10.0.401, Release apphost |
+| Spawn-to-exit, AOT same three verbs | 18 / 19 / 58 ms median | §4.4, Actions run 38110959202, 2026-10-11, commit `1ef2e522` | Same machine class, self-contained linux-x64, #413 recipe |
+| RSS peak, JIT light / DI-heavy verb | 43 MB / 96 MB | §4.4, run 37935894413 | `ru_maxrss` median |
+| RSS peak, AOT light / DI-heavy verb | 29 MB / 35 MB | §4.4, run 38110959202 | `ru_maxrss` median |
+| Hinted cell-diff, 120x500 live chat timeline | 0.317 ms | Renderer-moat probes, 2026-08-31, `RendererMoatPerfTests` | Linux x64, .NET 10 Release JIT, discarding backend, no tty I/O |
+| Full frame, solve+paint+hinted diff+encode | 0.805 ms | Same probe | Same |
+| Armed post-fx glow frame | 0.671 ms | Same probe, within noise of the 0.805 ms base | Same |
+| Steady-frame allocations, 2 000 hinted frames | 0 B | Same probe | Same |
+
+Spawn-to-exit and cold start are not time-to-first-frame. The §4.1 median of 966 ms is wall-clock from process spawn to the first stdout byte of `--version`, not to the first rendered frame on a PTY. None of the Table 1 values may be relabeled as TTFF, input latency, or steady-state allocs/op.
+
+Table 2: requested metrics with no run yet, tasks and not estimates
+
+| Metric | Status | Instrument and method | Acceptance when added |
+|---|---|---|---|
+| Time-to-first-frame, JIT and AOT | NOT MEASURED | PTY harness with `HARBOR_TUI=cellforge`; timestamp process spawn and the first `WriteAsync` surfaced through `EngineStageCounters`; report spawn to the first byte of the first frame, not spawn to exit | N >= 7, median plus spread, both modes, run id and machine recorded |
+| Input latency p50/p95/p99 | NOT MEASURED | Timestamp the `InputEvent` in `TerminalInputSource` and the first frame whose diff carries its effect (caret move or prompt delta); measure pacer hysteresis separately so `CommitTickPacer` does not shift p95 | Report the distribution, not the mean; keyboard-to-screen analog of kitty |
+| Frame budget distribution | NOT MEASURED | Per-frame `solve+paint+diff+encode` over the same 120x500 live timeline as `RendererMoatPerfTests`, with a separate line for armed glow | p50/p95/p99, not only the 0.805 ms mean |
+| Steady-state allocs/op | NOT MEASURED | `GC.GetAllocatedBytesForCurrentThread` or BenchmarkDotNet around each scenario: stream token, tool-call delta, spinner tick, mouse wheel, paste, resize, overlay open/close | Bytes per operation per scenario; a 0 B/op claim only where measured |
+| Damage ratio | NOT MEASURED | Count cells emitted against screen area (cols x rows) via `DiffEngine.HintArea()`; count hint hits versus full-scan fallback at the 25% threshold | Emitted/area ratio and fallback frequency, with the run recorded |
+| GC pause / Gen0 over a 30 s stream | NOT MEASURED | `dotnet-counters` against a 30-second stream, Gen0 count and pause histogram; closes the §4.3 gap | Counter output attached and run id recorded |
+| AOT versus JIT at steady state | NOT MEASURED | Same PTY workload in both binaries, compare p95 frame time and Gen0 count | p95 and GC in both modes; no claim inferred from startup numbers |
+| Parser throughput, bytes/s | NOT MEASURED | Feed a bootstrap ANSI stream into `EscapeSequenceParser` with rendering disabled, count input bytes per second | Comparable to kitty throughput with the explicit caveat that this is a parser, not a terminal emulator |
+
+Verdict on "fast as Rust": unconfirmed. What this file proves is a zero-allocation cell-diff core (0 B over 2 000 frames), a 0.317 ms hinted diff against a 16 ms budget, and a 7 to 8x startup win under AOT. It does not yet prove time-to-first-frame, p95 input latency, or steady-state allocs/op in the form kitty and Ghostty publish. Until Table 2 has recorded runs, the defensible claim is that the engine has measured microbenchmarks and the architectural preconditions, not parity with Rust-grade terminal performance.
+
+This subsection changes no portable threshold and no CI gate. It is documentation only.
+
 ## 5. Microbenchmarks (BenchmarkDotNet)
 
 Located in `tests/Harbor.Benchmarks/`. Run with:
