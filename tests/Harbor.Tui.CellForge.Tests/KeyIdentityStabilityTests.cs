@@ -3,7 +3,6 @@ using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
-using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -131,46 +130,32 @@ public class KeyIdentityStabilityTests
     }
 
     [Test]
-    public async Task ChangingPanelId_IsAnExplicitRemap_NotAFrameSideEffect()
+    public async Task ChangingPanelKey_IsAnExplicitReregistration()
     {
-        // A provider whose key can change out of band. The registry keys on the
-        // id at registration time, so a stray change must not silently reroute.
-        var mutable = new MutablePanel { Id = "help" };
+        // Routing follows the key captured at registration, not the provider's
+        // identity. Moving a provider to another key is an explicit unregister
+        // plus register, never a side effect of a frame.
+        var help = new CellForgeHelpPanel();
+        var logs = new CellForgeLogsPanel();
         var registry = new PanelRegistry();
 
-        await Assert.That(registry.Register(mutable).IsSuccess).IsTrue();
-        await Assert.That(ReferenceEquals(registry.Get("help"), mutable)).IsTrue();
+        await Assert.That(registry.Register(help).IsSuccess).IsTrue();
+        await Assert.That(ReferenceEquals(registry.Get("help"), help)).IsTrue();
 
-        mutable.Id = "logs"; // deliberate remap
+        await Assert.That(registry.Unregister("help").IsSuccess).IsTrue();
         await Assert.That(registry.Get("help")).IsNull();
-        await Assert.That(registry.Get("logs")).IsNull();
-        await Assert.That(registry.Register(mutable).IsSuccess).IsTrue();
-        await Assert.That(ReferenceEquals(registry.Get("logs"), mutable)).IsTrue();
-    }
 
-    private sealed class MutablePanel : IPanelProvider
-    {
-        public string Id { get; set; } = "";
-        public string Title => "Mutable";
-        public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
-        public int DefaultSize => 20;
-        public object? Build(PanelContext ctx) => Array.Empty<string>();
-        public bool OnKey(UiKey key, PanelContext ctx) => false;
+        await Assert.That(registry.Register(logs).IsSuccess).IsTrue();
+        await Assert.That(ReferenceEquals(registry.Get("logs"), logs)).IsTrue();
     }
 
     // ── Timeline key ────────────────────────────────────────────────────────
 
-    /// <summary>Height depends on width, so a repaint can change Y but never the block identity.</summary>
-    private sealed class WidthBlock(string id, int h80, int h120) : IChatBlock
-    {
-        public string Kind => "key-identity";
-        public bool IsStreamContinuation => false;
-        public int BudgetBytes => 32;
-        public BlockMeasure Measure(int width) => BlockMeasure.Exact(width <= 100 ? h80 : h120);
-        public int CheapEstimate(int width) => width <= 100 ? h80 : h120;
-        public void Paint(in BlockPaintContext ctx) { }
-        public string RawText() => id;
-    }
+    // Reuse the existing width-sensitive IChatBlock double rather than adding a
+    // new implementer (the seam-graph gate tracks IChatBlock implementers).
+    // 10 lines x 20 chars = 200 chars: 3 rows at width 80, 2 at width 120.
+    private static WrappingBlock Block(string id) =>
+        new(id, logicalLines: 10, lineChars: 19, honestEstimate: true);
 
     [Test]
     public async Task TimelineIdentity_IsStableAcrossRepaintFrames()
@@ -178,7 +163,7 @@ public class KeyIdentityStabilityTests
         var cache = new TimelineLayoutCache();
         for (int i = 0; i < 20; i++)
         {
-            cache.Append(new WidthBlock($"b{i}", h80: 3, h120: 5));
+            cache.Append(Block($"b{i}"));
         }
 
         _ = cache.PrepareLayout(80, 10, scrollY: 0);
@@ -204,14 +189,14 @@ public class KeyIdentityStabilityTests
         var cache = new TimelineLayoutCache();
         for (int i = 0; i < 20; i++)
         {
-            cache.Append(new WidthBlock($"b{i}", h80: 3, h120: 5));
+            cache.Append(Block($"b{i}"));
         }
 
         _ = cache.PrepareLayout(80, 10, scrollY: 0);
         cache.PinAnchor(scrollTopY: 12); // b4
 
         // Explicit remap: same message, new instance. The anchor follows it.
-        var replacement = new WidthBlock("b4:committed", h80: 3, h120: 5);
+        var replacement = Block("b4:committed");
         cache.Replace(4, replacement);
 
         _ = cache.PrepareLayout(120, 10, scrollY: 0);
