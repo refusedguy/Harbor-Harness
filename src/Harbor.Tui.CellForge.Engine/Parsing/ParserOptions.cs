@@ -20,5 +20,24 @@ public sealed class ParserOptions
     public int MaxPasteBytes { get; init; } = DefaultMaxPasteBytes;
     public int MaxStringBytes { get; init; } = DefaultMaxStringBytes;
 
+    /// <summary>
+    /// Optional sink for malformed/ignored input sequences (#1110). The parser
+    /// always counts drops; without a sink those counts stay internal and the
+    /// drops are silent. A host that wants diagnostics sets this to log or
+    /// surface the snapshot instead of losing the signal.
+    /// </summary>
+    /// <remarks>
+    /// The sink is null by default. The drop path pays one null check and
+    /// keeps its existing counter increment, with no delegate call or allocation.
+    /// The callback runs on the reader thread inside the parser state machine.
+    /// </remarks>
+    public Action<ParserDrop>? OnDrop { get; init; }
+
     public static ParserOptions Default { get; } = new();
 }
+
+/// <summary>
+/// One parser drop notification: the running malformed/ignored counts after
+/// the increment that triggered it (#1110).
+/// </summary>
+public readonly record struct ParserDrop(int MalformedCount, int IgnoredCount);

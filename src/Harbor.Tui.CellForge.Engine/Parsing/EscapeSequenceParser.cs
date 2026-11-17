@@ -67,8 +67,35 @@ public sealed class EscapeSequenceParser
     public ParserOptions Options => _options;
     public ParserState State => _state;
     public int AvailableEvents => _count;
-    public int MalformedSequenceCount { get; internal set; }
-    public int IgnoredSequenceCount { get; internal set; }
+
+    private int _malformedSequenceCount;
+    private int _ignoredSequenceCount;
+
+    // #1110: the counters used to only increment and were surfaced nowhere.
+    // A malformed or ignored sequence vanished with no log and no diagnostic.
+    // Funnelling the setters through the opt-in sink keeps every existing
+    // increment site (here, CsiDecoder and OscHandler) unchanged while giving
+    // a host the chance to observe the drop. No sink => one null check, the
+    // same counter write as before, and no allocation on the drop path.
+    public int MalformedSequenceCount
+    {
+        get => _malformedSequenceCount;
+        internal set
+        {
+            _malformedSequenceCount = value;
+            _options.OnDrop?.Invoke(new ParserDrop(_malformedSequenceCount, _ignoredSequenceCount));
+        }
+    }
+
+    public int IgnoredSequenceCount
+    {
+        get => _ignoredSequenceCount;
+        internal set
+        {
+            _ignoredSequenceCount = value;
+            _options.OnDrop?.Invoke(new ParserDrop(_malformedSequenceCount, _ignoredSequenceCount));
+        }
+    }
 
     /// <summary>True while a bracketed paste block has not been closed yet.</summary>
     public bool IsAwaitingPasteClose { get; internal set; }
