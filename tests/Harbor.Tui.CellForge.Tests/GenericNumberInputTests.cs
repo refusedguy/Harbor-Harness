@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using TUnit.Core;
 

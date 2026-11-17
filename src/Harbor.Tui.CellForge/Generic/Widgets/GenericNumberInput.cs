@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Generic.Widgets;

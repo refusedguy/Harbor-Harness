@@ -100,7 +100,7 @@ public static class GenericStepper
         var completedStyle = new CellStyle(ChatPalette.Success);
         var currentStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var upcomingStyle = ChatPalette.Dim;
-        var connectorStyle = ChatPalette.Muted;
+        var connectorStyle = new CellStyle(ChatPalette.Muted);
 
         int x = rect.X;
         for (int i = 0; i < state.Count && x < rect.X + rect.Width; i++)
