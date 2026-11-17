@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Input;
 using TUnit.Core;
@@ -57,6 +58,7 @@ public class GenericToggleSelectTests
         await Assert.That(widget.Checked).IsFalse();
     }
 
+    [Test]
     [Arguments(ToggleSelectStyle.Checkbox)]
     [Arguments(ToggleSelectStyle.Switch)]
     [Arguments(ToggleSelectStyle.Toggle)]
@@ -76,6 +78,7 @@ public class GenericToggleSelectTests
         await Assert.That(widget.Checked).IsFalse();
     }
 
+    [Test]
     [Arguments(ToggleSelectStyle.Radio)]
     [Arguments(ToggleSelectStyle.Select)]
     public async Task ListStyles_ArrowsMoveCursor_EnterAndSpaceCommit(ToggleSelectStyle style)
@@ -187,6 +190,7 @@ public class GenericToggleSelectTests
 
     // --------------------------------------------------------------- golden --
 
+    [Test]
     [Arguments(ToggleSelectStyle.Checkbox, 0, "[ ]")]
     [Arguments(ToggleSelectStyle.Checkbox, 1, "[x]")]
     [Arguments(ToggleSelectStyle.Switch, 0, "[-]")]
@@ -204,6 +208,7 @@ public class GenericToggleSelectTests
         await Assert.That(ScreenFixtures.Row(buffer, 0, 24).TrimEnd()).IsEqualTo(glyph + " Label");
     }
 
+    [Test]
     [Arguments(ToggleSelectStyle.Radio, "( )", "(*)")]
     [Arguments(ToggleSelectStyle.Select, "[ ]", "[x]")]
     public async Task Golden_ListStyle_StateMatrix(ToggleSelectStyle style, string off, string on)
