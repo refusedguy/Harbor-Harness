@@ -295,7 +295,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
                 if (prevUnderline)
                 {
                     // SGR 24 is the single off code for every underline style.
-                    QueueSgrParam(24);
+                    AppendSgrParam(24);
                 }
 
                 if (targetUnderline)
