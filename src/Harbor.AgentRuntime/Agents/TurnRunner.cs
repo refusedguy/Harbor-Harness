@@ -171,7 +171,7 @@ internal sealed class TurnRunner(
                 .ConfigureAwait(false);
 
         return provider.Match(
-            catalog => Maybe.From(FindModel(catalog.Catalog, agent.Model))
+            catalog => FindModel(catalog.Catalog, agent.Model)
                 .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
                 .Map(m => (Client: catalog.Client, Model: m)),
             error => Result.Failure<(ILlmClient Client, ModelInfo Model)>(error));
@@ -1212,17 +1212,18 @@ internal sealed class TurnRunner(
 
     /// <summary>
     ///     Linear scan for the requested model — avoids LINQ FirstOrDefault delegate allocation.
+    ///     Absence is a value (<see cref="Maybe{T}.None" />), never a null pointer.
     /// </summary>
-    private static ModelInfo? FindModel(IReadOnlyList<ModelInfo> models, string modelId)
+    private static Maybe<ModelInfo> FindModel(IReadOnlyList<ModelInfo> models, string modelId)
     {
         for (int i = 0; i < models.Count; i++)
         {
             if (models[i].Id == modelId)
             {
-                return models[i];
+                return Maybe.From(models[i]);
             }
         }
-        return null;
+        return Maybe<ModelInfo>.None;
     }
 
     /// <summary>
