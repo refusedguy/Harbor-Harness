@@ -173,6 +173,61 @@ public class ResultTryAdoptionTests
                 "library member and will drift: " + string.Join(" | ", violations));
     }
 
+    /// <summary>
+    ///     Positive control for the hand-rolled <c>try/catch -&gt; Result</c>
+    ///     matcher itself (#1730, #1724). The guard above feeds real <c>src/</c>
+    ///     files to <see cref="ScanFile" /> and expects no violations, so a matcher
+    ///     that stopped matching would make it green for the wrong reason.
+    ///     <c>KnownExemptSites_AreStillAccurate</c> proves the ratchet, not the
+    ///     matcher. This test plants an offender in synthetic source, drives the
+    ///     SAME scanner through <see cref="ScanText" />, and requires the hit. It
+    ///     also feeds the two narrowed-catch shapes the guard must leave alone,
+    ///     so a matcher made trigger-happy by a regex edit turns red here too.
+    /// </summary>
+    [Test]
+    public async Task PositiveControl_ScanText_ReportsPlantedHandRolledTryCatch()
+    {
+        // The try body does work but does not itself return a Result literal, so
+        // this is the plain shape the guard exists to convert to Result.Try.
+        // (A try body carrying `return Result.X` is the nested-Result case the
+        // guard deliberately exempts, not an offender.)
+        const string planted = """
+            public Result DoWork()
+            {
+                var value = Compute();
+                try
+                {
+                    Mutate(value);
+                }
+                catch (Exception ex)
+                {
+                    return Result.Failure($"failed: {ex.Message}");
+                }
+                return Result.Success();
+            }
+            """;
+
+        var reported = ScanText(planted, "src/Planted/PlantedSource.cs", []).ToList();
+        await Assert.That(reported.Count)
+            .IsEqualTo(1)
+            .Because("the scanner must report a planted catch(Exception) that builds Result.Failure by hand; a matcher that returns nothing cannot enforce the gate");
+        await Assert.That(reported[0])
+            .Contains("catch(Exception) builds Result.Failure by hand")
+            .Because("the single hit must be the planted offender, not an unrelated finding");
+
+        // Narrowed catches must stay invisible: Result.Try would widen them and
+        // change behaviour. Both were real sites this wave deliberately kept.
+        const string narrowedByType = planted.Replace("catch (Exception ex)", "catch (IOException)", StringComparison.Ordinal);
+        await Assert.That(ScanText(narrowedByType, "src/Planted/NarrowedByType.cs", []).ToList())
+            .IsEmpty()
+            .Because("catch(IOException) is narrower than Result.Try and must not be reported");
+
+        const string narrowedByFilter = planted.Replace("catch (Exception ex)", "catch (Exception ex) when (ex is IOException)", StringComparison.Ordinal);
+        await Assert.That(ScanText(narrowedByFilter, "src/Planted/NarrowedByFilter.cs", []).ToList())
+            .IsEmpty()
+            .Because("a catch with an exception filter is narrower than Result.Try and must not be reported");
+    }
+
     [Test]
     public async Task KnownExemptSites_AreStillAccurate()
     {
@@ -290,6 +345,30 @@ public class ResultTryAdoptionTests
             .Because("ROP perimeter marker files moved — update ScopeMarkerFiles: " + string.Join(", ", missing));
     }
 
+    /// <summary>
+    ///     Read one source file and hand its text to the matcher. Split from
+    ///     <see cref="ScanText" /> so the positive control can plant an offender
+    ///     without writing a file to disk.
+    /// </summary>
+    private static IEnumerable<string> ScanFile(string root, string file, Dictionary<string, string[]> exempt)
+    {
+        string text;
+        try
+        {
+            text = File.ReadAllText(file);
+        }
+        catch (IOException)
+        {
+            yield break;
+        }
+
+        string rel = Normalise(Path.GetRelativePath(root, file));
+        foreach (string violation in ScanText(text, rel, exempt))
+        {
+            yield return violation;
+        }
+    }
+
     /// <summary>Every <c>.cs</c> file under <c>src/</c>, minus build output.</summary>
     private static IEnumerable<string> EnumerateSourceFiles(string root)
     {
@@ -367,22 +446,14 @@ public class ResultTryAdoptionTests
            && Array.Exists(anchors, a => catchBlockText.Contains(a, StringComparison.Ordinal));
 
     /// <summary>
-    ///     Returns one message per violation in <paramref name="file" />, or an
-    ///     empty sequence. See the file header for the exempt shapes.
+    ///     The matcher itself, driven by source text. Returns one message per
+    ///     violation in <paramref name="text" />, or an empty sequence. See the
+    ///     file header for the exempt shapes. <see cref="ScanFile" /> is a thin
+    ///     file-reading wrapper over this, so the positive control drives the
+    ///     exact same code path without touching disk.
     /// </summary>
-    private static IEnumerable<string> ScanFile(string root, string file, Dictionary<string, string[]> exempt)
+    private static IEnumerable<string> ScanText(string text, string rel, Dictionary<string, string[]> exempt)
     {
-        string text;
-        try
-        {
-            text = File.ReadAllText(file);
-        }
-        catch (IOException)
-        {
-            yield break;
-        }
-
-        string rel = Normalise(Path.GetRelativePath(root, file));
         string[] lines = text.Replace("\r\n", "\n").Split('\n');
 
         for (int i = 0; i < lines.Length; i++)
