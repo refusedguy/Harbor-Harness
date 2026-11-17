@@ -8,40 +8,18 @@ namespace Harbor.Tui.CellForge.Generic.Widgets;
 /// and delegates all editing to the state. No chat coupling and no key routing:
 /// the host calls the state's edit methods from its own input loop.
 /// </summary>
-public sealed class TextInput : ITextInput
+public sealed class TextInput : TextInputBase
 {
-    private readonly TextInputChrome _chrome = new();
-
     public TextInput(TextInputState state)
+        : base(state)
     {
-        Ensure.NotNull(state);
-        State = state;
     }
 
     /// <inheritdoc />
-    public TextInputState State { get; }
+    public override int DesiredHeight => 1;
 
     /// <inheritdoc />
-    public TextInputAffixes Affixes
-    {
-        get => _chrome.Affixes;
-        set => _chrome.Affixes = value ?? TextInputAffixes.None;
-    }
-
-    /// <inheritdoc />
-    public bool IsFocused { get; set; } = true;
-
-    /// <inheritdoc />
-    public int DesiredHeight => 1;
-
-    /// <inheritdoc />
-    public string? Validate() => State.Validate();
-
-    /// <inheritdoc />
-    public string? HitTest(int x, int y) => _chrome.HitTest(x, y);
-
-    /// <inheritdoc />
-    public void Paint(ScreenBuffer buffer, Rect rect)
+    public override void Paint(ScreenBuffer buffer, Rect rect)
     {
         Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
@@ -49,11 +27,11 @@ public sealed class TextInput : ITextInput
             return;
         }
 
-        _chrome.Reset();
-        _chrome.PaintPrefix(buffer, rect);
+        Chrome.Reset();
+        Chrome.PaintPrefix(buffer, rect);
 
-        int fieldX = rect.X + _chrome.PrefixCells;
-        int fieldW = rect.Width - _chrome.PrefixCells - _chrome.SuffixCells;
+        int fieldX = rect.X + Chrome.PrefixCells;
+        int fieldW = rect.Width - Chrome.PrefixCells - Chrome.SuffixCells;
         if (fieldW <= 0)
         {
             return;
@@ -73,7 +51,7 @@ public sealed class TextInput : ITextInput
                 PaintCursor(buffer, fieldX, rect.Y, hintStyle);
             }
 
-            _chrome.PaintSuffix(buffer, rect);
+            Chrome.PaintSuffix(buffer, rect);
             return;
         }
 
@@ -105,19 +83,6 @@ public sealed class TextInput : ITextInput
             }
         }
 
-        _chrome.PaintSuffix(buffer, rect);
-    }
-
-    private static void PaintCursor(ScreenBuffer buffer, int x, int y, CellStyle baseStyle)
-    {
-        if ((uint)x >= (uint)buffer.Cols || (uint)y >= (uint)buffer.Rows)
-        {
-            return;
-        }
-
-        var style = new CellStyle(baseStyle.Fg, baseStyle.Bg, baseStyle.Attrs | StyleAttr.Reverse);
-        int rune = buffer.Get(x, y).Rune;
-        Rune r = rune == 0 || rune == ' ' ? new Rune('_') : new Rune(rune);
-        buffer.SetRune(x, y, r, in style);
+        Chrome.PaintSuffix(buffer, rect);
     }
 }

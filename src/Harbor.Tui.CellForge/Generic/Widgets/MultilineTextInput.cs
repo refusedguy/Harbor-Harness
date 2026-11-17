@@ -11,31 +11,16 @@ namespace Harbor.Tui.CellForge.Generic.Widgets;
 /// breaks; a word wider than the field breaks at a rune boundary. Editing and
 /// validation stay in the state, so this class only decides where glyphs land.
 /// </summary>
-public sealed class MultilineTextInput : ITextInput
+public sealed class MultilineTextInput : TextInputBase
 {
-    private readonly TextInputChrome _chrome = new();
     private readonly List<Line> _lines = new();
 
     private readonly record struct Line(int Start, int Length);
 
     public MultilineTextInput(TextInputState state)
+        : base(state)
     {
-        Ensure.NotNull(state);
-        State = state;
     }
-
-    /// <inheritdoc />
-    public TextInputState State { get; }
-
-    /// <inheritdoc />
-    public TextInputAffixes Affixes
-    {
-        get => _chrome.Affixes;
-        set => _chrome.Affixes = value ?? TextInputAffixes.None;
-    }
-
-    /// <inheritdoc />
-    public bool IsFocused { get; set; } = true;
 
     /// <summary>Field width used for wrapping and autogrow; paint updates it from the rect.</summary>
     public int WrapWidth { get; set; } = 40;
@@ -44,7 +29,7 @@ public sealed class MultilineTextInput : ITextInput
     public int MaxRows { get; set; }
 
     /// <inheritdoc />
-    public int DesiredHeight
+    public override int DesiredHeight
     {
         get
         {
@@ -54,13 +39,7 @@ public sealed class MultilineTextInput : ITextInput
     }
 
     /// <inheritdoc />
-    public string? Validate() => State.Validate();
-
-    /// <inheritdoc />
-    public string? HitTest(int x, int y) => _chrome.HitTest(x, y);
-
-    /// <inheritdoc />
-    public void Paint(ScreenBuffer buffer, Rect rect)
+    public override void Paint(ScreenBuffer buffer, Rect rect)
     {
         Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
@@ -68,8 +47,8 @@ public sealed class MultilineTextInput : ITextInput
             return;
         }
 
-        _chrome.Reset();
-        int fieldW = rect.Width - _chrome.PrefixCells - _chrome.SuffixCells;
+        Chrome.Reset();
+        int fieldW = rect.Width - Chrome.PrefixCells - Chrome.SuffixCells;
         if (fieldW <= 0)
         {
             return;
@@ -82,20 +61,20 @@ public sealed class MultilineTextInput : ITextInput
         for (int r = 0; r < lines.Count && r < rect.Height; r++)
         {
             int y = rect.Y + r;
-            _chrome.PaintPrefix(buffer, new Rect(rect.X, y, rect.Width, 1));
+            Chrome.PaintPrefix(buffer, new Rect(rect.X, y, rect.Width, 1));
 
             Line line = lines[r];
             if (State.Mask is { } mask)
             {
                 int runes = TextRunes.Count(State.Text.Substring(line.Start, line.Length));
-                buffer.SetText(rect.X + _chrome.PrefixCells, y, new string((char)mask.Value, runes).AsSpan(), textStyle);
+                buffer.SetText(rect.X + Chrome.PrefixCells, y, new string((char)mask.Value, runes).AsSpan(), textStyle);
             }
             else
             {
-                buffer.SetText(rect.X + _chrome.PrefixCells, y, State.Text.AsSpan(line.Start, line.Length), textStyle);
+                buffer.SetText(rect.X + Chrome.PrefixCells, y, State.Text.AsSpan(line.Start, line.Length), textStyle);
             }
 
-            _chrome.PaintSuffix(buffer, new Rect(rect.X, y, rect.Width, 1));
+            Chrome.PaintSuffix(buffer, new Rect(rect.X, y, rect.Width, 1));
         }
 
         if (!IsFocused)
@@ -109,7 +88,7 @@ public sealed class MultilineTextInput : ITextInput
             return;
         }
 
-        int cursorX = rect.X + _chrome.PrefixCells + col;
+        int cursorX = rect.X + Chrome.PrefixCells + col;
         if ((uint)cursorX < (uint)buffer.Cols)
         {
             PaintCursor(buffer, cursorX, rect.Y + row, textStyle);
@@ -199,18 +178,5 @@ public sealed class MultilineTextInput : ITextInput
         }
 
         return (0, 0);
-    }
-
-    private static void PaintCursor(ScreenBuffer buffer, int x, int y, CellStyle baseStyle)
-    {
-        if ((uint)x >= (uint)buffer.Cols || (uint)y >= (uint)buffer.Rows)
-        {
-            return;
-        }
-
-        var style = new CellStyle(baseStyle.Fg, baseStyle.Bg, baseStyle.Attrs | StyleAttr.Reverse);
-        int rune = buffer.Get(x, y).Rune;
-        Rune r = rune == 0 || rune == ' ' ? new Rune('_') : new Rune(rune);
-        buffer.SetRune(x, y, r, in style);
     }
 }

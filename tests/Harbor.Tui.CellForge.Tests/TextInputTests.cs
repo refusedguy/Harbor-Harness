@@ -185,6 +185,7 @@ public class TextInputTests
         await Assert.That(state.Text).IsEqualTo("ab");
         await Assert.That(state.Insert(new Rune('\n'))).IsFalse();
 
+        state.MaxLength = 0;
         state.Multiline = true;
         await Assert.That(state.Insert(new Rune('\n'))).IsTrue();
         await Assert.That(state.Text).IsEqualTo("ab\n");
