@@ -417,6 +417,9 @@ public sealed class ScreenSession
         {
             ArmEffects();
             CopyPaintToBack();
+            // Issue #2222 z-order: cells under a bitmap are Skip so the diff
+            // cannot overdraw it. Skip mirrors silently, FRONT still == BACK.
+            Images.ApplySkip(_back);
             _engine.Flush(_back, _writer, Hyperlinks, UnderlineColors);
             // Inline images (issue #387) ride this same write: the escape
             // payloads are appended to the frame buffer AFTER the cell diff, so
@@ -470,6 +473,9 @@ public sealed class ScreenSession
 
             ArmEffects();
             CopyPaintToBack();
+            // Issue #2222 z-order: cells under a bitmap are Skip so the diff
+            // cannot overdraw it. Skip mirrors silently, FRONT still == BACK.
+            Images.ApplySkip(_back);
             _engine.Flush(_back, _writer, Hyperlinks, UnderlineColors);
             Images.Emit(_writer);
             EmitProtocolFrames();

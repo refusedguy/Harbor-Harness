@@ -13,6 +13,11 @@ public enum InlineImageKind : byte
 
     /// <summary>kitty APC graphics (DCS _G … ESC \) — PNG payloads only.</summary>
     KittyApc = 2,
+
+    /// <summary>DEC Sixel graphics (DCS q … ST) — RGB pixels quantized against
+    /// the fixed catalog palette; no cell-box parameter, so the bitmap keeps
+    /// its native pixel geometry.</summary>
+    Sixel = 3,
 }
 
 /// <summary>
@@ -22,8 +27,11 @@ public enum InlineImageKind : byte
 /// 1. explicit override HARBOR_INLINE_IMAGE (auto|off|osc1337|kitty);
 /// 2. multiplexer guard — tmux/screen passthrough is out of scope;
 /// 3. kitty family (APC): KITTY_WINDOW_ID / KITTY_PID / TERM xterm-kitty;
-/// 4. OSC 1337 family: iTerm2, WezTerm, Konsole, mintty;
-/// 5. otherwise None — the text card is the graceful fallback.
+/// 4. Sixel family: TERM advertises sixel (xterm-sixel, mlterm, …);
+/// 5. OSC 1337 family: iTerm2, WezTerm, Konsole, mintty;
+/// 6. otherwise None — the text card is the graceful fallback.
+/// A wire probe (<see cref="GraphicsProbe" />) can confirm kitty graphics and
+/// Sixel on terminals that do not advertise either through the environment.
 /// </summary>
 public static class InlineImageProbe
 {
@@ -60,9 +68,22 @@ public static class InlineImageProbe
             return InlineImageKind.None;
         }
 
+        // Sixel is intentionally kept out of the reviewed override table: that
+        // table is the byte-exact target of a compiled gate rewrite, and #2222
+        // should not force a gate-binary rebuild. The override still works.
+        if (overrideValue == "sixel")
+        {
+            return InlineImageKind.Sixel;
+        }
+
         if (IsKittyFamily(lookup))
         {
             return InlineImageKind.KittyApc;
+        }
+
+        if (IsSixelFamily(lookup))
+        {
+            return InlineImageKind.Sixel;
         }
 
         return IsOsc1337Family(lookup) ? InlineImageKind.Osc1337 : InlineImageKind.None;
@@ -80,6 +101,18 @@ public static class InlineImageProbe
         !string.IsNullOrEmpty(lookup("KITTY_WINDOW_ID"))
         || !string.IsNullOrEmpty(lookup("KITTY_PID"))
         || lookup("TERM")?.Contains("kitty", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>TERM values that advertise Sixel without also owning an OSC
+    /// 1337 stack. WezTerm speaks Sixel but is deliberately left on OSC 1337
+    /// here: the environment says nothing about which family the user wants,
+    /// and a wire probe is the honest way to upgrade that choice.</summary>
+    private static bool IsSixelFamily(Func<string, string?> lookup)
+    {
+        string? term = lookup("TERM");
+        return term is not null
+               && (term.Contains("sixel", StringComparison.OrdinalIgnoreCase)
+                   || term.Contains("mlterm", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static bool IsOsc1337Family(Func<string, string?> lookup)
     {

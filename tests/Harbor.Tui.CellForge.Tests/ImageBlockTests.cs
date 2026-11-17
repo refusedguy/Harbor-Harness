@@ -129,9 +129,19 @@ public class ImageBlockTests
             return payload is { Length: > 0 };
         }
 
+        public bool TryEncode(string name, string mimeType, ReadOnlySpan<byte> data, int cols, int rows, int zIndex, out byte[]? payload)
+        {
+            EncodeCalls++;
+            payload = InlineImageEncoder.Encode(_kind, name, data, cols, rows, 0, zIndex);
+            return payload is { Length: > 0 };
+        }
+
         public Rect ClipToFrame(Rect cellRect) => cellRect.Intersect(FrameBounds);
 
         public void Place(Rect cellRect, ReadOnlyMemory<byte> payload) =>
+            Placed.Add((cellRect, System.Text.Encoding.UTF8.GetString(payload.Span)));
+
+        public void Place(Rect cellRect, ReadOnlyMemory<byte> payload, int zIndex) =>
             Placed.Add((cellRect, System.Text.Encoding.UTF8.GetString(payload.Span)));
     }
 
