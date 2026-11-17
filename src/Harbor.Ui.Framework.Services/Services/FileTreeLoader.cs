@@ -401,25 +401,23 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
     /// </summary>
     private async Task<Result<TreeResult>> LoadTreeAsync(string directory, CancellationToken cancellationToken)
     {
-        Result<DirectoryListing> root = await _lister
-            .ListAsync(directory, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (root.IsFailure)
-        {
-            return Result.Failure<TreeResult>(root.Error);
-        }
-
+        // Bind keeps a failed root listing as a failure without an IsFailure guard.
         // Exact repeats of a reported path are skipped (a symlink pointing at an
         // already-seen directory). Depth and node caps cover the case where a link
         // produces a NEW path string at each level. All pure string handling: the
         // port owns the filesystem, this class only decides what to ask it for.
-        var visited = new HashSet<string>(StringComparer.Ordinal) { NormalizePath(directory) };
-        var budget = new NodeBudget(MaxTreeNodes);
-        ImmutableArray<FileTreeEntry> entries = await BuildLevelAsync(
-            root.Value.Entries, 1, visited, budget, cancellationToken).ConfigureAwait(false);
-
-        return Result.Success(new TreeResult(entries, root.Value.Truncated, root.Value.TotalCount));
+        return await (await _lister
+            .ListAsync(directory, cancellationToken)
+            .ConfigureAwait(false))
+            .Bind(async root =>
+            {
+                var visited = new HashSet<string>(StringComparer.Ordinal) { NormalizePath(directory) };
+                var budget = new NodeBudget(MaxTreeNodes);
+                ImmutableArray<FileTreeEntry> entries = await BuildLevelAsync(
+                    root.Entries, 1, visited, budget, cancellationToken).ConfigureAwait(false);
+                return Result.Success(new TreeResult(entries, root.Truncated, root.TotalCount));
+            })
+            .ConfigureAwait(false);
     }
 
     /// <summary>Build one level, recursing into directory children while the caps allow.</summary>

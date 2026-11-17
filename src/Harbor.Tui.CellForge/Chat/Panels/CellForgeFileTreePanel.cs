@@ -101,7 +101,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         // Covers(dir) is what makes a late result harmless: a snapshot for some
         // other directory answers as "nothing loaded" instead of painting.
         FileTreeSnapshot snapshot = ctx.State.Ui.FileTreeFor(Id, dir);
-        List<VisibleNode> nodes = Flatten(ctx, snapshot.Entries);
+        List<VisibleNode> nodes = Flatten(ctx, Id, snapshot.Entries);
         int cursor = ResolveCursor(ctx, nodes.Count);
         cursor = nodes.Count == 0 ? 0 : Math.Clamp(cursor, 0, nodes.Count - 1);
 
@@ -135,7 +135,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         {
             string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
             FileTreeSnapshot snapshot = ctx.State.Ui.FileTreeFor(Id, dir);
-            List<VisibleNode> nodes = Flatten(ctx, snapshot.Entries);
+            List<VisibleNode> nodes = Flatten(ctx, Id, snapshot.Entries);
             int cursor = ResolveCursor(ctx, nodes.Count);
 
             VisibleNode? current = cursor >= 0 && cursor < nodes.Count ? nodes[cursor] : null;
@@ -236,7 +236,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
     {
         string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
         FileTreeSnapshot snapshot = ctx.State.Ui.FileTreeFor(Id, dir);
-        int count = Flatten(ctx, snapshot.Entries).Count;
+        int count = Flatten(ctx, Id, snapshot.Entries).Count;
         int next;
         lock (_gate)
         {
@@ -291,7 +291,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
     ///     only when their parent directory is expanded, so collapsing hides a whole
     ///     subtree without touching the loaded data or the current directory.
     /// </summary>
-    private static List<VisibleNode> Flatten(PanelContext ctx, ImmutableArray<FileTreeEntry> entries)
+    private static List<VisibleNode> Flatten(PanelContext ctx, string id, ImmutableArray<FileTreeEntry> entries)
     {
         var nodes = new List<VisibleNode>();
         for (int i = 0; i < entries.Length; i++)
@@ -302,7 +302,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
                 i == entries.Length - 1,
                 prefix: string.Empty,
                 depth: 0,
-                path => ctx.State.Ui.IsFileTreeNodeExpanded(Id, path));
+                path => ctx.State.Ui.IsFileTreeNodeExpanded(id, path));
         }
 
         return nodes;
