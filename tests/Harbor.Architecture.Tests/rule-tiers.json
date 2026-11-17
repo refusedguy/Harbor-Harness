@@ -4,22 +4,22 @@
   "issue": 1725,
   "population": {
     "tree": "tests/Harbor.Architecture.Tests",
-    "cs_files": 188,
-    "top_level_classes": 245,
-    "classes_with_tests": 170,
-    "guards": 158,
+    "cs_files": 187,
+    "top_level_classes": 242,
+    "classes_with_tests": 169,
+    "guards": 157,
     "instrument_self_tests": 14,
     "engine_or_probe": 2,
-    "helper_classes_without_tests": 75,
-    "test_attributes": 1112,
-    "tree_lines": 109583,
+    "helper_classes_without_tests": 73,
+    "test_attributes": 1108,
+    "tree_lines": 109223,
     "ticket_claim_110": {
       "value": 110,
       "measured_at_commit": "d96b66ec",
       "measured_at_date": "2026-10-20",
       "what_it_counted": "classes whose name ends in Rule or Rules, in tests/Harbor.Architecture.Tests",
       "still_true": false,
-      "note": "The 110 was exact on 2026-10-20 and is stale. On the audit tree there were 129 classes named *Rule or *Rules, one of which (ScanRule) is the shared engine rather than a guard, so 128 guards carried that name; after #1727 removed ScanUniverseRule and OverlayKeyPlaneCensusRule the count is 126 -- and 32 more guards do not follow the convention at all (FullLayerMatrixTests, ResultFailureConversionTests, MaybeAbsenceTests, TokenTrackingRatchet, FatInterfaceShapeRatchet and the other *Tests-named guards). The real population was 160 at audit time and is 158 after the two #1727 removals."
+      "note": "The 110 was exact on 2026-10-20 and is stale. On the audit tree there were 129 classes named *Rule or *Rules, one of which (ScanRule) is the shared engine rather than a guard, so 128 guards carried that name; after #1727 removed ScanUniverseRule, OverlayKeyPlaneCensusRule and ProjectKeyedScanRule the count is 126 -- and 32 more guards do not follow the convention at all (FullLayerMatrixTests, ResultFailureConversionTests, MaybeAbsenceTests, TokenTrackingRatchet, FatInterfaceShapeRatchet and the other *Tests-named guards). The real population was 160 at audit time and is 157 after the three #1727 removals."
     }
   },
   "tiers": {
@@ -47,12 +47,12 @@
   "tier_counts": {
     "A": 50,
     "B": 100,
-    "C": 8
+    "C": 7
   },
   "false_positive_cost_counts": {
     "0": 51,
     "1": 86,
-    "2": 21
+    "2": 20
   },
   "semantic_candidates": {
     "count": 76,
@@ -2255,27 +2255,6 @@
       "estimated_lines_saved": 350
     },
     {
-      "id": "ProjectKeyedScanRule",
-      "file": "tests/Harbor.Architecture.Tests/ProjectKeyedScanRule.cs",
-      "kind": "guard",
-      "note": null,
-      "tests": 4,
-      "file_lines": 360,
-      "subject": "Which directories under src/ hold compiled product code and are not a project.",
-      "checks": "Walks src/ for directories with .cs files and no .csproj, and reports which project compiles each file.",
-      "defect_signal": "Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the second form of 'a measurement that cannot see its subject'.",
-      "refactor_signal": "The measurement is of the tree's shape. Every directory that is created without a csproj moves the answer.",
-      "false_positive_cost": 2,
-      "tier": "C",
-      "evidence": [
-        "file header: 'a MEASUREMENT, not a fix'"
-      ],
-      "semantic_candidate": false,
-      "semantic_kind": null,
-      "already_semantic": false,
-      "estimated_lines_saved": 0
-    },
-    {
       "id": "PromptCacheKeyCoverageRules",
       "file": "tests/Harbor.Architecture.Tests/PromptCacheKeyCoverageRules.cs",
       "kind": "guard",
@@ -3743,6 +3722,15 @@
       "removed_at": "2026-11-17",
       "reason": "Pure census + ratchet ('MEASUREMENT + ratchet for issue #812' per the file header). Its four verdicts compare a live walk of the IOverlayLayer implementations with written-down name tables (RegisteredLayers, RegisteredButCannotReadKeys, NeverConstructedInProduct, ArmedButNotHostRouted). Every row grades the shape of the tree, not a property of product code: a new or removed overlay layer moves the count, and the repair is an edit to the guard's table. That is a rule bound to form, which issue #1727 defines as tier C.",
       "invariant_disposition": "No code invariant is lost. The dead key plane this file pinned is already carried as acknowledged debt by PanelKeyRouteReachabilityRule (the GUARD for #857/#812): its PanelKeyRouteProbe.Ledger names OverlayStack.RouteKey and its tests hold that debt with planted positive controls. Whether to wire or delete RouteKey is a deferred product decision, not a defect signal, and the paint-half fact (SyncOverlays / PaintOver calls) is recorded in OverlayKeyRouteClaimRule's header. OverlayKeyPlaneProbe and OverlayLayerCensus had no consumers outside this file. The only remaining reference is a historical attribution in docs/DIALOG_OVERLAY_KIND_CENSUS.md, updated to point at the surviving guard. No successor is needed because nothing graded a defect."
+    },
+    {
+      "id": "ProjectKeyedScanRule",
+      "file": "tests/Harbor.Architecture.Tests/ProjectKeyedScanRule.cs",
+      "issue": 1727,
+      "tier": "C",
+      "removed_at": "2026-11-17",
+      "reason": "Pure census + ratchet ('a MEASUREMENT, not a fix' per its own header). CsprojLessFolders_MatchTheMeasuredBaseline compares the live set of csproj-less src/ directories with the written-down names MeasuredCsprojLessFolders; the other three verdicts are instrument sanity checks (the project glob is non-empty, a project with a csproj is not classified as csproj-less, and no folder is an orphan). Every row grades the shape of the tree: a new csproj-less directory moves the baseline and the repair is an edit to this guard. That is a rule bound to form, which issue #1727 defines as tier C.",
+      "invariant_disposition": "No code invariant is lost. The one defect-shaped verdict, EveryCsprojLessFolder_IsCompiledIntoSomeProject, is fully covered by SharedSourceLinkRules (GUARD for #456): R1 Every_Csproj_Less_Source_Folder_Is_Declared fails on a new csproj-less folder that is not declared, R3 Every_Declared_Shared_File_Is_Linked_By_At_Least_One_Project fails on a linked-source file in no build, and Every_Declared_Folder_Has_At_Least_One_Consumer fails on a folder nothing links. FullLayerMatrixTests.SharedSourceFolders owns the declaration table those checks read. What is genuinely lost is only the 'these folders are not keys' measurement, which grades no defect by the file's own header. CsprojLessFolder and ProjectKeyedScanProbe had no consumers outside this file; the only external references were a prose comparison in ScanVisibilityRule.cs and two rows in docs/ARCH_RULES.md, both updated to point at the surviving guard. No successor is needed because nothing graded a defect."
     }
   ]
 }

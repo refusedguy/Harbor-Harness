@@ -26,18 +26,18 @@ from the tree, not from a hand-kept list.
 
 | | count | what it is |
 |---|---:|---|
-| `.cs` files in the tree | 188 | |
-| top-level classes | 245 | |
-| classes with at least one `[Test]` | 170 | |
-| **rules (guards about the repository)** | **158** | the population of this audit |
+| `.cs` files in the tree | 187 | |
+| top-level classes | 242 | |
+| classes with at least one `[Test]` | 169 | |
+| **rules (guards about the repository)** | **157** | the population of this audit |
 | instrument self-tests | 14 | the guard machinery proving it can fail, not a rule about the product |
 | engine / probe | 2 | `ScanRule` (the shared runner) and the #861 probe file |
-| helper classes without tests | 75 | probes, fixtures, records, planted controls |
-| `[Test]` attributes | 1112 | |
-| lines in the tree | 109,583 | |
+| helper classes without tests | 73 | probes, fixtures, records, planted controls |
+| `[Test]` attributes | 1108 | |
+| lines in the tree | 109,223 | |
 
-Two tier-C guards were removed after the audit (#1727, see [Post-audit removal](#post-audit-removal-1727)):
-the counts above are the 2026-10-22 snapshot minus those two files.
+Three tier-C guards were removed after the audit (#1727, see [Post-audit removal](#post-audit-removal-1727)):
+the counts above are the 2026-10-22 snapshot minus those three files.
 
 ### The "110" of the issue
 
@@ -48,11 +48,11 @@ ends in `Rule` or `Rules`:
 commit d96b66ec (2026-10-20)  ->  110 classes named *Rule / *Rules
 this tree (2026-10-22)         ->  129 classes named *Rule / *Rules
 after #1727                    ->  126 classes named *Rule / *Rules
-this tree, the real population  ->  158 rules (170 test-bearing classes, minus 14 self-tests)
+this tree, the real population  ->  157 rules (169 test-bearing classes, minus 14 self-tests)
 ```
 
-Two corrections turn that into the real number. **17** `*Rule`-named classes were added since (19
-minus the two removed by #1727),
+Two corrections turn that into the real number. **16** `*Rule`-named classes were added since (19
+minus the three removed by #1727),
 and — the bigger half — **32 guards do not follow the suffix convention at all**:
 `FullLayerMatrixTests`, `ResultFailureConversionTests`, `MaybeAbsenceTests`,
 `TokenTrackingRatchet`, `FatInterfaceShapeRatchet`, `EnforcerIntegrityTests` and the other
@@ -63,7 +63,7 @@ engine). So:
 126 classes named *Rule / *Rules
  -  1  the shared engine (ScanRule)
  + 32  guards that do not follow the naming convention
- = 158 guards
+ = 157 guards
 ```
 
 A name-shape count and a rule count are different numbers. The audit uses the second one.
@@ -90,18 +90,18 @@ Cost is how often the rule needs a **manual repair** after an innocent change:
 |---:|---|---:|
 | 0 | never: the rule re-derives everything it grades. | 51 |
 | 1 | rarely: one manual edit of the rule or of one ledger row per relevant change. | 86 |
-| 2 | often: the rule carries a written-down number, a name list or a path table that every relevant change moves. | 22 |
+| 2 | often: the rule carries a written-down number, a name list or a path table that every relevant change moves. | 21 |
 
 The distribution is the headline of the second half of this audit: **more than half of the
 rules carry a ledger, a pinned number or a text anchor**, and that is what makes an innocent
 change expensive.
 
-| tier | rules | share of the 158 |
+| tier | rules | share of the 157 |
 |---|---:|---:|
-| A | 50 | 31.6% |
-| B | 100 | 63.3% |
-| C | 8 | 5.1% |
-| **total** | **158** | |
+| A | 50 | 31.8% |
+| B | 100 | 63.7% |
+| C | 7 | 4.5% |
+| **total** | **157** | |
 
 ## The rules, one by one
 
@@ -269,7 +269,7 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `UiFrameworkNullabilityRules` | `UiFrameworkNullabilityRules.cs` | Source-scans the nine Ui.Framework assemblies for `null!` and grades each site. | ProjectionCache declared six members non-nullable and initialised them with null!, so the compiler was asked to accept a value nobody assigned. | The nine assembly paths are named; a rename of an assembly needs an edit. | 1 |
 | `VendoredHtmlSurfaceRules` | `VendoredHtmlSurfaceRules.cs` | Compares the two vendored CollapseWhitespace implementations against each other by re-typing both and comparing over an exhaustive alphabet. | #878: the two vendored helpers disagree on 758 of the whitespace cases, so a behaviour that looked like one thing was two. | The rule grades the VENDORED tree, which is not built by CI: a change there is not caught by the compiler, which is the point. | 1 |
 
-### Tier C — does not catch a defect (8 rules)
+### Tier C — does not catch a defect (7 rules)
 
 | rule | file | checks | defect signal | refactoring signal | cost |
 |---|---|---|---|---|---:|
@@ -277,7 +277,6 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `BenchmarkContractTests` | `BenchmarkContractTests.cs` | Enumerates the benchmark sources and requires the seven contract fields (Operation / Payload / StateReset / Drain / RetainedState / AwaitSemantics /… | #408: a number that nobody can attribute cannot answer 'is this faster than before?', and a benchmark that carries state between iterations measures… | A new benchmark class needs its contract; the enumeration re-points itself. | 1 |
 | `ContribBoundaryNameRule` | `ContribBoundaryNameRule.cs` | Walks src/ and contrib/ for type declarations and compares the cross-boundary name set with a written-down baseline. | Nothing by its own header: it is 'a MEASUREMENT, not a prohibition'. | The baseline is a written-down set of names. The renderer move-out (16249cb1) changed the set and the rule fired on the shape change, not on a defect. | 2 |
 | `ExistenceCheckLivenessRule` | `ExistenceCheckLivenessRule.cs` | Reads the existence-check tables of the rules that hold them and asks, for each row, whether the named thing still exists and is still reachable. | Nothing by itself: it is the liveness half of the ledger checks, and it fires on a stale ROW, not on broken code. | Its whole job is to fire when a row goes stale after a rename or a move: this is a rule whose firing IS the refactoring signal. | 2 |
-| `ProjectKeyedScanRule` | `ProjectKeyedScanRule.cs` | Walks src/ for directories with .cs files and no .csproj, and reports which project compiles each file. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the second form of 'a measurement that cannot see its subject'. | The measurement is of the tree's shape. Every directory that is created without a csproj moves the answer. | 2 |
 | `ReadmeCoverageTests` | `ReadmeCoverageTests.cs` | Walks the src/ csproj directories and requires a README.md in each; for a packable project it requires the named sections to be present. | #430: the coverage lived as prose in a document and had already drifted twice (32/51, 45/54, then 48/54 actually measured). | Adding a project needs a README: a chore, not a bug. This is the measured 'style' class: the firing means 'the tree grew', not 'the code is wrong'. | 2 |
 | `ScanVisibilityRule` | `ScanVisibilityRule.cs` | Walks each tree through the shared helper and reports the trees that come back empty. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the first form of 'a measurement that cannot see its subject'. | The invisible-tree set is a written-down list; adding a tree changes the answer. | 2 |
 | `SharedSourceLinkRules` | `SharedSourceLinkRules.cs` | Walks the src/ folders that hold shared source, computes which project links each file, and compares the link inventory with a written-down count (22… | #456: a shared-source folder grew a file that no project linked, so the file was in the tree and in no build. | The count is a written-down literal. Commit 38516394743 (perf/1102-requestbuild-args) and 38854377103 (nightshift/1563-utf8jsonreader-helpers) both f… | 2 |
@@ -297,7 +296,6 @@ marked "keep" is a duplicate the tree needs.
 | `DesignSystemLeafTakesNoIoRules`, `DesktopSharedTakesNoIoRules`, `DesktopAbstractionsLeafTakesNoIoRules` | the same disk-call and environment scan of one leaf assembly (#534, #535, #536); each file carries its own `ParseDiskCall` / `ParseEnvLookup` | **merge the scanner**, keep one verdict per assembly in a table; 2 rules off |
 | `BackgroundTaskSyncResultRule`, `ToolDispatcherSyncResultRule` | both are #1099's blocking `.Result` behind `IsCompletedSuccessfully` in `src/Harbor.AgentRuntime/Agents`; both copy `ParseSyncResultReads`, `MethodWindow` and `FindSyncResultLines` | **merge into one rule** with a per-method table; 1 rule off |
 | `LayerDependencyTests`, `NetArchLayerRules` | the same layer edges from `docs/ARCHITECTURE_LAYERS.md` §2, read by reflection and by the NetArchTest DSL | **keep both**; both headers state the overlap is deliberate, so a breaking change in either tool surface cannot silently disable the invariant |
-| `ProjectKeyedScanRule`, `ScanVisibilityRule` | both measure the #877 "cannot see its subject" family | **keep both**; the `ProjectKeyedScanRule` header says they fail in opposite directions (absent project key vs path dropped by a filter) and no single edit fixes both |
 
 The four Result-family rules (`HandRolledResultShapeTests`, `ResultFailureConversionTests`,
 `MapErrorFailureShapeTests`, `ResultTryAdoptionTests`) look like the same family but are not
@@ -441,22 +439,22 @@ The census is a computation over the tree, not a list anyone maintains:
 
 ```bash
 # the population: one entry per class with at least one [Test]
-grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1112 test attributes
+grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1108 test attributes
 
 # the files and the lines of the tree
-ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 188 files
-cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 109583 lines
+ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 187 files
+cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 109223 lines
 
 # the classes, and the ones that carry a [Test]. A [Test] method belongs to
 # the type that encloses it, so the last declaration before it is its class.
 awk 'match($0, /^(public|internal|private|protected)[A-Za-z ]*(class|record|struct|interface|enum) [A-Za-z_][A-Za-z0-9_]*/) { n = split(substr($0, RSTART, RLENGTH), a, " "); if (a[n-1] == "class") c[a[n]] = 1; cur = a[n] } /^[ \t]*\[Test/ { if (cur != "") t[cur] = 1 } END { nc = 0; for (k in c) nc++; nt = 0; for (k in t) if (k in c) nt++; print "top-level classes:", nc; print "classes with a [Test]:", nt }' \
     tests/Harbor.Architecture.Tests/*.cs
-# top-level classes: 245
-# classes with a [Test]: 170
+# top-level classes: 242
+# classes with a [Test]: 169
 
 # the tiers
 python3 -c "import json;d=json.load(open('tests/Harbor.Architecture.Tests/rule-tiers.json'));print(d['tier_counts'])"
-# {'A': 50, 'B': 100, 'C': 8}
+# {'A': 50, 'B': 100, 'C': 7}
 ```
 
 ## Post-audit removal (#1727)
@@ -495,12 +493,34 @@ had no consumers outside the file; the only remaining reference is a historical 
 cost-2 22 -> 21, guards 159 -> 158. The reason is recorded in the `removals` array of
 `rule-tiers.json`.
 
+`ProjectKeyedScanRule` was removed on 2026-11-17 under the same #1727 batch. Its own header called
+it "a MEASUREMENT, not a fix". Of its four verdicts, one compared the live set of csproj-less
+`src/` directories with the written-down names in `MeasuredCsprojLessFolders`, and the other three
+were instrument sanity checks (the project glob is non-empty, a project with a csproj is not
+classified as csproj-less, and no folder is an orphan). Every row graded the shape of the tree: a
+new csproj-less directory moved the baseline, and the firing's fix was an edit to this guard.
+
+**No invariant was lost.** The one defect-shaped verdict,
+`EveryCsprojLessFolder_IsCompiledIntoSomeProject`, is fully covered by `SharedSourceLinkRules`, the
+GUARD for #456. Its R1 `Every_Csproj_Less_Source_Folder_Is_Declared` fails on a new csproj-less
+folder that is not declared, R3 `Every_Declared_Shared_File_Is_Linked_By_At_Least_One_Project`
+fails on a linked-source file in no build, and `Every_Declared_Folder_Has_At_Least_One_Consumer`
+fails on a folder nothing links; `FullLayerMatrixTests.SharedSourceFolders` owns the declaration
+table those checks read. What is lost is only the "these folders are not keys" measurement, which
+grades no defect by the file's own header. `ScanVisibilityRule` stays: its subject is the shared
+scan helper's undeclared filter boundary, a live API contract rather than a census. The earlier
+"keep both" verdict in the duplicates table is reversed on that basis. `CsprojLessFolder` and
+`ProjectKeyedScanProbe` had no consumers outside the file; the only external references were a
+prose comparison in `ScanVisibilityRule.cs` and two rows in this document, all updated. Tier C
+8 -> 7, cost-2 21 -> 20, guards 158 -> 157. The reason is recorded in the `removals` array of
+`rule-tiers.json`.
+
 ## Related
 
 - #1724, the epic this audit belongs to.
 - #1726, the measurement this audit leans on: [docs/GUARD_VALUE_MEASUREMENT.md](GUARD_VALUE_MEASUREMENT.md)
   and [`tools/guard-triage-classes.json`](../tools/guard-triage-classes.json).
-- #1727, the Tier C removal. The eight Tier C rules below are its input.
+- #1727, the Tier C removal. The seven Tier C rules below are its input.
 - #1729, the pilot that turned two text rules into Roslyn analyzers -- the shape the 74
   `roslyn-analyzer` candidates would take.
 - [docs/ARCHITECTURE_LAYERS.md](ARCHITECTURE_LAYERS.md), the contract the rules enforce.
