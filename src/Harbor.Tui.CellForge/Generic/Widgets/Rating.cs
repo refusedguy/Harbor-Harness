@@ -47,7 +47,7 @@ public readonly record struct RatingState
 /// <summary>One accepted keyboard edit: the value before and after the key.</summary>
 /// <param name="OldValue">Value before the key.</param>
 /// <param name="NewValue">Value after the key; differs from <paramref name="OldValue"/>.</param>
-public readonly record struct RatingChange(int OldValue, int NewValue);
+public sealed record RatingChange(int OldValue, int NewValue) : EventArgs;
 
 /// <summary>
 /// Compact star-rating primitive with keyboard selection and a read-only mode.
@@ -174,8 +174,7 @@ public sealed class Rating
             return;
         }
 
-        string label = " " + State.Value.ToString() + "/" + State.Maximum.ToString()
-            + (readOnly ? " ro" : string.Empty);
+        string label = $" {State.Value}/{State.Maximum}" + (readOnly ? " ro" : string.Empty);
         int take = Math.Min(label.Length, right - x);
         if (take > 0)
         {
