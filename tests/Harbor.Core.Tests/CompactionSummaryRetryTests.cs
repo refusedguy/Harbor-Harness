@@ -33,11 +33,9 @@ public class CompactionSummaryRetryTests
             providers,
             NullLogger<CompactionService>.Instance,
             null,
-            retry)
-        {
-            KeepRecentTokens = 60,
-            TailTurns = 0
-        };
+            retry,
+            keepRecentTokens: 60,
+            tailTurns: 0);
     }
 
     private static List<AgentMessage> FourLongMessages() =>
