@@ -16,7 +16,8 @@
 // Extra keys inside an entry are ignored for the same reason the top-level
 // reader ignores fields it does not know: a manifest written for a newer Harbor
 // still loads here. The required keys are checked, so a typo in one of those is
-// still caught.
+// still caught. The reads are chained, so a failure short-circuits to the host
+// with the first bad entry instead of leaving a partial list behind.
 
 using System.Text.Json;
 using Harbor.Plugins.Abstractions;
@@ -34,48 +35,9 @@ public static class PluginBundleDeclarationsReader
     /// <param name="element">The field value from the manifest.</param>
     /// <param name="origin">The manifest file name, used in the messages.</param>
     /// <returns>The declared skills, or a failure naming the bad entry.</returns>
-    public static Result<IReadOnlyList<PluginSkillDeclaration>> ReadSkills(JsonElement element, string origin)
-    {
-        Result<JsonElement.ArrayEnumerator> list = ReadArray(element, "skills", origin);
-        if (list.IsFailure)
-            return list.ConvertFailure<IReadOnlyList<PluginSkillDeclaration>>();
-
-        var skills = new List<PluginSkillDeclaration>();
-        var paths = new HashSet<string>(StringComparer.Ordinal);
-        int index = 0;
-        foreach (JsonElement item in list.Value)
-        {
-            string label = $"skills[{index}]";
-            if (!TryReadObject(item, label, origin, out string? objectError))
-                return Result.Failure<IReadOnlyList<PluginSkillDeclaration>>(objectError!);
-
-            Result<string> path = ReadRequiredString(item, "path", label, origin);
-            if (path.IsFailure)
-                return path.ConvertFailure<IReadOnlyList<PluginSkillDeclaration>>();
-
-            if (!paths.Add(path.Value))
-                return Result.Failure<IReadOnlyList<PluginSkillDeclaration>>(
-                    $"The plugin manifest '{origin}' declares the skill path '{path.Value}' twice.");
-
-            Result<string?> name = ReadOptionalString(item, "name", label, origin);
-            if (name.IsFailure)
-                return name.ConvertFailure<IReadOnlyList<PluginSkillDeclaration>>();
-
-            Result<string?> description = ReadOptionalString(item, "description", label, origin);
-            if (description.IsFailure)
-                return description.ConvertFailure<IReadOnlyList<PluginSkillDeclaration>>();
-
-            skills.Add(new PluginSkillDeclaration
-            {
-                Path = path.Value,
-                Name = name.Value,
-                Description = description.Value,
-            });
-            index++;
-        }
-
-        return Result.Success<IReadOnlyList<PluginSkillDeclaration>>(skills);
-    }
+    public static Result<IReadOnlyList<PluginSkillDeclaration>> ReadSkills(JsonElement element, string origin) =>
+        ReadArray(element, "skills", origin)
+            .Bind(items => ReadSkillEntries(items, origin));
 
     /// <summary>
     ///     Read the <c>hooks</c> array.
@@ -83,45 +45,9 @@ public static class PluginBundleDeclarationsReader
     /// <param name="element">The field value from the manifest.</param>
     /// <param name="origin">The manifest file name, used in the messages.</param>
     /// <returns>The declared hook files, or a failure naming the bad entry.</returns>
-    public static Result<IReadOnlyList<PluginHookDeclaration>> ReadHooks(JsonElement element, string origin)
-    {
-        Result<JsonElement.ArrayEnumerator> list = ReadArray(element, "hooks", origin);
-        if (list.IsFailure)
-            return list.ConvertFailure<IReadOnlyList<PluginHookDeclaration>>();
-
-        var hooks = new List<PluginHookDeclaration>();
-        var identities = new HashSet<string>(StringComparer.Ordinal);
-        int index = 0;
-        foreach (JsonElement item in list.Value)
-        {
-            string label = $"hooks[{index}]";
-            if (!TryReadObject(item, label, origin, out string? objectError))
-                return Result.Failure<IReadOnlyList<PluginHookDeclaration>>(objectError!);
-
-            Result<string> path = ReadRequiredString(item, "path", label, origin);
-            if (path.IsFailure)
-                return path.ConvertFailure<IReadOnlyList<PluginHookDeclaration>>();
-
-            Result<string?> hookEvent = ReadOptionalString(item, "event", label, origin);
-            if (hookEvent.IsFailure)
-                return hookEvent.ConvertFailure<IReadOnlyList<PluginHookDeclaration>>();
-
-            string identity = path.Value + "\u0000" + (hookEvent.Value ?? string.Empty);
-            if (!identities.Add(identity))
-                return Result.Failure<IReadOnlyList<PluginHookDeclaration>>(
-                    $"The plugin manifest '{origin}' declares the hook '{path.Value}' for the event "
-                    + $"'{hookEvent.Value}' twice.");
-
-            hooks.Add(new PluginHookDeclaration
-            {
-                Path = path.Value,
-                Event = hookEvent.Value,
-            });
-            index++;
-        }
-
-        return Result.Success<IReadOnlyList<PluginHookDeclaration>>(hooks);
-    }
+    public static Result<IReadOnlyList<PluginHookDeclaration>> ReadHooks(JsonElement element, string origin) =>
+        ReadArray(element, "hooks", origin)
+            .Bind(items => ReadHookEntries(items, origin));
 
     /// <summary>
     ///     Read the <c>mcpServers</c> array.
@@ -129,84 +55,223 @@ public static class PluginBundleDeclarationsReader
     /// <param name="element">The field value from the manifest.</param>
     /// <param name="origin">The manifest file name, used in the messages.</param>
     /// <returns>The declared servers, or a failure naming the bad entry.</returns>
-    public static Result<IReadOnlyList<PluginMcpServerDeclaration>> ReadMcpServers(JsonElement element, string origin)
-    {
-        Result<JsonElement.ArrayEnumerator> list = ReadArray(element, "mcpServers", origin);
-        if (list.IsFailure)
-            return list.ConvertFailure<IReadOnlyList<PluginMcpServerDeclaration>>();
-
-        var servers = new List<PluginMcpServerDeclaration>();
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        int index = 0;
-        foreach (JsonElement item in list.Value)
-        {
-            string label = $"mcpServers[{index}]";
-            if (!TryReadObject(item, label, origin, out string? objectError))
-                return Result.Failure<IReadOnlyList<PluginMcpServerDeclaration>>(objectError!);
-
-            Result<string> name = ReadRequiredString(item, "name", label, origin);
-            if (name.IsFailure)
-                return name.ConvertFailure<IReadOnlyList<PluginMcpServerDeclaration>>();
-
-            if (!names.Add(name.Value))
-                return Result.Failure<IReadOnlyList<PluginMcpServerDeclaration>>(
-                    $"The plugin manifest '{origin}' declares the MCP server '{name.Value}' twice.");
-
-            Result<string> command = ReadRequiredString(item, "command", label, origin);
-            if (command.IsFailure)
-                return command.ConvertFailure<IReadOnlyList<PluginMcpServerDeclaration>>();
-
-            Result<IReadOnlyList<string>> args = ReadStringArray(item, "args", label, origin);
-            if (args.IsFailure)
-                return args.ConvertFailure<IReadOnlyList<PluginMcpServerDeclaration>>();
-
-            Result<IReadOnlyDictionary<string, string>> environment = ReadEnvironment(item, label, origin);
-            if (environment.IsFailure)
-                return environment.ConvertFailure<IReadOnlyList<PluginMcpServerDeclaration>>();
-
-            servers.Add(new PluginMcpServerDeclaration
-            {
-                Name = name.Value,
-                Command = command.Value,
-                Args = args.Value,
-                Environment = environment.Value,
-            });
-            index++;
-        }
-
-        return Result.Success<IReadOnlyList<PluginMcpServerDeclaration>>(servers);
-    }
+    public static Result<IReadOnlyList<PluginMcpServerDeclaration>> ReadMcpServers(JsonElement element, string origin) =>
+        ReadArray(element, "mcpServers", origin)
+            .Bind(items => ReadMcpServerEntries(items, origin));
 
     /// <summary>
     ///     A field this build reads as a list of declarations.
     /// </summary>
-    private static Result<JsonElement.ArrayEnumerator> ReadArray(JsonElement element, string field, string origin)
-    {
-        if (element.ValueKind != JsonValueKind.Array)
-            return Result.Failure<JsonElement.ArrayEnumerator>(
+    private static Result<JsonElement.ArrayEnumerator> ReadArray(JsonElement element, string field, string origin) =>
+        element.ValueKind == JsonValueKind.Array
+            ? Result.Success(element.EnumerateArray())
+            : Result.Failure<JsonElement.ArrayEnumerator>(
                 $"The plugin manifest '{origin}' declares '{field}' that is not an array.");
-
-        return Result.Success(element.EnumerateArray());
-    }
 
     /// <summary>
     ///     An entry must be an object; a string where a declaration belongs is a
     ///     broken declaration, not a shorthand path.
     /// </summary>
-    private static bool TryReadObject(
+    private static Result<JsonElement> ReadObject(JsonElement item, string label, string origin) =>
+        item.ValueKind == JsonValueKind.Object
+            ? Result.Success(item)
+            : Result.Failure<JsonElement>(
+                $"The plugin manifest '{origin}' declares '{label}' that is not an object.");
+
+    /// <summary>
+    ///     Read one skill. Absent optional fields stay unsaid; a bad one fails
+    ///     the whole read.
+    /// </summary>
+    private static Result<PluginSkillDeclaration> ReadSkillEntry(
         JsonElement item,
         string label,
-        string origin,
-        out string? error)
-    {
-        if (item.ValueKind == JsonValueKind.Object)
+        string origin) =>
+        from obj in ReadObject(item, label, origin)
+        from path in ReadRequiredString(obj, "path", label, origin)
+        from name in ReadOptionalString(obj, "name", label, origin)
+        from description in ReadOptionalString(obj, "description", label, origin)
+        select new PluginSkillDeclaration
         {
-            error = null;
-            return true;
+            Path = path,
+            Name = name.HasValue ? name.Value : null,
+            Description = description.HasValue ? description.Value : null,
+        };
+
+    /// <summary>
+    ///     Read one hook file.
+    /// </summary>
+    private static Result<PluginHookDeclaration> ReadHookEntry(
+        JsonElement item,
+        string label,
+        string origin) =>
+        from obj in ReadObject(item, label, origin)
+        from path in ReadRequiredString(obj, "path", label, origin)
+        from hookEvent in ReadOptionalString(obj, "event", label, origin)
+        select new PluginHookDeclaration
+        {
+            Path = path,
+            Event = hookEvent.HasValue ? hookEvent.Value : null,
+        };
+
+    /// <summary>
+    ///     Read one MCP server declaration.
+    /// </summary>
+    private static Result<PluginMcpServerDeclaration> ReadMcpServerEntry(
+        JsonElement item,
+        string label,
+        string origin) =>
+        from obj in ReadObject(item, label, origin)
+        from name in ReadRequiredString(obj, "name", label, origin)
+        from command in ReadRequiredString(obj, "command", label, origin)
+        from args in ReadStringArray(obj, "args", label, origin)
+        from environment in ReadEnvironment(obj, label, origin)
+        select new PluginMcpServerDeclaration
+        {
+            Name = name,
+            Command = command,
+            Args = args,
+            Environment = environment,
+        };
+
+    /// <summary>
+    ///     Read all skill entries; one bad entry fails the whole list.
+    /// </summary>
+    private static Result<IReadOnlyList<PluginSkillDeclaration>> ReadSkillEntries(
+        JsonElement.ArrayEnumerator items,
+        string origin)
+    {
+        Result<IReadOnlyList<PluginSkillDeclaration>> accumulated =
+            Result.Success<IReadOnlyList<PluginSkillDeclaration>>(Array.Empty<PluginSkillDeclaration>());
+
+        int index = 0;
+        foreach (JsonElement item in items)
+        {
+            string label = $"skills[{index++}]";
+            accumulated =
+                from list in accumulated
+                from skill in ReadSkillEntry(item, label, origin)
+                from next in AppendSkill(list, skill, origin)
+                select next;
         }
 
-        error = $"The plugin manifest '{origin}' declares '{label}' that is not an object.";
-        return false;
+        return accumulated;
+    }
+
+    /// <summary>
+    ///     Add one skill, refusing a second declaration of the same path. The
+    ///     paths are few, so the linear check keeps the reader obvious.
+    /// </summary>
+    private static Result<IReadOnlyList<PluginSkillDeclaration>> AppendSkill(
+        IReadOnlyList<PluginSkillDeclaration> skills,
+        PluginSkillDeclaration skill,
+        string origin)
+    {
+        foreach (PluginSkillDeclaration existing in skills)
+        {
+            if (string.Equals(existing.Path, skill.Path, StringComparison.Ordinal))
+                return Result.Failure<IReadOnlyList<PluginSkillDeclaration>>(
+                    $"The plugin manifest '{origin}' declares the skill path '{skill.Path}' twice.");
+        }
+
+        var next = new List<PluginSkillDeclaration>(skills.Count + 1);
+        next.AddRange(skills);
+        next.Add(skill);
+        return Result.Success<IReadOnlyList<PluginSkillDeclaration>>(next);
+    }
+
+    /// <summary>
+    ///     Read all hook entries; one bad entry fails the whole list.
+    /// </summary>
+    private static Result<IReadOnlyList<PluginHookDeclaration>> ReadHookEntries(
+        JsonElement.ArrayEnumerator items,
+        string origin)
+    {
+        Result<IReadOnlyList<PluginHookDeclaration>> accumulated =
+            Result.Success<IReadOnlyList<PluginHookDeclaration>>(Array.Empty<PluginHookDeclaration>());
+
+        int index = 0;
+        foreach (JsonElement item in items)
+        {
+            string label = $"hooks[{index++}]";
+            accumulated =
+                from list in accumulated
+                from hook in ReadHookEntry(item, label, origin)
+                from next in AppendHook(list, hook, origin)
+                select next;
+        }
+
+        return accumulated;
+    }
+
+    /// <summary>
+    ///     Add one hook, refusing a second declaration of the same file and
+    ///     event pair.
+    /// </summary>
+    private static Result<IReadOnlyList<PluginHookDeclaration>> AppendHook(
+        IReadOnlyList<PluginHookDeclaration> hooks,
+        PluginHookDeclaration hook,
+        string origin)
+    {
+        string identity = hook.Path + "\u0000" + (hook.Event ?? string.Empty);
+        foreach (PluginHookDeclaration existing in hooks)
+        {
+            if (string.Equals(existing.Path + "\u0000" + (existing.Event ?? string.Empty), identity,
+                    StringComparison.Ordinal))
+                return Result.Failure<IReadOnlyList<PluginHookDeclaration>>(
+                    $"The plugin manifest '{origin}' declares the hook '{hook.Path}' for the event "
+                    + $"'{hook.Event}' twice.");
+        }
+
+        var next = new List<PluginHookDeclaration>(hooks.Count + 1);
+        next.AddRange(hooks);
+        next.Add(hook);
+        return Result.Success<IReadOnlyList<PluginHookDeclaration>>(next);
+    }
+
+    /// <summary>
+    ///     Read all MCP server entries; one bad entry fails the whole list.
+    /// </summary>
+    private static Result<IReadOnlyList<PluginMcpServerDeclaration>> ReadMcpServerEntries(
+        JsonElement.ArrayEnumerator items,
+        string origin)
+    {
+        Result<IReadOnlyList<PluginMcpServerDeclaration>> accumulated =
+            Result.Success<IReadOnlyList<PluginMcpServerDeclaration>>(Array.Empty<PluginMcpServerDeclaration>());
+
+        int index = 0;
+        foreach (JsonElement item in items)
+        {
+            string label = $"mcpServers[{index++}]";
+            accumulated =
+                from list in accumulated
+                from server in ReadMcpServerEntry(item, label, origin)
+                from next in AppendServer(list, server, origin)
+                select next;
+        }
+
+        return accumulated;
+    }
+
+    /// <summary>
+    ///     Add one server, refusing a second declaration of the same name. A
+    ///     server name is a key the host would have to disambiguate otherwise.
+    /// </summary>
+    private static Result<IReadOnlyList<PluginMcpServerDeclaration>> AppendServer(
+        IReadOnlyList<PluginMcpServerDeclaration> servers,
+        PluginMcpServerDeclaration server,
+        string origin)
+    {
+        foreach (PluginMcpServerDeclaration existing in servers)
+        {
+            if (string.Equals(existing.Name, server.Name, StringComparison.Ordinal))
+                return Result.Failure<IReadOnlyList<PluginMcpServerDeclaration>>(
+                    $"The plugin manifest '{origin}' declares the MCP server '{server.Name}' twice.");
+        }
+
+        var next = new List<PluginMcpServerDeclaration>(servers.Count + 1);
+        next.AddRange(servers);
+        next.Add(server);
+        return Result.Success<IReadOnlyList<PluginMcpServerDeclaration>>(next);
     }
 
     /// <summary>
@@ -224,27 +289,33 @@ public static class PluginBundleDeclarationsReader
                 $"The plugin manifest '{origin}' declares '{fullLabel}' that is not a string.");
 
         string text = value.GetString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(text))
-            return Result.Failure<string>(
-                $"The plugin manifest '{origin}' declares '{fullLabel}' that is empty.");
-
-        return Result.Success(text);
+        return string.IsNullOrWhiteSpace(text)
+            ? Result.Failure<string>(
+                $"The plugin manifest '{origin}' declares '{fullLabel}' that is empty.")
+            : Result.Success(text);
     }
 
     /// <summary>
-    ///     Read a key that may be absent, but must be a string when present.
+    ///     Read a key that may be absent, but must be a string when present. The
+    ///     absent case is a <see cref="Maybe{T}" /> with no value, never a
+    ///     <c>Result&lt;string?&gt;</c> — that type would hide "absent" inside
+    ///     "succeeded" and leave the caller no branch to write.
     /// </summary>
-    private static Result<string?> ReadOptionalString(JsonElement entry, string key, string label, string origin)
+    private static Result<Maybe<string>> ReadOptionalString(
+        JsonElement entry,
+        string key,
+        string label,
+        string origin)
     {
         string fullLabel = label + "." + key;
         if (!entry.TryGetProperty(key, out JsonElement value))
-            return Result.Success<string?>(null);
+            return Result.Success(Maybe<string>.None);
 
         if (value.ValueKind != JsonValueKind.String)
-            return Result.Failure<string?>(
+            return Result.Failure<Maybe<string>>(
                 $"The plugin manifest '{origin}' declares '{fullLabel}' that is not a string.");
 
-        return Result.Success<string?>(value.GetString());
+        return Result.Success(Maybe<string>.From(value.GetString()));
     }
 
     /// <summary>
