@@ -14,12 +14,15 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class SessionForkServiceTests
 {
-    private sealed class FakeStore : ISessionStore
+    private sealed class FakeStore : ISessionStore, ISessionOperationEventStore
     {
         public readonly Dictionary<string, Session> Sessions = [];
         public readonly Dictionary<string, List<AgentMessage>> Messages = [];
         public readonly List<string> DeletedIds = [];
+        public readonly List<SessionOperationEvent> Markers = [];
+        public readonly List<IReadOnlyList<AgentMessage>> Batches = [];
         public bool FailUpdates;
+        public bool FailSingleAppend;
 
         public Task<Result<Session>> CreateAsync(
             string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
@@ -40,9 +43,21 @@ public class SessionForkServiceTests
 
         public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
         {
+            if (FailSingleAppend)
+                return Task.FromResult(Result.Failure("fork must use AppendMessagesBatchAsync"));
             if (!Messages.TryGetValue(sessionId, out var list))
                 return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
             list.Add(message);
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> AppendMessagesBatchAsync(
+            string sessionId, IReadOnlyList<AgentMessage> messages, CancellationToken ct = default)
+        {
+            Batches.Add(messages);
+            if (!Messages.TryGetValue(sessionId, out var list))
+                return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+            list.AddRange(messages);
             return Task.FromResult(Result.Success());
         }
 
@@ -78,6 +93,17 @@ public class SessionForkServiceTests
 
         public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
             => Task.FromResult(Result.Success());
+
+        public Task<Result> AppendOperationEventAsync(
+            string sessionId, SessionOperationEvent operationEvent, CancellationToken ct = default)
+        {
+            Markers.Add(operationEvent with { Sequence = Markers.Count });
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result<IReadOnlyList<SessionOperationEvent>>> GetOperationEventsAsync(
+            string sessionId, CancellationToken ct = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<SessionOperationEvent>>([.. Markers]));
     }
 
     private static UserMessage User(string sessionId, int n) =>
@@ -165,6 +191,74 @@ public class SessionForkServiceTests
         // No half-forked orphan may survive: the shell was created, then rolled back.
         await Assert.That(store.DeletedIds.Count()).IsEqualTo(1);
         await Assert.That(store.Sessions.ContainsKey(store.DeletedIds[0])).IsFalse();
+    }
+
+    [Test]
+    public async Task ForkAsync_UsesBatchAndBracketsCopyWithMatchedMarkers()
+    {
+        var store = new FakeStore();
+        var parent = (await AddParentAsync(store, 3)).Session;
+        var ids = store.Messages[parent.Id].Select(m => m.Id).ToList();
+        // Arm this only after seeding: a single-message append now fails, so
+        // the fork can only succeed through the batch primitive.
+        store.FailSingleAppend = true;
+
+        var result = await new SessionForkService().ForkAsync(store, parent.Id, upToMessageId: ids[1]);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(store.Batches.Count).IsEqualTo(1);
+        await Assert.That(store.Messages[result.Value.Session.Id].Count).IsEqualTo(2);
+        var starts = store.Markers.Where(m => m.Kind == SessionOperationKind.ForkStart).ToList();
+        var ends = store.Markers.Where(m => m.Kind == SessionOperationKind.ForkEnd).ToList();
+        await Assert.That(starts.Count).IsEqualTo(1);
+        await Assert.That(ends.Count).IsEqualTo(1);
+        await Assert.That(starts[0].BoundaryMessageId).IsEqualTo(ids[1]);
+        await Assert.That(starts[0].Copied).IsEqualTo(2);
+        await Assert.That(ends[0].Owner).IsEqualTo(starts[0].Owner);
+        await Assert.That(SessionOperationMarkers.HasIncompleteFork(store.Markers)).IsFalse();
+    }
+
+    [Test]
+    public async Task InterruptedFork_StartWithoutEnd_IsDetected()
+    {
+        IReadOnlyList<SessionOperationEvent> markers =
+        [
+            new SessionOperationEvent
+            {
+                Kind = SessionOperationKind.ForkStart,
+                Owner = "fork-1",
+                BoundaryMessageId = "m2",
+                Copied = 2,
+                OccurredAt = DateTimeOffset.UtcNow,
+            },
+        ];
+
+        await Assert.That(SessionOperationMarkers.HasIncompleteFork(markers)).IsTrue();
+        IReadOnlyList<SessionOperationEvent> open = SessionOperationMarkers.FindUnmatchedStarts(
+            markers, SessionOperationKind.ForkStart, SessionOperationKind.ForkEnd);
+        await Assert.That(open.Count).IsEqualTo(1);
+        await Assert.That(open[0].BoundaryMessageId).IsEqualTo("m2");
+        await Assert.That(open[0].Copied).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task InterruptedTurn_StartWithoutEnd_IsDetected()
+    {
+        IReadOnlyList<SessionOperationEvent> interrupted =
+        [
+            new SessionOperationEvent { Kind = SessionOperationKind.TurnStart, Turn = 1, OccurredAt = DateTimeOffset.UtcNow },
+            new SessionOperationEvent { Kind = SessionOperationKind.TurnEnd, Turn = 1, OccurredAt = DateTimeOffset.UtcNow },
+            new SessionOperationEvent { Kind = SessionOperationKind.TurnStart, Turn = 2, OccurredAt = DateTimeOffset.UtcNow },
+        ];
+
+        IReadOnlyList<SessionOperationEvent> finished =
+        [
+            new SessionOperationEvent { Kind = SessionOperationKind.TurnStart, Turn = 1, OccurredAt = DateTimeOffset.UtcNow },
+            new SessionOperationEvent { Kind = SessionOperationKind.TurnEnd, Turn = 1, OccurredAt = DateTimeOffset.UtcNow },
+        ];
+
+        await Assert.That(SessionOperationMarkers.FindIncompleteTurn(interrupted)).IsEqualTo(2);
+        await Assert.That(SessionOperationMarkers.FindIncompleteTurn(finished)).IsNull();
     }
 
     /// <summary>

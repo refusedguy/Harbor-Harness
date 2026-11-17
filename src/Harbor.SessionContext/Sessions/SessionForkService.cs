@@ -38,13 +38,12 @@ public sealed record SessionFork(Session Session, int Copied);
 ///         message id. The UI framework now reaches this service through the
 ///         <c>ISessionForker</c> port (<c>Harbor.Ui.Framework.Abstractions/Forking</c>), so this
 ///         is the only fork left — and anything a caller needs guaranteed has to be guaranteed
-///         here. One diagnostic moved IN with the deletion: a half-written copy reports how far it
-///         got, because the duplicate reported progress and losing that would have left a
-///         truncated child in the store with nothing recording how far it reached. It is the only
-///         return in this method that rebuilds its error text — every other one re-types the
-///         store's <c>Result</c> and leaves the string alone, per
-///         <c>ResultConversionBehaviourTests</c>. Progress is the exception because it is not a
-///         restatement of the cause: only the copy loop knows where it stopped.
+///         here. One diagnostic moved IN with the deletion: a failed copy reports how far it
+///         got. Since #2226 the prefix is copied in one atomic batch, so the number is always
+///         zero on failure (no record landed), but the text survives for callers that keyed
+///         on it. It is the only return in this method that rebuilds its error text — every
+///         other one re-types the store's <c>Result</c> and leaves the string alone, per
+///         <c>ResultConversionBehaviourTests</c>.
 ///     </para>
 /// </remarks>
 public sealed class SessionForkService
@@ -134,30 +133,74 @@ public sealed class SessionForkService
             return stamped.ConvertFailure<SessionFork>();
         }
 
-        int copied = 0;
+        // #2226: bracket the copy with a durable claim. The start is written
+        // FIRST and the end LAST, so a crash between them leaves an unmatched
+        // start — detectable evidence that this child is an incomplete fork.
+        ISessionOperationEventStore? markers = store as ISessionOperationEventStore;
+        string forkId = Guid.NewGuid().ToString("N");
+        if (markers is not null)
+        {
+            Result claimed = await markers.AppendOperationEventAsync(
+                child.Id,
+                new SessionOperationEvent
+                {
+                    Kind = SessionOperationKind.ForkStart,
+                    Owner = forkId,
+                    BoundaryMessageId = upToMessageId,
+                    Copied = count,
+                    OccurredAt = DateTimeOffset.UtcNow,
+                },
+                ct).ConfigureAwait(false);
+            if (claimed.IsFailure)
+            {
+                await store.DeleteAsync(child.Id, CancellationToken.None).ConfigureAwait(false);
+                return claimed.ConvertFailure<SessionFork>();
+            }
+        }
+
+        // #1571: the copy protocol lives on the message (Prototype), not here.
+        // #2226: the whole prefix goes in ONE atomic write. A crash no longer
+        // leaves a child with a prefix of the history — it is all or nothing.
+        var copies = new AgentMessage[count];
         for (int i = 0; i < count; i++)
         {
-            // #1571: the copy protocol lives on the message (Prototype), not here.
-            AgentMessage copy = msgsRes.Value[i].CloneForSession(child.Id);
-            Result appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
-            if (appended.IsFailure)
-            {
-                // #670: the duplicate this replaced reported its progress here, and that number
-                // was the only record of how far a half-written fork got. It moves to the single
-                // remaining implementation rather than dying with the duplicate.
-                //
-                // This is the ONE error this service rebuilds, and the reason it is allowed here
-                // and nowhere else in the method: `ResultConversionBehaviourTests` requires the
-                // store's text to arrive unchanged at a re-type, and that holds for every other
-                // return. Progress is not a restatement of the cause — it is state the caller
-                // cannot reconstruct, because only this loop knows where it stopped.
-                int done = copied;
-                return appended.ConvertFailure<SessionFork>()
-                    .MapError(e =>
-                        $"Failed to copy message history ({done} of {count} copied): {e}");
-            }
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return above, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
+            copies[i] = msgsRes.Value[i].CloneForSession(child.Id);
+            #pragma warning restore CFE0001
+        }
 
-            copied++;
+        Result appended = await store.AppendMessagesBatchAsync(child.Id, copies, ct).ConfigureAwait(false);
+        if (appended.IsFailure)
+        {
+            // No record landed (the batch is atomic), so the child cannot look
+            // like a partial fork. Remove the shell and the claim with it.
+            await store.DeleteAsync(child.Id, CancellationToken.None).ConfigureAwait(false);
+            return appended.ConvertFailure<SessionFork>()
+                .MapError(e => $"Failed to copy message history (0 of {count} copied): {e}");
+        }
+
+        if (markers is not null)
+        {
+            Result released = await markers.AppendOperationEventAsync(
+                child.Id,
+                new SessionOperationEvent
+                {
+                    Kind = SessionOperationKind.ForkEnd,
+                    Owner = forkId,
+                    BoundaryMessageId = upToMessageId,
+                    Copied = count,
+                    OccurredAt = DateTimeOffset.UtcNow,
+                },
+                CancellationToken.None).ConfigureAwait(false);
+            if (released.IsFailure)
+            {
+                // The copy landed, but the claim is still open. That is a
+                // DETECTABLE state, not a silent success: surface the failure.
+                return released.ConvertFailure<SessionFork>();
+            }
         }
 
         return Result.Success(new SessionFork(stampedChild, count));

@@ -192,3 +192,35 @@ static Harbor.Abstractions.Models.ToolResult.Failed(string! detail, Harbor.Abstr
 Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.get -> Harbor.Abstractions.Models.ToolErrorInfo?
 Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.init -> void
 static Harbor.Abstractions.Models.ToolCallLink.IsAbandoned(Harbor.Abstractions.Models.ToolResultEntry! entry) -> bool
+Harbor.Abstractions.Sessions.SessionOperationEvent
+Harbor.Abstractions.Sessions.SessionOperationEvent.<Clone>$() -> Harbor.Abstractions.Sessions.SessionOperationEvent!
+Harbor.Abstractions.Sessions.SessionOperationEvent.BoundaryMessageId.get -> string?
+Harbor.Abstractions.Sessions.SessionOperationEvent.BoundaryMessageId.init -> void
+Harbor.Abstractions.Sessions.SessionOperationEvent.Copied.get -> int
+Harbor.Abstractions.Sessions.SessionOperationEvent.Copied.init -> void
+Harbor.Abstractions.Sessions.SessionOperationEvent.Equals(Harbor.Abstractions.Sessions.SessionOperationEvent? other) -> bool
+Harbor.Abstractions.Sessions.SessionOperationEvent.Kind.get -> Harbor.Abstractions.Sessions.SessionOperationKind
+Harbor.Abstractions.Sessions.SessionOperationEvent.Kind.init -> void
+Harbor.Abstractions.Sessions.SessionOperationEvent.OccurredAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.SessionOperationEvent.OccurredAt.init -> void
+Harbor.Abstractions.Sessions.SessionOperationEvent.Owner.get -> string?
+Harbor.Abstractions.Sessions.SessionOperationEvent.Owner.init -> void
+Harbor.Abstractions.Sessions.SessionOperationEvent.Sequence.get -> int
+Harbor.Abstractions.Sessions.SessionOperationEvent.Sequence.init -> void
+Harbor.Abstractions.Sessions.SessionOperationEvent.SessionOperationEvent() -> void
+Harbor.Abstractions.Sessions.SessionOperationEvent.Turn.get -> int?
+Harbor.Abstractions.Sessions.SessionOperationEvent.Turn.init -> void
+override Harbor.Abstractions.Sessions.SessionOperationEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionOperationEvent.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionOperationEvent.ToString() -> string!
+static Harbor.Abstractions.Sessions.SessionOperationEvent.operator !=(Harbor.Abstractions.Sessions.SessionOperationEvent? left, Harbor.Abstractions.Sessions.SessionOperationEvent? right) -> bool
+static Harbor.Abstractions.Sessions.SessionOperationEvent.operator ==(Harbor.Abstractions.Sessions.SessionOperationEvent? left, Harbor.Abstractions.Sessions.SessionOperationEvent? right) -> bool
+Harbor.Abstractions.Sessions.SessionOperationKind
+Harbor.Abstractions.Sessions.SessionOperationKind.ForkEnd = 1 -> Harbor.Abstractions.Sessions.SessionOperationKind
+Harbor.Abstractions.Sessions.SessionOperationKind.ForkStart = 0 -> Harbor.Abstractions.Sessions.SessionOperationKind
+Harbor.Abstractions.Sessions.SessionOperationKind.TurnEnd = 3 -> Harbor.Abstractions.Sessions.SessionOperationKind
+Harbor.Abstractions.Sessions.SessionOperationKind.TurnStart = 2 -> Harbor.Abstractions.Sessions.SessionOperationKind
+Harbor.Abstractions.Sessions.SessionOperationMarkers
+static Harbor.Abstractions.Sessions.SessionOperationMarkers.FindIncompleteTurn(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>! events) -> int?
+static Harbor.Abstractions.Sessions.SessionOperationMarkers.FindUnmatchedStarts(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>! events, Harbor.Abstractions.Sessions.SessionOperationKind start, Harbor.Abstractions.Sessions.SessionOperationKind end) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>!
+static Harbor.Abstractions.Sessions.SessionOperationMarkers.HasIncompleteFork(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>! events) -> bool

@@ -390,3 +390,8 @@ static Harbor.Abstractions.Tools.ToolOutputSpill.operator ==(Harbor.Abstractions
 Harbor.Abstractions.Tools.ToolOutputSpillPolicy
 const Harbor.Abstractions.Tools.ToolOutputSpillPolicy.DefaultMaxInlineChars = 2000 -> int
 const Harbor.Abstractions.Tools.ToolOutputSpillPolicy.DefaultTtlHours = 24 -> int
+Harbor.Abstractions.Sessions.ISessionOperationEventStore
+Harbor.Abstractions.Sessions.ISessionOperationEventStore.AppendOperationEventAsync(string! sessionId, Harbor.Abstractions.Sessions.SessionOperationEvent! operationEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISessionOperationEventStore.GetOperationEventsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>!>>!
+Harbor.Abstractions.Sessions.ISessionStore.AppendMessagesBatchAsync(string! sessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISessionContext.OperationEvents.get -> Harbor.Abstractions.Sessions.ISessionOperationEventStore?

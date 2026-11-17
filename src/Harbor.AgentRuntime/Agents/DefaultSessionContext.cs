@@ -293,6 +293,12 @@ internal sealed class DefaultSessionContext : ISessionContext
     ///     the compaction path has to know that before it writes anything.
     /// </remarks>
     public ICompactionEventStore? CompactionEvents => _store as ICompactionEventStore;
+
+    /// <summary>
+    ///     The operation-marker seam of this session's store, or null when the
+    ///     store records no fork/turn markers (#2226).
+    /// </summary>
+    public ISessionOperationEventStore? OperationEvents => _store as ISessionOperationEventStore;
 }
 
 /// <summary>
