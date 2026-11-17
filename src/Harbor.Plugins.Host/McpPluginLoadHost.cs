@@ -67,6 +67,13 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost, IReversiblePluginLoad
     public IReadOnlyDictionary<string, ITool> Tools => _tools;
 
     /// <summary>
+    ///     Fires after the tool catalog changes so the MCP stdio server can send
+    ///     <c>notifications/tools/list_changed</c> (#2228). The server debounces the
+    ///     signal, so a burst of plugin loads collapses into one notification.
+    /// </summary>
+    public event Action? ToolsChanged;
+
+    /// <summary>
     ///     Whether the MCP client has completed the handshake with this host (#1733).
     /// </summary>
     /// <remarks>
@@ -83,9 +90,13 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost, IReversiblePluginLoad
     public void MarkSessionEstablished() => Volatile.Write(ref _sessionEstablished, 1);
 
     public Result RegisterTool(ITool tool)
-        => _tools.TryAdd(tool.Name.Value, tool)
-            ? Result.Success()
-            : Result.Failure($"Tool '{tool.Name.Value}' is already registered; skipping duplicate.");
+    {
+        if (!_tools.TryAdd(tool.Name.Value, tool))
+            return Result.Failure($"Tool '{tool.Name.Value}' is already registered; skipping duplicate.");
+
+        ToolsChanged?.Invoke();
+        return Result.Success();
+    }
 
     public Result RegisterProvider(ProviderId providerId, Func<ILlmClient> factory)
     {
@@ -157,9 +168,11 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost, IReversiblePluginLoad
 
     public Result UnregisterTool(ToolName name)
     {
-        return _tools.TryRemove(name.Value, out _)
-            ? Result.Success()
-            : Result.Failure($"Tool '{name.Value}' is not registered.");
+        if (!_tools.TryRemove(name.Value, out _))
+            return Result.Failure($"Tool '{name.Value}' is not registered.");
+
+        ToolsChanged?.Invoke();
+        return Result.Success();
     }
 
     public Result UnregisterProvider(ProviderId providerId) => Result.Failure(

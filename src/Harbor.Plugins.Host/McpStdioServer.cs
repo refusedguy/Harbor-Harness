@@ -1,7 +1,9 @@
 using System.Buffers;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
@@ -23,6 +25,14 @@ internal sealed class McpStdioServer
     private const string ProtocolVersion = "2024-11-05";
     private const string ServerName = "harbor-csharp-plugins";
     private const string ServerVersion = "0.4.0-alpha";
+
+    // #2228: tools/list is bounded twice, by tool count and by estimated byte
+    // size, so a large plugin catalog yields a finite cursor chain instead of
+    // one unbounded frame. MaxPages caps the chain even for a hostile client
+    // that keeps asking for the next page forever.
+    internal const int DefaultMaxToolsPerPage = 50;
+    internal const int DefaultMaxPageBytes = 16 * 1024;
+    private const int MaxPages = 1024;
 
     /// <summary>
     ///     The namespaced method that answers with the live plugin composition
@@ -47,6 +57,16 @@ internal sealed class McpStdioServer
     private readonly ILogger<McpStdioServer> _logger;
     private readonly Action? _onSessionEstablished;
     private readonly PluginHost? _pluginHost;
+    private readonly McpToolListChangeNotifier _listChangeNotifier;
+    private readonly int _maxToolsPerPage;
+    private readonly int _maxPageBytes;
+    private readonly Action _toolsChangedHandler;
+
+    // #2228: client capabilities harvested from the initialize request. Both
+    // default to false so a client that never handshakes keeps the old wire
+    // shape (no notifications, no structuredContent) and old tests stay green.
+    private volatile bool _clientSupportsListChanged;
+    private volatile bool _clientSupportsStructuredContent;
 
     /// <summary>
     ///     Construct the MCP stdio server over the given sink.
@@ -63,16 +83,31 @@ internal sealed class McpStdioServer
     ///     Optional. The host whose live composition the inventory method reports
     ///     (#1722). Null means the method answers that no composition is available.
     /// </param>
+    /// <param name="maxToolsPerPage">Upper bound on tools in one list page (#2228).</param>
+    /// <param name="maxPageBytes">Upper bound on estimated page bytes (#2228).</param>
+    /// <param name="notifier">Optional change notifier; injectable so debounce is testable.</param>
     public McpStdioServer(
         McpPluginLoadHost loadHost,
         ILogger<McpStdioServer> logger,
         Action? onSessionEstablished = null,
-        PluginHost? pluginHost = null)
+        PluginHost? pluginHost = null,
+        int maxToolsPerPage = DefaultMaxToolsPerPage,
+        int maxPageBytes = DefaultMaxPageBytes,
+        McpToolListChangeNotifier? notifier = null)
     {
         _loadHost = loadHost ?? throw new ArgumentNullException(nameof(loadHost));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _onSessionEstablished = onSessionEstablished;
         _pluginHost = pluginHost;
+        _maxToolsPerPage = maxToolsPerPage > 0 ? maxToolsPerPage : DefaultMaxToolsPerPage;
+        _maxPageBytes = maxPageBytes > 0 ? maxPageBytes : DefaultMaxPageBytes;
+        _listChangeNotifier = notifier ?? new McpToolListChangeNotifier();
+
+        // #2228: fold every catalog mutation into the debounced notifier. The
+        // handler is kept so the subscription can be released if the server is
+        // ever torn down independently of the load host.
+        _toolsChangedHandler = _listChangeNotifier.SignalChange;
+        _loadHost.ToolsChanged += _toolsChangedHandler;
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -81,28 +116,89 @@ internal sealed class McpStdioServer
             Console.OpenStandardInput(), Console.InputEncoding, detectEncodingFromByteOrderMarks: false, bufferSize: 8192, leaveOpen: true);
         using var stdout = new StreamWriter(
             Console.OpenStandardOutput(), Console.OutputEncoding, bufferSize: 8192, leaveOpen: true) { AutoFlush = true };
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        string? line;
-        while ((line = await stdin.ReadLineAsync(ct).ConfigureAwait(false)) is not null)
+        // #2228: one writer owns stdout. Both request responses and
+        // server-initiated notifications flow through this channel, so a
+        // list_changed frame can never interleave with a JSON-RPC response.
+        var frames = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            try
+            SingleReader = true,
+            SingleWriter = false
+        });
+        Task writerTask = PumpFramesAsync(frames.Reader, stdout, linked.Token);
+        Task notifyTask = PumpNotificationsAsync(frames.Writer, linked.Token);
+        try
+        {
+            string? line;
+            while ((line = await stdin.ReadLineAsync(linked.Token).ConfigureAwait(false)) is not null)
             {
-                await HandleAsync(line, stdout, ct).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    string? response = await HandleLineAsync(line, linked.Token).ConfigureAwait(false);
+                    if (response is not null)
+                        frames.Writer.TryWrite(response);
+                }
+                catch (Exception ex)
+                {
+                    McpStdioServerLog.FailedToHandleMessage(_logger, ex);
+                }
             }
-            catch (Exception ex)
-            {
-                McpStdioServerLog.FailedToHandleMessage(_logger, ex);
-            }
+        }
+        finally
+        {
+            frames.Writer.TryComplete();
+            try { await writerTask.ConfigureAwait(false); } catch { /* shutdown */ }
+            linked.Cancel();
+            try { await notifyTask.ConfigureAwait(false); } catch { /* shutdown */ }
+            _loadHost.ToolsChanged -= _toolsChangedHandler;
         }
     }
 
-    private async Task HandleAsync(string line, StreamWriter stdout, CancellationToken ct)
+    /// <summary>Drain the single stdout writer until the channel completes.</summary>
+    private static async Task PumpFramesAsync(ChannelReader<string> reader, StreamWriter stdout, CancellationToken ct)
     {
-        string? response = await HandleLineAsync(line, ct).ConfigureAwait(false);
-        if (response is null)
-            return;
-        await stdout.WriteAsync(response).ConfigureAwait(false);
+        try
+        {
+            while (await reader.WaitToReadAsync(ct).ConfigureAwait(false))
+                while (reader.TryRead(out string? frame))
+                {
+                    await stdout.WriteAsync(frame.AsMemory(), ct).ConfigureAwait(false);
+                    await stdout.FlushAsync(ct).ConfigureAwait(false);
+                }
+        }
+        catch (OperationCanceledException)
+        {
+            // normal shutdown
+        }
+    }
+
+    /// <summary>
+    ///     Poll the debounced notifier and forward due frames to stdout. The
+    ///     25 ms tick is only a wake-up interval; the debounce itself lives in
+    ///     <see cref="McpToolListChangeNotifier" />.
+    /// </summary>
+    private async Task PumpNotificationsAsync(ChannelWriter<string> writer, CancellationToken ct)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(25));
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            {
+                if (!_clientSupportsListChanged)
+                    continue;
+                if (_listChangeNotifier.TryTake(out string? frame) && frame is not null)
+                {
+                    writer.TryWrite(frame);
+                    McpStdioServerLog.ListChangedSent(_logger, _listChangeNotifier.CurrentGeneration);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // normal shutdown
+        }
     }
 
     /// <summary>
@@ -144,6 +240,10 @@ internal sealed class McpStdioServer
         switch (method)
         {
             case "initialize":
+                // #2228: harvest the client's declared capabilities before the
+                // result goes out, so list_changed and structuredContent are
+                // gated on what the other side actually understands.
+                ApplyClientCapabilities(paramsEl);
                 await WriteResultAsync(writer, idEl, WriteInitialize, ct).ConfigureAwait(false);
                 // #1733: the handshake is the moment the "mcp-session" capability becomes
                 // true. The plugins that were waiting for it are activated right here, so
@@ -162,7 +262,12 @@ internal sealed class McpStdioServer
                 break;
 
             case "tools/list":
-                await WriteResultAsync(writer, idEl, WriteToolsList, ct).ConfigureAwait(false);
+                if (!TryParseCursor(paramsEl, out int offset))
+                {
+                    await WriteErrorAsync(writer, idEl, -32602, "Invalid tools/list cursor.", ct).ConfigureAwait(false);
+                    break;
+                }
+                await WriteResultAsync(writer, idEl, w => WriteToolsList(w, offset), ct).ConfigureAwait(false);
                 break;
 
             case "tools/call":
@@ -276,7 +381,9 @@ internal sealed class McpStdioServer
         w.WriteString("protocolVersion", ProtocolVersion);
         w.WriteStartObject("capabilities");
         w.WriteStartObject("tools");
-        w.WriteBoolean("listChanged", false);
+        // #2228: the server does emit list_changed frames, gated on the client
+        // having declared the matching capability in its initialize request.
+        w.WriteBoolean("listChanged", true);
         w.WriteEndObject();
         w.WriteEndObject();
         w.WriteStartObject("serverInfo");
@@ -285,19 +392,145 @@ internal sealed class McpStdioServer
         w.WriteEndObject();
     }
 
-    private void WriteToolsList(Utf8JsonWriter w)
+    /// <summary>
+    ///     Harvest the client capability flags from the initialize params.
+    ///     Both flags default to false, so a client that never handshakes keeps
+    ///     the old wire shape and nothing is emitted behind its back (#2228).
+    /// </summary>
+    private void ApplyClientCapabilities(JsonElement? paramsEl)
     {
-        w.WriteStartArray("tools");
-        foreach (var (name, tool) in _loadHost.Tools)
+        bool listChanged = false;
+        bool structured = false;
+        if (paramsEl is { ValueKind: JsonValueKind.Object } p
+            && p.TryGetProperty("capabilities", out var caps)
+            && caps.ValueKind == JsonValueKind.Object)
         {
-            w.WriteStartObject();
-            w.WriteString("name", name);
-            w.WriteString("description", tool.Description);
-            w.WritePropertyName("inputSchema");
-            WriteSchema(w, tool.ParameterSchema);
-            w.WriteEndObject();
+            if (caps.TryGetProperty("tools", out var toolCaps) && toolCaps.ValueKind == JsonValueKind.Object)
+            {
+                if (toolCaps.TryGetProperty("listChanged", out var lc) && lc.ValueKind == JsonValueKind.True)
+                    listChanged = true;
+                if (toolCaps.TryGetProperty("structuredContent", out var sc) && sc.ValueKind == JsonValueKind.True)
+                    structured = true;
+            }
+
+            // Harbor-specific opt-in on the standard MCP "experimental" block.
+            if (caps.TryGetProperty("experimental", out var exp) && exp.ValueKind == JsonValueKind.Object
+                && exp.TryGetProperty("harborStructuredContent", out var hsc) && hsc.ValueKind == JsonValueKind.True)
+                structured = true;
+        }
+
+        _clientSupportsListChanged = listChanged;
+        _clientSupportsStructuredContent = structured;
+    }
+
+    /// <summary>
+    ///     Parse an opaque tools/list cursor. Absent or null means "first page";
+    ///     a non-string or non-negative-integer value is an invalid parameter,
+    ///     which the caller maps to JSON-RPC -32602 instead of looping forever.
+    /// </summary>
+    private static bool TryParseCursor(JsonElement? paramsEl, out int offset)
+    {
+        offset = 0;
+        if (paramsEl is not { ValueKind: JsonValueKind.Object } p)
+            return true;
+        if (!p.TryGetProperty("cursor", out var cursor) || cursor.ValueKind == JsonValueKind.Null)
+            return true;
+        if (cursor.ValueKind != JsonValueKind.String)
+            return false;
+
+        return int.TryParse(cursor.GetString(), NumberStyles.None, CultureInfo.InvariantCulture, out offset);
+    }
+
+    /// <summary>
+    ///     Write one bounded page of tools/list. The page is capped by count and
+    ///     by estimated byte size, and a nextCursor is only emitted while pages
+    ///     remain below the hard page cap. Both bounds are what make a large
+    ///     catalog terminate (#2228).
+    /// </summary>
+    private void WriteToolsList(Utf8JsonWriter w, int offset)
+    {
+        var tools = _loadHost.Tools;
+        var names = new List<string>(tools.Count);
+        foreach (string name in tools.Keys)
+            names.Add(name);
+        // Ordinal order makes the numeric cursor stable across calls even
+        // though the underlying dictionary has no ordering guarantee.
+        names.Sort(StringComparer.Ordinal);
+
+        int index = Math.Min(offset, names.Count);
+        int written = 0;
+        int bytes = 0;
+        int nextIndex = index;
+        w.WriteStartArray("tools");
+        for (; index < names.Count; index++)
+        {
+            var tool = tools[names[index]];
+            int entryBytes = EstimateToolBytes(names[index], tool.Description, tool.ParameterSchema);
+            // Always include at least one entry so a page cannot be empty while
+            // tools remain, which would stall a client following the cursor.
+            if (written > 0 && (written >= _maxToolsPerPage || bytes + entryBytes > _maxPageBytes))
+                break;
+
+            WriteToolEntry(w, names[index], tool);
+            bytes += entryBytes;
+            written++;
+            nextIndex = index + 1;
         }
         w.WriteEndArray();
+
+        int maxTools = checked(_maxToolsPerPage * MaxPages);
+        if (nextIndex < names.Count && nextIndex < maxTools)
+            w.WriteString("nextCursor", nextIndex.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static void WriteToolEntry(Utf8JsonWriter w, string name, ITool tool)
+    {
+        w.WriteStartObject();
+        w.WriteString("name", name);
+        w.WriteString("description", tool.Description);
+        w.WritePropertyName("inputSchema");
+        WriteSchema(w, tool.ParameterSchema);
+        // #2228: advertise a structured output schema so a capable client can
+        // bind the structuredContent returned by tools/call without losing types.
+        w.WritePropertyName("outputSchema");
+        w.WriteStartObject();
+        w.WriteString("type", "object");
+        w.WriteBoolean("additionalProperties", true);
+        w.WriteEndObject();
+        w.WriteEndObject();
+    }
+
+    private static int EstimateToolBytes(string name, string description, JsonDocument schema)
+    {
+        int schemaBytes = schema.RootElement.ValueKind == JsonValueKind.Object
+            ? schema.RootElement.GetRawText().Length
+            : 16;
+        return name.Length + description.Length + schemaBytes + 128;
+    }
+
+    /// <summary>
+    ///     Write a tool's structured metadata into the MCP result. JsonElement
+    ///     and JsonDocument are written verbatim, which preserves every JSON
+    ///     type (numbers stay numbers, objects stay objects). Other CLR objects
+    ///     go through reflection, which is safe in this JIT-only host.
+    /// </summary>
+    private static void WriteStructuredContent(Utf8JsonWriter w, object metadata)
+    {
+        switch (metadata)
+        {
+            case JsonElement element:
+                element.WriteTo(w);
+                break;
+            case JsonDocument document:
+                document.RootElement.WriteTo(w);
+                break;
+            case string text:
+                w.WriteStringValue(text);
+                break;
+            default:
+                JsonSerializer.Serialize(w, metadata, metadata.GetType());
+                break;
+        }
     }
 
     /// <summary>
@@ -351,12 +584,12 @@ internal sealed class McpStdioServer
         try
         {
             var result = await tool.ExecuteAsync(args, context, ct).ConfigureAwait(false);
-            await WriteToolResultAsync(stdout, idEl, result.Output, result.IsError, ct).ConfigureAwait(false);
+            await WriteToolResultAsync(stdout, idEl, result.Output, result.IsError, result.Metadata, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             McpStdioServerLog.ToolThrew(_logger, ex, toolName);
-            await WriteToolResultAsync(stdout, idEl, $"Tool threw: {ex.Message}", isError: true, ct).ConfigureAwait(false);
+            await WriteToolResultAsync(stdout, idEl, $"Tool threw: {ex.Message}", true, null, ct).ConfigureAwait(false);
         }
     }
 
@@ -373,7 +606,13 @@ internal sealed class McpStdioServer
             Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
     }
 
-    private async Task WriteToolResultAsync(StreamWriter stdout, JsonElement idEl, string text, bool isError, CancellationToken ct)
+    private async Task WriteToolResultAsync(
+        StreamWriter stdout,
+        JsonElement idEl,
+        string text,
+        bool isError,
+        object? structuredContent,
+        CancellationToken ct)
     {
         await WriteResultAsync(stdout, idEl, w =>
         {
@@ -384,6 +623,14 @@ internal sealed class McpStdioServer
             w.WriteEndObject();
             w.WriteEndArray();
             w.WriteBoolean("isError", isError);
+            // #2228: structured payload is emitted only on success, when the
+            // tool actually produced metadata, and when the client opted in at
+            // handshake. The JSON types survive verbatim (WriteStructuredContent).
+            if (!isError && structuredContent is not null && _clientSupportsStructuredContent)
+            {
+                w.WritePropertyName("structuredContent");
+                WriteStructuredContent(w, structuredContent);
+            }
         }, ct).ConfigureAwait(false);
     }
 
@@ -455,6 +702,9 @@ internal static partial class McpStdioServerLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "The session-established hook threw; the MCP session continues")]
     public static partial void SessionHookFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Sent tools/list_changed notification (generation {Generation})")]
+    public static partial void ListChangedSent(ILogger logger, long generation);
 }
 
 /// <summary>
