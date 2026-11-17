@@ -2,6 +2,8 @@ using System.Text;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using TUnit.Core;
 
+namespace Harbor.Tui.CellForge.Tests;
+
 // Rendering reads global TerminalColorPalette — serialized vs theme tests.
 [NotInParallel("pty")]
 public class TextInputTests

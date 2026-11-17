@@ -91,7 +91,7 @@ public sealed class MultilineTextInput : TextInputBase
         int cursorX = rect.X + Chrome.PrefixCells + col;
         if ((uint)cursorX < (uint)buffer.Cols)
         {
-            PaintCursor(buffer, cursorX, rect.Y + row, textStyle);
+            TextRunes.PaintCursor(buffer, cursorX, rect.Y + row, textStyle);
         }
     }
 

@@ -48,7 +48,7 @@ public sealed class TextInput : TextInputBase
         {
             if (IsFocused)
             {
-                PaintCursor(buffer, fieldX, rect.Y, hintStyle);
+                TextRunes.PaintCursor(buffer, fieldX, rect.Y, hintStyle);
             }
 
             Chrome.PaintSuffix(buffer, rect);
@@ -79,7 +79,7 @@ public sealed class TextInput : TextInputBase
             int cursorX = fieldX + cursorCells - scroll;
             if (cursorX >= fieldX && cursorX < fieldX + fieldW)
             {
-                PaintCursor(buffer, cursorX, rect.Y, textStyle);
+                TextRunes.PaintCursor(buffer, cursorX, rect.Y, textStyle);
             }
         }
 

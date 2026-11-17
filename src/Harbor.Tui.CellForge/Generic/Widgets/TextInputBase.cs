@@ -1,4 +1,3 @@
-using System.Text;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Generic.Widgets;
@@ -43,18 +42,4 @@ public abstract class TextInputBase : ITextInput
 
     /// <inheritdoc />
     public abstract void Paint(ScreenBuffer buffer, Rect rect);
-
-    /// <summary>Paints the caret by reversing the cell it covers.</summary>
-    protected static void PaintCursor(ScreenBuffer buffer, int x, int y, CellStyle baseStyle)
-    {
-        if ((uint)x >= (uint)buffer.Cols || (uint)y >= (uint)buffer.Rows)
-        {
-            return;
-        }
-
-        var style = new CellStyle(baseStyle.Fg, baseStyle.Bg, baseStyle.Attrs | StyleAttr.Reverse);
-        int rune = buffer.Get(x, y).Rune;
-        Rune r = rune == 0 || rune == ' ' ? new Rune('_') : new Rune(rune);
-        buffer.SetRune(x, y, r, in style);
-    }
 }
