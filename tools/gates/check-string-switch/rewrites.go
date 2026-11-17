@@ -304,6 +304,7 @@ namespace Harbor.Tui.CellForge.Input;`},
                 ["off"] = InlineImageKind.None,
                 ["osc1337"] = InlineImageKind.Osc1337,
                 ["kitty"] = InlineImageKind.KittyApc,
+                ["sixel"] = InlineImageKind.Sixel,
             },
             StringComparer.Ordinal);
 
