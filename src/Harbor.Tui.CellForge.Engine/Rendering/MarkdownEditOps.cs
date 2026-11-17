@@ -1,3 +1,10 @@
+// #1620 adapted slice 3: this leaf was moved here from
+// Harbor.Tui.CellForge/Chat/Rendering/MarkdownEditOps.cs (now deleted). The body
+// and namespace are byte-equal; what changed is its binding home. Its three
+// type dependencies (PromptBuffer, EditOutcome, EditOutcomeKind) were re-homed
+// into the engine by #2330 (the PromptBuffer slice), so this leaf now compiles
+// against the engine copy in this same namespace instead of the Chat assembly's
+// view of it. No alias-bound vocabulary and no body logic change.
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
