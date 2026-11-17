@@ -112,6 +112,12 @@ internal sealed class CellForgeReplRunner(
     internal readonly VirtualizedChatTimeline _timeline = screens.Screen.Timeline.Timeline;
     internal readonly CommandPaletteView _palette = new();
     internal readonly LeaderKeyRouter _leader = new();
+    /// <summary>
+    /// Dedicated leader router for the attached floating terminal (issue #1491).
+    /// A second instance of the same primitive keeps the detach chord from
+    /// firing the composer's other leader chords while the pane owns input.
+    /// </summary>
+    internal readonly LeaderKeyRouter _terminalLeader = new();
     internal readonly ChatKeyMap _keyMap = new();
     internal readonly VimComposerMode _vim = new();
     internal readonly SelectionEngine _selection = new();
@@ -233,6 +239,8 @@ internal sealed class CellForgeReplRunner(
     // frozen — test FakeHost/StubHost implementations keep compiling.
     internal IEventBus EventBus => core.EventBus;
     internal TerminalInputSource InputSource => screens.Input;
+    /// <summary>Floating terminal attach/detach controller (issue #1491).</summary>
+    internal FloatingTerminalController FloatingTerminal => screens.Screen.FloatingTerminal;
     internal ITerminalModeController ModeController => modeController;
     internal ITerminalBackend Backend => screens.Backend;
     internal ILogger Log => core.Logger;

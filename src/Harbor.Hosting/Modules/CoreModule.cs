@@ -51,6 +51,12 @@ internal static class CoreModule
         // #1523: the workspace snapshot cache is instance state behind this
         // interface; the static facade (TurnRunner's pre-DI path) forwards to
         // the same shared Instance, so both consumers read one cache.
+        // #2230: give that one instance the bootstrap logger so context-budget
+        // truncation warnings reach the log; identity stays the singleton.
+        // ctx.LoggerFactory is always present (AddHarborConfiguration creates it),
+        // unlike ILogger<T> from DI, which bare ServiceCollections need not have.
+        WorkspaceContextSource.Instance.SetLogger(
+            ctx.LoggerFactory.CreateLogger<WorkspaceContextService>());
         services.AddSingleton<IWorkspaceContextSource>(_ => WorkspaceContextSource.Instance);
         // #1735: ISkillProvider and ISkillRegistry are registered by
         // RegistryFacade.Compose, which builds them eagerly (the skill tool

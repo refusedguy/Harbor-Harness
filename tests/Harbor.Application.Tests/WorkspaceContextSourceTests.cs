@@ -1,7 +1,9 @@
+using System.Text;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
@@ -45,6 +47,77 @@ public class WorkspaceContextSourceTests : IDisposable
         await Assert.That(files[0].Path).IsEqualTo("AGENTS.md");
         await Assert.That(files[0].Content).IsEqualTo("# agents rules");
         await Assert.That(files[1].Path).IsEqualTo("CLAUDE.md");
+    }
+
+    /// <summary>
+    ///     #2230: one budget for ALL context files. Two files that would each
+    ///     pass the old per-file 256 KiB valve must fit a single 32 KiB budget;
+    ///     the second is cut to the bytes left and the cut is logged.
+    /// </summary>
+    [Test]
+    public async Task LoadContextFiles_CombinedBudget_TruncatesLastFileAndWarns()
+    {
+        int half = WorkspaceContextService.MaxContextBytes / 2;
+        await File.WriteAllTextAsync(Path.Combine(_dir, "AGENTS.md"), new string('A', half));
+        await File.WriteAllTextAsync(Path.Combine(_dir, "CLAUDE.md"), new string('C', WorkspaceContextService.MaxContextBytes));
+        var logger = new CapturingLogger<WorkspaceContextService>();
+
+        var files = new WorkspaceContextService(logger).LoadContextFiles(_dir);
+
+        await Assert.That(files.Count).IsEqualTo(2);
+        await Assert.That(files[0].Content.Length).IsEqualTo(half);
+        await Assert.That(files[1].Content.Length).IsEqualTo(WorkspaceContextService.MaxContextBytes - half);
+        await Assert.That(files.Sum(f => Encoding.UTF8.GetByteCount(f.Content)))
+            .IsEqualTo(WorkspaceContextService.MaxContextBytes);
+        await Assert.That(logger.Warnings.Count).IsEqualTo(1);
+        await Assert.That(logger.Warnings[0]).Contains("CLAUDE.md");
+        await Assert.That(logger.Warnings[0]).Contains("truncated");
+    }
+
+    /// <summary>
+    ///     #2230: when the first file consumes the whole budget, later context
+    ///     files are dropped entirely and each cut produces its own warning.
+    /// </summary>
+    [Test]
+    public async Task LoadContextFiles_CombinedBudget_SkipsLaterFilesWhenExhausted()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_dir, "AGENTS.md"),
+            new string('A', WorkspaceContextService.MaxContextBytes + 100));
+        await File.WriteAllTextAsync(Path.Combine(_dir, "CLAUDE.md"), "small tail");
+        var logger = new CapturingLogger<WorkspaceContextService>();
+
+        var files = new WorkspaceContextService(logger).LoadContextFiles(_dir);
+
+        await Assert.That(files.Count).IsEqualTo(1);
+        await Assert.That(files[0].Content.Length).IsEqualTo(WorkspaceContextService.MaxContextBytes);
+        await Assert.That(logger.Warnings.Count).IsEqualTo(2);
+        await Assert.That(logger.Warnings[0]).Contains("truncated");
+        await Assert.That(logger.Warnings[1]).Contains("skipped");
+    }
+
+    /// <summary>
+    ///     #2230: the snapshot key covers file CONTENTS, not just mtime. A
+    ///     same-length edit with the mtime restored must still invalidate.
+    /// </summary>
+    [Test]
+    public async Task GetOrLoadCached_ContentChange_InvalidatesSnapshot()
+    {
+        string path = Path.Combine(_dir, "AGENTS.md");
+        string original = new string('A', 64) + "X";
+        await File.WriteAllTextAsync(path, original);
+        DateTime mtime = File.GetLastWriteTimeUtc(path);
+        var source = new WorkspaceContextService();
+
+        var (first, _) = source.GetOrLoadCached(_dir);
+        string changed = new string('A', 64) + "Y";
+        await File.WriteAllTextAsync(path, changed);
+        File.SetLastWriteTimeUtc(path, mtime);
+
+        var (second, _) = source.GetOrLoadCached(_dir);
+
+        await Assert.That(first[0].Content).IsEqualTo(original);
+        await Assert.That(second[0].Content).IsEqualTo(changed);
+        await Assert.That(second).IsNotSameReferenceAs(first);
     }
 
     [Test]
