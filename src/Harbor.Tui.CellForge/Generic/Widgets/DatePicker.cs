@@ -76,6 +76,7 @@ public sealed class DatePicker
     /// <summary>Grid rows plus the selection line and the key-hint line.</summary>
     public int RowCount => _calendar.RowCount + FooterRows;
 
+    /// <summary>Creates a picker with the supplied external selection state.</summary>
     /// <param name="focus">Initial keyboard cursor and visible month.</param>
     /// <param name="mode">Single-date or range selection.</param>
     /// <param name="selectionStart">Host-supplied committed start, if any.</param>
@@ -223,7 +224,7 @@ public sealed class DatePicker
         int y = rect.Y + _calendar.RowCount;
         if (y < rect.Bottom)
         {
-            buffer.SetText(rect.X, y++, FormatSelection(), ChatPalette.Accent);
+            buffer.SetText(rect.X, y++, FormatSelection(), new CellStyle(ChatPalette.Accent));
         }
 
         if (y < rect.Bottom)

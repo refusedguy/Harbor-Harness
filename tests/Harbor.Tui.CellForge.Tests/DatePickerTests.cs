@@ -11,11 +11,14 @@ public class DatePickerTests
 
     private static string Date(DateOnly date) => DatePicker.FormatDate(date);
 
-    private static string[] Lines(DatePicker picker, int width = 32)
+    private static string[] Lines(DatePicker picker, int width = 72)
     {
         var buffer = TestRender.Buffer(width, picker.RowCount);
         picker.Paint(buffer, new Rect(0, 0, width, picker.RowCount));
-        return TestRender.Art(buffer).Split('\n').Select(line => line.TrimEnd()).ToArray();
+        return TestRender.Art(buffer).Split('\n')
+            .Select(line => line.TrimEnd())
+            .Take(picker.RowCount)
+            .ToArray();
     }
 
     private static DatePicker Move(DatePicker picker, KeyCode key) =>
