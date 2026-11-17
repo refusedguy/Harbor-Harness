@@ -59,6 +59,22 @@ public sealed class OpenAiCompatiblePumpObserveRule
             return string.Empty;
         }
 
+        // #1499: the pump detach moved into the shared Template Method base,
+        // linked into the OpenAI-compatible assembly. Point the guard at the
+        // code it grades instead of letting it go vacuous on a file that no
+        // longer owns the detach.
+        string path = Path.Combine(root, "src", "Harbor.Providers.Shared", "ProviderLlmClientBase.cs");
+        return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+    }
+
+    private static string CompatClientSource()
+    {
+        string? root = RepoPaths.RepoRoot;
+        if (root is null)
+        {
+            return string.Empty;
+        }
+
         string path = Path.Combine(root, "src", "Harbor.Providers.OpenAiCompatible", "OpenAiCompatibleLlmClient.cs");
         return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
     }
@@ -331,8 +347,16 @@ public sealed class OpenAiCompatiblePumpObserveRule
             .Because("the detach observer must be a chained ContinueWith on the pump "
                    + "task, not a second completion path (#1099)");
 
-        await Assert.That(window).Contains("StreamTaskFailed")
-            .Because("the detach observer must reuse the StreamTaskFailed sink: it is "
+        await Assert.That(window).Contains("LogPumpFault")
+            .Because("the detach observer must route through the provider's fault hook "
+                   + "instead of a new log shape (#1099)");
+
+        string client = CompatClientSource();
+        await Assert.That(client).Contains("ObservePumpFault => true")
+            .Because("the OpenAI-compatible client must opt into the fault observer — "
+                   + "the shared base attaches it only when this flag is set (#1499)");
+        await Assert.That(client).Contains("StreamTaskFailed")
+            .Because("the compat fault hook must reuse the StreamTaskFailed sink: it is "
                    + "the pump's fault surface, not a new log shape (#1099)");
     }
 

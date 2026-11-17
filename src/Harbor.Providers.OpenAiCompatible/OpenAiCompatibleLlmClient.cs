@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
 using Harbor.Providers.Internal;
@@ -9,12 +8,10 @@ using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAiCompatible;
 
-public sealed class OpenAiCompatibleLlmClient : ILlmClient
+public sealed class OpenAiCompatibleLlmClient : ProviderLlmClientBase, ILlmClient
 {
-    private readonly IAuthResolver _auth;
     private readonly ProviderConfig _config;
 
-    private readonly HttpClient _http;
     private readonly ILogger<OpenAiCompatibleLlmClient> _logger;
     private readonly IModelCatalog _modelCatalog;
 
@@ -30,143 +27,106 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         IAuthResolver auth,
         IModelCatalog modelCatalog,
         ILogger<OpenAiCompatibleLlmClient> logger)
+        : base(http, auth, logger, config.GetProviderId())
     {
-        _http = http;
         _config = config;
-        _auth = auth;
         _modelCatalog = modelCatalog;
         _logger = logger;
-        ProviderId = config.GetProviderId();
     }
 
-    public ProviderId ProviderId { get; }
+    // --- Template Method variation points (#1499) ---------------------------
 
-    public async IAsyncEnumerable<LlmEvent> StreamAsync(
-        LlmRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
+    internal override Channel<LlmEvent> CreateChannel() =>
         // #1104: bounded — when the consumer stops early (output-size cap)
         // the pump parks on a full channel instead of buffering the whole
         // response behind a reader that is already gone.
-        var channel = Channel.CreateBounded<LlmEvent>(new BoundedChannelOptions(64)
+        Channel.CreateBounded<LlmEvent>(new BoundedChannelOptions(64)
         {
             SingleReader = true,
             SingleWriter = true,
             FullMode = BoundedChannelFullMode.Wait
         });
 
-        var writer = channel.Writer;
+    protected override string ApiErrorLabel => "API";
 
-        // #1099: the pump stays observed — a fault-only continuation below
-        // logs a late pump fault instead of parking it where only
-        // finalization could see it.
-        // #1104: no cancellationToken on Task.Run — a pre-cancelled token
-        // would skip the delegate entirely and the writer would never
-        // complete. The token still flows into every await inside (SsePump
-        // observes it), so the pump exits promptly; the finally below
-        // always completes the writer.
-        _ = Task.Run(async () =>
+    protected override bool ObservePumpFault => true;
+
+    protected override Activity? StartStreamActivity(LlmRequest request)
+    {
+        var activity = Source.StartActivity("LLM.Call");
+        activity?.SetTag(ProviderNameTag, ProviderId.Value);
+        activity?.SetTag(RequestModelTag, request.Model);
+        return activity;
+    }
+
+    protected override Action<HttpResponseMessage>? ResponseHook(Activity? activity) =>
+        response => activity?.SetTag("http.status_code", (int)response.StatusCode);
+
+    protected override Func<Exception, CancellationToken, ErrorEvent>? SendFailureHook(Activity? activity, CancellationToken ct) =>
+        (ex, _) =>
         {
-            using var activity = Source.StartActivity("LLM.Call");
-            activity?.SetTag(ProviderNameTag, ProviderId.Value);
-            activity?.SetTag(RequestModelTag, request.Model);
-            try
-            {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
-                if (apiKeyResult.IsFailure)
-                {
-                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.AddException(ex);
+            return new ErrorEvent(
+                $"HTTP request failed: {ex.Message}", ex.ToString(),
+                ProviderErrors.FromException(ex, ct));
+        };
 
-                var httpRequest = BuildRequest(request, apiKeyResult.Value);
-
-                // §OOP-001 (RESOLVED): per-StreamAsync-call parsing state —
-                // tool-call id map + malformed-chunk counter (ROP-A ПР.3/ПР.4).
-                var chunkState = new ChunkStreamState();
-
-                // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
-                // live in SsePump; activity observability is preserved via hooks.
-                await SsePump.RunSseAsync(
-                    writer, _http, httpRequest,
-                    async (data, token) =>
-                    {
-                        foreach (var evt in OpenAiWire.TryParseChatChunkLine(data, chunkState, _logger))
-                        {
-                            if (evt is StepFinishEvent { Usage: not null } sfe)
-                            {
-                                activity?.SetTag(PromptTokensTag, sfe.Usage.InputTokens);
-                                activity?.SetTag(CompletionTokensTag, sfe.Usage.OutputTokens);
-                            }
-                            await writer.WriteAsync(evt, token).ConfigureAwait(false);
-                        }
-                    },
-                    "API", _logger, cancellationToken,
-                    onResponse: response => activity?.SetTag("http.status_code", (int)response.StatusCode),
-                    mapSendFailure: (ex, _) =>
-                    {
-                        activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                        activity?.AddException(ex);
-                        return new ErrorEvent(
-                            $"HTTP request failed: {ex.Message}", ex.ToString(),
-                            ProviderErrors.FromException(ex, cancellationToken));
-                    },
-                    onTransportError: ex =>
-                    {
-                        activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                        activity?.AddException(ex);
-                    },
-                    onComplete: () =>
-                    {
-                        activity?.SetStatus(ActivityStatusCode.Ok);
-                        // #203: stream-health summary (only when noteworthy).
-                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
-                        {
-                            OpenAiCompatibleLlmClientLog.StreamCompleted(
-                                _logger, ProviderId.Value, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
-                        }
-                    }).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                // #203 E5: fire-and-forget pump task must log inside the
-                // lambda — the ErrorEvent alone is invisible in traces.
-                OpenAiCompatibleLlmClientLog.StreamTaskFailed(_logger, ex, ProviderId.Value, ex.Message);
-                await writer.WriteAsync(new ErrorEvent(
-                    $"Stream failed: {ex.Message}", ex.ToString(),
-                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                writer.TryComplete();
-            }
-        }).ContinueWith(
-            t => OpenAiCompatibleLlmClientLog.StreamTaskFailed(
-                _logger,
-                t.Exception?.InnerException ?? t.Exception!,
-                ProviderId.Value,
-                (t.Exception?.InnerException ?? t.Exception!).Message),
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted,
-            TaskScheduler.Default);
-
-        await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+    protected override Action<Exception>? TransportErrorHook(Activity? activity) =>
+        ex =>
         {
-            yield return evt;
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.AddException(ex);
+        };
+
+    internal override void OnStreamComplete(ChunkStreamState chunkState, Activity? activity)
+    {
+        activity?.SetStatus(ActivityStatusCode.Ok);
+        // #203: stream-health summary (only when noteworthy).
+        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
+            OpenAiCompatibleLlmClientLog.StreamCompleted(
+                Logger, ProviderId.Value, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
+    }
+
+    protected override void OnCanceled(Activity? activity) => activity?.SetStatus(ActivityStatusCode.Ok);
+
+    protected override void OnFailed(Exception ex, Activity? activity)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+        activity?.AddException(ex);
+        // #203 E5: fire-and-forget pump task must log inside the lambda —
+        // the ErrorEvent alone is invisible in traces.
+        OpenAiCompatibleLlmClientLog.StreamTaskFailed(Logger, ex, ProviderId.Value, ex.Message);
+    }
+
+    protected override void LogPumpFault(Exception ex) =>
+        OpenAiCompatibleLlmClientLog.StreamTaskFailed(Logger, ex, ProviderId.Value, ex.Message);
+
+    internal override async Task WriteEventsAsync(
+        string data,
+        ChannelWriter<LlmEvent> writer,
+        ChunkStreamState chunkState,
+        LlmRequest request,
+        Activity? activity,
+        CancellationToken token)
+    {
+        foreach (var evt in OpenAiWire.TryParseChatChunkLine(data, chunkState, Logger))
+        {
+            if (evt is StepFinishEvent { Usage: not null } sfe)
+            {
+                activity?.SetTag(PromptTokensTag, sfe.Usage.InputTokens);
+                activity?.SetTag(CompletionTokensTag, sfe.Usage.OutputTokens);
+            }
+            await writer.WriteAsync(evt, token).ConfigureAwait(false);
         }
     }
 
-    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) => await _modelCatalog.GetModelsAsync(_config, cancellationToken).ConfigureAwait(false);
+    public override async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) => await _modelCatalog.GetModelsAsync(_config, cancellationToken).ConfigureAwait(false);
 
     // #1100: internal so the wire/scaling tests can drive the serializer
-    // directly (InternalsVisibleTo covers Harbor.Providers.Tests).
-    internal HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
+    // directly (InternalsVisibleTo covers Harbor.Providers.Tests). Also the
+    // BuildRequest variation point of the #1499 Template Method.
+    internal override HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
     {
         string url = $"{_config.BaseUrl.TrimEnd('/')}/chat/completions";
 
