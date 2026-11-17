@@ -179,14 +179,19 @@ public sealed class GenericScreen
 {
     private readonly Dictionary<string, GenericContentPanel> _panels = new(StringComparer.Ordinal);
     private readonly List<string> _focusOrder = [];
+    private readonly GenericLayoutPlan _plan;
 
-    private GenericScreen(LayoutTree tree)
+    private GenericScreen(LayoutTree tree, GenericLayoutPlan plan)
     {
         Tree = tree;
+        _plan = plan;
     }
 
     /// <summary>Assembled layout tree (solved per frame via <see cref="Solve"/>).</summary>
     public LayoutTree Tree { get; }
+
+    /// <summary>Normalized spec this screen was assembled from.</summary>
+    public GenericLayoutPlan Plan => _plan;
 
     /// <summary>Panel count.</summary>
     public int Count => _panels.Count;
@@ -222,91 +227,89 @@ public sealed class GenericScreen
     }
 
     /// <summary>
-    /// Builds the screen from nodes plus splits. The first node is the root;
-    /// each split seats one more node beside its target. Pure setup-time work
-    /// (no buffer writes, no store access) so tests can assert the tree shape
+    /// Builds the screen from nodes plus splits. The spec is normalized to a
+    /// fixpoint first (<see cref="GenericLayoutPlan.Normalize"/>), so every
+    /// node but the root is seated exactly once. Pure setup-time work (no
+    /// buffer writes, no store access) so tests can assert the tree shape
     /// without a terminal.
     /// </summary>
     /// <param name="nodes">Leaves in seating order (at least one).</param>
     /// <param name="splits">Splits seating nodes 1..N (one per extra node by default).</param>
     public static GenericScreen Build(
         IReadOnlyList<GenericNodeSpec> nodes,
-        IReadOnlyList<GenericSplitSpec>? splits = null)
+        IReadOnlyList<GenericSplitSpec>? splits = null) =>
+        Reconcile(null, nodes, splits);
+
+    /// <summary>
+    /// Rebuilds the screen from a new layout spec, reconciling by stable node
+    /// id: a panel that keeps its id is reused as-is, so its scroll offset
+    /// (inside the hosted field), geometry flags and focus survive the layout
+    /// change. Only new ids get fresh panels; ids that disappeared are
+    /// dropped. Focus falls back to the root when the focused id was removed,
+    /// and <see cref="Mode"/> carries over. Content edits to a surviving panel
+    /// go through <see cref="LayoutTree.Update"/> rather than this method.
+    /// </summary>
+    public GenericScreen Rebuild(
+        IReadOnlyList<GenericNodeSpec> nodes,
+        IReadOnlyList<GenericSplitSpec>? splits = null) =>
+        Reconcile(this, nodes, splits);
+
+    private static GenericScreen Reconcile(
+        GenericScreen? existing,
+        IReadOnlyList<GenericNodeSpec> nodes,
+        IReadOnlyList<GenericSplitSpec>? splits)
     {
-        Ensure.NotNull(nodes);
-        if (nodes.Count == 0)
-        {
-            throw new ArgumentException("At least one node is required.", nameof(nodes));
-        }
-
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (int i = 0; i < nodes.Count; i++)
-        {
-            var node = nodes[i];
-            Ensure.NotNull(node);
-            Ensure.NotBlank(node.Id);
-            if (!seen.Add(node.Id))
-            {
-                throw new ArgumentException($"Duplicate node id '{node.Id}'.", nameof(nodes));
-            }
-
-            if (float.IsNaN(node.MinWidth) || float.IsNaN(node.MinHeight))
-            {
-                throw new ArgumentException($"Node '{node.Id}' has an invalid minimum.", nameof(nodes));
-            }
-        }
-
+        var plan = GenericLayoutPlan.Normalize(nodes, splits);
         var byId = new Dictionary<string, GenericNodeSpec>(StringComparer.Ordinal);
-        for (int i = 0; i < nodes.Count; i++)
+        foreach (var node in nodes)
         {
-            byId[nodes[i].Id] = nodes[i];
+            byId[node.Id] = node;
         }
+
+        // Assemble from panel objects, not factories: reusing the object by
+        // id is exactly what carries per-panel state across a layout change.
+        GenericContentPanel Seat(string id) =>
+            existing is not null && existing._panels.TryGetValue(id, out var previous)
+                ? previous
+                : new GenericContentPanel(byId[id]);
 
         var tree = new LayoutTree();
-        var screen = new GenericScreen(tree);
-        var root = new GenericContentPanel(nodes[0]);
+        var screen = new GenericScreen(tree, plan);
+
+        var root = Seat(plan.RootId);
         tree.AddRoot(root);
-        screen._panels[root.Id] = root;
-        screen._focusOrder.Add(root.Id);
-        screen.FocusedId = root.Id;
-        root.Focused = true;
+        screen.Register(root);
 
-        if (splits is not null)
+        foreach (var split in plan.Splits)
         {
-            for (int i = 0; i < splits.Count; i++)
-            {
-                var split = splits[i];
-                Ensure.NotNull(split);
-                if (!byId.TryGetValue(split.NewPanelId, out var spec))
-                {
-                    throw new KeyNotFoundException($"split seats unknown node '{split.NewPanelId}'");
-                }
-
-                if (screen._panels.ContainsKey(spec.Id))
-                {
-                    throw new ArgumentException($"split seats already-seated node '{spec.Id}'", nameof(splits));
-                }
-
-                float ratio = Math.Clamp(split.Ratio, 0.05f, 0.95f);
-                var panel = new GenericContentPanel(spec);
-                tree.Split(split.TargetId, split.Direction, ratio, panel, split.Gap);
-                screen._panels[panel.Id] = panel;
-                screen._focusOrder.Add(panel.Id);
-            }
+            var panel = Seat(split.NewPanelId);
+            tree.Split(split.TargetId, split.Direction, split.Ratio, panel, split.Gap);
+            screen.Register(panel);
         }
-        else
+
+        string focusedId = existing?.FocusedId is string kept && screen._panels.ContainsKey(kept)
+            ? kept
+            : plan.RootId;
+        foreach (var panel in screen._panels.Values)
         {
-            for (int i = 1; i < nodes.Count; i++)
-            {
-                var spec = nodes[i];
-                var panel = new GenericContentPanel(spec);
-                tree.Split(screen._focusOrder[0], SplitDir.Vertical, 1f - (i / (float)(nodes.Count + 1)), panel, gap: 0);
-                screen._panels[panel.Id] = panel;
-                screen._focusOrder.Add(panel.Id);
-            }
+            panel.Focused = false;
+        }
+
+        screen._panels[focusedId].Focused = true;
+        screen.FocusedId = focusedId;
+
+        if (existing is not null)
+        {
+            screen.Mode = existing.Mode;
         }
 
         return screen;
+    }
+
+    private void Register(GenericContentPanel panel)
+    {
+        _panels[panel.Id] = panel;
+        _focusOrder.Add(panel.Id);
     }
 
     /// <summary>Resolves every panel rect for the given viewport.</summary>
