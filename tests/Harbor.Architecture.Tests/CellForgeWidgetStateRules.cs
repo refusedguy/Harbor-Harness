@@ -109,6 +109,7 @@ public sealed class CellForgeWidgetStateRules
     /// </remarks>
     private static readonly Dictionary<string, string> AllowedNullableProperties = new(StringComparer.Ordinal)
     {
+        ["BreadcrumbTrail.Current"] = "content value — null when the trail is empty; the current node of a present trail, like FloatingTerminalController.Session; Maybe<T> is unavailable in the BCL-only engine",
         ["CellForgeDockPanel.Services"] = "host-wired typed panel dependencies; #63 replaced the IServiceProvider/Store pair",
         ["CellForgeDockPanel.View"] = "host-wired read-only panel snapshot",
         ["CommandPaletteView.OnCommit"] = "host callback — nothing to branch on, only to invoke",
