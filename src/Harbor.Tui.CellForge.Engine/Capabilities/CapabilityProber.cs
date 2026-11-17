@@ -88,7 +88,13 @@ public sealed class CapabilityProber
             var kittyAnswer = await transport.WaitAsync(kittyTimeout ?? DefaultKittyTimeout, cancellationToken).ConfigureAwait(false);
             if (kittyAnswer is { Kind: CapabilityEventKind.KittyFlagsReport } kittyReport)
             {
-                return Evaluate([kittyReport]);
+                // #2217: OSC 8 has no wire query; compose the environmental
+                // probe into whatever this ladder concludes. Done at the
+                // return so no cited line above shifts.
+                return Evaluate([kittyReport]) with
+                {
+                    Osc8Hyperlinks = Osc8HyperlinkProbe.Detect(_environmentLookup),
+                };
             }
         }
 
@@ -97,7 +103,7 @@ public sealed class CapabilityProber
         var decrqm = await transport.WaitAsync(DefaultFallbackTimeout, cancellationToken).ConfigureAwait(false);
 
         return decrqm is null
-            ? TerminalCapabilities.Unprobed() with { Probed = true }
-            : Evaluate([decrqm.GetValueOrDefault()]);
+            ? TerminalCapabilities.Unprobed() with { Probed = true, Osc8Hyperlinks = Osc8HyperlinkProbe.Detect(_environmentLookup) }
+            : Evaluate([decrqm.GetValueOrDefault()]) with { Osc8Hyperlinks = Osc8HyperlinkProbe.Detect(_environmentLookup) };
     }
 }
