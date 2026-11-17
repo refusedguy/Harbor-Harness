@@ -87,6 +87,15 @@ public sealed record TerminalUiState
         = ImmutableDictionary<string, FileTreeSnapshot>.Empty;
 
     /// <summary>
+    ///     Per-panel PR review comments (#1488), keyed by panel id. Hosts that
+    ///     already have review data in the session put it here with
+    ///     <c>AppMsg.SetPrComments</c>; the cards panel reads it in <c>Build</c>
+    ///     and performs no I/O. Missing key = empty state (honest placeholder).
+    /// </summary>
+    public ImmutableDictionary<string, ImmutableArray<PrCommentCard>> PrComments { get; init; }
+        = ImmutableDictionary<string, ImmutableArray<PrCommentCard>>.Empty;
+
+    /// <summary>
     ///     Id of the panel currently owning keyboard focus, or <see langword="null" />
     ///     when the chat / input box owns focus. Driven by <c>FocusPanel</c> /
     ///     <c>CyclePanelFocus</c> messages.
@@ -140,6 +149,10 @@ public sealed record TerminalUiState
         => FileTrees.TryGetValue(id, out FileTreeSnapshot? snapshot) && snapshot.Covers(directory)
             ? snapshot
             : FileTreeSnapshot.None;
+
+    /// <summary>The loaded comment cards for <paramref name="id" />, or an empty array.</summary>
+    public ImmutableArray<PrCommentCard> PrCommentsFor(string id)
+        => PrComments.TryGetValue(id, out var cards) ? cards : ImmutableArray<PrCommentCard>.Empty;
 
     public static readonly TerminalUiState Empty = new();
 

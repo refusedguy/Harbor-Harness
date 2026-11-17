@@ -155,6 +155,13 @@ public static class AppReducer
         }),
         AppMsg.SetPanelCursor pc => ReduceResult.NoOp(SetPanelCursor(state, pc.Id, pc.Cursor)),
         AppMsg.SetPanelDirectory pd => ReduceResult.NoOp(SetPanelDirectory(state, pd.Id, pd.Directory)),
+        AppMsg.SetPrComments pc => ReduceResult.NoOp(state with
+        {
+            Ui = state.Ui with
+            {
+                PrComments = state.Ui.PrComments.SetItem(pc.Id, pc.Cards)
+            }
+        }),
         AppMsg.SetFileTreePending ft => ReduceResult.NoOp(SetFileTree(state, ft.Id, FileTreeSnapshot.Pending(ft.Directory))),
         AppMsg.SetFileTreeLoaded fl => ReduceResult.NoOp(SetFileTree(state, fl.Id, FileTreeSnapshot.Completed(
             fl.Directory,
