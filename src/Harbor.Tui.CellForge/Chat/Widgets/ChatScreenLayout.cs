@@ -16,6 +16,8 @@ public sealed class ComposerPanel : Panel
 {
     private static readonly CellStyle CaretStyle = new(attrs: StyleAttr.Reverse);
     private static readonly CellStyle PlaceholderStyle = ChatPalette.Dim;
+    // O7 (#1482): queue depth dock, right-aligned on the prompt rail's top row.
+    private static readonly CellStyle QueuedCounterStyle = ChatPalette.ToolRunning;
 
     public ComposerPanel(string id, Rendering.ComposerController composer, int minWidth, int minHeight, int priority = 5)
         : base(id, new Size(minWidth, minHeight), priority)
@@ -130,6 +132,18 @@ public sealed class ComposerPanel : Panel
         if (caretRow < textRows && textRows > 0 && caretCol <= content.Width)
         {
             buffer.SetStyleAt(Math.Min(content.X + caretCol, content.Right - 1), content.Y + caretRow, CaretStyle);
+        }
+
+        // O7 (#1482): visible queue dock in the prompt rail. The composer owns
+        // the queue, so the counter is derived from it directly — one source of
+        // truth, no new projector or extension axis. An empty queue paints
+        // nothing, so every existing golden stays byte-identical. With chrome on
+        // (the interactive host) row 0 is the "─ INPUT ──" rule, so the counter
+        // sits on dedicated chrome, never over a typed draft.
+        if (Composer.QueuedCounterText() is { Length: > 0 } counter)
+        {
+            int width = PromptBuffer.DisplayCells(counter.AsSpan());
+            buffer.SetText(Math.Max(Rect.X, Rect.Right - width), Rect.Y, counter, QueuedCounterStyle);
         }
     }
 }
