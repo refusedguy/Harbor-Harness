@@ -35,6 +35,17 @@ public sealed class TokenTracker : ITokenTracker
     private int _reserveTokens = CompactionPolicy.DefaultReserveTokens;
 
     /// <summary>
+    ///     Fraction of a model's context window held back as a compaction reserve
+    ///     (#2225, opencode <c>RESERVE_SHARE</c>). A fixed floor alone is too small
+    ///     for large windows: the heuristic estimator runs low on real providers,
+    ///     so a 16k reserve on a 200k window lets the request grow until the
+    ///     provider refuses it. Growing the reserve with the window makes the
+    ///     preventive pass fire while there is still headroom to summarize,
+    ///     instead of leaving the reactive overflow retry to pay for it.
+    /// </summary>
+    public const double ContextReserveShare = 0.15;
+
+    /// <summary>
     ///     Token reserve below the model's context window that triggers compaction.
     ///     Init-only (#80): mutating the threshold on the shared singleton mid-run
     ///     would silently move the goalposts for every session at once.
@@ -59,6 +70,26 @@ public sealed class TokenTracker : ITokenTracker
         Ensure.NotNull(estimator);
         _estimator = estimator;
         _logger = logger ?? NullLogger<TokenTracker>.Instance;
+    }
+
+    /// <summary>
+    ///     The reserve that actually applies to <paramref name="model" />: the
+    ///     configured floor, raised to <see cref="ContextReserveShare" /> of the
+    ///     window when the window is large enough for that to matter (#2225).
+    ///     Both the compaction verdict here and <c>CompactionService</c>'s budget
+    ///     math read this one value, so the two cannot drift apart (#1106).
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="ReserveTokens" /> stays the configured floor (init-only):
+    ///     small windows keep the historical 16,384 threshold, and a test or a
+    ///     host that lowers the floor still moves the verdict for its window.
+    /// </remarks>
+    /// <param name="model">The model whose context window sizes the reserve.</param>
+    /// <returns>The effective reserve, never below <see cref="ReserveTokens" />.</returns>
+    public int EffectiveReserveTokens(ModelInfo model)
+    {
+        Ensure.NotNull(model);
+        return Math.Max(ReserveTokens, (int)(model.ContextWindow * ContextReserveShare));
     }
 
     public void RecordTurnUsage(Usage usage)
@@ -132,12 +163,17 @@ public sealed class TokenTracker : ITokenTracker
             return false;
         }
 
+        // The reserve scales with the window (#2225): 15% of a large context,
+        // but never below the configured floor for small ones. Computed once
+        // here so the guard and the verdict use the same number.
+        int reserve = EffectiveReserveTokens(model);
+
         // Degenerate but reported window (#80 companion): at or below the
         // reserve it would make `estimated > negative` true on EVERY turn.
         // Refuse instead of compacting blindly.
-        if (model.ContextWindow <= ReserveTokens)
+        if (model.ContextWindow <= reserve)
         {
-            TokenTrackerLog.SkippingCompactionCheck(_logger, model.ContextWindow, ReserveTokens);
+            TokenTrackerLog.SkippingCompactionCheck(_logger, model.ContextWindow, reserve);
             return false;
         }
 
@@ -171,7 +207,7 @@ public sealed class TokenTracker : ITokenTracker
             }
         }
 
-        return estimated > model.ContextWindow - ReserveTokens;
+        return estimated > model.ContextWindow - reserve;
     }
 
     public TokenStats GetStats()
