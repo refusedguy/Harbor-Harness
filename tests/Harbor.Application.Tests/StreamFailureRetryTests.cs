@@ -55,7 +55,7 @@ public class StreamFailureRetryTests
         // is the one the attempt reported — same kind, same message, same
         // provider body.
         await Assert.That(calls).IsEqualTo(3);
-        await Assert.That(outcome.IsFailure).IsTrue();
+        await Assert.That(outcome).IsFailed();
         await Assert.That(outcome.Error.Kind).IsEqualTo(ProviderErrorKind.ServerError);
         await Assert.That(outcome.Error.Message).IsEqualTo("503 from the provider");
         await Assert.That(outcome.Error.Details).IsEqualTo("provider body");
@@ -80,7 +80,7 @@ public class StreamFailureRetryTests
 
         // Auth failures are fatal: one attempt, no retry, the failure as-is.
         await Assert.That(calls).IsEqualTo(1);
-        await Assert.That(outcome.IsFailure).IsTrue();
+        await Assert.That(outcome).IsFailed();
         await Assert.That(outcome.Error.Kind).IsEqualTo(ProviderErrorKind.Auth);
         await Assert.That(outcome.Error.Message).IsEqualTo("bad key");
         await Assert.That(outcome.Error.Details).IsNull();
@@ -136,7 +136,7 @@ public class StreamFailureRetryTests
             CancellationToken.None);
 
         await Assert.That(calls).IsEqualTo(1);
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value).IsEqualTo("streamed");
     }
 
@@ -180,7 +180,7 @@ public class StreamFailureRetryTests
             cts.Token);
 
         await Assert.That(calls).IsEqualTo(1);
-        await Assert.That(outcome.IsFailure).IsTrue();
+        await Assert.That(outcome).IsFailed();
         await Assert.That(outcome.Error.Kind).IsEqualTo(ProviderErrorKind.ServerError);
     }
 
@@ -200,7 +200,7 @@ public class StreamFailureRetryTests
 
         // The failure travels back as a value and the run fails with the
         // provider's own message — the text the thrown exception carried.
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo("bad key: the API key is invalid");
         await Assert.That(client.StreamCalls).IsEqualTo(1);
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(1);
@@ -219,7 +219,7 @@ public class StreamFailureRetryTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.StreamCalls).IsEqualTo(1);
         var assistant = session.Messages.OfType<AssistantMessage>().Single();
         await Assert.That(assistant.Parts.OfType<TextPart>().Single().Text).IsEqualTo("hello");

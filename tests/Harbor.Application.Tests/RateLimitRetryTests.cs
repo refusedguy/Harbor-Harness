@@ -248,7 +248,7 @@ public class RateLimitRetryTests
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
         // Degraded success: the run ends gracefully, not with terminal death…
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         // …after outliving the old 3-attempt budget on the rate-limit budget…
         await Assert.That(client.StreamCalls).IsGreaterThan(3);
         // …with the streamed partial persisted for resumption…
@@ -276,7 +276,7 @@ public class RateLimitRetryTests
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
         // Auth failures are fatal: no retry, no degrade — one attempt, terminal failure.
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(client.StreamCalls).IsEqualTo(1);
         await Assert.That(session.Messages.OfType<AssistantMessage>().Count()).IsEqualTo(0);
     }
@@ -316,7 +316,7 @@ public class RateLimitRetryTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("Partial output (degraded): partial work done before the failure");
     }
 
@@ -329,7 +329,7 @@ public class RateLimitRetryTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("failed: model exploded");
         await Assert.That(result.Error.Contains("Partial output")).IsFalse();
     }

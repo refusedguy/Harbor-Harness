@@ -656,7 +656,7 @@ property is the form this section replaces.
 
 ### The canonical implementation
 
-`tests/Harbor.TestKit.Support/ResultAssertions.cs:112`:
+`tests/Harbor.TestKit.Support/ResultAssertions.cs:127`:
 
 ```csharp
 public static AssertionResult IsSuccessful<T>(this Result<T> result) =>

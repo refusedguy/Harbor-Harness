@@ -79,7 +79,7 @@ public class StorePersistFailureTests
 
             var result = await agent.PromptAsync("will not be persisted");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("Failed to persist");
             // The agent loop must never see a run whose history is missing its prompt.
             await Assert.That(loop.Runs).IsEqualTo(0);

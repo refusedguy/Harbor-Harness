@@ -145,7 +145,7 @@ public class AgentLoopAllocationTests
         if (!OperatingSystem.IsLinux())
             return; // Tripwire is linux-only: GC accounting varies 4x across OS runtimes.
         var warm = await NewTextOnlyLoop().RunAsync(NewSession(), TestAgents.AllowAll());
-        await Assert.That(warm.IsSuccess).IsTrue();
+        await Assert.That(warm).IsSuccessful();
 
         const int turns = 10;
         var loops = new AgentLoop[turns];
@@ -188,7 +188,7 @@ public class AgentLoopAllocationTests
         // Exercises StreamingCoalescer start/delta/materialize (TryParseArgs)
         // plus permission check, tool dispatch and result append.
         var warm = await NewToolCallLoop().RunAsync(NewSession(), TestAgents.AllowAll());
-        await Assert.That(warm.IsSuccess).IsTrue();
+        await Assert.That(warm).IsSuccessful();
 
         const int runs = 5;
         var loops = new AgentLoop[runs];

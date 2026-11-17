@@ -112,6 +112,11 @@ const (
 // request), the value is a placeholder this runner resolves.
 var treeGates = []treeGate{
 	{
+		name:  "banned-api-exemptions",
+		needs: "the tree and BannedSymbols.txt",
+		args:  []string{"--min-exemptions", "6"},
+	},
+	{
 		name:  "changelog-assemble",
 		needs: "the changelog fragments and CHANGELOG.md",
 		args:  []string{"--check"},

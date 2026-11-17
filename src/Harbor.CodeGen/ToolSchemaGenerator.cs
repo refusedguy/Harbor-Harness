@@ -60,7 +60,7 @@ public sealed class ToolSchemaGenerator : IIncrementalGenerator
         + "pinned as {1} and the declaration renders as {2}. The schema is the tool's "
         + "contract with the model: a change to it changes what the model may send, and it "
         + "changes the prompts and the recorded sessions that carry it. Re-sign the pin "
-        + "(tools/codemod-tool-schemas.py --write-pin) in the same commit, or revert the change.",
+        + "(harbor-gates codemod-tool-schemas --write-pin) in the same commit, or revert the change.",
         "ToolSchema",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -268,7 +268,7 @@ public sealed class ToolSchemaGenerator : IIncrementalGenerator
                     data.Location,
                     $"The tool '{data.ClassName}' declares a schema, but no hash is pinned for it. "
                     + "Add it to src/Harbor.Tools.Builtin/Schemas/tool-schemas.sha256.json "
-                    + "(tools/codemod-tool-schemas.py --write-pin)."));
+                    + "(harbor-gates codemod-tool-schemas --write-pin)."));
                 continue;
             }
 
@@ -295,7 +295,7 @@ public sealed class ToolSchemaGenerator : IIncrementalGenerator
                 Location.None,
                 $"A hash is pinned for the tool '{pinned}', but no tool declares that schema. "
                 + "Either the tool was renamed or it is gone: drop the pin "
-                + "(tools/codemod-tool-schemas.py --write-pin)."));
+                + "(harbor-gates codemod-tool-schemas --write-pin)."));
         }
     }
 

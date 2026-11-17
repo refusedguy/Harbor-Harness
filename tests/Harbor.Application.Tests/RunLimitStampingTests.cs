@@ -91,7 +91,7 @@ public class RunLimitStampingTests
         // this fixes: `SubAgentRunner` (:168-188) turns that into
         // `SessionStatus.Error` and a "Sub-agent failed" note for the parent
         // model, i.e. a ceiling would be reported as a malfunction.
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         // The budget is a comparison, so the run ends at exactly MaxSteps turns
         // — on any machine, with no tolerance to tune.
@@ -131,7 +131,7 @@ public class RunLimitStampingTests
 
         var result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Limit).IsNull();
         await Assert.That(end.Cancelled).IsFalse();
@@ -148,12 +148,11 @@ public class RunLimitStampingTests
         var agent = Agent(MaxSteps);
         var loop = AgentLoopFixtures.Loop(client, counter, bus, agent);
 
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        using var cts = TestCancellation.Cancelled();
 
         var result = await loop.RunAsync(NewSession(), agent, cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Cancelled).IsTrue();
         await Assert.That(end.Limit).IsNull();

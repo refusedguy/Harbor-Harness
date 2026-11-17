@@ -99,7 +99,7 @@ public class CancelMisclassification1103Tests
 
         var result = await loop.RunAsync(NewSession(), TestAgents.AllowAll());
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(1);
         await Assert.That(bus.Events.OfType<AgentEndEvent>().Count()).IsEqualTo(1);
     }
@@ -116,12 +116,11 @@ public class CancelMisclassification1103Tests
         var agent = TestAgents.AllowAll();
         var loop = LoopWithBus(client, bus, agent);
 
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        using var cts = TestCancellation.Cancelled();
 
         var result = await loop.RunAsync(NewSession(), agent, cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("cancelled");
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
         var end = bus.Events.OfType<AgentEndEvent>().Single();
@@ -191,7 +190,7 @@ public class CancelMisclassification1103Tests
 
         var result = await loop.RunAsync(session, agent, cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
         // The already-streamed output survived the cancel.
         await Assert.That(session.Messages.OfType<AssistantMessage>().Count()).IsEqualTo(1);
@@ -216,7 +215,7 @@ public class CancelMisclassification1103Tests
 
         var result = await loop.RunAsync(NewSession(), agent, cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(bus.Events.OfType<TurnStartEvent>().Count()).IsEqualTo(1);
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
         var end = bus.Events.OfType<AgentEndEvent>().Single();
@@ -311,7 +310,7 @@ public class CancelMisclassification1103Tests
             .WaitAsync(TimeSpan.FromSeconds(10))
             .ConfigureAwait(false);
 
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].Output).Contains("timed out");
         await Assert.That(message.Results[0].Output).DoesNotContain("Permission denied");
         await Assert.That(message.Results[0].Output).DoesNotContain("cancelled");
@@ -421,7 +420,7 @@ public class CancelMisclassification1103Tests
         var result = await runner.RunAsync(
             agent, new SubAgentRunRequest("find the todos", ParentSessionId: "parent-1"), cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("cancelled");
         await Assert.That(store.UpdatedSessions.Count).IsGreaterThanOrEqualTo(1);
         await Assert.That(store.UpdatedSessions[^1].Status).IsEqualTo(SessionStatus.Aborted);

@@ -165,7 +165,12 @@ internal static class AnthropicEventMapper
                     break;
 
                 case JsonTokenType.PropertyName:
-                    string prop = reader.GetString() ?? string.Empty;
+                    // The name is matched against this mapper's own literal
+                    // table, so the dispatch costs NO string: the old path
+                    // allocated one per property per event, and an event is
+                    // what every token of every answer arrives as (see
+                    // Utf8JsonReaderExtensions.PropertyName).
+                    string prop = EventPropertyName(ref reader);
                     if (!reader.Read())
                         throw new JsonException("Truncated line: property without value.");
                     HandleValue(ref reader, depth, prop, inDelta, inContentBlock, inUsage,
@@ -194,6 +199,46 @@ internal static class AnthropicEventMapper
         MessageDelta,
         MessageStop,
     }
+
+    /// <summary>
+    ///     The name of the property the reader is on, as one of the literals
+    ///     this mapper dispatches on — or <see cref="string.Empty" /> for a
+    ///     name it does not know. The table is matched against the RAW bytes
+    ///     of the name, so the dispatch allocates nothing; the literals are
+    ///     interned, so the comparisons are the same ones the old path made.
+    /// </summary>
+    private static string EventPropertyName(ref Utf8JsonReader reader)
+    {
+        string? known = MatchEventProperty(reader.ValueSpan);
+        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
+    }
+
+    /// <summary>
+    ///     The property names this mapper dispatches on. The table is
+    ///     EXHAUSTIVE over the literals <see cref="HandleValue" /> compares
+    ///     against — a name missing from it would stop being dispatched on,
+    ///     which is why the parity test pins the whole set.
+    /// </summary>
+    private static string? MatchEventProperty(ReadOnlySpan<byte> raw) => raw switch
+    {
+        // Ordered by how often an event carries them, not alphabetically.
+        var x when x.SequenceEqual("type"u8) => "type",
+        var x when x.SequenceEqual("delta"u8) => "delta",
+        var x when x.SequenceEqual("content_block"u8) => "content_block",
+        var x when x.SequenceEqual("usage"u8) => "usage",
+        var x when x.SequenceEqual("index"u8) => "index",
+        var x when x.SequenceEqual("text"u8) => "text",
+        var x when x.SequenceEqual("id"u8) => "id",
+        var x when x.SequenceEqual("name"u8) => "name",
+        var x when x.SequenceEqual("thinking"u8) => "thinking",
+        var x when x.SequenceEqual("partial_json"u8) => "partial_json",
+        var x when x.SequenceEqual("stop_reason"u8) => "stop_reason",
+        var x when x.SequenceEqual("input_tokens"u8) => "input_tokens",
+        var x when x.SequenceEqual("output_tokens"u8) => "output_tokens",
+        var x when x.SequenceEqual("cache_read_input_tokens"u8) => "cache_read_input_tokens",
+        var x when x.SequenceEqual("cache_creation_input_tokens"u8) => "cache_creation_input_tokens",
+        _ => null
+    };
 
     private static void HandleValue(
         ref Utf8JsonReader reader, int depth, string prop, bool inDelta, bool inContentBlock, bool inUsage,

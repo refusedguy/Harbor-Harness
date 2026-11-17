@@ -104,7 +104,7 @@ public class AcceptedGraceAbandonedTests
         ToolResultMessage result = await run.WaitAsync(TimeSpan.FromSeconds(10));
 
         await Assert.That(result.Results.Count).IsEqualTo(1);
-        await Assert.That(result.Results[0].IsError).IsTrue();
+        await Assert.That(result.Results[0]).HasFailed();
         await Assert.That(result.Results[0].Output).Contains("abandoned");
         await Assert.That(result.Results[0].Output).Contains(ToolDispatcher.AcceptedStopReason);
     }
@@ -187,7 +187,7 @@ public class AcceptedGraceAbandonedTests
         await Assert.That(tool.Calls).IsEqualTo(2);
         foreach (ToolResultEntry entry in result.Results)
         {
-            await Assert.That(entry.IsError).IsTrue();
+            await Assert.That(entry).HasFailed();
             await Assert.That(entry.Output).Contains("abandoned");
             await Assert.That(entry.Output).Contains(ToolDispatcher.AcceptedStopReason);
         }
@@ -211,7 +211,7 @@ public class AcceptedGraceAbandonedTests
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Stopped);
         await Assert.That(outcome.ToolCalls.Count).IsEqualTo(2);
         await Assert.That(outcome.ToolCalls[0].ToolCallId).IsEqualTo("tc-ab");
-        await Assert.That(outcome.ToolCalls[0].IsError).IsTrue();
+        await Assert.That(outcome.ToolCalls[0]).HasFailed();
         await Assert.That(outcome.ToolCalls[0].Completion).IsEqualTo(ToolCallCompletion.Abandoned);
         await Assert.That(outcome.ToolCalls[1].Completion).IsEqualTo(ToolCallCompletion.Completed);
     }

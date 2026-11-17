@@ -156,7 +156,7 @@ public class ToolErrorCode1760Tests
             TestAgents.AllowAll(), CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(message.Results.Count).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
         await Assert.That(message.Results[0].ErrorInfo).IsNull();
         // A success is not rewritten: the tool's own text is the text.
         await Assert.That(message.Results[0].Output).IsEqualTo("all good");
@@ -175,7 +175,7 @@ public class ToolErrorCode1760Tests
             [Call()], NewSession(), AssistantMessage.Empty("s", "m"),
             TestAgents.AllowAll(), CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].ErrorInfo!.Code).IsEqualTo(ToolErrorCodes.Error);
         await Assert.That(message.Results[0].Output).IsEqualTo("TOOL_ERROR: something went wrong");
     }
@@ -276,7 +276,7 @@ public class ToolErrorCode1760Tests
             TestAgents.AllowAll(), CancellationToken.None).ConfigureAwait(false);
 
         ToolResultEntry entry = message.Results[0];
-        await Assert.That(entry.IsError).IsTrue();
+        await Assert.That(entry).HasFailed();
         await Assert.That(entry.ErrorInfo!.Code).IsEqualTo(ToolErrorCodes.Timeout);
         await Assert.That(entry.Output).StartsWith("TOOL_TIMEOUT: ");
         await Assert.That(entry.Output).Contains("timed out after");
@@ -382,7 +382,7 @@ public class ToolErrorCode1760Tests
         var session = NewSession();
         var result = await loop.RunAsync(session, TestAgents.AllowAll()).ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         string secondRequest = TestMessages.RenderText(client.Requests[1]);
         await Assert.That(secondRequest).Contains("TOOL_TIMEOUT: ");
     }

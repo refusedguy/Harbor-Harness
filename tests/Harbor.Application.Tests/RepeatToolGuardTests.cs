@@ -255,7 +255,7 @@ public class RepeatToolGuardTests
 
         var result = await loop.RunAsync(session, agent).ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(tool.Executions).IsEqualTo(3)
             .Because("the guard is ADVISORY: it never blocks a call, it only tells the model");
 
@@ -291,7 +291,7 @@ public class RepeatToolGuardTests
 
         var result = await loop.RunAsync(session, agent).ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(tool.Executions).IsEqualTo(3)
             .Because("a disabled guard changes nothing about the run");
         await Assert.That(TestMessages.RenderText(client.Requests[3])).DoesNotContain("repeated tool call")

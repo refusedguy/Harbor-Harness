@@ -65,7 +65,7 @@ public class ContextOverflowRecovery1755Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue()
+        await Assert.That(result).IsSuccessful()
             .Because("the compaction freed the window, so the turn continues");
         await Assert.That(client.StreamCalls).IsEqualTo(2)
             .Because("the refused request is retried exactly once, from the compacted view");
@@ -97,7 +97,7 @@ public class ContextOverflowRecovery1755Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains(OverflowMessage)
             .Because("the provider's own refusal is what the run reports — the harness does not replace it");
         await Assert.That(result.Error).Contains("context overflow recovery")
@@ -119,7 +119,7 @@ public class ContextOverflowRecovery1755Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("the compaction failed")
             .Because("the reason the turn could not continue is the compaction's own failure");
         await Assert.That(client.StreamCalls).IsEqualTo(1);
@@ -141,7 +141,7 @@ public class ContextOverflowRecovery1755Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(client.StreamCalls).IsGreaterThan(1)
             .Because("the recovery DID retry — otherwise the bound below would prove nothing");
         await Assert.That(client.StreamCalls).IsLessThanOrEqualTo(1 + CompactionBehavior.MaxOverflowRetries)

@@ -301,7 +301,7 @@ public class HookRunnerTests
 
         await Assert.That(tool.Executions).IsEqualTo(0);
         await Assert.That(message.Results.Count).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].Output).Contains("hooked");
     }
 
@@ -321,7 +321,7 @@ public class HookRunnerTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
         await Assert.That(tool.ExecutedArgs.Count).IsEqualTo(1);
         await Assert.That(tool.ExecutedArgs[0]).Contains("2");
     }
@@ -344,7 +344,7 @@ public class HookRunnerTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
         await Assert.That(File.Exists(marker)).IsTrue();
     }
 
@@ -360,7 +360,7 @@ public class HookRunnerTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
     }
 
     // ── Loop integration (SessionEnd) ────────────────────────────────────
@@ -400,7 +400,7 @@ public class HookRunnerTests
 
         Result result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(File.Exists(marker)).IsTrue();
     }
 
@@ -638,7 +638,7 @@ public class HookRunnerTests
             .WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(File.Exists(marker)).IsTrue();
     }
 
@@ -658,7 +658,7 @@ public class HookRunnerTests
             .ConfigureAwait(false);
 
         // The gate sits before the first turn, so nothing was streamed.
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("blocked by hook");
         await Assert.That(client.StreamCalls).IsEqualTo(0);
     }
@@ -678,7 +678,7 @@ public class HookRunnerTests
             .WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.StreamCalls).IsEqualTo(1);
     }
 
@@ -698,7 +698,7 @@ public class HookRunnerTests
             .WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(client.StreamCalls).IsEqualTo(0);
     }
 
@@ -722,7 +722,7 @@ public class HookRunnerTests
             .WaitAsync(TimeSpan.FromSeconds(30))
             .ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(File.Exists(marker)).IsFalse();
         await Assert.That(client.StreamCalls).IsEqualTo(1);
     }

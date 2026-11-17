@@ -16,7 +16,17 @@
     -->
     <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
+    <!--
+      The four provider assemblies each carry their own copy of the shared
+      wire helpers (OpenAiWire.cs, SsePump.cs, Utf8JsonReaderExtensions.cs
+      are LINKED source, not a shared assembly), so their internal types
+      collide by name. The aliases below are what let a test name ONE of
+      them; `global` keeps every type visible unqualified as before, so the
+      aliases add a way to disambiguate without removing one.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj">
+      <Aliases>AnthropicWire,global</Aliases>
+    </ProjectReference>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj">

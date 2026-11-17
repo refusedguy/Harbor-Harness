@@ -208,6 +208,11 @@ jobs:
               # the gate must run the job that executes it. Same #618
               # argument, one line over.
               - 'tools/gates/check-arch-suite-once/**'
+              # The control for the TUnit analyzer gate (#1836) runs INSIDE
+              # the build job, and it is compiled now. Same #618 argument: an
+              # edit to its sources must run the job that executes it, or the
+              # edit lands unvalidated.
+              - 'tools/gates/check-tunit-analyzer-gate/**'
               # The build-output cache's mtime normalisation (issue #1927).
               # It runs INSIDE the build job, and it decides whether MSBuild
               # may skip a project — so an edit to it must set dotnet=true,
@@ -244,8 +249,9 @@ jobs:
               # argument as the lines above: editing the tool that proves the
               # gate must run the job that executes it, or the edit lands
               # unvalidated. The canary's own source is under tests/, which the
-              # dotnet filter already covers.
-              - 'tools/check-tunit-analyzer-gate.py'
+              # dotnet filter already covers. The instrument is compiled now;
+              # its sources are under `tools/gates/`, which the filter below
+              # already covers.
               # NUKE build code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false, skip the build job
@@ -288,7 +294,7 @@ jobs:
               - 'Directory.Build.props'
               - 'Directory.Packages.props'
               - 'BannedSymbols.txt'
-              - 'tools/check-test-packages.py'
+              - 'tools/gates/check-test-packages/**'
               - 'tools/test-package-exceptions.txt'
             ui:
               - 'src/Harbor.Tui*/**'
@@ -579,9 +585,9 @@ jobs:
           # job (the build job) builds it on purpose to prove the gate.
           dotnet restore tests/TUnitAnalyzerCanary/TUnitAnalyzerCanary.csproj
       - name: Package-set gate fails on an injected banned package
-        run: python3 tools/check-test-packages.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --self-test
       - name: Check the resolved package set of every test and sample project
-        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 50 --min-packages 1400
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 50 --min-packages 1400
 
   # #1893. The VSTest test host must not come back.
   #
@@ -683,118 +689,22 @@ jobs:
         with:
           job-name: analyzer scope
 
-  # #1853. Unused-reference detection over the whole solution.
+  # #1853 — the unused-reference detector (ReferenceTrimmer 3.5.13, MIT).
   #
-  # ReferenceTrimmer 3.5.13 (MIT) is a build-time analyzer: it asks Roslyn
-  # which assemblies the compiled code actually uses and reports the declared
-  # references that none of them reach (RT0001 bare reference, RT0002 project
-  # reference, RT0003 package reference).
+  # It USED to be a job of its own, right here, and that job compiled the
+  # whole tree a second time: `dotnet restore Harbor.slnx
+  # -p:HarborReferenceTrimmer=true` followed by a full `dotnet build
+  # Harbor.slnx -c Release`. That is not a gate step, it is a second full
+  # compile of the solution — 260 s, 22 % of the pull-request lane's
+  # runner-minutes (run 39556560488), for one answer.
   #
-  # It is a separate job and not a build step, for three reasons.
+  # Since #2108 the analyzer runs INSIDE the `build` job's one compile, and
+  # the `check-reference-trimmer` gate reads the findings out of that
+  # compile's warning log. The gate, its baseline, the coverage floor of 100
+  # projects and the artifact are all still here — they moved into the `build`
+  # job, and the second compile is gone.
   #
-  #   COST. GetUsedAssemblyReferences is a real semantic analysis of every
-  #   compilation. Running it on every PR would tax every PR for a signal
-  #   that changes only when a dependency changes.
-  #
-  #   BLAST RADIUS. The findings are warnings, and this repository sets
-  #   TreatWarningsAsErrors=true, so the package would break the build the
-  #   day it was added. The job turns warnings-as-errors off FOR ITSELF and
-  #   compares the findings with a baseline instead. The property is a global
-  #   property, so it overrides the props files that set it.
-  #
-  #   SCOPE. The tool sees SOURCE. It cannot see reflection, DI registration
-  #   by convention, or a plugin loaded by name. This repository forbids
-  #   dynamic code outside src/Harbor.Plugins.* (#626), so the blind spot is
-  #   small — but a candidate still needs a human read before anything is
-  #   removed, and the baseline is where that read is recorded.
-  #
-  # Two properties make the run measure the whole tree rather than a part of
-  # it:
-  #
-  #   GenerateDocumentationFile=true — tests/Directory.Build.props turns the
-  #   doc file off, and the tool says itself (RT0000) that without one its
-  #   "used references" answer is less accurate. A weaker instrument that is
-  #   allowed to under-report is not a measurement, so the job turns the doc
-  #   file on everywhere; the gate treats an RT0000 as a failure.
-  #
-  #   HarborArchGate=false — the architecture suite that runs inside the
-  #   Release build is the `core` test shard's job on the PR path, and running
-  #   it here as well would compile the same assembly twice for one answer.
-  #
-  # The raw log is uploaded as an artifact so that a reader can check the
-  # tool's answer without re-running it.
-  reference-trimmer:
-    name: unused references (ReferenceTrimmer)
-    needs: changes
-    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
-      - uses: actions/checkout@v7
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.402"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
-      # The restore has to run with the property too: the package has to be in
-      # the assets file before the compiler can load the analyzer, and a
-      # restore without the property would write an assets file the build
-      # then does not agree with.
-      - name: Restore the solution with the ReferenceTrimmer analyzer
-        run: dotnet restore Harbor.slnx -p:HarborReferenceTrimmer=true
-      - name: Build the solution and collect the analyzer's findings
-        run: |
-          dotnet build Harbor.slnx -c Release --no-restore \
-            -p:HarborReferenceTrimmer=true \
-            -p:TreatWarningsAsErrors=false \
-            -p:GenerateDocumentationFile=true \
-            -p:HarborArchGate=false \
-            -p:MaxCpuCount=0 \
-            -flp:"logfile=rt-warnings.log;warningsonly" \
-            -flp2:"logfile=rt-errors.log;errorsonly"
-      # The coverage list is the answer to "how many projects did the analyzer
-      # actually run in". The analyzer writes its declared-reference table
-      # into each project's intermediate directory, so the table's own file
-      # names are the evidence — and the gate checks the count against a
-      # floor, because a scan that silently narrowed must go red, not quiet.
-      - name: Coverage — the projects the analyzer actually ran in
-        run: |
-          find . -name '_ReferenceTrimmer_DeclaredReferences.tsv' \
-                   -not -path './.git/*' -not -path './external/*' \
-            | sed 's|/obj/.*||' | sed 's|^\./||' | sort -u > rt-coverage.txt
-          echo "the analyzer ran in $(wc -l < rt-coverage.txt) project(s)"
-      - name: Upload the findings artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: reference-trimmer-findings
-          path: |
-            rt-warnings.log
-            rt-coverage.txt
-          if-no-files-found: warn
-          retention-days: 7
-      - name: The gate is red when the tool is not allowed to answer
-        if: always()
-        run: tools/bin/harbor-gates-linux-x64 check-reference-trimmer --self-test
-      - name: Gate — no unused reference outside the baseline
-        if: always()
-        run: tools/bin/harbor-gates-linux-x64 check-reference-trimmer --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
-
-      # The runner-wait measurement, in the job summary (#1782 step 4): how
-      # long this job waited for a runner after `build` finished. It is the
-      # number that decides whether any of this lane's job-graph work
-      # matters — the sum of the jobs' own durations is not the wall.
-      - name: Queue-wait measurement (#1782 step 4)
-        if: always()
-        uses: ./.github/actions/queue-wait
-        with:
-          job-name: unused references (ReferenceTrimmer)
+  # The measurement is in docs/REFERENCE-TRIMMER.md §6.
 
   build:
     needs: changes
@@ -940,16 +850,15 @@ jobs:
       # CoreCompile in Release (Directory.Build.props sets DebugType=none
       # there), so excluding it changes nothing but the payload.
       #
-      #   !tools/bin/**         `tools/bin/` holds the COMPILED GATE BINARY,
-      #                          and it is not a build output: it is committed
-      #                          to the repository, and the gates-binary
-      #                          workflow rebuilds it from the sources. A
-      #                          cache entry that carried it would restore
-      #                          the OLD binary over the NEW one, and a gate
-      #                          that moved into the binary would then run a
-      #                          build that does not know it. The first
-      #                          compiled gate to run in this job is what
-      #                          found it.
+      #   !tools/bin/**         the COMPILED GATE BINARY: a committed
+      #                           artifact, not a build output. `**/bin`
+      #                           matches `tools/bin` too, so a restored
+      #                           entry would overwrite the binary of the
+      #                           commit under test with the binary of the
+      #                           commit the entry was built from -- and the
+      #                           lane would then run a gate that the tree
+      #                           does not have (run 39651172996: "unknown
+      #                           gate: check-test-packages").
       HARBOR_BUILD_OUTPUT_CACHE_PATHS: |
         **/obj
         **/bin
@@ -1119,18 +1028,54 @@ jobs:
           scope="refs/heads/${base_ref}"
           echo "cache prefix:    ${prefix}"
           echo "looking in scope: ${scope}"
+          #
+          # THIS LANE'S OWN VERSION of the cache. The cache action computes it
+          # from the `path` input — the LINES joined with "|", plus the
+          # compression method and the salt "1.0" — and the service serves an
+          # entry only when the key AND the version agree. The version is
+          # therefore the SECOND thing that can differ between this lane and
+          # the base branch, and it is invisible in the log until the restore
+          # says "Cache not found for input keys" for a key the REST API has
+          # just named. Printing it here tells the two apart:
+          #
+          #   * the versions agree and the restore still misses → the entry is
+          #     in a scope this lane cannot read (a manual dispatch on a
+          #     feature branch sees none of dev's entries);
+          #   * the versions differ → the two lanes' path lists differ, and
+          #     the base branch never wrote this lane's version.
+          #
+          # The algorithm is the action's own (actions/toolkit,
+          # packages/cache/src/internal/cacheUtils.ts, getCacheVersion), and
+          # the number it produces for the four lines the list holds is the
+          # `version` the REST API reports for every entry dev has written
+          # since #2117: c59a4786cc2123d53e9d1c95486e32a211f9dcf3885f53318b7aedde237d9947.
+          paths="$(printf '%s' "$HARBOR_BUILD_OUTPUT_CACHE_PATHS" | sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d')"
+          compression="zstd-without-long"
+          if [ -z "$(zstd --quiet --version 2>/dev/null)" ]; then
+            compression="gzip"
+          fi
+          version="$( { printf '%s' "$paths" | paste -sd'|' - | tr -d '\n'; printf '|%s|1.0' "$compression"; } | sha256sum | cut -d' ' -f1 )"
+          echo "this lane's cache version: ${version}"
           key="$(curl -fsSL --max-time 60 \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
-            | jq -r --arg prefix "$prefix" --arg scope "$scope" '
+            | jq -r --arg prefix "$prefix" --arg scope "$scope" --arg version "$version" '
                 [ .actions_caches[] | select(.key | startswith($prefix)) ]
-                | ( (map(select(.ref == $scope)) | sort_by(.created_at) | last)
+                | ( (map(select(.version == $version)) | map(select(.ref == $scope)) | sort_by(.created_at) | last)
+                    // (map(select(.version == $version)) | sort_by(.created_at) | last)
+                    // (map(select(.ref == $scope)) | sort_by(.created_at) | last)
                     // (sort_by(.created_at) | last) )
-                | .key // empty' 2>/dev/null)"
-          if [ -n "$key" ]; then
-            echo "key=${key}" >> "$GITHUB_OUTPUT"
-            echo "cache entry to restore: ${key}"
+                | if . == null then "" else (.key + " " + .version) end' 2>/dev/null)"
+          entry_key="${key%% *}"
+          entry_version="${key##* }"
+          if [ -n "$entry_key" ]; then
+            echo "key=${entry_key}" >> "$GITHUB_OUTPUT"
+            echo "cache entry to restore: ${entry_key}"
+            echo "the entry's own version: ${entry_version}"
+            if [ "$entry_version" != "$version" ]; then
+              echo "::warning::the entry was written with another path list (its version is ${entry_version}, this lane's is ${version}); the service serves it only when the versions agree"
+            fi
           else
             echo "no build-output cache entry for this prefix — this lane compiles from scratch"
           fi
@@ -1189,6 +1134,20 @@ jobs:
           # The list itself, and the reason each of its lines is in it, live
           # in the env var above: ONE list, read by the restore step and by
           # the save step, so the two cannot drift.
+          #
+          # tools/bin/** IS EXCLUDED, and it is the one exclusion that is not
+          # about build outputs. `**/bin` matches `tools/bin` as well, and
+          # `tools/bin/` holds the COMPILED GATE BINARY -- the committed
+          # harbor-gates-linux-x64 that the gates-binary workflow rebuilds and
+          # compares byte for byte. A restored entry therefore OVERWRITES the
+          # committed binary with the one of the commit the entry was built
+          # from, and the lane then runs a binary that is not the one in the
+          # tree: on run 39651172996 the restored entry (built from 2549ac77)
+          # carried a binary without `check-test-packages`, the build job ran
+          # it, got "unknown gate: check-test-packages", and went red; the
+          # `gate` job then failed on the red `build`. The binary is a
+          # COMMITTED ARTIFACT, not a build output: it must come from the
+          # commit under test, never from a cache entry of an older one.
           path: ${{ env.HARBOR_BUILD_OUTPUT_CACHE_PATHS }}
           # The entry the step above resolved, when there is one. The
           # fallbacks are the old behaviour: the key for THIS commit first,
@@ -1367,8 +1326,32 @@ jobs:
       # The same question, asked of the tree the COMPILE leaves behind: does
       # the compile produce the .pdb that CoreCompile lists as its output, and
       # what is the newest file under obj/ and bin/ afterwards?
+      #
+      # ── The unused-reference analyzer runs INSIDE this compile ───────────────
+      #
+      # ReferenceTrimmer (#1853) used to have its own job, and that job
+      # compiled the whole tree a second time — 260 s, 22 % of the
+      # pull-request lane's runner-minutes, for one gate (#2108). It runs here
+      # instead, in the compile the lane already pays for, and the
+      # `check-reference-trimmer` gate reads the findings out of that compile's
+      # warning log. The job is gone; the gate is not.
+      #
+      # `HarborReferenceTrimmer` is an ENVIRONMENT variable, and MSBuild reads
+      # an environment variable as a property, so it reaches BOTH the restore
+      # NUKE runs first and the build itself. The restore matters: the
+      # analyzer package has to be in the assets file before the compiler can
+      # load it, and a restore without the property would write an assets
+      # file the build does not agree with.
+      #
+      # `HARBOR_WARNING_LOG` names the file MSBuild's file logger writes the
+      # compiler's warnings to (see build/_build/Targets/CompileTarget.cs).
+      # Without it there is no file logger at all, so the ordinary local
+      # build writes nothing.
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
         id: compile
+        env:
+          HarborReferenceTrimmer: 'true'
+          HARBOR_WARNING_LOG: ${{ github.workspace }}/rt-warnings.log
         run: |
           date +%s > "$RUNNER_TEMP/harbor-compile-start"
           bash build/build.sh Compile --configuration Release
@@ -1541,7 +1524,7 @@ jobs:
       # mechanisms: a file can reach an output directory without being a
       # package in the graph.
       - name: No banned assembly in any test/sample output directory
-        run: python3 tools/check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --output-only --min-projects 43 --min-output-dirs 40
 
       # #1836 — the TUnit analyzer gate, proved rather than assumed.
       #
@@ -1566,8 +1549,8 @@ jobs:
       # diagnostic on the wrong line.
       - name: The TUnit analyzer gate is armed (planted offender, waived site)
         run: |
-          python3 tools/check-tunit-analyzer-gate.py --selftest
-          python3 tools/check-tunit-analyzer-gate.py
+          tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate --selftest
+          tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
@@ -1715,6 +1698,43 @@ jobs:
         run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --self-test
       - name: The architecture suite runs once on every lane (#1920, #2114)
         run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --min-shards 4
+
+      # ── The unused-reference gate, fed by THIS build (#1853, #2108) ────────
+      #
+      # The analyzer ran inside the compile above, so its findings are in that
+      # compile's warning log. These steps are the gate that reads them: the
+      # coverage list (how many projects the analyzer actually ran in), the
+      # gate's own failure path, and the comparison with the baseline.
+      #
+      # The coverage list is the answer to "how many projects did the analyzer
+      # actually run in". The analyzer writes its declared-reference table
+      # into each project's intermediate directory, so the table's own file
+      # names are the evidence — and the gate checks the count against a
+      # floor, because a scan that silently narrowed must go red, not quiet.
+      - name: Coverage — the projects the analyzer actually ran in
+        run: |
+          find . -name '_ReferenceTrimmer_DeclaredReferences.tsv' \
+                   -not -path './.git/*' -not -path './external/*' \
+            | sed 's|/obj/.*||' | sed 's|^\./||' | sort -u > rt-coverage.txt
+          echo "the analyzer ran in $(wc -l < rt-coverage.txt) project(s)"
+      # The raw log is uploaded as an artifact so that a reader can check the
+      # tool's answer without re-running it.
+      - name: Upload the findings artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reference-trimmer-findings
+          path: |
+            rt-warnings.log
+            rt-coverage.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: The gate is red when the tool is not allowed to answer
+        if: always()
+        run: tools/bin/harbor-gates-linux-x64 check-reference-trimmer --self-test
+      - name: Gate — no unused reference outside the baseline
+        if: always()
+        run: tools/bin/harbor-gates-linux-x64 check-reference-trimmer --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
 
       # The evaluation-cost instrument's own failure path (issue #1919).
       # Same argument as the aot gate's self-test below and docs.yml's

@@ -166,7 +166,7 @@ func Run(args []string) int {
 		return gate.Red
 	}
 
-	fmt.Printf("compared %d commit(s) in %s..%s\n", count, base[:12], head)
+	fmt.Printf("compared %d commit(s) in %s..%s\n", count, shortSHA(base), head)
 	for _, text := range findings {
 		fmt.Printf("FAIL %s\n", text)
 	}
@@ -176,6 +176,21 @@ func Run(args []string) int {
 	}
 	fmt.Println("OK: every change to the frozen surface is re-signed in its own commit")
 	return gate.Green
+}
+
+// shortSHA is the python `text[:12]`: the first twelve characters, or the
+// whole text when it is shorter.
+//
+// The python original sliced a STRING, and a python slice of a short string
+// is the whole string. A Go slice of a short string is a panic, so the port
+// has to say what python's slice says: a gate that crashes on an argument
+// it accepts is a gate that cannot run, and the crash was found by the
+// benchmark, which passes `--base HEAD~1` where CI passes a SHA.
+func shortSHA(text string) string {
+	if len(text) > 12 {
+		return text[:12]
+	}
+	return text
 }
 
 // isDigits is the python str.isdigit.
@@ -400,7 +415,7 @@ func checkCommit(sha string, subject string, files []string, cwd string, finding
 		}
 		if len(edited) > 0 && len(sources) == 0 && !removalOnly {
 			*findings = append(*findings,
-				"RESIGN-001 "+sha[:12]+" "+subject+
+				"RESIGN-001 "+shortSHA(sha)+" "+subject+
 					" — the frozen baseline of "+entry.assembly+" was edited in this commit ("+
 					strings.Join(edited, ", ")+") and no source of the assembly was touched with it. "+
 					"A re-signing is a diff, not a file edit: the code that changed the surface and "+
@@ -422,7 +437,7 @@ func checkCommit(sha string, subject string, files []string, cwd string, finding
 					tail = ", ..."
 				}
 				*findings = append(*findings,
-					"RESIGN-002 "+sha[:12]+" "+subject+
+					"RESIGN-002 "+shortSHA(sha)+" "+subject+
 						" — this commit changes a public declaration of "+entry.assembly+" ("+
 						strings.Join(shown, ", ")+tail+
 						") and does not re-sign the frozen baseline with it. "+

@@ -20,6 +20,7 @@
 > - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `tools/bin/harbor-gates-linux-x64 gen-seam-graph --write` after changing a type under `src/` or `apps/`; the `tree gates` CI job fails when the committed copy is stale.
 > - [docs/DEMO_GIFS.md](./docs/DEMO_GIFS.md) — README demo GIFs: how they are recorded, and what counts as an *intentional* re-record (never hand-edit `assets/demo/*.gif`; never commit regenerated GIFs in a PR).
 > - [docs/ARCH_RULES.md](./docs/ARCH_RULES.md) — the architecture rule set, classified: 160 guards into tiers A (catches a defect and is cheap) / B (catches a defect but nags) / C (catches the tree's shape), with the false-positive cost of each and the commits that proved the tier. The machine-readable form is `tests/Harbor.Architecture.Tests/rule-tiers.json`.
+> - [docs/GUARD_VACUITY.md](./docs/GUARD_VACUITY.md) — the vacuity sweep (#1730): which architecture and security guards can actually fail, what proves it, and what is still unguarded. The 160 architecture guards, the 8 that declare no positive control and no discovery floor, and the banned-API suppression catalogue the new `banned-api-exemptions` gate now holds.
 
 ## What Harbor is
 
@@ -126,7 +127,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 84 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 90 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 48 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
@@ -755,7 +756,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 
 1. **Don't add dependencies to `Harbor.Abstractions`** — it must stay as small as it is today. It is not zero-dep: the measured set is 7 `PackageReference` (`CSharpFunctionalExtensions`, `MemoryPack`, `ZLinq` + `ZLinq.DropInGenerator`, and the three `Microsoft.Extensions.*.Abstractions`), plus one `ProjectReference` to `Harbor.Abstractions.Contracts`. This list used to say "only CSharpFunctionalExtensions" and was wrong by six. It is now enforced by [the compiled `check-abstractions-contract` gate](./tools/gates/check-abstractions-contract/main.go), which fails when a declared package has no `using` under it or a non-BCL `using` has no package over it — run `--report` to print the census rather than trusting this sentence. The gate covers five projects, not just this one: `Harbor.Abstractions.Contracts`, plus `Harbor.Extensions`, `Harbor.Application` and `Harbor.PolicyConfig`, which carried the same phantom `CommunityToolkit.HighPerformance` edge until #1016's follow-up measured that nothing in `src/` used it. `Harbor.Extensions`, `Harbor.Application` and `Harbor.PolicyConfig` are not frozen contracts — they are on the gate because their dependency sets are the ones every other assembly inherits through them (`Harbor.PolicyConfig` joined the perimeter with #1625, the day it landed).
 2. **Don't use `Newtonsoft.Json`** — use `System.Text.Json` only. The ban is on **our** use of Newtonsoft. Two cases, and the difference between them is the whole point:
-   - **Our code and our dependencies**: full ban, no exceptions. No `using Newtonsoft.Json`, no direct `PackageReference`, no package we add that drags Newtonsoft in, in `src/`, `apps/`, `contrib/`, `tests/`, `samples/` or a plugin alike. In `src/` and `apps/` this is a build error (`BannedSymbols.txt` → RS0030). RS0030 is off for `tests/` and `samples/` (`<NoWarn>$(NoWarn);RS0030</NoWarn>` in `Directory.Build.props`), so there the package edge is carried by [`tools/check-test-packages.py`](./tools/check-test-packages.py): it reads the resolved package graph of every test and sample project and fails on a banned package, direct or transitive. The code edge (no Newtonsoft types in test code) has no mechanical backstop there: review is it.
+   - **Our code and our dependencies**: full ban, no exceptions. No `using Newtonsoft.Json`, no direct `PackageReference`, no package we add that drags Newtonsoft in, in `src/`, `apps/`, `contrib/`, `tests/`, `samples/` or a plugin alike. In `src/` and `apps/` this is a build error (`BannedSymbols.txt` → RS0030). RS0030 is off for `tests/` and `samples/` (`<NoWarn>$(NoWarn);RS0030</NoWarn>` in `Directory.Build.props`), so there the package edge is carried by `harbor-gates check-test-packages`: it reads the resolved package graph of every test and sample project and fails on a banned package, direct or transitive. The code edge (no Newtonsoft types in test code) has no mechanical backstop there: review is it.
    - **A foreign library's transitive dependency that we do not use**: not a violation of the ban, but the decision must be explicit and written down. Either the package is dropped, or the case is named in [`tools/test-package-exceptions.txt`](./tools/test-package-exceptions.txt) with a reason and an owner. A package must not arrive quietly. `TngTech.ArchUnitNET` 0.13.4 is the worked example: it declares `Newtonsoft.Json 13.0.4`, and exactly one class of it touches that (`ArchUnitNET/Fluent/Freeze/JsonViolationStore.cs`, upstream commit `1ab5943`, the commit 0.13.4 was packed from), and only for the optional `Freeze()` feature, which we do not call. The answer was the first one: 0.13.4 is REJECTED (#1841, #1870, #1871; the verdict table in `docs/ANALYZERS.md`), so the package is not taken. That exception file has **no** entries today: the treatment of a package that drags Newtonsoft in is to **drop that package**, not to except it.
 3. **Don't use EF Core** — not AOT-compatible. Use Dapper or raw ADO.NET.
 4. **Don't throw exceptions for expected failures** — use `Result<T>`.
@@ -801,8 +802,8 @@ dotnet run --project apps/Harbor.App.Cli
 # the resolved package graph `dotnet restore` writes, so the restore comes
 # first; the gate itself is stdlib python and needs no build.
 dotnet restore Harbor.slnx
-python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
-python3 tools/check-test-packages.py --self-test   # prove the gate still fails on a banned package
+tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 40 --min-packages 1400
+tools/bin/harbor-gates-linux-x64 check-test-packages --self-test   # prove the gate still fails on a banned package
 
 # CLI verbs: ask <prompt> | run | demo | setup | auth | config | providers | models [provider] |
 #            sessions | mcp | serve | tui | events | storage | logs | daemon (start|stop|status) |

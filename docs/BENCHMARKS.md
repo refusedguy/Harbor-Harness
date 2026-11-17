@@ -2907,7 +2907,85 @@ content differs), and the rewrite makes it newer than the outputs. Measured on
 run 39723477934, the diff was exactly that one line. The diagnostic therefore
 rebuilt the very project it was measuring and named a cause the lane does not
 have; the step now passes `-p:SolutionDir="$GITHUB_WORKSPACE/"`, so its
-verdict is the lane's own.
+verdict is the lane's own. Measured on run 39725284841, after that fix: the
+editorconfig's hash is the same before and after the diagnostic's own build
+(`e68c5f62…`), the diff is empty, and MSBuild answers **"Skipping target
+"CoreCompile" because all output files are up-to-date with respect to the
+input files."** — the tree is incremental, said by MSBuild itself.
+
+#### 6.4.3 The cache hits in 78 % of the pull-request runs, and every miss has a name
+
+The cache does not "sometimes work": it hits on **14 of the 18** pull-request
+runs measured on 2026-10-22, and each of the four misses has a cause that is
+in the pull request's own diff. The table is every pull-request run of
+`.github/workflows/ci.yml` in the last 60 runs that had a build job; the
+compile is the NUKE `Compile` phase and the wall is the `build` job's.
+
+| run | lane | cache | why | NUKE compile | `build` job |
+|---|---|---|---|---:|---:|
+| [39725284841](https://github.com/refusedguy/Harbor-Harness/actions/runs/39725284841) | PR `ci/2107-incremental` | HIT | — | 29.6 s | 185 s |
+| [39724322981](https://github.com/refusedguy/Harbor-Harness/actions/runs/39724322981) | PR `perf/arch-parser` | HIT | — | 52.3 s | 210 s |
+| [39723562597](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723562597) | PR `fix/2061b` | HIT | — | 213.6 s | 389 s |
+| [39723477934](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723477934) | PR `ci/2107-incremental` | HIT | — | 36.7 s | 180 s |
+| [39723469087](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723469087) | PR `perf/arch-parser` | HIT | — | 55.2 s | 217 s |
+| [39723207604](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723207604) | PR `ci/2107-incremental` | HIT | — | 29.6 s | 151 s |
+| [39722755948](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722755948) | PR `perf/arch-parser` | HIT | — | 60.3 s | 230 s |
+| [39721927302](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721927302) | PR `feat/gates-d-5` | HIT | — | 65.4 s | 251 s |
+| [39721911469](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721911469) | PR `perf/arch-parser` | HIT | — | 55.4 s | 219 s |
+| [39721827406](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721827406) | PR `perf/arch-parser` | HIT | — | (not measured) | 80 s |
+| [39721223746](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721223746) | PR `feat/gates-d-6` | HIT | — | 57.9 s | 207 s |
+| [39721154583](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721154583) | PR `perf/arch-parser` | HIT | — | 53.2 s | 212 s |
+| [39720669054](https://github.com/refusedguy/Harbor-Harness/actions/runs/39720669054) | PR `fix/2119-event-topology` | HIT | — | 39.0 s | 207 s |
+| [39720312442](https://github.com/refusedguy/Harbor-Harness/actions/runs/39720312442) | PR `fix/2119-event-topology` | HIT | — | 32.2 s | 199 s |
+| [39724256147](https://github.com/refusedguy/Harbor-Harness/actions/runs/39724256147) | PR `feat/gates-a` | **MISS** | the path list | 147.9 s | 241 s |
+| [39722793701](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722793701) | PR `feat/gates-a` | **MISS** | the path list | 223.0 s | 344 s |
+| [39721596368](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721596368) | PR `feat/gates-a` | **MISS** | the path list | 219.8 s | 346 s |
+| [39721996221](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721996221) | PR `ci/2108-merge-reference-trimmer` | **MISS** | the props hash | 221.5 s | 356 s |
+
+**14 hits, 4 misses: 78 %.** The three `feat/gates-a` runs are one branch (it
+was pushed three times), so per branch the sample is 8 branches that hit on
+every run and 2 that missed on every run. The three dev pushes of the same
+window hit as well (39723714473, 39724342525, 39725519389).
+
+**WHAT THE KEY IS, AND WHAT A HIT DEPENDS ON.** The key is
+
+```
+msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+```
+
+and the parts that decide a hit are:
+
+| part | what it is | a miss when |
+|---|---|---|
+| `<props hash>` | `hashFiles` over `Directory.Packages.props`, `Directory.Build.props`, `Directory.Build.targets`, `global.json` | the pull request touches one of the four — the prefix names an entry no branch has (run 39721996221: the lane's prefix ended in `1de69dbd…`, the base branch's in `61e83d62…`) |
+| the VERSION | the SHA-256 of the cache action's `path` input: the lines joined with a pipe, plus the compression method and the salt `1.0` | the pull request's `path` list differs from the base branch's — the service is asked for "the entry with this key AND this version", and the base branch never wrote that version (runs 39721596368, 39722793701, 39724256147) |
+| the scope | the service serves a run the entries of its own branch, of the branches below it and — for a pull request — of the base branch | the run is not a pull request and not a push to `dev`: a manual dispatch on a feature branch sees none of `dev`'s entries (run 39658451546) |
+
+**THERE IS NO RACE IN IT.** The key is not computed from the pull request's
+commit: the resolve step names the base branch's newest entry with the prefix
+(it sorts the REST API's list by `created_at` and takes the last), and the
+`restore-keys` fallback asks the service for "the newest entry with this
+prefix" among the scopes the run can read. So a base branch whose newest push
+has not saved its entry yet costs the lane FRESHNESS, not the hit — the
+stamper's diff covers the delta, and an entry that is one push older is still
+a valid base.
+
+**A HIT DOES NOT MEAN A FAST COMPILE, AND THAT IS A FOURTH, NAMED CASE.** Run
+39723562597 hit the cache and still compiled in 213.6 s. Its diff against the
+base carries `BannedSymbols.txt` and the analyzer that reads it: the analyzer
+is rebuilt, its output assembly is an INPUT of every `CoreCompile`, so every
+project is out of date and the whole tree compiles again. Same shape as a
+props change: the cache hit, and the tree still full.
+
+**WHAT A MISS COSTS.** The `build` job's wall, same lane shape: 185 s on a
+hit (run 39725284841) and 297 s on a miss (run 39725420279) — **112 s**, or
+1.9 runner-minutes. The whole pull-request lane costs 15.0 runner-minutes on a
+hit and 17.1 on a miss (the sum of the job durations, measured on those two
+runs), of which the `build` job is 3.1 and 5.0 minutes and the
+`unused references (ReferenceTrimmer)` job — a SECOND, full compile, because
+the analyzer has to run in every project — is 4.1 minutes either way. At the
+measured 78 % hit rate the misses cost 0.22 × 112 s = **25 s per lane**, and a
+lane that hit every time would cost 15.0 runner-minutes instead of 15.4.
 
 ### 6.5 The same rules in Release and Debug: the axis that is NOT measured yet
 
@@ -3733,59 +3811,110 @@ carries five shards with 347 s of service time, and it is the pool the
 4. **NativeAOT publish for CLI** — DONE on `fulltree`: 29 MB binary, 18 ms cold start, ~29 MB RSS idle (§4.4). Open: the `minimal` profile.
 5. **Self-contained + `PublishSingleFile` + trimmed** for desktop apps — Avalonia target: ~50 MB single .exe.
 
-## 10. The gate suite: the python gates in `tools/`
+## 10. The gate suite: the gates in `tools/`
 
 The gates are a product too: every pull request pays for them, and a
 gate that costs minutes costs every pull request. This section holds the
 numbers for the gate set, measured the way the workflows run it.
 
 **Method.** A clean checkout of the commit under test, with the git
-history (the gate `TEST-CITE-DRIFT` reads the history, so a tree without
-it is not the tree CI runs). Every gate is run with the arguments its
-workflow passes, from `bench/gates/tools.tsv`, five times, and the
-MINIMUM wall time is kept: the machine is shared and its load is 18-26, so
-the minimum is the estimate that the least foreign work distorts. The peak
-RSS is `/proc/<pid>/status VmHWM`, polled while the child runs, and not
+history (the gates that read the history — `check-doc-cites.py` and
+`check-local-merge-loss.py` — need it, and a tree without it is not the
+tree CI runs). Every gate is run with the arguments its workflow passes,
+from `bench/gates/tools.tsv`, five times, and the MINIMUM wall time is
+kept: the machine is shared and its load is 18-26, so the minimum is the
+estimate that the least foreign work distorts. The peak RSS is
+`/proc/<pid>/status VmHWM`, polled while the child runs, and not
 `getrusage(RUSAGE_CHILDREN).ru_maxrss`: on this host the latter carries a
 value the child never reached, because it inherits the accounting of the
 parent's own high-water mark. The measuring parent is a 2 KB C program
 (`bench/gates/maxrss.c`) for the same reason.
 
+**The set is the set CI runs**, and the gate `harbor-gates
+check-gate-bench-set` says so: it reads the workflow files, the measured
+set and the exclusion list, and fails when they disagree. §10.2 has the
+numbers and the list of what is out.
+
 ### 10.1 `check-doc-cites.py`: the git processes, batched (#2090)
 
-The same tree, the same moment, the same harness, five runs each, the
-minimum kept:
+**A number in this section is a number about a TREE, and the tree is named
+with it.** A gate that walks the tree gets slower when the tree grows, and
+a gate that walks the HISTORY gets slower when the history grows:
+`origin/dev` is 4051 files today and was 3876 at `a763c824`, and the
+doc-cites gate reads 1291 `.cs` files under `tests/` there and 1334 here.
+Two columns of one table measured on two different trees are not a
+comparison, so every column below says which tree it was measured on.
+
+**The numbers are WARM-CACHE numbers, and a CI runner is COLD.** The git
+object store on the measuring machine was in the page cache; a CI runner
+reads it for the first time. Measured here: the object store is copied to
+a scratch directory on the same btrfs volume, the copy is evicted from the
+page cache with `posix_fadvise(POSIX_FADV_DONTNEED)`, and git is pointed
+at the copy with `GIT_OBJECT_DIRECTORY`. Nothing in the repository is
+touched, and the copy is thrown away afterwards.
+
+| | cold | warm |
+|---|---:|---:|
+| the first `git cat-file --batch` | **0.431 s** | **0.008 s** |
+| the whole gate, with the batching | **55.92 s** | **26.23 s** |
+
+**The cold cache DOUBLES the gate**: 26.23 s warm and 55.92 s cold, on the
+same tree, on the same machine, minutes apart. Every number below is a
+warm-cache number, and a CI runner pays the cold column on top of it. The
+cold penalty is the pack read and not the gate's own work, and it lands on
+the gate that reads the most history — which is the gate the batching
+made cheap.
+
+#### The measurement, on ONE tree
+
+Two columns, ONE tree, and the tree is named in the column head: the tree
+is the one at `73c0b485` (4051 files, 1334 tracked `.cs` files under
+`tests/`; it was `origin/dev` when the measurement was taken), and the two
+columns differ by ONE file: the gate itself. The
+"before" column is the gate as `a763c824` has it, the "after" column is
+the gate as the batching commit `ab4638f3` has it, dropped into the same
+tree. Every other input — the documents the gate reads, the citations it
+checks, the history it walks — is the same tree, so the two columns are a
+controlled comparison and not a comparison of two trees.
 
 | | before | after |
 |---|---|---|
-| wall time, whole gate | **547.2 s** (median 620.4 s) | **68.1 s** (median 72.5 s), **8.0x** |
-| `git` processes | **1233** | **37** |
-| time inside `git` | **414 s** | **39 s** |
-| peak RSS | 69.1 MB | 57.4 MB |
+| the gate | the gate as `a763c824` has it | the batching of #2090 — **one file differs** |
+| wall time, whole gate | **135.647 s** (median 151.906 s) | **21.535 s** (median 21.873 s), **6.3x** |
+| `git` processes | **1277** | **37** |
+| time inside `git` | **118.1 s** | **6.8 s** |
+| peak RSS | 87.8 MB | 57.2 MB |
 | output | the findings | **byte-identical** |
 
-Tree: `origin/dev` at `a763c824`, 3876 files, 1291 tracked `.cs` files
-under `tests/`. The gate's own output is byte-identical before and after
-(the two runs are compared with `diff`), and its self-test still passes
-(67 checks).
+The process count and the time inside `git` are measured with a shim that
+wraps `git` and records when each process starts and ends, so the numbers
+are the count of the processes the gate actually started and the time the
+gate actually spent waiting for them. The 1277 processes are 1231
+`git blame` calls, 41 `git show` calls and 5 others; the 37 are 29
+`git blame` calls (the fallback for the files whose history crosses a
+merge), 4 `git ls-files`, one `git rev-parse`, one `git log`, one
+`git diff` and one `git cat-file --batch`.
 
-The first pair of numbers measured for this gate (669 s and 209 s) was
-taken while the machine carried other people's runs, and both sides of that
-pair carry that load. The pair above is the same measurement on the same
-tree with the machine quiet, and it is the one to quote: the speed-up of
-the GATE is 8.0x, and the speed-up of the SET is in §10.2.
+**What the two gate versions are.** The difference between them is 370
+inserted lines and 8 deleted ones
+(`git diff a763c824 ab4638f3 -- tools/check-doc-cites.py`): the per-file
+`_blame_map` call is gone, and the diff-based reconstruction is in its
+place. The gate file has not changed since that commit
+(`git diff ab4638f3 origin/dev -- tools/check-doc-cites.py` is empty), so
+the "after" column runs the SAME gate the repository runs today, and the
+difference between that column and §10.2's number is the tree.
 
-What the 1233 processes were: 1188 `git blame` calls, one per file under
-`tests/` that the gate read, 40 `git show` calls, and 5 others. The blame
-call is the expensive one: **347 ms each**, and the cost is not the output
-but the per-process walk of the history that finds the commit that wrote a
-line.
+**The blame call is the expensive one**, and its cost is not the output:
+it is the per-process walk of the history that finds the commit that wrote
+a line. On a quiet machine that is 96 ms per call; the 347 ms the older
+measurement quoted was the same call on a loaded machine.
 
 What replaced it:
 
 - the gate asks git about the files that HOLD a citation, not about every
-  file it read. In this tree **30 of the 1291** files under `tests/` hold a
-  citation (94 citations), and the gate used to ask git about all of them;
+  file it read. In the tree at `a763c824` **30 of the 1291** files under
+  `tests/` hold a citation (94 citations), and the gate used to ask git
+  about all of them;
 - one `git log -p -U0` over those files, and the blame rebuilt from the
   diffs. The hunks of one commit are applied from the last to the first,
   because they all speak about the file as it was BEFORE that commit;
@@ -3798,19 +3927,194 @@ What replaced it:
 The reconstruction was checked against `git blame` line by line for every
 file of this tree: of the files the gate uses it for, **0 disagree**.
 
+#### What this section used to say, and why it was wrong
+
+The revision before this one carried this table:
+
+| | before | after |
+|---|---|---|
+| wall time, whole gate | **547.2 s** (median 620.4 s) | **68.1 s** (median 72.5 s), **8.0x** |
+| `git` processes | **1233** | **37** |
+| time inside `git` | **414 s** | **39 s** |
+| peak RSS | 69.1 MB | 57.4 MB |
+| output | the findings | **byte-identical** |
+
+and named ONE tree for it: "Tree: `origin/dev` at `a763c824`, 3876 files,
+1291 tracked `.cs` files under `tests/`". Three things were wrong with
+that, and each of them is checkable:
+
+1. **The tree line named a tree that cannot carry the "after" column.** The
+   batching IS the commit `ab4638f3`, and `a763c824` is its ANCESTOR: the
+   tree at `a763c824` has no batching at all. A column measured with the
+   batching is a number about a tree that has it.
+2. **The "37" is the tree that has the batching, and the "1233" is the
+   tree that has not.** Measured today on `origin/dev` at `73c0b485`: the
+   gate with the batching starts exactly **37** `git` processes, and the
+   gate without it starts **1277** — the old table's 1233 is the same
+   measurement on the tree of that day, which had 43 fewer `.cs` files
+   under `tests/`.
+3. **The wall times carry the machine's load.** The same comparison, on
+   one tree, on a quiet machine, gives **135.6 s** and **21.5 s** (6.3x),
+   and the old pair (547.2 s and 68.1 s, 8.0x) is that comparison with
+   the load on: the per-process cost of a `git blame` is what the load
+   multiplies, and the batching is what removes the processes.
+
+The two tables are not in conflict: the old one is the same comparison
+measured on a loaded machine, and this one is the same comparison measured
+on a quiet one. What was wrong with the old one was not its numbers but
+its tree line, which named a tree that was not the tree the numbers came
+from.
+
 ## 10.2 The whole set, gate by gate
 
-The same harness, the same tree, the same moment, five runs each, the
-minimum wall time kept. `bench/gates/measure.sh` runs every gate the
-workflows run, with the arguments the workflows pass.
+**The set is the set CI runs.** `bench/gates/tools.tsv` holds one row per
+gate, with the arguments the workflow passes; `bench/gates/excluded.tsv`
+holds the gates CI runs that the set does not measure, each with the reason
+it is out (the .NET SDK, the network, or a self-test-only invocation). The
+two files are checked against the workflow files by the gate
+`harbor-gates check-gate-bench-set`, which fails when a gate a workflow runs
+is in neither file, when a row names a gate no workflow runs, and when a row
+passes arguments CI does not pass. The set below is therefore complete by
+construction, not by memory: **41 gates**, and a gate added to a workflow
+without a row in the table is red. The tree runner counts: a workflow that
+calls `harbor-gates all` runs the gates of the runner's list, and the gate
+reads that list out of the runner's Go source, so a row for a gate the
+runner starts is a row for a gate CI runs.
 
-**The three columns are three questions.**
+**Method.** The tree at `536e660e` (`origin/dev` at `ff1e2955` plus this
+branch's commits), with the git history. Forty-one gates, five runs per
+gate, the MINIMUM wall time kept. The exit code is the gate's own: `0` is
+a clean run, `1` is a run that found something, and `2` is "could not run".
 
-* **python** — the gates as they were.
-* **python + the git batching** — the doc-cites gate no longer asks git
-  about every file it read, only about the 30 that hold a citation.
-* **the compiled binary** — the gates that have moved to `harbor-gates`
-  run as the binary, the rest are still python.
+**THE BOX WAS NOT QUIET, and the numbers below carry that.** The load
+average was 20 to 33 during the measurement and the CPU was 99 % busy with
+other agents' runs, so the numbers below are the set's cost UNDER LOAD.
+Three measurements of the same harness say how much the load costs:
+
+| what | number |
+|---|---:|
+| the 37-gate set on the PRE-merge tree, on this box on this day | **164.4 s** |
+| the same 37-gate set on the pre-merge tree, on a QUIET machine (published before) | **39.7 s** |
+| the 41-gate set on the merged tree, on this box | **222.3 s** |
+
+The load is worth about four times, and it is worth knowing that: the
+minimum of five runs is the estimate that the least foreign work distorts,
+but on a box that never went quiet it is the best of five bad samples. Two
+runs of the same set half an hour apart differed by nineteen per cent
+(**186.0 s** and **221.1 s**, on the tree before the last merge). The table
+below is the more expensive of the runs on the merged tree.
+
+**What the merge changed, measured under one load.** The two gates that
+carry the set, the same pair of trees, back to back on the same box, each
+timed around the whole process:
+
+| | pre-merge tree `1f19a8c9` | merged tree `db3fd419` | |
+|---|---:|---:|---:|
+| `check-doc-cites.py` | 113.5 s | 120.5 s | **+6 %** |
+| `check-local-merge-loss` | 52.9 s | 52.3 s | **-1 %** |
+
+The tree grew by sixteen commits and the set grew by four gates; the cost
+moved by less than the load moved it.
+
+| gate | wall (s) | median (s) | peak RSS | exit |
+|---|---:|---:|---:|---:|
+| `check-doc-cites.py` | 136.206 | 145.054 | 56.9 MB | 0 |
+| `check-local-merge-loss` | 34.768 | 37.310 | 42.0 MB | 0 |
+| `check-test-dup.py` | 7.968 | 10.068 | 52.9 MB | 0 |
+| `check-test-projects.py` | 7.710 | 9.355 | 23.3 MB | 0 |
+| `check-string-switch.py` | 7.547 | 8.169 | 18.0 MB | 0 |
+| `check-result-chains.py` | 6.975 | 7.670 | 18.3 MB | 0 |
+| `check-gate-policy.py` | 4.705 | 5.070 | 25.6 MB | 0 |
+| `check-abstractions-contract` | 4.202 | 5.953 | 13.0 MB | 0 |
+| `guard-triage.py` | 1.644 | 1.888 | 31.0 MB | 0 |
+| `check-md-links.py` | 1.539 | 2.068 | 20.6 MB | 0 |
+| `check-arch-anchors.py` | 1.462 | 2.560 | 17.3 MB | 0 |
+| `md-lint.py` | 1.259 | 1.311 | 19.2 MB | 1 |
+| `changelog-assemble` | 1.036 | 1.484 | 16.7 MB | 0 |
+| `gen-seam-graph` | 1.031 | 1.242 | 79.4 MB | 0 |
+| `check-arch-suite-once.py` | 0.651 | 0.939 | 17.6 MB | 0 |
+| `check-event-topology` | 0.464 | 0.687 | 19.1 MB | 0 |
+| `check-test-json-reflection.py` | 0.459 | 0.504 | 17.0 MB | 0 |
+| `check-analyzer-scope` | 0.409 | 0.488 | 12.3 MB | 0 |
+| `check-public-api-resign` | 0.289 | 0.317 | 10.9 MB | 0 |
+| `normalize-mtimes` | 0.284 | 0.476 | 12.3 MB | 0 |
+| `ci-shard-slices.py` | 0.260 | 0.274 | 19.4 MB | 0 |
+| `check-test-packages.py` | 0.251 | 0.265 | 18.8 MB | 1 |
+| `check-tool-schema-pin.py` | 0.236 | 0.249 | 19.4 MB | 0 |
+| `gen-plugin-inventory.py` | 0.206 | 0.300 | 18.1 MB | 0 |
+| `check-coverage-registry` | 0.160 | 0.534 | 10.8 MB | 1 |
+| `coverage-report` | 0.103 | 0.172 | 11.6 MB | 0 |
+| `check-doc-facts` | 0.090 | 0.098 | 9.3 MB | 0 |
+| `check-xml-doc-coverage` | 0.063 | 0.082 | 11.1 MB | 0 |
+| `check-no-test-sdk` | 0.051 | 0.076 | 13.5 MB | 0 |
+| `aggregate-analyzer-cost` | 0.044 | 0.064 | 7.3 MB | 1 |
+| `check-workflows` | 0.040 | 0.046 | 10.5 MB | 0 |
+| `check-shard-balance` | 0.038 | 0.042 | 7.6 MB | 0 |
+| `pack-validate` | 0.031 | 0.058 | 8.0 MB | 1 |
+| `check-gate-bench-set` | 0.026 | 0.052 | 10.5 MB | 0 |
+| `aot-publish-gate` | 0.023 | 0.043 | 7.1 MB | 2 |
+| `test-census` | 0.020 | 0.041 | 7.2 MB | 0 |
+| `aggregate-build-vcpu` | 0.016 | 0.078 | 11.4 MB | 1 |
+| `demo-repro` | 0.015 | 0.033 | 7.4 MB | 0 |
+| `test-measurements` | 0.014 | 0.018 | 7.2 MB | 0 |
+| `test-skips` | 0.013 | 0.025 | 7.0 MB | 0 |
+| `check-reference-trimmer` | 0.009 | 0.009 | 7.1 MB | 1 |
+| **the whole set** | **222.317** | | | |
+
+**The set costs 222.3 s on a loaded box**, and two gates are 77 % of it: the
+doc-cites gate (136.2 s, 61 %) and the merge-loss gate (34.8 s, 16 %). The
+other 39 gates together cost 51.3 s.
+
+**PROJECTION, not a measurement: on a quiet machine the set costs about 40
+to 42 s.** The pre-merge tree's quiet cost was 39.7 s for the 37 gates of
+that set; the four gates this branch's merge added cost about 1.5 s under
+load and about 0.4 s quiet, and the two gates that carry the set moved by
+the percentages of the comparison above (+1.3 s and -0.1 s). The box never
+went quiet during the measurement window, so the quiet number is not
+measured here, and the honest form of it is a range.
+
+**What the exit codes mean here.** Twelve gates read an artifact the build
+produced, and the measuring machine has none of them, so they were measured
+against an EMPTY directory of the right shape: the TRX directory
+(`test-census`, `test-skips`, `test-measurements`, `guard-triage.py`), the
+packed packages (`pack-validate`), the coverage directory
+(`check-coverage-registry`, `coverage-report`), the measurement
+directory (`aggregate-analyzer-cost`, `aggregate-build-vcpu`), the analyzer's
+two files (`check-reference-trimmer`), the resolved package graph
+(`check-test-packages.py`) and the AOT publish log (`aot-publish-gate`).
+Their number is the cost of walking the tree and finding nothing, and the
+parse is NOT in it: for the six gates that report a finding (exit 1) and for
+the one that cannot judge what it was given (exit 2, the AOT publish log)
+the number is a LOWER BOUND. The list is in
+[bench/gates/README.md](../bench/gates/README.md).
+
+**The gates that are NOT in the set** are the ones that need the .NET SDK
+and the ones that need the network; they are listed with their reasons in
+[bench/gates/excluded.tsv](../bench/gates/excluded.tsv). The compile-time
+gates cost what §6 says: a build is 411 s, the compiler 518.8 s and the
+analyzers 673.5 s.
+
+### 10.2.1 What the set cost before: the batching and the port
+
+The measurement above is the set as it is now. The measurement it replaced
+(#2104) was of a smaller set, on older trees, and the two are not
+comparable row by row. It is quoted here because it is the measurement that
+decided the port, and because the numbers say what the port bought.
+
+The three columns are three questions, and each column is a DIFFERENT tree
+and a different moment:
+
+* **python** — the gates as they were, on `origin/dev` at `a763c824`, the
+  tree without the git batching and before any gate moved into the binary;
+* **python + the git batching** — the same set with the batching of #2090;
+* **the compiled binary** — the gates that had moved into `harbor-gates` run
+  as the binary, the rest are still python.
+
+The whole table was measured while the machine carried other people's
+runs, so it carries that load: the same set on a quiet machine is 2.2
+times cheaper (see the method note above). The doc-cites row is the
+clearest case — 547.2 s here, 135.6 s for the same gate with the same
+tree and a quiet machine (§10.1).
 
 | gate | python | python + batching | compiled | RSS python | RSS compiled |
 |---|---:|---:|---:|---:|---:|
@@ -3827,7 +4131,7 @@ workflows run, with the arguments the workflows pass.
 | `md-lint.py` | 1.4 | 0.8 | **0.1** | 19.7 MB | 10.4 MB |
 | `check-arch-anchors.py` | 1.1 | 1.0 | **0.1** | 17.8 MB | 10.1 MB |
 | `check-arch-suite-once.py` | — | — | **0.02** | 17.9 MB | 7.9 MB |
-| `check-test-json-reflection.py` | 0.8 | 0.8 | — | 17.4 MB | |
+| `check-test-json-reflection.py` | 0.8 | 0.8 | **0.2** | 17.4 MB | 14.5 MB |
 | `check-xml-doc-coverage.py` | 0.6 | 0.7 | — | 16.7 MB | |
 | `check-doc-facts.py` | 0.5 | 0.3 | — | 17.9 MB | |
 | `check-analyzer-scope.py` | 0.6 | 0.3 | — | 18.4 MB | |
@@ -3890,10 +4194,32 @@ on another machine, and the two columns of a row are therefore not from
 one moment. The table of this section is the one to compare: same tree,
 same moment, same box, both variants interleaved.
 
+**The reflection-JSON row was measured on its own, and here is its
+provenance.** The table above is one snapshot: the same harness, the same
+tree, the same moment. The port of this gate (#2122) landed after that
+snapshot, so its number was measured separately, with the same harness
+(`bench/gates/measure.sh`, `RUNS=5`, the minimum wall time kept) on the tree
+of the port, the python gate measured before its original was deleted and the
+compiled gate after. Four rounds of five runs each, because this host is
+shared:
+
+| | python | compiled |
+|---|---:|---:|
+| the wall time, the best round | 0.714 s | 0.194 s |
+| the spread of the four rounds | 0.714-0.965 s | 0.194-0.339 s |
+| the peak RSS | 17 796-17 808 KB | 14 500-16 588 KB |
+
+The gate scans `tests/**/*.cs` and the scan is the whole of its work, so the
+two numbers are the same work measured twice: **3.7x** faster as a binary on
+the best round of each. The set's sum falls by the difference of the two
+best rounds, 0.520 s; the sum was not re-measured, and a sum that mixes two
+snapshots is not a number, only the delta is.
+
+
 Three numbers, and they are the whole answer to "what does the language
 buy":
 
-1. **The set costs 619 s**, and 547 s of it is ONE gate. The other 28
+1. **The set cost 619 s**, and 547 s of it was ONE gate. The other 28
    instruments together cost 72 s.
 2. **The git batching takes the set from 619 s to 117 s (5.3x)**, and it
    touches no language at all.
@@ -3911,6 +4237,13 @@ gate were compiled, the set would be bounded by the doc-cites gate's
 python scanning: about 55 s of scanning and 13 s of git. The full port is
 therefore worth roughly 619 s to 60 s, and the batching is worth 619 s to
 117 s on its own.
+
+Since then the port landed: twenty-six gates are compiled, and the set is
+measured again above. The 117 s of that table is the set of 28 gates on
+the tree of that day; the quiet cost of the set of 41 gates on today's
+tree is 40 to 42 s (the projection above), and the two numbers differ by
+the gates that were not in the old set at all, by the language mix, and by
+the machine's load.
 
 ## 11. What a pull request costs
 

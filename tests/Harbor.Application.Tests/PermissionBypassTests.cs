@@ -42,7 +42,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", "bash", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
     }
 
@@ -56,7 +56,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", "bash", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
@@ -80,7 +80,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", "bash", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
         await Assert.That(prompts).IsEqualTo(0);
     }
@@ -95,7 +95,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", "write", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
     }
 
@@ -107,7 +107,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", "write", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
@@ -119,7 +119,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", "edit", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
     }
 
@@ -138,7 +138,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", tool, args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
     }
 
@@ -150,7 +150,7 @@ public class PermissionBypassTests
 
         var result = await svc.CheckAsync("code", "ripgrep", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
     }
 }

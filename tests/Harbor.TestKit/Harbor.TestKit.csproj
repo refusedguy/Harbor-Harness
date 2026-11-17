@@ -89,6 +89,23 @@
   </ItemGroup>
 
   <!--
+    #1569: the RESULT ASSERTIONS left this project too. `ResultAssertions.cs`
+    is now in the sibling `Harbor.TestKit.Support`, next to the shared doubles
+    that need no product assembly either.
+
+    The reason is the same one that put the doubles there: the assertions need
+    the two CONTRACT assemblies and two PACKAGES, and nothing else — so the
+    24 test projects that take only the support part can now reach them
+    without pulling the core kit (the agent fakes, the scripted clients, the
+    two cost gates) into their closure.
+
+    Nothing about a consumer's source changes. The namespace is still
+    `Harbor.TestKit` (the support part sets `<RootNamespace>Harbor.TestKit`),
+    and this project still references the support part, so the thirteen
+    projects that take the core keep the assertions transitively.
+  -->
+
+  <!--
     #1875: the source-generated test doubles LEFT this project. The
     generator (`tests/Harbor.TestKit.Generators`) now runs over the sibling
     `Harbor.TestKit.Generated`, and so does the opt-in marker

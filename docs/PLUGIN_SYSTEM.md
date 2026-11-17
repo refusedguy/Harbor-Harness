@@ -679,7 +679,7 @@ verb with no MCP session to ask through.
 **The tree's own composition** is committed, in the same schema:
 [`docs/PLUGIN_INVENTORY.json`](./PLUGIN_INVENTORY.json) says what the
 repository declares — the axes, the per-route verdicts, and the plugins the
-samples ship. `tools/gen-plugin-inventory.py --check` fails when that
+samples ship. `harbor-gates gen-plugin-inventory --check` fails when that
 document no longer matches the tree, and when the two producers disagree about
 the schema.
 

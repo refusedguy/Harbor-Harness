@@ -170,7 +170,7 @@ public class DanglingToolCall1751Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(DanglingToolCallIds(session.Messages)).IsEmpty();
 
         var closures = session.Messages.OfType<ToolResultMessage>().ToList();
@@ -178,7 +178,7 @@ public class DanglingToolCall1751Tests
         var entry = closures[0].Results.Single();
         await Assert.That(entry.ToolCallId).IsEqualTo("call-1");
         await Assert.That(entry.ToolName).IsEqualTo("counter");
-        await Assert.That(entry.IsError).IsTrue();
+        await Assert.That(entry).HasFailed();
         // The runtime KNOWS the call never started — the dispatcher was never
         // reached — so the model is told the retry is safe.
         await Assert.That(entry.Output).Contains(UnresolvedToolCall.NotStartedCode);
@@ -199,7 +199,7 @@ public class DanglingToolCall1751Tests
         var ends = bus.Events.OfType<ToolExecutionEndEvent>().ToList();
         await Assert.That(ends.Count).IsEqualTo(1);
         await Assert.That(ends[0].ToolCallId).IsEqualTo("call-1");
-        await Assert.That(ends[0].IsError).IsTrue();
+        await Assert.That(ends[0]).HasFailed();
         await Assert.That(ends[0].Result.Output).Contains(UnresolvedToolCall.NotStartedCode);
 
         // The turn end carries the closure too, so a consumer that reads the
@@ -232,7 +232,7 @@ public class DanglingToolCall1751Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(1);
         await Assert.That(DanglingToolCallIds(session.Messages)).IsEmpty();
 
@@ -240,7 +240,7 @@ public class DanglingToolCall1751Tests
         await Assert.That(results.Count).IsEqualTo(1);
         var entry = results[0].Results.Single();
         await Assert.That(entry.ToolCallId).IsEqualTo("call-1");
-        await Assert.That(entry.IsError).IsFalse();
+        await Assert.That(entry).HasSucceeded();
         await Assert.That(entry.Output).DoesNotContain(UnresolvedToolCall.NotStartedCode);
     }
 
@@ -264,7 +264,7 @@ public class DanglingToolCall1751Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll(), cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(DanglingToolCallIds(session.Messages)).IsEmpty();
         var closures = session.Messages.OfType<ToolResultMessage>().ToList();
         await Assert.That(closures.Count).IsEqualTo(1);
@@ -290,6 +290,10 @@ public class DanglingToolCall1751Tests
         var closure = (LlmToolResultMessage)result[1];
         await Assert.That(closure.ToolCallId).IsEqualTo("call-1");
         await Assert.That(closure.ToolName).IsEqualTo("read");
+        // #1569: `LlmToolResultMessage` is the WIRE the model sees, not a
+        // result the tree owns, so the kit has no assertion for it (see
+        // `Harbor.TestKit.Support/ResultAssertions.cs`). The plain boolean
+        // form is the deliberate spelling here.
         await Assert.That(closure.IsError).IsTrue();
         await Assert.That(closure.Output).Contains(UnresolvedToolCall.OutcomeUnknownCode);
     }
@@ -311,6 +315,8 @@ public class DanglingToolCall1751Tests
         await Assert.That(result[1]).IsTypeOf<LlmToolResultMessage>();
         var closure = (LlmToolResultMessage)result[1];
         await Assert.That(closure.Output).IsEqualTo("file contents");
+        // #1569: see the note on the sibling site — the provider wire type
+        // keeps the plain boolean spelling.
         await Assert.That(closure.IsError).IsFalse();
     }
 

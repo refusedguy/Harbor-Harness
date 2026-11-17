@@ -81,10 +81,14 @@ public sealed class DemoGifTriggerSurfaceTests
     /// </summary>
     private static readonly string[] RecordingInputsOutsideDemoDir =
     [
-        // The frame pacer. tools/demo_repro.py `normalize` decides the frame
+        // The frame pacer. The demo gate's `normalize` decides the frame
         // count, the per-frame delays and therefore the duration — every number
-        // the drift gate compares. A change here changes every GIF.
-        "tools/demo_repro.py",
+        // the drift gate compares. A change here changes every GIF. The gate
+        // moved into the compiled binary, and this is the file that holds the
+        // pacing; the trigger filter covers the whole `tools/gates/demo-repro/`
+        // directory, so a change to any of the gate's files schedules a
+        // re-record.
+        "tools/gates/demo-repro/main.go",
     ];
 
     /// <summary>
@@ -112,7 +116,7 @@ public sealed class DemoGifTriggerSurfaceTests
         "demo/install-toolchain.sh",
         "demo/run-scene.sh",
         "demo/toolchain.lock",
-        "tools/demo_repro.py",
+        "tools/gates/demo-repro/main.go",
     ];
 
     /// <summary>

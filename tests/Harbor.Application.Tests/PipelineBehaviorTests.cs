@@ -53,7 +53,7 @@ public class PipelineBehaviorTests
 
         Result result = await behavior.HandleAsync(request, next, CancellationToken.None);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(calls()).IsEqualTo(1);
     }
 
@@ -78,7 +78,7 @@ public class PipelineBehaviorTests
 
         Result result = await behavior.HandleAsync(request, next, CancellationToken.None);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("permission");
         await Assert.That(calls()).IsEqualTo(0);
     }
@@ -91,7 +91,7 @@ public class PipelineBehaviorTests
 
         Result result = await behavior.HandleAsync(NewRequest(), next, CancellationToken.None);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(calls()).IsEqualTo(1);
     }
 
@@ -109,7 +109,7 @@ public class PipelineBehaviorTests
             return Task.FromResult(Result.Success());
         }, CancellationToken.None);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(order).IsEquivalentTo(["outer", "inner", "terminal"]);
     }
 
@@ -127,7 +127,7 @@ public class PipelineBehaviorTests
             return Task.FromResult(Result.Success());
         }, CancellationToken.None);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(order).IsEquivalentTo(["inner"]);
     }
 
@@ -247,8 +247,7 @@ public class TurnBehaviorTests
         var behavior = new CompactionBehavior(
             compaction, new FakeTokenTracker(shouldCompact: true), bus, NullMetrics.Instance, NullLogger.Instance);
 
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        using var cts = TestCancellation.Cancelled();
         CompactionOutcome outcome = await behavior.BeforeTurnAsync(
             session, session.Messages, TestModel, truncationFallback: false, cts.Token);
 

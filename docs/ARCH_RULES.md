@@ -1,351 +1,412 @@
-# Architecture rules — the classified set
+# Architecture rules: what each one catches, and what it only nags about
 
-> Status: normative for the CLASSIFICATION below. The census is
-> measured against the tree this document was written on; the machine-
-> readable form is
-> [`tests/Harbor.Architecture.Tests/rule-tiers.json`]
-> (../tests/Harbor.Architecture.Tests/rule-tiers.json), and it is the file
-> a future gate reads.
+> Status (2026-10-22): an audit of the architecture rule set of `dev`, re-counted on the tree this
+> branch merges into (`dev` at `a55ea18c` plus #1725 and #1730). The first count was made on
+> `c75dbfdd` (2026-10-21) and every number below was recomputed after the merge. A dated
+> record, not a normative claim about the current tree. The machine-readable
+> form of everything below is [`tests/Harbor.Architecture.Tests/rule-tiers.json`](../tests/Harbor.Architecture.Tests/rule-tiers.json);
+> this page is the argument, the JSON is the data.
 
-## 1. What this document is for
+Issue #1725 asks for a classification of the architecture rules into three tiers: which ones
+catch a **defect**, which ones only react to the tree **changing shape**, and what each one
+**costs** when an innocent change lands. The issue's own number, "110 rules", is checked
+against the tree below.
 
-The architecture rule set grew to 160 guards. Nobody could say which of
-them had ever caught anything, and nobody could say which of them fire
-on a change nobody made. #1724 wants to shrink the set, and it cannot
-do that safely without this census: cutting a guard that caught a real
-defect is a silent hole, and cutting one that only ever fired on a
-legitimate refactor is pure win.
+The metric this audit leans on was measured separately and is not repeated here:
+[docs/GUARD_VALUE_MEASUREMENT.md](GUARD_VALUE_MEASUREMENT.md) classified 52 guard firings over
+43 CI runs of 2026-09-26 .. 2026-10-20 as `defect` (28), `style` (8) or `noise` (16), and named
+the run each verdict came from. Every tier in this document that rests on a measured firing
+carries that run id.
 
-So every guard is classified here, and the classification is written
-down rather than remembered:
+## The census: how many rules there really are
 
-| tier | what it means | count |
-|---|---|---:|
-| **A** | catches a defect and is cheap | 76 |
-| **B** | catches a defect but nags | 66 |
-| **C** | catches the tree's shape | 18 |
+The unit of the audit is a **rule class**: a class in `tests/Harbor.Architecture.Tests/` that
+carries at least one `[Test]` and grades something about the repository. The count is computed
+from the tree, not from a hand-kept list.
 
-| verdict | count |
-|---|---:|
-| defect | 130 |
-| refactoring | 12 |
-| shape | 18 |
+| | count | what it is |
+|---|---:|---|
+| `.cs` files in the tree | 190 | |
+| top-level classes | 249 | |
+| classes with at least one `[Test]` | 172 | |
+| **rules (guards about the repository)** | **160** | the population of this audit |
+| instrument self-tests | 14 | the guard machinery proving it can fail, not a rule about the product |
+| engine / probe | 2 | `ScanRule` (the shared runner) and the #861 probe file |
+| helper classes without tests | 77 | probes, fixtures, records, planted controls |
+| `[Test]` attributes | 1121 | |
+| lines in the tree | 110,834 | |
 
-| false-positive cost | count |
-|---|---:|
-| low | 94 |
-| medium | 58 |
-| high | 8 |
+### The "110" of the issue
 
-## 2. How a guard was counted, and how it was read
+The number was **exact on 2026-10-20 and is stale now**. It counted the classes whose name
+ends in `Rule` or `Rules`:
 
-**A guard is a FILE under `tests/Harbor.Architecture.Tests/` that
-enforces an invariant**: the 129 files named `*Rule.cs` / `*Rules.cs`
-minus the shared matcher `ScanRule.cs`, the 2 ratchet files, and the
-29 files named `*Tests.cs` that hold a guard rather than a control over
-the guard machinery. That is **160 guard files**.
-The 21 files that are not guards are listed with the reason in the JSON.
+```
+commit d96b66ec (2026-10-20)  ->  110 classes named *Rule / *Rules
+this tree (2026-10-22)         ->  129 classes named *Rule / *Rules
+this tree, the real population  ->  160 rules (172 test-bearing classes, minus 14 self-tests)
+```
 
-**A tier is a reading of the guard's own source**, and three facts
-decide it:
+Two corrections turn that into the real number. **19** `*Rule`-named classes were added since,
+and — the bigger half — **32 guards do not follow the suffix convention at all**:
+`FullLayerMatrixTests`, `ResultFailureConversionTests`, `MaybeAbsenceTests`,
+`TokenTrackingRatchet`, `FatInterfaceShapeRatchet`, `EnforcerIntegrityTests` and the other
+`*Tests`-named guards. One `*Rule`-named class is not a guard at all (`ScanRule` is the shared
+engine). So:
 
-1. **What the rule reads.** A rule that reads a project graph, the IL
-   of a method, or the DECLARATION of a type cannot fire on a refactor
-   that keeps the invariant. A rule that reads the TEXT of a file can.
-   That is the whole difference between tier A and tier B.
-2. **What the rule claims.** A rule that MEASURES the tree (a census, a
-   ratchet, a baseline) claims no defect at all. It holds a number, and
-   a number is the tree's shape. That is tier C.
-3. **What the firings said.** Where
-   [`tools/guard-triage-classes.json`](../tools/guard-triage-classes.json)
-   has a verdict for a guard, that verdict wins over the reading, because
-   it was decided FROM firings rather than from the source.
+```
+129 classes named *Rule / *Rules
+ -  1  the shared engine (ScanRule)
+ + 32  guards that do not follow the naming convention
+ = 160 guards
+```
 
-**A verdict is one of three**: `defect` (the subject is an invariant
-that was broken once), `refactor` (the subject is a shape that a
-legitimate change moves), `shape` (the rule measures; neither of the
-two).
+A name-shape count and a rule count are different numbers. The audit uses the second one.
 
-**The false-positive cost is the price of the mechanism**: `low` means
-a refactor that keeps the invariant cannot fire the rule, `medium` means
-it can, but only by moving a declaration, `high` means the rule binds
-to the text of a file, so a reformat fires it.
+## The three tiers
 
-## 3. The census
+| tier | meaning | how it is decided |
+|---|---|---|
+| **A** | catches a defect, and it is cheap | the verdict is derived from the product's structure; an innocent change (a rename, a move, a new type) does not require editing the rule |
+| **B** | catches a defect, but it nags | an innocent change forces a manual edit of the rule or of one of its ledgers (a pinned count, a written-down name list, a path table, a text anchor on a declaration) |
+| **C** | catches no defect | the firing means "the tree changed shape", or "a row of the rule's own table went stale", or the rule no longer decides anything |
 
-Every row: the guard, what it checks, the tier, the verdict, the cost
-of a false positive, and the symbol it should anchor on instead of the
-text it reads (`—` when the rule already reads a symbol).
+A rule is B when it has a job AND an instrument bound to form. It is C when it has no job:
+a measurement, a census, or a rule the compiler has taken over. The measurement in
+[GUARD_VALUE_MEASUREMENT.md](GUARD_VALUE_MEASUREMENT.md) draws the same line between `defect`
+and `style`, and this audit adds the third class the measurement could not name: the rules
+that fire only on their own stale table.
 
-<!-- check-doc-cites: allow-unwired TypeFilterMiddleware — the census quotes the guard's own header, and that header names a type the product deleted in #478 on purpose: TypeFilterRegistrationTests exists to keep it unregistered, so declared-and-nothing-constructs-it is the state the guard enforces. -->
+### The false-positive cost
 
-| guard | what it checks | tier | verdict | FP cost | semantic anchor |
-|---|---|---|---|---|---|
-| `AbstractionsNamespaceOwnershipRules` | The layers are declared but the NAMES do not reflect them. | **A** | defect | low | — |
-| `AbstractionsSplitLayerRules` | layer-dependency rules for the Harbor.Abstractions contract split (F1 decoupling, sprint 5v2). | **A** | defect | low | — |
-| `AotBlockDemotionRules` | "the AOT block claims analysis passes cleanly while demoting IL2026 to a warning". | **A** | defect | low | — |
-| `AvaloniaFileTreeWalkRules` | source-level guard for issue #492: `MainViewModel` owned a recursive filesystem scanner (`Directory.GetDirectories` / `Directory.GetFiles` / `new Dir… | **A** | defect | low | — |
-| `AvaloniaTerminalPaneSpawnRules` | source-level guard for issue #672: TerminalPaneViewModel forked a real interactive shell (`$SHELL -i`, full inherited environment) straight out of a… | **A** | defect | low | — |
-| `AvaloniaTextFileIoRules` | source-level guard for issue #934: `CodeEditorViewModel` read and wrote the file the user opened straight from the view-model, with no seam: `File.Ex… | **A** | defect | low | — |
-| `BuildGraphCoverageRule` | #1005 reported FOUR csproj files that CI never builds, and supported that with a grep for each project's path over `*.csproj`: apps/Harbor.App.Avalon… | **A** | defect | low | — |
-| `CellForgeDiffEncoderBoundaryRules` | boundary between the portable cell-diff protocol and the CellForge engine's frame (issue #1519). | **A** | defect | low | — |
-| `CellForgeEngineAbsenceAxisTests` | pins WHICH of the two absence axes each public member of src/Harbor.Tui.CellForge.Engine is on. | **A** | defect | low | — |
-| `CellForgeEngineAtomicityRules` | step 1; CLOSED by #436. | **A** | defect | low | — |
-| `CellForgeEngineCseOwnershipTests` | the engine's CSharpFunctionalExtensions reachability has no owner yet, and no prose keeps it that way. | **A** | defect | low | — |
-| `CellForgeEngineEnterPolicyParityRules` | #435 deleted the last `Harbor.Ui.Framework.State` edge out of `Harbor.Tui.CellForge.Engine` by moving the Enter-key DECISION down into the BCL-only l… | **A** | defect | low | — |
-| `CellForgeEngineVocabularyParityRules` | #436 turned `Harbor.Tui.CellForge.Engine` into a standalone leaf: zero ProjectReference entries to Harbor assemblies, zero per-file imports of Harbor… | **A** | defect | low | — |
-| `CellForgeGraphRules` | the CellForge project graph: which layer each CellForge project sits in | **A** | defect | low | — |
-| `ChildProcessPipeDrainRules` | for #884, widened for #908. | **A** | defect | low | — |
-| `ConfigSetSingleTableTests` | `set` has ONE key table. | **A** | defect | low | — |
-| `ContribIsolationRules` | for the `contrib/` boundary. | **A** | defect | low | — |
-| `DeadPublicInterfaceRule` | A public interface with NO implementor and NO consumer is a promise nobody keeps, and nothing in the tree said so. | **A** | defect | low | — |
-| `DeadPublicMemberRule` | The member-level half of the dead-surface finding #1831 made: a public member that nothing in the tree references is a promise nobody keeps, and noth… | **A** | defect | low | — |
-| `DefaultAgentSingleSourceTests` | "Which agent is the default?" was answered in three places inside src/Harbor.Ui.Framework.Sessions, and one of the three did not answer it at all: Se… | **A** | defect | low | — |
-| `DefaultInterfaceMemberRule` | for docs/PATTERNS.md §"Default interface members: a default must fail towards loudly-wrong" (issue #579). | **A** | defect | low | — |
-| `DefaultModelSingleSourceTests` | `IdentityConfig` declared the default model id TWICE, seven lines apart, and the two copies did not agree: public const string FallbackModel = "kiloc… | **A** | defect | low | — |
-| `DesignSystemLeafTakesNoIoRules` | for #536. | **A** | defect | low | — |
-| `DesktopAbstractionsLeafTakesNoIoRules` | for #534. | **A** | defect | low | — |
-| `DesktopSharedTakesNoIoRules` | for #535. | **A** | defect | low | — |
-| `ExhaustiveUnionSwitchRule` | for docs/PATTERNS.md §"Type unions: a switch is a compile error when the union grows" (issue #578). | **A** | defect | low | — |
-| `ExtensionAxisRegistrationRule` | successor to #620's ExtensionAxisFreezeRule. | **A** | defect | low | — |
-| `ExtensionAxisRouteCarriageRule` | transport half of the extension-axis contract (issue #1723). | **A** | defect | low | — |
-| `FullLayerMatrixTests` | table-driven layer rules for EVERY main-solution Harbor src assembly (ROP-D Z2). | **A** | defect | low | — |
-| `HandRolledResultShapeTests` | no hand-rolled Result<T> facades in shipped code. | **A** | defect | low | — |
-| `HdsPaletteReachabilityRules` | behind #583: the Avalonia app SHIPS six HDS palettes, and the desktop path could reach two of them. | **A** | defect | low | — |
-| `HttpClientReuseRules` | Issue #1854 collected a candidate analyzer package (IDisposableAnalyzers, rule IDISP014 "use a single instance of HttpClient") and REJECTED it: the u… | **A** | defect | low | — |
-| `IdeAbandonObserveRule` | IdeAbandonObserveRule — the IDE bridge background prompt run must stay observed. | **A** | defect | low | — |
-| `InnerExceptionRules` | Two sites in the product threw a new exception inside a catch and dropped the caught exception on the floor. | **A** | defect | low | — |
-| `LayerDependencyTests` | the layer dependency edges, read by reflection over the loaded assemblies | **A** | defect | low | — |
-| `LegacyFlatTeaBranchRule` | The `AgentEvent` → UI-state fold has exactly ONE home in this repo, and it is `Harbor.Ui.Framework.State`: `UiStore.Dispatch(AgentEvent)` reduces thr… | **A** | defect | low | — |
-| `MapErrorFailureShapeTests` | for the "hand-rolled error re-wrapping → ResultExtensions.MapError" wave, plus the behaviour tests that pin the converted error text. | **A** | defect | low | — |
-| `MaybeAbsenceTests` | for the "absence is Maybe<T>" wave. | **A** | defect | low | — |
-| `McpHttpClientOwnershipRules` | The remote-MCP transports each assembled their own HttpClient: private HttpClient GetClient() { if (_client is { } existing) return existing; var han… | **A** | defect | low | — |
-| `ModelRefSingleParserTests` | `ModelRef.TryParse` (src/Harbor.Abstractions.Contracts/Models/Identifiers/ Identifiers.cs) is, in the words of the declaration it grew out of, "the o… | **A** | defect | low | — |
-| `NetArchLayerRules` | NetArchTest-based layer dependency rules. | **A** | defect | low | — |
-| `OnboardingFireAndForgetRule` | OnboardingFireAndForgetRule — the onboarding wizard's background work stays observed. | **A** | defect | low | — |
-| `OpenAiCompatiblePumpObserveRule` | OpenAiCompatiblePumpObserveRule — the OpenAI-compatible SSE pump stays observed. | **A** | defect | low | — |
-| `PanelImplementationBoundaryRules` | #474 was filed from the 2026-09-28 audit: "`PanelContext — IServiceProvider? Services stuffed into a per-frame context bag. | **A** | defect | low | — |
-| `PresentationCapabilityRules` | CAPABILITY half of the layer contract for issue 455, "ARCH-5: Presentation layer performs I/O and spawns processes; no capability rules". | **A** | defect | low | — |
-| `ProviderAuthSingleAnswerRules` | for #671. | **A** | defect | low | — |
-| `ProviderIdDispatchRule` | Issue #560 asked whether Harbor still edits provider-keyed tables when a new LLM provider is added. | **A** | defect | low | — |
-| `ProviderPayloadSerializationRules` | "[GoF-A8] Provider payload builders: untyped Dictionary/anonymous types + reflection". | **A** | defect | low | — |
-| `PublicAbstractBaseLivenessRules` | #1835 audited the base classes under `src/` and measured twelve `public abstract` types with ZERO product descendants — 788 lines of published base c… | **A** | defect | low | — |
-| `ReadOnlyAgentPermissionRule` | #798 is a careful, well-evidenced issue. | **A** | defect | low | — |
-| `ReadOnlyAgentShellAllowRule` | for the hole #798 did not report. | **A** | defect | low | — |
-| `ReflectionConventionRule` | and the migration of its rule to the compiler (issue #1844). | **A** | defect | low | — |
-| `ReleaseBuildConfigurationRule` | CI run 39389070999 built `Harbor.slnx` in Release, and the project-completion timeline showed THREE of the 112 compiled projects producing `bin/Debug… | **A** | defect | low | — |
-| `RemoteTransportResultRules` | `IMcpRemoteTransport` used to declare exactly one member: Task<JsonDocument?> RoundTripAsync(...) A nullable document has two meanings and no way to… | **A** | defect | low | — |
-| `RendererEventSeamRule` | for docs/PATTERNS.md §"Observer → the event seam" (issue #575). | **A** | defect | low | — |
-| `ResultConversionBehaviourTests` | behaviour proof for the ConvertFailure wave. | **A** | defect | low | — |
-| `ResultFailureConversionTests` | for the `ConvertFailure` wave. | **A** | defect | low | — |
-| `ResultTryAdoptionTests` | ROP wave: `try/catch -> Result` must ride the library, not be hand-rolled. | **A** | defect | low | — |
-| `SeamTypeLeakRules` | two seams named a CONCRETE implementation type where the consumer therefore learned the implementation instead of the contract. | **A** | defect | low | — |
-| `ServiceLocatorBoundaryRules` | Issue #470 was "[DIP] Two service locators in hot paths": `ToolContext.Services` — declared `IServiceProvider`, passed as `null!` by BOTH production… | **A** | defect | low | — |
-| `SessionAgentResolutionTests` | The issue was filed against a tree where "resolve an AgentDefinition, falling back to a default" appeared to be hand-rolled eight times: five inside… | **A** | defect | low | — |
-| `SharedSourceLinkRules` | Two `src/` folders hold shared source and produce no assembly: their files are `<Compile Include>`-linked into consumer projects instead of being ref… | **A** | defect | low | — |
-| `SlashCommandContextScopeTests` | for the slash-command context bag (issue #483). | **A** | defect | low | — |
-| `SlashCommandRouterShapeRule` | the contracts layer must not declare a slash-command ROUTER again, and must not declare the `Result<bool>` shape whose negative case is a routing dec… | **A** | defect | low | — |
-| `TelemetryOtlpBoundaryRules` | OTLP exporter stays OUT of the product graph, and the OpenTelemetry SDK stays out of everything except that exporter (#1799). | **A** | defect | low | — |
-| `TestKitCompositionRules` | `Harbor.TestKit` was ONE project holding ONE file that needs the UI stack (`UiTestDoubles.cs` — the dispatcher double and the counting view-model stu… | **A** | defect | low | — |
-| `TestProjectReferenceRules` | edges BETWEEN test projects, and the two costs a wrong edge carries. | **A** | defect | low | — |
-| `ThemeAxisStaysDataRules` | behind #622, which was the *exception* clause to the #555 feature freeze. | **A** | defect | low | — |
-| `ThemeStoreSeamRules` | for #668, and for the duplicate half of #479-A6. | **A** | defect | low | — |
-| `ToastKindTableRule` | the kind-to-presentation mapping is ONE table, and no product file may write a second one. | **A** | defect | low | — |
-| `ToolDispatcherSyncResultRule` | ToolDispatcherSyncResultRule — the abandon paths stay async. | **A** | defect | low | — |
-| `TransportRetryOwnershipRules` | "Should this failure be retried, and how long should we wait?" was supposed to have one owner: `Harbor.Application.Resilience.RetryPolicy`. | **A** | defect | low | — |
-| `TrimUnsafeReflectionRules` | ("48/S3"): trim-safety of the hot paths, and why "zero allocations" is not the claim. | **A** | defect | low | — |
-| `TypeFilterRegistrationTests` | `TypeFilterMiddleware` had a two-state constructor: new TypeFilterMiddleware(logger) -> _allowAll = true new TypeFilterMiddleware(logger, typeof(Foo)… | **A** | defect | low | — |
-| `UiSingletonThreadSafetyRules` | for #605 (GoF-A19). | **A** | defect | low | — |
-| `UnguardedResultReadRules` | `IConfigStore.LoadAsync` really does fail: `JsonConfigStore.LoadCore` ends in `Result.Try(..., ResultErrors.Message)` and returns `Failure("config.js… | **A** | defect | low | — |
-| `AgentStateContractRules` | `IAgent.State` was declared `AgentState State { get; }` — non-nullable — while `DefaultAgent` initialised the backing field with `null!` and first as… | **B** | defect | medium | the IAgent.State declaration, not the text that names it |
-| `AnalyzerSeverityScopeRules` | the DI severity model has a per-PATH layer, and nothing owned the gap between that layer and the document which claims to summarise it. | **B** | defect | medium | the severity entry's own path, resolved against the project graph |
-| `ApprovalGateWaiterRaceRules` | source-level guard for the #765/#797 flake class: a test that asserts a terminal approval disposition while a WaitForDecisionAsync waiter is parked o… | **B** | refactoring | high | the awaited terminal state, read from the syntax tree |
-| `AvaloniaConverterInstanceRules` | source-level guard for issue #1539: a view that declares its own converter instance allocates one per inflation. | **B** | defect | medium | the converter type the view declares |
-| `AvaloniaDispatchAsyncVoidRule` | Avalonia headless suite must not write `session.Dispatch(async () => …)`, because that call does not await what it appears to await (#766, generalisi… | **B** | defect | medium | the Dispatch overload the call resolves to |
-| `AvaloniaHeadlessSessionHelperRule` | the Avalonia headless suite opens ONE session, through ONE helper. | **B** | refactoring | medium | the helper's declaration and its callers |
-| `AvaloniaInitializeComponentShadowRules` | source-level guard against a hand-written `InitializeComponent` shadowing the one Avalonia's source generator emits (issue #973). | **B** | refactoring | high | the InitializeComponent declaration, not a call-shaped string |
-| `BackgroundTaskSyncResultRule` | BackgroundTaskSyncResultRule — the background-task drain path stays async. | **B** | defect | medium | the await the drain path does or does not have |
-| `BuiltinAgentPickerProjectionRules` | #582 measured "adding a builtin agent = 3 structural edits, one a hardcoded onboarding menu". | **B** | defect | medium | the registry the picker projects from |
-| `CellForgeWidgetAxisRules` | "Is the CellForge widget set closed at compile time, and can a plugin add a widget?" #564 measured it and reported the cost of an in-tree widget (4-5… | **B** | defect | medium | the axis the widget declares, not the string that spells it |
-| `CellForgeWidgetStateRules` | for the widget-state half of #592. | **B** | defect | medium | the state record the widget owns |
-| `CommonConfigContractRules` | for #453. | **B** | defect | medium | the config section declaration |
-| `ConfigHalfPairWriteRules` | for #894. | **B** | defect | medium | the write pair, resolved from the declarations |
-| `ConfigSectionDocRules` | the guard for the documentation half of the same issue. | **B** | refactoring | high | the section's own declaration, matched by symbol |
-| `ContractsArtifactCapabilityRule` | for epic #41 slice B3.1 (#405). | **B** | defect | medium | the capability's own declaration |
-| `CostPricedInCoreRules` | "the cost of a session is computed by the headless core; the presentation layer only displays it". | **B** | defect | medium | the pricing call the core makes |
-| `CostUnpricedBitRules` | for #942: the core's "I could not price this session" bit must REACH the surface that paints the money. | **B** | defect | medium | the unpriced bit's carrier |
-| `DebouncedSettleShapeRule` | settle that waits out the debounce must not BE the debounce, multiplied (#757). | **B** | defect | medium | the settle call's shape |
-| `DefaultModelDocClaimTests` | the documentation named the free model as `kilocode/kilo-auto/free` in five places while providers/kilocode.json has declared `tencent/hy3:free` all… | **B** | refactoring | medium | the model id the doc names, matched against the catalog |
-| `DiSeverityDemotionRules` | #865: the Avalonia block in `.editorconfig` demoted four DI rules under one sentence that named three of them. | **B** | defect | medium | the severity entry the demotion sets |
-| `DiagnosticsClassificationRule` | Deciding "is this line a diagnostic, and how bad is it" is COUNTING, not DRAWING. | **B** | defect | medium | the detector's own declaration list, read by symbol |
-| `DiffSurfaceNameCollisionRule` | The line diff has exactly ONE implementation in this repo: `src/Harbor.Ui.Framework.Rendering/Widgets/LineDiff.cs` (Myers O(ND), added by #694). | **B** | defect | medium | the two surfaces' declarations |
-| `ExtensionAxisDoorHonestyRule` | door-honesty half of the successor to #620's ExtensionAxisFreezeRule (issue #1719), and the guard #1758 asks for. | **B** | defect | medium | the door's own registration |
-| `FeatureFlagWiringRules` | `apps/Harbor.App.Cli/Harbor.App.Cli.csproj` offers two ways to turn NativeAOT on and they are not equivalent. | **B** | defect | medium | the flag's declaration |
-| `FileLogSinkOwnershipRule` | A `Microsoft.Extensions.Logging.ILoggerProvider` implementation is a LOGGING PROVIDER: the thing an app registers to get its log lines somewhere. | **B** | defect | medium | the sink type the host registers |
-| `GateGlowConsumerReachabilityRule` | The gate-glow pipeline has a producer with a test and a consumer with none, and the missing half is the half the user can see. | **B** | defect | medium | the consumer's declaration |
-| `HostingCompositionNullabilityRules` | for the `null!` wave in the composition root (src/Harbor.Hosting), issue #562. | **B** | refactoring | high | the nullable annotation on the declaration |
-| `KeyGateFamilyRules` | for #833. | **B** | defect | medium | the key gate's declaration |
-| `LayerClaimMatchesMatrixRules` | for the layer-CLAIM class (#895). | **B** | defect | medium | the matrix row the claim names |
-| `LayerDocAgreementRule` | `docs/ARCHITECTURE_LAYERS.md` §1 assigned all four IPC assemblies to APPLICATION. | **B** | refactoring | high | the layer graph, compared to the doc by name instead of by line |
-| `LayerTableDocAgreementRules` | for #922. | **B** | refactoring | high | the layer table's own rows |
-| `LogLevelMnemonicRule` | The 4-character LogLevel mnemonic (TRAC / DBUG / INFO / WARN / ERRO / CRIT / NONE) is a shared rendered string, and a switch that maps `LogLevel` to… | **B** | defect | medium | the mnemonic table's declaration |
-| `McpOAuthTokenShapeRules` | `McpOAuthHandler` surfaced ONE lookup — "give me an access token for this server" — through THREE conventions at once: 1. | **B** | defect | medium | the token record's declaration |
-| `MegaConstructorDoneStateTests` | done-state guard for issue #486 findings 3–4. | **B** | defect | medium | the constructor's parameter list |
-| `ModelRateLabelRules` | for the pricing half of issue #686. | **B** | defect | medium | the rate table's declaration |
-| `MoneyCellSingleHomeRules` | for #682: a session's MONEY CELL has ONE shape, and only the two rendering conventions are allowed to write it. | **B** | defect | medium | the cell writer's declaration |
-| `OverlayKeyRouteClaimRule` | five doc comments (and four more this file found) describe an input path that no product host uses. | **B** | defect | medium | the route the doc names |
-| `PanelKeyRouteReachabilityRule` | (and its parent #812): a key hand-off must be reachable from product code, and the tests that drive an unreachable hand-off are not evidence of anyth… | **B** | defect | medium | the route's declaration |
-| `ProcessEnvIsolationRule` | Nine test classes call `Environment.SetEnvironmentVariable`, and not one of them carried a `[NotInParallel]` form of any kind. | **B** | defect | medium | the process-environment write |
-| `PromptCacheKeyCoverageRules` | `CachingSystemPromptBuilder` is a memoizing decorator: it answers a repeat context from a hash instead of calling the inner builder, and the only thi… | **B** | defect | medium | the cache-key builder's declaration |
-| `PromptClockPurityRule` | . (#814) THE CONVENTION BEING ENFORCED An ISystemPromptBuilder implementation reads NO clock. The prompt is a pure function of its SystemPromptContex… | **B** | defect | medium | the clock call's receiver |
-| `PromptSectionPolicyRule` | . THE CONVENTION BEING ENFORCED A prompt-assembly method (one that appends `## ` Markdown section headers into a StringBuilder) must not carry a bare… | **B** | defect | medium | the section's declaration |
-| `ProviderCatalogueBudgetRules` | for #685. | **B** | defect | medium | the catalogue's declaration |
-| `ProviderModelAbsenceRules` | `SessionFactory.ResolveProviderModelFromConfigAsync` returned `Task<(string? ProviderId, string? ModelId)>`. | **B** | defect | medium | the model's declaration |
-| `ReadmeCoverageTests` | per-project README coverage gate. | **B** | refactoring | medium | the project list the README coverage is measured against |
-| `RenderInvalidationCoalescingTests` | contract for RENDER invalidation coalescing on the CellForge REPL frame loop (issue #396, epic #47/S5). | **B** | defect | medium | the coalescer's declaration |
-| `ReplConstructorCompositionTests` | for the REPL's own wiring (issue #486). | **B** | defect | medium | the constructor's parameter list |
-| `ResultMaybeSignatureTests` | for the ROP wave that replaced every `Result<T?>` in the non-test tree with `Result<Maybe<T>>`. | **B** | refactoring | high | the Result<T?> declaration, matched by symbol |
-| `SessionForkPortSeamRules` | for #882. | **B** | defect | medium | the port's declaration |
-| `SessionStatusFrameReachabilityTests` | tests for #861. | **B** | defect | medium | the projection's declaration |
-| `SessionStatusReader` | #687 removed the transcript heuristic from `ChatStreamingPresenter.DeriveStatus` and made the reducer the single source of a session's status. | **B** | defect | medium | the projection's declaration |
-| `SessionStatusSourceRule` | `SessionStatus` (idle / working / done / error / aborted) is a DOMAIN FACT decided once, by the core, around the run that establishes it. | **B** | defect | medium | the status source's declaration |
-| `SessionStatusTableRule` | `SessionStatus` (idle / working / done / error / aborted) has exactly one rendered form per concern, and both live in ONE file: src/Harbor.Ui.Framewo… | **B** | defect | medium | the label table's declaration |
-| `SessionStoreFailureTextParityRules` | #764's claim: "Harbor.Storage.Memory hand-writes the session-store failure texts nine times, and `SessionStoreErrors` is supposed to be their single… | **B** | defect | medium | the failure text each store builds |
-| `SlashResultChannelTests` | for the slash-command `Result` channel (issue #603). | **B** | defect | medium | the channel's declaration |
-| `TestDiagnosticsOutputRule` | for #1856: a test's diagnostics belong to that test. | **B** | defect | medium | the diagnostic sink's declaration |
-| `TestKitLocalDoubleRules` | `Harbor.TestKit` is the one place a shared test double is supposed to live, and it was not: five test projects each kept their OWN set of interface d… | **B** | refactoring | medium | the double's declaration |
-| `TestKitSharedCopyReasonRules` | second half. | **B** | defect | medium | the shared double's declaration |
-| `TokenCellSingleHomeRules` | for #788: a session's TOKEN CELL is written by more than one surface, and the set of writers is frozen here WITHOUT choosing which notation is canoni… | **B** | defect | medium | the cell writer's declaration |
-| `ToolGlyphTableRule` | Issue #680 reported that `ChatViewModelBase` holds a hand-written glyph catalogue for ten builtin tools and rebuilds a structured tool call by re-par… | **B** | defect | medium | the glyph table's declaration |
-| `ToolNameListRule` | The issue says "eight hand-maintained lists of tool names, two of them already wrong". | **B** | defect | medium | the catalog declaration the list is compared against |
-| `TuiReadLineContractRules` | `ITuiRenderer.ReadLineAsync` used to return `Task<Result<string>>`, and EVERY implementation answered end-of-input with `Result.Success(line ?? strin… | **B** | defect | medium | the read-line contract's declaration |
-| `UiConfigDefaultsRule` | Two desktop view-models hand-picked a DEFAULT for a persisted config field that the core already gives a default to, and the two answers disagreed wi… | **B** | defect | medium | the default's declaration |
-| `UiFrameworkNullabilityRules` | for the `null!` wave in src/Harbor.Ui.Framework*. | **B** | refactoring | high | the nullable annotation on the declaration |
-| `VendoredHtmlSurfaceRules` | source-level guard for issue #878. | **B** | defect | medium | the surface type's declaration |
-| `WellKnownToolsRule` | #1564 moved the builtin tool names out of two hundred and ninety-two string literals and into one catalog, `WellKnownTools`. | **B** | defect | medium | the catalog declaration the names are compared against |
-| `AcceptedStopCensusRule` | AcceptedStopCensusRule — ratchet for the number 401 remainder, the B2 core. | **C** | shape | low | — |
-| `AvaloniaFireAndForgetRules` | RETIRED pattern matcher, kept as a NON-GATING ORACLE. | **C** | shape | low | — |
-| `CellForgeMascotMoveOutRules` | Issue #1619 named the mascot as the "trial balloon" for the move-out mechanics: a decoration cluster (MascotDirector + MascotPanel + AmbientMascot, ~… | **C** | shape | low | — |
-| `CfeControlPositiveControlTests` | proves the CFE0001 analyzer is not vacuous. | **C** | shape | low | — |
-| `CfeValueBaselineTests` | ROP-001 backstop, and the tests that prove the backstop is real. | **C** | shape | low | — |
-| `ContribBoundaryNameRule` | a MEASUREMENT, not a prohibition: how many simple type names are declared on BOTH sides of the boundary CI does not build. | **C** | shape | low | — |
-| `DemoGifTriggerSurfaceTests` | the demo GIFs are regenerated by a workflow that fires on `push` PATHS, so the A/B question "did anything that can move a pixel change?" is answered… | **C** | shape | low | — |
-| `DialogKeyDispatchCensusRule` | + ratchet for #472 item 2 and #473. | **C** | shape | low | — |
-| `E2eAvaloniaShardCoverageRules` | arch-rule half of the headless Avalonia E2E process split. | **C** | shape | low | — |
-| `ExistenceCheckLivenessRule` | a MEASUREMENT: how many of this project's "this name must exist" checks can actually fail. | **C** | shape | low | — |
-| `FatInterfaceShapeRatchet` | for #471, slice 2: the three interfaces the issue names and the fourth it under-counts. | **C** | shape | low | — |
-| `OverlayKeyPlaneCensusRule` | + ratchet for issue #812. | **C** | shape | low | — |
-| `ProjectKeyedScanRule` | a MEASUREMENT, not a fix: which directories under `src/` hold compiled product code and are not a project, because they have no `.csproj` to be found… | **C** | shape | low | — |
-| `ScanUniverseRule` | a MEASUREMENT, not a fix: what is in the reflection scan universe of Harbor.Architecture.Tests, and — the part that matters more — what is NOT in it. | **C** | shape | low | — |
-| `ScanVisibilityRule` | a MEASUREMENT, not a fix: which top-level repository trees the shared scan helper can read, and which it silently returns nothing for. | **C** | shape | low | — |
-| `SharedSourceTreeSnapshotTests` | for the shared source snapshot (issue #1791). | **C** | shape | low | — |
-| `TestShardZeroTestGuardRules` | the `test` job's shard matrix states a zero-test guard per shard, and one of the four entries stated the OPPOSITE with nothing recorded next to it. | **C** | shape | low | — |
-| `TokenTrackingRatchet` | for #471, slice 1: ITokenTracker. | **C** | shape | low | — |
+Cost is how often the rule needs a **manual repair** after an innocent change:
 
-## 4. The rules worth moving to a semantic check
+| cost | meaning | rules |
+|---:|---|---:|
+| 0 | never: the rule re-derives everything it grades. | 51 |
+| 1 | rarely: one manual edit of the rule or of one ledger row per relevant change. | 86 |
+| 2 | often: the rule carries a written-down number, a name list or a path table that every relevant change moves. | 23 |
 
-66 of the 160 guards bind to the TEXT of a file, to a file name, or to a
-line number, and each of them names the symbol it should read instead.
-That is the work list for #1724, and it is the list with the best
-ratio: the rule keeps its subject, and the false positive goes away.
+The distribution is the headline of the second half of this audit: **more than half of the
+rules carry a ledger, a pinned number or a text anchor**, and that is what makes an innocent
+change expensive.
 
-| guard | tier | FP cost | anchor on |
+| tier | rules | share of the 160 |
+|---|---:|---:|
+| A | 50 | 31.2% |
+| B | 100 | 62.5% |
+| C | 10 | 6.2% |
+| **total** | **160** | |
+
+## The rules, one by one
+
+`checks` is what the rule reads mechanically. `defect` is the signal on which it fires for a
+real defect. `refactor` is the signal on which it fires because the tree changed shape. The
+full text of every cell, and the evidence behind each row, is in the JSON.
+
+### Tier A — catches a defect and is cheap (50 rules)
+
+| rule | file | checks | defect signal | refactoring signal | cost |
+|---|---|---|---|---|---:|
+| `AbstractionsNamespaceOwnershipRules` | `AbstractionsNamespaceOwnershipRules.cs` | Walks every src/ csproj, reads its <Compile Include> set, collects the namespace of each compiled file, and fails when a NON-contract assembly declar… | A type declared in Harbor.Abstractions.Events from Harbor.Registries: two layers own one namespace, so a consumer cannot tell which side of the pyram… | A file moved to another project changes which assembly declares its namespace; the rule re-derives from the csproj, so it re-points without an edit.… | 0 |
+| `AbstractionsSplitLayerRules` | `AbstractionsSplitLayerRules.cs` | Reads Assembly.GetReferencedAssemblies() of Harbor.Abstractions.Contracts, Harbor.Extensions and Harbor.Abstractions and asserts the dependency direc… | A contract assembly gains a Harbor project reference, so the Domain facade stops being a facade. | None: the verdict is a function of the reference graph, which the compiler produces. Adding or removing a reference is the change being graded. | 0 |
+| `AvaloniaConverterInstanceRules` | `AvaloniaConverterInstanceRules.cs` | Scans every .axaml under apps/Harbor.App.Avalonia for a converter element declared in a resource dictionary, and cross-checks the view list against t… | Eight views declared a converter of their own, so every inflation allocated a converter nothing else could see. | The scope is the tree, so a view that is added or moved is picked up automatically. Only the shared-base list needs a hand edit when a converter type… | 0 |
+| `AvaloniaTerminalPaneSpawnRules` | `AvaloniaTerminalPaneSpawnRules.cs` | Source-scans apps/Harbor.App.Avalonia for the spawn shapes (Process.Start, posix_spawn, $SHELL -i) and reports the file. | TerminalPaneViewModel forked a real interactive shell with the full inherited environment, with no permission gate and no cancellation point. | The scope is the tree; no path is written down, so a move re-points it. | 0 |
+| `CellForgeDiffEncoderBoundaryRules` | `CellForgeDiffEncoderBoundaryRules.cs` | Grades the encoder's call sites through a semantic probe: which type owns the diff payload and who is allowed to encode it. | A second home for the diff payload would make the renderer and the tool disagree about the same cell. | The probe reads types, not text, so a rename re-points it. | 0 |
+| `CellForgeEngineAbsenceAxisTests` | `CellForgeEngineAbsenceAxisTests.cs` | Walks the engine's public surface through reflection and reads each Maybe member through the struct-aware form. | TableBlock read a Maybe member in a form that does not compile for a struct: a real absence bug. | The reflection walk re-points on a rename. The member list is read from the assembly, not written down. | 0 |
+| `CellForgeEngineEnterPolicyParityRules` | `CellForgeEngineEnterPolicyParityRules.cs` | Reads the key-binding vocabulary of both engines and compares the sets and the enter-policy coverage. | The two engines answered the same key with different policies. | Both sides are read from the assemblies, so a rename re-points them. | 0 |
+| `CellForgeEngineVocabularyParityRules` | `CellForgeEngineVocabularyParityRules.cs` | Extracts the key vocabulary both engines understand and compares the sets and the arms each one implements. | The two engines answered the same key differently, which is a silent divergence between the shipped renderer and the engine under it. | Both sides are read from the assemblies, so a rename re-points them. | 0 |
+| `CellForgeGraphRules` | `CellForgeGraphRules.cs` | Walks the ProjectReference graph of the CellForge family and asserts acyclicity and the declared edges. | A cycle between the engine and the renderer makes the build order depend on the restore order. | The graph is read from the csproj files, so a project that is added or removed re-points it. | 0 |
+| `ConfigHalfPairWriteRules` | `ConfigHalfPairWriteRules.cs` | Source-scans for a write of one half of a paired config field without the other, and grades the site. | One half of a pair was written alone, so the persisted value contradicted the in-memory one. | The scope is a tree scan; the planted controls name synthetic paths only. | 0 |
+| `ContractsArtifactCapabilityRule` | `ContractsArtifactCapabilityRule.cs` | Walks the contracts assembly's IL and its package metadata, and asserts it neither produces an artefact nor declares a capability beyond pure contrac… | A contract assembly gained a runtime dependency, so the contract stopped being a contract. | The probe reads symbols, so a rename re-points it. | 0 |
+| `ContribIsolationRules` | `ContribIsolationRules.cs` | Reads every csproj's ProjectReference and Compile Include sets and asserts nothing outside contrib/ reaches into it unconditionally. | A product project referenced a contrib project, so an unmaintained tree became part of the shipped build. | The verdict is derived from the project graph; no written-down list, so an added project re-points it. | 0 |
+| `ExhaustiveUnionSwitchRule` | `ExhaustiveUnionSwitchRule.cs` | Reads the union members through reflection and compares them with the switch arms found in the source; a wildcard arm is reported. | A switch over a union silently fell through for a member added later, so the new member rendered as the default. | The member list is read from the assembly; the scan of the arms is text-based, so an arm written across lines can be missed (false negative, not a fa… | 0 |
+| `ExtensionAxisDoorHonestyRule` | `ExtensionAxisDoorHonestyRule.cs` | Walks the axis registry and the doors behind it and grades each door: a door on a closed axis may not advertise itself as open. | A door on a closed axis was reachable, so a plugin could take an axis the product had closed. | The axis set is read from the registry; a rename re-points it. | 0 |
+| `ExtensionAxisRegistrationRule` | `ExtensionAxisRegistrationRule.cs` | Reads the axis registry and the product's registrations and compares the two, then grades each axis against the additive rule. | An axis was used without being registered, so a plugin could add to it and nothing declared it. | The axis names are read from the registry, so a rename re-points it. | 0 |
+| `GateGlowConsumerReachabilityRule` | `GateGlowConsumerReachabilityRule.cs` | Walks the product tree for the gate-glow consumers and checks that each one is named by a real call site; a consumer that nothing names is reported. | A consumer existed that nothing reached, so the gate it belonged to never fired. | The scope is the tree; the expectation names the probe paths only as controls. | 0 |
+| `HdsPaletteReachabilityRules` | `HdsPaletteReachabilityRules.cs` | Walks the product tree for the palette projection and checks that a view binds it and that a view routes an event to its handler. | A palette existed, was rendered, and nothing could reach it: dead chrome that looked alive. | The scope is a tree scan, so a moved view re-points it. | 0 |
+| `LayerDependencyTests` | `LayerDependencyTests.cs` | Reads Assembly.GetReferencedAssemblies() of every src/ assembly and asserts the allowed edge set from the layer table. | A Domain assembly referenced an Infrastructure assembly: the pyramid was upside down. | The verdict is a function of the reference graph. Nothing is written down except the layer table itself. | 0 |
+| `LogLevelMnemonicRule` | `LogLevelMnemonicRule.cs` | Source-scans for a switch that maps a LogLevel to a rendered string, and compares the members with the canonical table's members. | #563 found six copies of the table; three disagreed on the unknown-level case. | The canonical table's members are read from the assembly; the scan of the duplicates is text-based. | 0 |
+| `NetArchLayerRules` | `NetArchLayerRules.cs` | Runs the fluent DSL over the same assemblies and asserts the same forbidden-dependency set as LayerDependencyTests. | Same defect class as LayerDependencyTests; the two files overlap deliberately so a break in either tool surface does not silently disable the rules. | Nothing is written down except the forbidden-dependency table. Two tool surfaces, one invariant. | 0 |
+| `PanelImplementationBoundaryRules` | `PanelImplementationBoundaryRules.cs` | Source-scans the panel sources for the service-locator shapes and grades each site against the injection seam. | #474's premise turned out to be stale, but a panel could still resolve a service per frame from a context bag, which is what made a panel untestable… | The scope is a tree scan; the planted controls name synthetic paths only. | 0 |
+| `PromptClockPurityRule` | `PromptClockPurityRule.cs` | Source-scans the prompt builders for DateTime.Now / DateTime.UtcNow / a stopwatch and grades each site; a builder that takes a TimeProvider is exempt. | A builder read the clock, so the prompt was not a pure function of its context and the cache served a stale prompt. | The scope is the prompt assemblies and the exemption is by shape, not by name. | 0 |
+| `PromptSectionPolicyRule` | `PromptSectionPolicyRule.cs` | Source-scans for a bare numeric literal inside a conditional in a prompt-assembling method and grades each site. | A cap of three guidelines written as `n >= 3` cannot be named by a test, so raising it to thirty changed what the model read and every test still pas… | The scope is a tree scan; the planted controls are synthetic. | 0 |
+| `ProviderAuthSingleAnswerRules` | `ProviderAuthSingleAnswerRules.cs` | Reads the auth abstraction's implementors and the call sites and requires that every answer comes from IAuthResolver. | #671: the picker read the config dictionary directly, so it could not see an environment key and painted a wrong answer. | The scope is a tree scan; the exemption is by shape. | 0 |
+| `ProviderIdDispatchRule` | `ProviderIdDispatchRule.cs` | Source-scans for a provider-keyed table and for an allow-list of provider ids in the test tree. | #560: adding a provider still meant editing hand-written tables. | The scope is a tree scan; the vocabulary is derived from the provider catalogue, so a new provider re-points it. | 0 |
+| `ProviderPayloadSerializationRules` | `ProviderPayloadSerializationRules.cs` | Source-scans the provider projects for JsonSerializer.Serialize over an untyped carrier and for an anonymous-type payload, and grades each site. | #475: the payloads were built as Dictionary<string, object?> and serialized through the static generic entry point, which needs a JsonTypeInfo for th… | The scope is the provider trees; the exception is by shape. | 0 |
+| `ReadOnlyAgentPermissionRule` | `ReadOnlyAgentPermissionRule.cs` | Reads the permission rulesets of the read-only agents and asserts the write category is denied for every write-category tool. | #798's claim (patch resolves to Ask under plan) was false: PlanDefault carries new("write", "*", Deny) and the category matcher covers the whole clas… | The rulesets are read from the assembly; the tool categories are read from the safety declarations, so a new write tool re-points it. | 0 |
+| `ReadOnlyAgentShellAllowRule` | `ReadOnlyAgentShellAllowRule.cs` | Reads the read-only agents' rulesets and asserts no shell-allowing rule survives. | The hole #798 did not report: a read-only agent could allow a shell command. | The rulesets are read from the assembly. | 0 |
+| `ReleaseBuildConfigurationRule` | `ReleaseBuildConfigurationRule.cs` | Reads the solution configuration's project list, then compares each built project's bin/Release output with its bin/Debug output byte for byte. | #1921: three of the 112 compiled projects produced bin/Debug output and no bin/Release output at all (run 39407510139). | The comparison is over build artefacts, so a legitimate build change can move it; but the verdict is derived from the artefacts, not from a written-d… | 0 |
+| `RemoteTransportResultRules` | `RemoteTransportResultRules.cs` | Reads the transport interface's members through reflection and asserts the return shape carries both the failure and the absence. | #587: a nullable document had two meanings -- 'the server answered 202 with no body' and 'the endpoint returned 503 three times' -- and the caller co… | The member names are read from the assembly. | 0 |
+| `RenderInvalidationCoalescingTests` | `RenderInvalidationCoalescingTests.cs` | Reads the frame loop's blocks and asserts that a block writes only one of the two channels, and that the wake precedes the event where the contract s… | #396 asked for a second message class and a priority lane; the measured answer was that the coalescing already exists, so the rule pins the existing… | The blocks are found by a source scan; a rewrite that moves the block changes the scan's input but the rule re-derives. | 0 |
+| `ResultConversionBehaviourTests` | `ResultConversionBehaviourTests.cs` | Runs the conversion against a synthetic failure and asserts the error text is byte-identical and the outcome is unchanged. | ConvertFailure throws InvalidOperationException if the receiver is a success, so a re-type applied to the wrong side crashed. | The behaviour is proven on synthetic values, so nothing in the tree is named and nothing goes stale. | 0 |
+| `ResultFailureConversionTests` | `ResultFailureConversionTests.cs` | Source-scans the guarded trees for the hand-rolled `Result.Failure<K>(other.Error)` shape and grades each site. | WebFetchTool re-typed a failure by hand, and that member throws InvalidOperationException on a success (run 38862719862). | The scope is the guarded trees; the exemption list is small. | 0 |
+| `ResultMaybeSignatureTests` | `ResultMaybeSignatureTests.cs` | Source-scans src/ for `Result<...?>`, `Task<...?>` and `Nullable<T>` in a Result position. | McpSseParser declared Result<JsonElement?>: the banned shape that hides absence inside success (run 39122311873). | The scope is a tree scan; the ban is by shape. | 0 |
+| `SeamTypeLeakRules` | `SeamTypeLeakRules.cs` | Reads the contract assemblies' signatures through reflection and checks each parameter and return type against the seam's contract set; a concrete ty… | #494: ReconnectableRpcClient named MessagePackRpcClient in six signatures, and the other seam named an implementation where it should have named a co… | The contract set is read from the assembly; the signature walk is over the loaded type, so a rename re-points it. | 0 |
+| `ServiceLocatorBoundaryRules` | `ServiceLocatorBoundaryRules.cs` | Reads the panel and tool context types through reflection and asserts neither declares an IServiceProvider member; a source scan grades the call site… | #470: ToolContext.Services was declared IServiceProvider and passed as null! by both production call sites; PanelContext.Services was re-resolved abo… | The context types are read from the assembly; the source scan's scope is a tree. | 0 |
+| `SessionAgentResolutionTests` | `SessionAgentResolutionTests.cs` | Reads the agent registry and the resolution call sites and asserts a single fallback path, compared with the registry's first agent. | #596: 'resolve an AgentDefinition, falling back to a default' was hand-rolled in eight places; the honest count was smaller, but one hole was left op… | The scope is a tree scan; the registry is read from the assembly. | 0 |
+| `SessionStatusTableRule` | `SessionStatusTableRule.cs` | Source-scans for a status-to-text or status-to-brush mapping and compares the members with the canonical table's members. | #663: one displayed status, one table; three copies of the mapping had drifted. | The canonical members are read from the assembly; the scan of the duplicates is text-based. | 0 |
+| `SlashCommandContextScopeTests` | `SlashCommandContextScopeTests.cs` | Reads the dispatcher's context record through reflection and asserts the optional tail members are genuinely optional (nullable and defaulted). | #483: seventeen handlers received a sixteen-member context record with four optional tail members that were not marked optional, so a handler could n… | The context record is read from the assembly. | 0 |
+| `SlashCommandRouterShapeRule` | `SlashCommandRouterShapeRule.cs` | Reads the contract assemblies' members through reflection and fails on a router interface or a Result<bool> in a contract. | #565: ISlashCommandRouter declared four members, was implemented by nothing, and its TryHandleAsync returned Task<Result<bool>> whose false means 'no… | The member names are read from the assembly. | 0 |
+| `SlashResultChannelTests` | `SlashResultChannelTests.cs` | Reads the registration's Execute delegate shape and the call sites and asserts the result is consumed, not discarded. | #603: the dispatcher assigned the Result and never read it, so a failed command returned Continue and the user saw nothing. | The scope is a tree scan; the delegate shape is read from the assembly. | 0 |
+| `TestProjectReferenceRules` | `TestProjectReferenceRules.cs` | Reads every test csproj's ProjectReferences and computes the closure and the discovery cost; a test project that references another test project is r… | Harbor.Ipc.Tests referenced Harbor.E2E.Framework and used none of its types; the edge still put the whole Ui.Framework family into its closure -- 23… | The verdict is derived from the csproj graph; the expectations name no file. | 0 |
+| `TestShardZeroTestGuardRules` | `TestShardZeroTestGuardRules.cs` | Parses .github/workflows/ci.yml, reads the shard matrix, and checks that each row states a zero-test policy and that the run step passes the flag. | #977: one of the four entries stated the OPPOSITE of a zero-test guard with nothing recorded next to it; a shard in which every test was skipped read… | The verdict is over the workflow file, so an edit to ci.yml is the change being graded. The matrix is read, not written down. | 0 |
+| `ToastKindTableRule` | `ToastKindTableRule.cs` | Source-scans for a toast-kind-to-glyph or toast-kind-to-brush mapping and compares the set with the canonical table's members. | #1543: the same toast kind was drawn with a different glyph by the terminal renderer and by the desktop shell, and one of the arms was dead in every… | The canonical members are read from the assembly; the scope is a tree scan. | 0 |
+| `ToolGlyphTableRule` | `ToolGlyphTableRule.cs` | Source-scans for a switch or expression arm keyed by a tool name and compares the names with the derived inventory. | #680: three copies of the glyph table, two of them already wrong, and all three keyed the web-fetch tool as 'web_fetch' while the tool registers as '… | The vocabulary is DERIVED from the tool declarations (ToolNameInventory), so a new tool re-points it. Only the scan's line-level shape is a limitatio… | 0 |
+| `TransportRetryOwnershipRules` | `TransportRetryOwnershipRules.cs` | Reads the transports' retry helpers through reflection and compares their verdicts with the owner's, for the same exception types. | #572: the two remote-MCP transports each carried a private copy of IsTransient, and both copies disagreed with RetryPolicy. | The member names are read from the assembly; the comparison is over the exception types. | 0 |
+| `UiSingletonThreadSafetyRules` | `UiSingletonThreadSafetyRules.cs` | Reads the projector's registration lifetime and its own doc comment and asserts the two agree. | #605: DefaultUiProjector documented itself as NOT thread-safe while the only shipped DI host registered it, and its only consumer, as singletons -- s… | The scope is a single type, read from the assembly. | 0 |
+| `UnguardedResultReadRules` | `UnguardedResultReadRules.cs` | Source-scans for `.Value` on a Result and grades each site; since #1868 a type-resolving analyzer (HARCH00x) decides the same question by type, and t… | #602: two call sites read (await _configStore.LoadAsync()).Value, and Result<T>.Value on a failure throws ResultFailureException -- so `harbor ask` d… | The scope is a tree scan; the exemption list is short. | 0 |
+| `UnobservedTaskRuleTests` | `UnobservedTaskRuleTests.cs` | Runs the Roslyn analyzer in-process over planted offenders, over the live tree, and against AvaloniaFireAndForgetRules' spelling matcher. | An unobserved Task (the #948 class: async void swallows everything after await) reaches the product with nobody noticing. | The differential against the retired matcher is expected to drift: the matcher asks about the SPELLING, the analyzer about the TYPE, and the disagree… | 0 |
+| `WellKnownToolsRule` | `WellKnownToolsRule.cs` | Reads the [ToolInfo] attributes of the builtin tools and compares each with the catalog's entry for that tool. | #1564 moved 292 tool-name literals into one catalog; two places still had to keep a literal (an attribute argument and a case label), and if the two… | The names are read from the assembly; the tool set is derived. | 0 |
+
+### Tier B — catches a defect but is noisy (100 rules)
+
+| rule | file | checks | defect signal | refactoring signal | cost |
+|---|---|---|---|---|---:|
+| `AcceptedStopCensusRule` | `AcceptedStopCensusRule.cs` | Counts the terminal ToolExecutionEndEvent publishes that ride TerminalEventToken in the dispatcher source and compares them with a floor of seven; al… | The dispatcher lost two terminal publishes: the floor read 5 where 7 was expected (run 38864383040). | The floor is a written-down number. Adding or removing a publish site moves it, and the rule has to be edited in the same commit; the 53-site census… | 1 |
+| `AgentStateContractRules` | `AgentStateContractRules.cs` | Source-scans the guarded trees for `State.Value`, `State!.`, `State is null` on a non-Maybe member and for `null!` on a state field, and checks that… | DefaultAgent declared a non-nullable State and initialised it with null!, then dereferenced it unguarded: the annotation was a lie the compiler could… | The rule anchors on the literal member name `State` and on three file paths. Renaming the member or moving the file breaks the anchor and the rule re… | 1 |
+| `AnalyzerSeverityScopeRules` | `AnalyzerSeverityScopeRules.cs` | Parses the root .editorconfig, resolves every path-scoped section against the tree, and compares the resolved set with the declared inventory of rela… | A demotion scoped to a path that no longer exists silently keeps relaxing a diagnostic nobody reads as relaxed. | Moving a project to a new directory invalidates the scoped path, and the section has to be re-pointed by hand. The rule deliberately stays quiet when… | 1 |
+| `AotBlockDemotionRules` | `AotBlockDemotionRules.cs` | Reads apps/Harbor.App.Cli/Harbor.App.Cli.csproj, extracts the ILLinkTreatWarningsAsErrors / NativeAOTErrorOnWarningsAsErrors / WarningsNotAsErrors pr… | The block demoted IL2026, IL3050, IL2104 and IL3053 while its own comment claimed 'AOT analysis passes cleanly'. | Adding a demoted diagnostic id needs a row; changing the block's shape (a different property set) makes the rule re-derive. | 1 |
+| `ApprovalGateWaiterRaceRules` | `ApprovalGateWaiterRaceRules.cs` | Source-scans the approval coordinator for the forbidden orderings (decide outside the lock, ForgetGate from a continuation, TrySetResult outside the… | A parked waiter and a twin stamp produced AlreadyDecided and StaleGate for the same gate, depending on scheduling. | The rule anchors on method names (`ForgetGate`, `TrySetResult`) and on three test-file paths. A rename of the coordinator's methods breaks the anchor… | 1 |
+| `AvaloniaDispatchAsyncVoidRule` | `AvaloniaDispatchAsyncVoidRule.cs` | Source-scans tests/Harbor.App.Avalonia.Tests for the async-lambda Dispatch call and grades the overload it binds to. | The lambda binds to Dispatch<Task>(Func<Task>, ct), which returns Task<Task> and does not await what it appears to await: a silent skip, not a flake. | The subject is a tree scan, so moving a test file re-points it. The overload table is written down, so a new Dispatch overload needs a row. | 1 |
+| `AvaloniaFileTreeWalkRules` | `AvaloniaFileTreeWalkRules.cs` | Source-scans apps/Harbor.App.Avalonia for Directory.GetDirectories / GetFiles / new DirectoryInfo / a depth cap / an ignore list, and reports each hi… | MainViewModel owned a recursive scan, a hardcoded depth cap, a hardcoded ignore list and an extension-to-icon switch. | The scope is the tree; the File.* carve-out names the two files that are tracked elsewhere, so moving one of them invalidates the carve-out. | 1 |
+| `AvaloniaHeadlessSessionHelperRule` | `AvaloniaHeadlessSessionHelperRule.cs` | Source-scans tests/Harbor.App.Avalonia.Tests for HeadlessUnitTestSession.StartNew and for the (System.Action) cast, and compares the count of call si… | Twenty-six call sites opened their own session, with three spellings of typeof(App) and a manual cast at every site. | The helper's own path is written into the rule; moving Support/AvaloniaSession.cs invalidates it. | 1 |
+| `AvaloniaInitializeComponentShadowRules` | `AvaloniaInitializeComponentShadowRules.cs` | Source-scans apps/Harbor.App.Avalonia for a hand-written InitializeComponent, and reports the file that declares it. | The hand-written overload bound first on a parameterless call, so the generated overload that assigns x:Name fields never ran and Dot stayed null: Nu… | The rule names StatusDot.axaml.cs as the site the defect was found at; a rename of that view invalidates the reference. | 1 |
+| `AvaloniaTextFileIoRules` | `AvaloniaTextFileIoRules.cs` | Source-scans apps/Harbor.App.Avalonia for File.Exists / File.ReadAllTextAsync / File.WriteAllTextAsync in the editor and theme services, and names th… | CodeEditorViewModel read and wrote the user's file straight from the view-model, with no seam to fake. | The scope is the tree. The rule's carve-out for File.* names the two sites tracked elsewhere, so moving them invalidates it. | 1 |
+| `BackgroundTaskSyncResultRule` | `BackgroundTaskSyncResultRule.cs` | Source-scans src/Harbor.AgentRuntime/Agents for `.Result` on a Task inside Observe/DrainCompletedAsync and grades the class against it. | DrainCompleted read the finished run with a blocking task.Result behind IsCompletedSuccessfully: sync-over-async that throws AggregateException if th… | The scope is one class and the rule names its file; moving the class invalidates it. The file also carries the #1099 remainder list, which is a ledge… | 1 |
+| `BuildGraphCoverageRule` | `BuildGraphCoverageRule.cs` | Walks Harbor.slnx and every csproj, computes the ProjectReference closure, and compares it with the solution rows in both directions. | #1005 reported four csproj files CI never builds; two of the three explanations were a separator artefact and the third was a real orphan. | The verdict is derived from the solution and the csproj files, so a project that is added or removed re-points it. The inventory of projects outside… | 1 |
+| `BuiltinAgentPickerProjectionRules` | `BuiltinAgentPickerProjectionRules.cs` | Reads the agent registry and asserts that the onboarding wizard, the /agent command, the config doc comment and the session row carry no hand-written… | #582 measured 'adding a builtin agent = 3 structural edits, one a hardcoded onboarding menu'. | The three picker files are written into the rule. Moving OnboardingWizard.cs or AgentCommand.cs invalidates the reference, and a new picker has to be… | 1 |
+| `CellForgeEngineAtomicityRules` | `CellForgeEngineAtomicityRules.cs` | Scans the engine sources for the forbidden shapes (write outside the lock, catch that swallows, partial state update) and grades each site; keeps a n… | An interleaved write left the buffer half-updated between two frames. | The exemption table names files; a rename or a move invalidates a row, and the table has a liveness check that fires on the stale row. | 1 |
+| `CellForgeEngineCseOwnershipTests` | `CellForgeEngineCseOwnershipTests.cs` | Compares the engine's CSE cache declaration against the set of expressions that are cached, and grades the ownership. | Two owners cached the same expression, so one of them held a stale value. | The exemption table names files; a rename invalidates a row. | 1 |
+| `CellForgeMascotMoveOutRules` | `CellForgeMascotMoveOutRules.cs` | Asserts that the mascot types live under Chat/Mascot/ with the mascot namespace, that the Chat/Widgets/ copy is gone, and that the set of product fil… | A move-out that leaves no trace is a move the next person undoes; the copy that comes back is a silent fork (two MascotPanel types, one painted). | The rule names seven moved files and the two consumers. The move commit 2df26dca had to edit this rule by hand; a later rename of any of those files… | 1 |
+| `CellForgeWidgetAxisRules` | `CellForgeWidgetAxisRules.cs` | Source-scans for a second `new LayoutTree(` outside the recorded builder set, and reads the documents that name the seam to check each is in the teac… | ScreenBuilder.cs built a LayoutTree outside the recorded set: a second home for the chrome. A document naming the view seam was in neither list, so t… | The builder set and the document lists are written down. Adding a builder or a document needs an edit; the rule then fires on the tree's shape. | 1 |
+| `CellForgeWidgetStateRules` | `CellForgeWidgetStateRules.cs` | Source-scans the widget assemblies for `public T?` properties, and requires each to be in the classification table; a second check asks that every cl… | A nullable public widget property was not classified, so the widget state had no owner for it. | The classification table names properties. A rename or a removal makes the row stale and the rule fires on the rule's own table (run 39391713493: 'st… | 2 |
+| `CfeValueBaselineTests` | `CfeValueBaselineTests.cs` | Reads the analyzer's severity configuration and compares the live site list with a written-down baseline of twenty-seven paths, each with its severit… | A site appeared that the baseline did not account for, so the diagnostic was either newly suppressed or newly unsuppressed with nobody deciding. | The baseline names twenty-seven real paths. Every renamed or moved site invalidates a row, and the rule is the baseline's liveness check. | 2 |
+| `ChildProcessPipeDrainRules` | `ChildProcessPipeDrainRules.cs` | Source-scans for the spawn-and-read shapes and grades each site: the reader must be registered for the pipe it writes to. | A child process wrote to a pipe whose reader was never registered, so the output was lost. | The three sites named in the rule are files; a move invalidates a row. | 1 |
+| `CommonConfigContractRules` | `CommonConfigContractRules.cs` | Reads the config interface, its implementors and the call sites through reflection plus a source scan, and compares the sets against the declared con… | Two implementations answered 'what is the configured value' differently, so the desktop and the CLI read different configs. | The rule names eight real paths as the expected implementors and callers; a move invalidates a row. | 1 |
+| `ConfigSectionDocRules` | `ConfigSectionDocRules.cs` | Reads the config section declarations and the docs that describe them, and compares the two sets. | A config section existed with no documentation, or a documented section did not exist. | The scope is a directory, so it re-points. The doc set is written down. | 1 |
+| `ConfigSetSingleTableTests` | `ConfigSetSingleTableTests.cs` | Reads the config command, the REPL command and the setter and asserts that the key set exists in exactly one of them. | The CLI and the REPL each kept their own list of settable keys, and they disagreed. | The three files are named in the rule; a move invalidates a row. | 1 |
+| `CostPricedInCoreRules` | `CostPricedInCoreRules.cs` | Source-scans for money formatting outside the core, and grades each site against the exemption table with a reason per row. | The cost cell was formatted by more than one rule, and the parity guard did not see it. | The exemption table names five real paths; a rename invalidates a row. The table is the ledger. | 1 |
+| `CostUnpricedBitRules` | `CostUnpricedBitRules.cs` | Source-scans for the cost formatting shapes in the view-models, the converters and the projections, and compares them with the canonical formatter. | Two UI stacks formatted the same cost differently, and the panels sent an unknown level to a 4-char default. | Eleven real paths are named in the exemption table; a move invalidates a row. | 1 |
+| `DeadPublicInterfaceRule` | `DeadPublicInterfaceRule.cs` | Reads the published contract assemblies' public interfaces through reflection, then searches the product tree for an implementor or a consumer of eac… | #1831 measured a published contract nobody keeps: an interface with zero implementors and zero consumers. | The reservation table names real paths (IHarborIdeClient, ITuiRenderBackend, IRenderEngine). Renaming or moving one invalidates a row, and the livene… | 1 |
+| `DeadPublicMemberRule` | `DeadPublicMemberRule.cs` | Reads the published assemblies' public members through reflection, then searches the tree for a caller; inherited members are counted, and a named re… | A public member in a published assembly had no caller at all. | The rule counts INHERITED members since 8c9528cf, so a base class that gains a member changes the verdict: the shape of the surface is the input. | 1 |
+| `DebouncedSettleShapeRule` | `DebouncedSettleShapeRule.cs` | Source-scans the watcher sources for the debounce shape and grades each site; a planted control asserts the matcher fires on the real shape. | The watcher settled on 'two events' rather than on 'the state is stable', so a burst of three events read as a different verdict (run 36669693739). | The rule anchors on the watcher test file; renaming it invalidates the reference. | 1 |
+| `DefaultAgentSingleSourceTests` | `DefaultAgentSingleSourceTests.cs` | Reads the AgentName declaration out of the identifiers source and compares the fallback constant with it; also asserts the registry's first agent is… | The name existed in two places, so the fallback and the registry could disagree. | The rule anchors on the TEXT 'class AgentName' and reads the value with a regex. Commit bcdb34ce turned the type into a record and the anchor missed… | 2 |
+| `DefaultInterfaceMemberRule` | `DefaultInterfaceMemberRule.cs` | Reads the published interfaces' members through reflection, classifies each (forwarded, default-bodied, abstract) and requires every default member t… | A default member silently changed the behaviour of every implementor. | The member names are read from the assembly, so a rename re-points it; the justification table names members, so a rename invalidates a row. | 1 |
+| `DefaultModelDocClaimTests` | `DefaultModelDocClaimTests.cs` | Reads the recorded divergences and the config sections, and checks that each document's prose about the default model matches the derived value. | A document claimed a default model that the code did not use. | The rule anchors on prose shapes in the documents; a rewording of the paragraph changes the answer. | 1 |
+| `DefaultModelSingleSourceTests` | `DefaultModelSingleSourceTests.cs` | Reads ConfigSections and the desktop Program and asserts that no second literal of the default model exists in the product tree. | Two places stated the default model and one of them was stale. | The two paths are named in the rule; a move invalidates a row. | 1 |
+| `DemoGifTriggerSurfaceTests` | `DemoGifTriggerSurfaceTests.cs` | Reads the demo tooling and the CI workflow and asserts that the surface named in the README is the surface that exists. | The README named a trigger that no longer existed, so the README told a reader to run something dead. | The workflow file and the tool path are named; moving the script invalidates them. | 1 |
+| `DesignSystemLeafTakesNoIoRules` | `DesignSystemLeafTakesNoIoRules.cs` | Scans the design-system assembly for the disk-call and environment shapes and grades each site. | The leaf that every view-model depends on was reading the disk, so it could not be faked in a test. | The scope is the assembly; the exemption table names a site. | 1 |
+| `DesktopAbstractionsLeafTakesNoIoRules` | `DesktopAbstractionsLeafTakesNoIoRules.cs` | Scans the assembly for the disk-call and environment shapes and grades each site. | A leaf assembly that performs I/O cannot be consumed by a host that wants to control its storage. | The scope is the assembly; a rename of the assembly re-points it. | 1 |
+| `DesktopSharedTakesNoIoRules` | `DesktopSharedTakesNoIoRules.cs` | Scans the assembly for the disk-call and environment shapes and grades each site. | The shared leaf read the disk, so the desktop app's behaviour depended on the file system in a unit test. | The scope is the assembly; two exemption rows name sites. | 1 |
+| `DiSeverityDemotionRules` | `DiSeverityDemotionRules.cs` | Parses the .editorconfig path-scoped sections, and for each severity demoted there requires a comment that names the rule id and states the reason. | A diagnostic was demoted for a whole directory with no recorded reason, and no gate could see the comment. | The rule is about the COMMENT's content, so editing the comment (even to fix a typo) re-opens the check. | 1 |
+| `DiagnosticsClassificationRule` | `DiagnosticsClassificationRule.cs` | Source-scans for a classification of a diagnostic outside the core detector and grades each site against the canonical classifier. | The UI classified a diagnostic itself, so the same input was classified two ways and the two answers differed. | The detector's path is named; a move invalidates the reference. | 1 |
+| `DialogKeyDispatchCensusRule` | `DialogKeyDispatchCensusRule.cs` | Source-scans the dialog and onboarding overlays for the key dispatch shapes and grades each site against the declared family table. | A key routed by a dialog was never handled, so the dialog swallowed the input. | The family table names widget files; a rename invalidates a row. | 1 |
+| `DiffSurfaceNameCollisionRule` | `DiffSurfaceNameCollisionRule.cs` | Source-scans the diff widgets and view-models for colliding type and member names, and compares the diff vocabulary each file uses with the owning fi… | Two diff surfaces declared the same name, so a rename in one silently changed the other. | Seven real paths are named as the owning files; a move invalidates a row. | 1 |
+| `E2eAvaloniaShardCoverageRules` | `E2eAvaloniaShardCoverageRules.cs` | Reads tests/Harbor.E2E.App.Avalonia/e2e-shards.json and the test tree, and compares the shard assignment with the files on disk. | A test file was in no shard, so it never ran. | The shard list is a written-down JSON; adding a test file needs an edit there and the rule re-points automatically. | 1 |
+| `EnforcerIntegrityTests` | `EnforcerIntegrityTests.cs` | Reads the matrix, the documented-exception table and the allowed-edge set and checks that each row names a file that exists, that each allowed edge i… | #450: a csproj-walking rule could pass silently when the repo root was not found; the enforcer's own integrity was unchecked. | Every allowed edge and every exception row names a real assembly and a real file. Two of its firings were on its own table (runs 38866609300, 3912201… | 2 |
+| `ExtensionAxisRouteCarriageRule` | `ExtensionAxisRouteCarriageRule.cs` | Walks the routes and the axes and compares the declared carriage with what the routes actually carry. | A route carried the axis on one path and dropped it on another, so a plugin's contribution vanished on the second path. | The axis and route names are read from the registry; the declared set is written down. | 1 |
+| `FatInterfaceShapeRatchet` | `FatInterfaceShapeRatchet.cs` | Measures the EFFECTIVE member count of a set of interfaces (inherited members included) through reflection and compares it with a written-down baseli… | An interface grew a member, so every implementor grew too. | The baseline is a number per interface. The measured members of the twenty REPL command interfaces are written into the rule, so a new command or a r… | 2 |
+| `FeatureFlagWiringRules` | `FeatureFlagWiringRules.cs` | Reads the flags out of the csproj and the product, and compares the wired set with the documented set. | A flag was read by the code but documented as unwired, so the doc lied about what the build does. | The flag names are read from the csproj; the documented set is written down. | 1 |
+| `FileLogSinkOwnershipRule` | `FileLogSinkOwnershipRule.cs` | Walks the product tree for the sink implementations and counts the owners of each sink type. | Two components each built their own file sink, so the same file was written by two writers with two formats. | The scope is the tree, so a move re-points it; the two real owner paths are named in the expectation. | 1 |
+| `FullLayerMatrixTests` | `FullLayerMatrixTests.cs` | Reads the matrix, compares each row's declared reference set against the assembly's real references, and checks that the rows cover exactly the src/… | Harbor.Registries had no matrix row, so no layer rule constrained that assembly (run 39114828129). A row could also permit an edge the product does n… | The matrix is the written-down table: every assembly that is added or moved needs a row, and the allowed-edge set is a ledger whose stale rows fire (… | 2 |
+| `HandRolledResultShapeTests` | `HandRolledResultShapeTests.cs` | Source-scans for the hand-rolled Result shapes and grades each site against the canonical construction. | A second implementation of a library member, written out longhand at every call site, is a drift source: 64 copies of Result.Failure<K>(other.Error). | The exemption table names fourteen real paths; a rename invalidates a row. | 1 |
+| `HostingCompositionNullabilityRules` | `HostingCompositionNullabilityRules.cs` | Source-scans src/Harbor.Hosting for the null-forgiving operator and grades each site. | A module was handed a null service and the DI order decided whether it worked. | The scope is a directory, so it re-points; the composition context's path is named. | 1 |
+| `HttpClientReuseRules` | `HttpClientReuseRules.cs` | Reads the verdicts of the analyzer that asks the same two questions by symbol (HARCH005 and HARCH006), and compares the creation sites with the decla… | A per-call HttpClient exhausted the socket pool under load; #1854 measured it. The text matcher could only see an expression-bodied lambda, and a blo… | The owner set names five real paths; a rename invalidates a row. The creation itself is resolved through the semantic model now, so a rename of the c… | 1 |
+| `IdeAbandonObserveRule` | `IdeAbandonObserveRule.cs` | Source-scans src/Harbor.Ipc.Client/Ide for the discard-and-forget shapes and grades the class. | A fault on the abandon path of the IDE bridge was swallowed, so the session hung with no log line. | The scope is a directory and the bridge's file is named; a move invalidates it. | 1 |
+| `InnerExceptionRules` | `InnerExceptionRules.cs` | Reads the catch blocks through a Roslyn parse of the guarded files and grades each catch: a caught exception must be rethrown with its inner exceptio… | A catch flattened the exception into a message string, so the stack and the cause were lost. | The scope is a tree scan; two real paths are named as the known sites. | 1 |
+| `KeyGateFamilyRules` | `KeyGateFamilyRules.cs` | Source-scans the product tree for the key-routing call sites and compares the set of sites with the family table. | BindingsMap routed keys and was absent from the family table, so it never declared its family (run 38264879229). | The family table names forty-eight real paths and the key-type vocabulary. Every renamed widget, every moved routing site and every new key type need… | 2 |
+| `LayerClaimMatchesMatrixRules` | `LayerClaimMatchesMatrixRules.cs` | Reads the layer claims made in the product tree (the assembly's own declared layer, in code comments and in the csproj) and compares each with the ma… | A project claimed a layer it did not have, so the layer contract was enforced against a fiction. | The claims are read from the tree, so a rename re-points them; the layer vocabulary is written down. | 1 |
+| `LayerDocAgreementRule` | `LayerDocAgreementRule.cs` | Parses the layer boxes of the document and compares each assembly's stated layer with the matrix row. | #888: the document assigned all four IPC assemblies to APPLICATION while the matrix said Domain for one and Infrastructure for three -- and the docum… | The document's prose is the input: rewriting the paragraph changes the verdict. The matrix is the other side and is stable. | 1 |
+| `LayerTableDocAgreementRules` | `LayerTableDocAgreementRules.cs` | Reads the summary tables of the four architecture documents and compares each row with the rule it names in the tree. | #922 fixed four documents' prose and declined to build the mechanism; this rule is that mechanism: a table row that names a rule nobody has is a tabl… | The tables name rules by file; a rule that is renamed or split makes the table row stale. | 1 |
+| `LegacyFlatTeaBranchRule` | `LegacyFlatTeaBranchRule.cs` | Source-scans for a second reducer branch and grades each site against the live branch; a named table records the files that belong to the live half. | #594 found a second, parallel TEA branch the live one had quietly outgrown. | The table names twenty-one real paths (reducers, stores, view-models); every move invalidates a row. | 1 |
+| `MapErrorFailureShapeTests` | `MapErrorFailureShapeTests.cs` | Source-scans for the hand-rolled error-to-failure shapes and grades each site. | A hand-written map produced a failure whose text did not match the child's error. | The exemption table names five real paths; a rename invalidates a row. | 1 |
+| `MaybeAbsenceTests` | `MaybeAbsenceTests.cs` | Source-scans the guarded projects for `out T?`, `Result<T?>` and `Task<T?>` declarations and grades each site. | RendererPipeline declared absence through a nullable out-parameter, so the caller could not tell 'absent' from 'not set yet' (run 38685128982). | The guarded project list and the exemption table name eighteen real paths. A new project that opts in needs a row. | 1 |
+| `McpHttpClientOwnershipRules` | `McpHttpClientOwnershipRules.cs` | Reads the MCP transports through reflection and counts the owners of the HttpClient; a public field or property that hands it out is reported. | The remote-MCP HttpClient had two owners (McpHttpClientFactory and McpOAuthHandler) -- the duplication #1567 removed coming back (run 39387894338). | The owner paths are named; the count is written down, so a new transport needs a row. | 1 |
+| `McpOAuthTokenShapeRules` | `McpOAuthTokenShapeRules.cs` | Reads the token lookup members through reflection and requires exactly one shape on the handler. | Three conventions for the same lookup answered at once; only one was wired, so the other two were dead API. | The member names are read from the assembly; the expectation names the handler's path. | 1 |
+| `MegaConstructorDoneStateTests` | `MegaConstructorDoneStateTests.cs` | Reads the two mega-constructors (ReplRunner, CellForgeReplRunner) and checks the done-state assignment shape. | A mega-constructor left its done-state unset on one path, so the object existed in a half-built state. | The two constructors are named; a rename invalidates a row. | 1 |
+| `ModelRateLabelRules` | `ModelRateLabelRules.cs` | Reads the rate-label model and the two picker view-models and asserts that only the model declares the label. | The two model pickers answered the same question about the same model with two different answers. | The four paths are named; a move invalidates a row. | 1 |
+| `ModelRefSingleParserTests` | `ModelRefSingleParserTests.cs` | Source-scans for an ad-hoc cut of a slash-separated model reference and grades each site against the contract and the inventory of known exceptions. | OnboardingPicks cut a slash-separated string by hand: a second parser of provider/model (run 39002619447). | The inventory names eighteen real paths and has a liveness check: an entry whose file no longer cuts is stale and the rule fires on its own table (ru… | 2 |
+| `MoneyCellSingleHomeRules` | `MoneyCellSingleHomeRules.cs` | Source-scans for the money formatting shapes and grades each site against the two allowed conventions. | #682: the cost cell was formatted by more than one rule and the parity guard did not see it. | The five named paths are the allowed writers; a rename invalidates a row. | 1 |
+| `OnboardingFireAndForgetRule` | `OnboardingFireAndForgetRule.cs` | Source-scans the wizard for the discard-and-forget shapes and grades the class. | Next launched its async work with a bare discard, so a fault on the catch path was swallowed. | The class is named; a move invalidates it. | 1 |
+| `OpenAiCompatiblePumpObserveRule` | `OpenAiCompatiblePumpObserveRule.cs` | Source-scans the client for the detached-task shapes and grades the class. | The SSE pump was parked on a detached Task.Run, so a fault on the catch path vanished. | The class is named; a move invalidates it. | 1 |
+| `OverlayKeyRouteClaimRule` | `OverlayKeyRouteClaimRule.cs` | Source-scans the product comments (comments stripped) for the overlay route names and checks that each named route has a product call site. | Nine doc comments described an input path that no product host used, so a reader was told about a route that did not exist. | The check is about COMMENT TEXT: editing or deleting a comment changes the verdict, and a moved call site changes it too. | 2 |
+| `PanelKeyRouteReachabilityRule` | `PanelKeyRouteReachabilityRule.cs` | Walks the product tree for the OnKey hand-off sites, measures their reachability, and attributes the tests that exercise them; a test attributed to a… | OverlayStack.RouteKey could not be entered at all, so the tests that drove it were evidence of nothing. | The reachability is measured from the tree, but the test attribution names files; commit a9f77508 had to edit the rule when the overlay moved. | 1 |
+| `PresentationCapabilityRules` | `PresentationCapabilityRules.cs` | Walks the IL of every Presentation assembly with Mono.Cecil and fails on a subprocess spawn, System.IO.File, System.IO.Directory, network or reflecti… | #455: the reference matrix could not see System.IO.File, System.Diagnostics.Process or HttpClient, so a perfectly layered assembly could still fork a… | The KnownViolations table is a ledger keyed by (assembly, rule, type). Renaming a violating type invalidates a row, and the coverage instrument in th… | 1 |
+| `ProcessEnvIsolationRule` | `ProcessEnvIsolationRule.cs` | Source-scans the test tree for Environment.SetEnvironmentVariable, and for each site checks the class carries a serialisation attribute and the varia… | Nine test classes set the process environment with no serialisation form, so two classes in one project raced on process state. | The list of the eleven offending classes is written into the rule; every renamed or moved test class needs an edit. The rule's own cost was 172.7 s u… | 1 |
+| `PromptCacheKeyCoverageRules` | `PromptCacheKeyCoverageRules.cs` | Reads the builder's rendered sections and the cache key's covered members and compares the two sets. | #792: a tool's PromptGuidelines rendered but did not key, so a guideline edit served the previous turn's text with a cache hit and no log line. | The builder's path is named; the member names are read from the assembly. | 1 |
+| `ProviderCatalogueBudgetRules` | `ProviderCatalogueBudgetRules.cs` | Reads the health-check timeout and the UI feedback budget out of the config and asserts each is declared once. | #671 renamed one number into two, and a second copy of the old number survived somewhere. | The config section is named; the member names are read from the assembly. | 1 |
+| `ProviderModelAbsenceRules` | `ProviderModelAbsenceRules.cs` | Reads the resolution methods through reflection and asserts the return shape carries one optional pair, not two nullable strings in a tuple. | #598: a two-element tuple of nullable strings made three states spellable and the three callers disagreed about the third. | The three call sites are named; a rename invalidates a row. | 1 |
+| `PublicAbstractBaseLivenessRules` | `PublicAbstractBaseLivenessRules.cs` | Reads the packable product assemblies' public abstract types through reflection and searches the product tree for a descendant; a named reservation e… | #1835 measured twelve public abstract types with zero product descendants -- 788 lines of published base class that nothing derived from, ten of them… | The reservation table names real types; a rename invalidates a row. | 1 |
+| `ReflectionConventionRule` | `ReflectionConventionRule.cs` | Since #1844 the rule IS the compiler's: the ban file BannedSymbols.DynamicCode.txt enforced by RS0030. The test runs the build's own analyzer in-proc… | The compiler's ban did not report a planted System.Reflection.Assembly.Load, so the ban file had a hole the text rule could not see (run 39395794130). | The reflection-based probe read the framework's public Assembly.Load surface; the migration to the compiler emptied that read and the rule fired on i… | 2 |
+| `RendererEventSeamRule` | `RendererEventSeamRule.cs` | Walks the Presentation assemblies' IL and checks that every event subscription is a handler registered through BaseTuiRenderer.RegisterHandler, or a… | A third, undeclared entry point let a renderer observe the agent without the host knowing. | The excluded-assembly list is written down; a renderer that moves out of the product invalidates a row. | 1 |
+| `ReplConstructorCompositionTests` | `ReplConstructorCompositionTests.cs` | Reads ReplRunner's and CellForgeReplRunner's constructors and asserts the parameter count stays at or below a declared bound, and grades each paramet… | #486 filed '20/22'; the count only went up, so the finding compounded. | The bound is a number, and the parameter list is read from the assembly: a legitimate dependency needs a rule edit. This is a ratchet over a count, d… | 2 |
+| `ResultTryAdoptionTests` | `ResultTryAdoptionTests.cs` | Source-scans for the hand-rolled try/catch-to-Result shape and grades each site. | LspManager hand-rolled catch(Exception) -> Result.Failure: a second implementation of Result.Try (run 36534957325). | The exemption table names the exempt sites and has a liveness check; a site whose reason no longer matches fires the rule on its own table (run 36536… | 2 |
+| `SessionForkPortSeamRules` | `SessionForkPortSeamRules.cs` | Reads the port's implementors and the composition roots and asserts that every host that constructs a session factory binds the port. | #882: the port was bound in exactly one place (ServiceRegistration.RegisterAppServices) and nothing said the next host had to bind it too. | The composition roots are named; a new host needs a row. | 1 |
+| `SessionStatusFrameReachabilityTests` | `SessionStatusFrameReachabilityTests.cs` | Reads the frame's callers through the probe in SessionStatusFrameReachabilityRules.cs and checks that the frame that publishes the reducer's decision… | #861: the TEST named after the #687 fix could never have caught its regression -- if the frame inlined a status the presenter died and the suite stay… | The reachability is measured from the tree; the claim set is written down. NOTE: the file name is inverted here -- the probe lives in SessionStatusFr… | 1 |
+| `SessionStatusSourceRule` | `SessionStatusSourceRule.cs` | Source-scans for a second derivation of the status from the transcript and grades each site against the reducer. | #687: the presentation layer answered 'is the agent running' a second time by looking at the transcript. | The scope is a tree scan; the four named paths are the live half. | 1 |
+| `SessionStoreFailureTextParityRules` | `SessionStoreFailureTextParityRules.cs` | Compares the failure texts the Jsonl, Sqlite and Memory stores produce for the same input, and grades the parity. | #764: the single-home half was true (the shared file declares all three shapes) but Memory links neither shared file, so it re-typed the texts itself. | The stores are named; the expected texts are written down. | 1 |
+| `TelemetryOtlpBoundaryRules` | `TelemetryOtlpBoundaryRules.cs` | Reads every project file's package references and the solution's project graph, and asserts that no product project declares an OpenTelemetry package… | #1799: the boundary was recorded in a document and was not true in the tree. | The package names and the project set are read from the tree; the allowed holder is named. | 1 |
+| `TestDiagnosticsOutputRule` | `TestDiagnosticsOutputRule.cs` | Source-scans the test tree for Console.Write diagnostics and requires them to go to TestContext.Output instead. | #1856 measured 112 call sites in 52 files; a red test with no answer is a CI minute spent on nothing. | The twenty named files are the exemptions (the ones that legitimately write to stdout). A renamed test file invalidates a row. | 1 |
+| `TestKitCompositionRules` | `TestKitCompositionRules.cs` | Reads the TestKit csproj's ProjectReferences and computes the transitive closure, then compares it with the parts of TestKit that need the UI stack. | #1889 measured 11 of 14 TestKit consumers dragging eleven UI/Desktop assemblies into their build and their test bin for a file they never used. | The rule's expectation is about the csproj graph, so a split re-points it; commit 5eee093c had to edit the rule by hand. | 1 |
+| `TestKitLocalDoubleRules` | `TestKitLocalDoubleRules.cs` | Scans the test tree for interface doubles and compares the set with the shared set, by shape rather than by name. | #1825: five test projects each kept their own set of interface doubles, and the sets did not even agree on the names (StubAuthResolver vs FixedAuthRe… | The shared doubles' paths are named; a renamed double invalidates a row. | 1 |
+| `TestKitSharedCopyReasonRules` | `TestKitSharedCopyReasonRules.cs` | Scans the test tree for the shared helper's copies and checks that each copy's header states why the copy exists. | #1889's second half: five projects kept a TestScalingGate of their own because the shared one sat behind a TestKit that dragged the Application in. | The copies' paths are named; a rename invalidates a row. | 1 |
+| `ThemeAxisStaysDataRules` | `ThemeAxisStaysDataRules.cs` | Source-scans for the theme wiring in the product and asserts that a theme is a data file, not a code branch. | #622: the theme axis was the one genuinely additive axis, and the carve-out from the #555 freeze said so. | The four theme paths are named; a rename invalidates a row. | 1 |
+| `ThemeStoreSeamRules` | `ThemeStoreSeamRules.cs` | Reads the theme types through reflection and asserts there is a single implementation of each port, and that no product file loads a theme file itsel… | #668 was filed as a capability item and turned out to be a duplicate: two CellForge widgets were a second implementation of theme loading next to the… | The four theme paths are named; the sole-implementation expectation names a type. | 1 |
+| `TokenCellSingleHomeRules` | `TokenCellSingleHomeRules.cs` | Source-scans for the token formatting shapes and compares the writers with the frozen set (the notation is deliberately not chosen here). | #788: five renderings of one magnitude existed; ADR-010 counted six writers and stopped because its inventory walked src/ only. | The frozen writer set names twenty-eight real paths; a rename invalidates a row. | 2 |
+| `TokenTrackingRatchet` | `TokenTrackingRatchet.cs` | Measures the tracked members of ITokenTracker and compares the split against a written-down baseline; the control asserts that a known improvement is… | #471: the first version of this file was a gate that demanded a refactor nobody had done, and was landed red on purpose -- which is how a team learns… | The control's expected list of seven member names was stale: the aggregate declared eight members and the control fired on its own table (run 3869539… | 2 |
+| `ToolDispatcherSyncResultRule` | `ToolDispatcherSyncResultRule.cs` | Source-scans src/Harbor.AgentRuntime/Agents for `.Result` on a Task inside the await helpers and grades the class. | #1099: AwaitOneWithAbandonAsync and AwaitAllWithAbandonAsync read the finished task with a blocking .Result behind IsCompletedSuccessfully. | The scope is one class and the rule names its file; the #1099 remainder list is a ledger. | 1 |
+| `ToolNameListRule` | `ToolNameListRule.cs` | Source-scans for a collection of tool names and compares each site with the catalog, and with the derived inventory. | #595: 'eight hand-maintained lists of tool names, two of them already wrong'. The catalog was the fix; this rule is the ratchet. | The four named sites are the exceptions; a rename invalidates a row. | 1 |
+| `TrimUnsafeReflectionRules` | `TrimUnsafeReflectionRules.cs` | Reads the trim-unsafe reflection shapes in the product sources and grades each site against the exemption table, with a resolver-aware custom parse. | #414: the hot paths used reflection the trimmer could not prove safe, so the published binary was not what the source said. | The exemption table names two real assemblies; a rename invalidates a row. | 1 |
+| `TuiReadLineContractRules` | `TuiReadLineContractRules.cs` | Source-scans the renderer trees for the fabrication shapes (`line ?? string.Empty`, `Maybe.From(Console.ReadLine() ?? "")`) and checks that each name… | #589: every implementation answered end-of-input with Result.Success(line ?? string.Empty), so the REPL branched on IsNullOrWhiteSpace and spun at 10… | The renderer tree list is written down AND its length is pinned (5). Commit 16249cb1 removed the vendored renderer and the count went 6 -> 5: the rul… | 2 |
+| `TypeFilterRegistrationTests` | `TypeFilterRegistrationTests.cs` | Reads the middleware's constructor and the registration sites and asserts the empty form is not used in production. | #478: the CLI built the filter with no types, so the only middleware on the production event bus filtered nothing while its doc comment advertised 'c… | The middleware's path is named; the registration sites are read from the tree. | 1 |
+| `UiConfigDefaultsRule` | `UiConfigDefaultsRule.cs` | Source-scans for a hand-picked default of a persisted config field and grades each site against the core's default. | #677: two desktop view-models hand-picked defaults for persisted config fields and their answers disagreed with the core's. | The two view-models are named; a move invalidates a row. | 1 |
+| `UiFrameworkNullabilityRules` | `UiFrameworkNullabilityRules.cs` | Source-scans the nine Ui.Framework assemblies for `null!` and grades each site. | ProjectionCache declared six members non-nullable and initialised them with null!, so the compiler was asked to accept a value nobody assigned. | The nine assembly paths are named; a rename of an assembly needs an edit. | 1 |
+| `VendoredHtmlSurfaceRules` | `VendoredHtmlSurfaceRules.cs` | Compares the two vendored CollapseWhitespace implementations against each other by re-typing both and comparing over an exhaustive alphabet. | #878: the two vendored helpers disagree on 758 of the whitespace cases, so a behaviour that looked like one thing was two. | The rule grades the VENDORED tree, which is not built by CI: a change there is not caught by the compiler, which is the point. | 1 |
+
+### Tier C — does not catch a defect (10 rules)
+
+| rule | file | checks | defect signal | refactoring signal | cost |
+|---|---|---|---|---|---:|
+| `AvaloniaFireAndForgetRules` | `AvaloniaFireAndForgetRules.cs` | Regex over the product tree for a discarded call whose NAME looks async-shaped; the file's own header says it no longer decides anything and that HAR… | Nothing: the file is not a gate. Its only role is to be the differential oracle for the analyzer that replaced it. | Every change of the product tree moves the oracle, and the differential test reads both sides; the oracle itself is expected to drift from the analyz… | 0 |
+| `BenchmarkContractTests` | `BenchmarkContractTests.cs` | Enumerates the benchmark sources and requires the seven contract fields (Operation / Payload / StateReset / Drain / RetainedState / AwaitSemantics /… | #408: a number that nobody can attribute cannot answer 'is this faster than before?', and a benchmark that carries state between iterations measures… | A new benchmark class needs its contract; the enumeration re-points itself. | 1 |
+| `ContribBoundaryNameRule` | `ContribBoundaryNameRule.cs` | Walks src/ and contrib/ for type declarations and compares the cross-boundary name set with a written-down baseline. | Nothing by its own header: it is 'a MEASUREMENT, not a prohibition'. | The baseline is a written-down set of names. The renderer move-out (16249cb1) changed the set and the rule fired on the shape change, not on a defect. | 2 |
+| `ExistenceCheckLivenessRule` | `ExistenceCheckLivenessRule.cs` | Reads the existence-check tables of the rules that hold them and asks, for each row, whether the named thing still exists and is still reachable. | Nothing by itself: it is the liveness half of the ledger checks, and it fires on a stale ROW, not on broken code. | Its whole job is to fire when a row goes stale after a rename or a move: this is a rule whose firing IS the refactoring signal. | 2 |
+| `OverlayKeyPlaneCensusRule` | `OverlayKeyPlaneCensusRule.cs` | Counts the IOverlayLayer implementations under src/ and apps/ and measures their reachability. | Nothing by its own header: it is 'a MEASUREMENT + ratchet'. | The count is a measurement of the tree's shape. A new overlay layer moves it, and the rule fires on the count rather than on a defect. | 2 |
+| `ProjectKeyedScanRule` | `ProjectKeyedScanRule.cs` | Walks src/ for directories with .cs files and no .csproj, and reports which project compiles each file. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the second form of 'a measurement that cannot see its subject'. | The measurement is of the tree's shape. Every directory that is created without a csproj moves the answer. | 2 |
+| `ReadmeCoverageTests` | `ReadmeCoverageTests.cs` | Walks the src/ csproj directories and requires a README.md in each; for a packable project it requires the named sections to be present. | #430: the coverage lived as prose in a document and had already drifted twice (32/51, 45/54, then 48/54 actually measured). | Adding a project needs a README: a chore, not a bug. This is the measured 'style' class: the firing means 'the tree grew', not 'the code is wrong'. | 2 |
+| `ScanUniverseRule` | `ScanUniverseRule.cs` | Walks the trees, loads the assemblies and compares the non-product members and the blind projects with two written-down baselines. | Nothing by its own header: it is 'a MEASUREMENT, not a fix'. | Both baselines are written-down literals. Every test project that is added moves the count, and the rule fires on the count: runs 39117642149, 393657… | 2 |
+| `ScanVisibilityRule` | `ScanVisibilityRule.cs` | Walks each tree through the shared helper and reports the trees that come back empty. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the first form of 'a measurement that cannot see its subject'. | The invisible-tree set is a written-down list; adding a tree changes the answer. | 2 |
+| `SharedSourceLinkRules` | `SharedSourceLinkRules.cs` | Walks the src/ folders that hold shared source, computes which project links each file, and compares the link inventory with a written-down count (22… | #456: a shared-source folder grew a file that no project linked, so the file was in the tree and in no build. | The count is a written-down literal. Commit 38516394743 (perf/1102-requestbuild-args) and 38854377103 (nightshift/1563-utf8jsonreader-helpers) both f… | 2 |
+
+## The tier is not invented: ten commits that forced a manual repair
+
+A tier that says "B: noisy" has to be backed by something that happened, not by an opinion about
+the rule's name. The commits below are the ones this audit checked, in the repository's own
+history. Every one of them **changed code without introducing a defect** and **edited the rule
+file by hand in the same commit**. The last column is the diff, which is the repair the rule
+demanded.
+
+| commit | what it changed | rule file edited in the same commit | the repair the rule demanded |
 |---|---|---|---|
-| `ApprovalGateWaiterRaceRules` | **B** | high | the awaited terminal state, read from the syntax tree |
-| `AvaloniaInitializeComponentShadowRules` | **B** | high | the InitializeComponent declaration, not a call-shaped string |
-| `ConfigSectionDocRules` | **B** | high | the section's own declaration, matched by symbol |
-| `HostingCompositionNullabilityRules` | **B** | high | the nullable annotation on the declaration |
-| `LayerDocAgreementRule` | **B** | high | the layer graph, compared to the doc by name instead of by line |
-| `LayerTableDocAgreementRules` | **B** | high | the layer table's own rows |
-| `ResultMaybeSignatureTests` | **B** | high | the Result<T?> declaration, matched by symbol |
-| `UiFrameworkNullabilityRules` | **B** | high | the nullable annotation on the declaration |
-| `AgentStateContractRules` | **B** | medium | the IAgent.State declaration, not the text that names it |
-| `AnalyzerSeverityScopeRules` | **B** | medium | the severity entry's own path, resolved against the project graph |
-| `AvaloniaConverterInstanceRules` | **B** | medium | the converter type the view declares |
-| `AvaloniaDispatchAsyncVoidRule` | **B** | medium | the Dispatch overload the call resolves to |
-| `AvaloniaHeadlessSessionHelperRule` | **B** | medium | the helper's declaration and its callers |
-| `BackgroundTaskSyncResultRule` | **B** | medium | the await the drain path does or does not have |
-| `BuiltinAgentPickerProjectionRules` | **B** | medium | the registry the picker projects from |
-| `CellForgeWidgetAxisRules` | **B** | medium | the axis the widget declares, not the string that spells it |
-| `CellForgeWidgetStateRules` | **B** | medium | the state record the widget owns |
-| `CommonConfigContractRules` | **B** | medium | the config section declaration |
-| `ConfigHalfPairWriteRules` | **B** | medium | the write pair, resolved from the declarations |
-| `ContractsArtifactCapabilityRule` | **B** | medium | the capability's own declaration |
-| `CostPricedInCoreRules` | **B** | medium | the pricing call the core makes |
-| `CostUnpricedBitRules` | **B** | medium | the unpriced bit's carrier |
-| `DebouncedSettleShapeRule` | **B** | medium | the settle call's shape |
-| `DefaultModelDocClaimTests` | **B** | medium | the model id the doc names, matched against the catalog |
-| `DiSeverityDemotionRules` | **B** | medium | the severity entry the demotion sets |
-| `DiagnosticsClassificationRule` | **B** | medium | the detector's own declaration list, read by symbol |
-| `DiffSurfaceNameCollisionRule` | **B** | medium | the two surfaces' declarations |
-| `ExtensionAxisDoorHonestyRule` | **B** | medium | the door's own registration |
-| `FeatureFlagWiringRules` | **B** | medium | the flag's declaration |
-| `FileLogSinkOwnershipRule` | **B** | medium | the sink type the host registers |
-| `GateGlowConsumerReachabilityRule` | **B** | medium | the consumer's declaration |
-| `KeyGateFamilyRules` | **B** | medium | the key gate's declaration |
-| `LayerClaimMatchesMatrixRules` | **B** | medium | the matrix row the claim names |
-| `LogLevelMnemonicRule` | **B** | medium | the mnemonic table's declaration |
-| `McpOAuthTokenShapeRules` | **B** | medium | the token record's declaration |
-| `MegaConstructorDoneStateTests` | **B** | medium | the constructor's parameter list |
-| `ModelRateLabelRules` | **B** | medium | the rate table's declaration |
-| `MoneyCellSingleHomeRules` | **B** | medium | the cell writer's declaration |
-| `OverlayKeyRouteClaimRule` | **B** | medium | the route the doc names |
-| `PanelKeyRouteReachabilityRule` | **B** | medium | the route's declaration |
-| `ProcessEnvIsolationRule` | **B** | medium | the process-environment write |
-| `PromptCacheKeyCoverageRules` | **B** | medium | the cache-key builder's declaration |
-| `PromptClockPurityRule` | **B** | medium | the clock call's receiver |
-| `PromptSectionPolicyRule` | **B** | medium | the section's declaration |
-| `ProviderCatalogueBudgetRules` | **B** | medium | the catalogue's declaration |
-| `ProviderModelAbsenceRules` | **B** | medium | the model's declaration |
-| `ReadmeCoverageTests` | **B** | medium | the project list the README coverage is measured against |
-| `RenderInvalidationCoalescingTests` | **B** | medium | the coalescer's declaration |
-| `ReplConstructorCompositionTests` | **B** | medium | the constructor's parameter list |
-| `SessionForkPortSeamRules` | **B** | medium | the port's declaration |
-| `SessionStatusFrameReachabilityTests` | **B** | medium | the projection's declaration |
-| `SessionStatusReader` | **B** | medium | the projection's declaration |
-| `SessionStatusSourceRule` | **B** | medium | the status source's declaration |
-| `SessionStatusTableRule` | **B** | medium | the label table's declaration |
-| `SessionStoreFailureTextParityRules` | **B** | medium | the failure text each store builds |
-| `SlashResultChannelTests` | **B** | medium | the channel's declaration |
-| `TestDiagnosticsOutputRule` | **B** | medium | the diagnostic sink's declaration |
-| `TestKitLocalDoubleRules` | **B** | medium | the double's declaration |
-| `TestKitSharedCopyReasonRules` | **B** | medium | the shared double's declaration |
-| `TokenCellSingleHomeRules` | **B** | medium | the cell writer's declaration |
-| `ToolGlyphTableRule` | **B** | medium | the glyph table's declaration |
-| `ToolNameListRule` | **B** | medium | the catalog declaration the list is compared against |
-| `TuiReadLineContractRules` | **B** | medium | the read-line contract's declaration |
-| `UiConfigDefaultsRule` | **B** | medium | the default's declaration |
-| `VendoredHtmlSurfaceRules` | **B** | medium | the surface type's declaration |
-| `WellKnownToolsRule` | **B** | medium | the catalog declaration the names are compared against |
+| `16249cb1` | refactor: remove the vendored SharpConsoleUI renderer from the product (#1930) | `TuiReadLineContractRules.cs`, `ContribBoundaryNameRule.cs`, `ScanUniverseRule.cs`, `EnforcerIntegrityTests.cs`, `FullLayerMatrixTests.cs` | the renderer tree list lost a row and the pinned count went `6` → `5` |
+| `6ba00729` | test(#1772,#1773): common test doubles + scopes into Harbor.TestKit (#1834) | `ScanUniverseRule.cs` | the pinned census string `tests=34` → `tests=36` |
+| `40df718b` | test: the E2E framework loses its 419 dead lines (#1943) | `ScanUniverseRule.cs`, `TestProjectReferenceRules.cs` | the pinned census string `tests=36` → `tests=37` |
+| `bcdb34ce` | refactor(#1559): Identifiers.cs 8× ValueObject → records (#1622) | `DefaultAgentSingleSourceTests.cs` | the text anchor `"class AgentName"` → `"record AgentName"` |
+| `2df26dca` | decomp(#1619): cellforge mascot move-out (#1718) | `CellForgeMascotMoveOutRules.cs`, `CellForgeWidgetStateRules.cs` | the moved-file list and the widget-state table were re-pointed by hand |
+| `ddf17cb1` | refactor(#1844): enforce the dynamic-code ban via BannedApiAnalyzers (#1913) | `ReflectionConventionRule.cs` | the reflection probe read an empty surface; the rule fired on its own instrument |
+| `a9f77508` | perf(#1140): remove per-frame snapshots in SideBarView/ToastOverlay/BaseTuiRenderer | `PanelKeyRouteReachabilityRule.cs`, `OverlayKeyRouteClaimRule.cs` | an exemption row and a call site moved; both were re-pointed by hand |
+| `5f641d55` | decomp(#1615): Permissions subdomain extraction (#1658) | `FullLayerMatrixTests.cs`, `ModelRefSingleParserTests.cs`, `LayerDependencyTests.cs`, `ToolNameListRule.cs` | a new matrix row; an inventory entry that pointed at a file which had moved |
+| `10c4bf6a` | refactor(#1625): the configuration family leaves Harbor.Application | `FullLayerMatrixTests.cs`, `LayerDependencyTests.cs`, `EnforcerIntegrityTests.cs`, `ConfigSectionDocRules.cs` | a new assembly row in the matrix, in the allowed-edge set and in the doc claims |
+| `5eee093c` | refactor(#1889): split Harbor.TestKit into core + Ui parts (#1914) | `TestKitCompositionRules.cs`, `TestKitSharedCopyReasonRules.cs`, `ScanUniverseRule.cs` | the shared-copy reason table and the census string |
 
-The 8 guards with a `high` false-positive cost are the sharp end of
-that list: a reformat of a product file fires them, and a reformat is
-not a defect.
+The CI runs corroborate the same shape from the other side. The measurement window holds four
+firings of `ScanUniverseRule.BlindProjects_MatchTheMeasuredBaseline` whose expected string was
+`apps=2 | contrib=14 | samples=5 | tests=32 | tools=1` and then `tests=33`, `tests=34`,
+`tests=36` — runs 39117642149, 39365793623, 39380697456 and 39416159291. **The product graph did
+not change; the number of test projects did**, and the rule was red four times for that.
 
-## 5. What this document does NOT know
+Two more measured firings are the same shape in a different costume:
 
-**138 of the 160 guards have never fired.** The triage registry has a
-verdict for 22 of them, each decided from named firings. The other 138
-have no firing evidence, and their tier is a READING OF THEIR SOURCE,
-not a measurement. A guard that has never fired may still be tier A
-(the defect it exists for has not happened yet) and it may equally be
-tier C (it measures a shape nobody cared about). The JSON says which
-is which: a guard with an empty `evidence` array is unmeasured.
+- run 39405134739 (`refactor/remove-nickconsoleex`) — `TuiReadLineContractRules.RendererTrees_AllExist` read 5 where 6 was written down. A renderer left the product; the rule fired on the number.
+- run 39395794130 (`refactor/1844-banned-api-rule`) — `ReflectionConventionRule.The_Ban_File_Covers_Every_Public_Assembly_Load_Overload` reported an empty collection. The migration to the compiler emptied the reflection read; the rule fired on itself.
 
-**The verdict of a guard is not the verdict of its firings.** The
-triage registry decides per FIRING, because one rule can mean
-different things in different situations. This document decides per
-GUARD, which is coarser on purpose: the question here is which guard
-to keep, and the answer has to be one thing per guard.
+## The rules that could become semantic checks
 
-**Nothing here is enforced yet.** The file a future gate reads is
-`tests/Harbor.Architecture.Tests/rule-tiers.json`, and this document is
-its prose. A gate that reads the JSON and refuses a guard that has no
-tier, or a tier-C guard that fires, is the next step, and it is not
-this change.
+This is the preparation for #1724, and the JSON names the shape per rule
+(`semantic_kind`).
 
-**The count is measured on one tree.** The census was taken on
-`origin/dev` at the commit this document was written on. A guard added
-afterwards is not in the census, and the JSON is the list a gate reads,
-so a new guard shows up there as a gap rather than as a silent
-omission.
+| shape | what it means | rules |
+|---|---|---:|
+| `roslyn-analyzer` | the rule grades source **text** today; a Roslyn analyzer over the product tree decides the same question by **type**. This is the #1729 pilot shape | 73 |
+| `derived-value` | the instrument is bound to form: it compares a live measurement with a written-down number or list. The repair is to **derive** the value, so the check survives the change | 4 |
+| `il-probe` | the rule **already** decides by symbol (reflection over the loaded assembly, Mono.Cecil over the IL, or a Roslyn analyzer over the syntax tree). No conversion is needed -- this is the shape the others should move to | 43 |
+
+**120 rules** are in the semantic family — 77 to convert, 43 already there — and the estimate for
+the code that comes off the tree is **17 840 lines**, which is **16.1%** of the 110 834 lines in
+the architecture tree. The estimate is a projection: it is the mechanism (the file walk, the
+comment stripper, the regex matcher, the baseline subtraction, the planted controls) that a
+symbol-level question does not need, and the prose that states the rule stays. It is not
+measured, and it is marked as a projection in the JSON.
+
+The twelve largest candidates:
+
+| rule | lines in the file | estimated lines off | why it can move |
+|---|---:|---:|---|
+| `ApprovalGateWaiterRaceRules` | 1032 | 400 | the forbidden orderings are control-flow facts, not text shapes |
+| `KeyGateFamilyRules` | 1092 | 400 | the routed sites are call-graph facts; the 48-path table disappears |
+| `CellForgeEngineAtomicityRules` | 1306 | 350 | the forbidden interleavings are statement-level facts |
+| `HandRolledResultShapeTests` | 1081 | 350 | the hand-rolled Result shapes are expression facts |
+| `LegacyFlatTeaBranchRule` | 954 | 350 | the second branch is a type question |
+| `ProcessEnvIsolationRule` | 1777 | 350 | the serialisation attribute and the restore are symbol facts |
+| `TrimUnsafeReflectionRules` | 930 | 350 | the trim-unsafe calls are symbol facts |
+| `AgentStateContractRules` | 450 | 320 | the state member's nullability is a symbol fact |
+| `AvaloniaTextFileIoRules` | 827 | 300 | the forbidden calls are symbol facts |
+| `BuiltinAgentPickerProjectionRules` | 707 | 300 | the picker files are found by type, not by path |
+| `ChildProcessPipeDrainRules` | 1002 | 300 | the pipe hand-off is a call-graph fact |
+| `CostUnpricedBitRules` | 785 | 300 | the formatter arms are symbol facts |
+
+The last row is the proof that the conversion is not a theory: `UnguardedResultReadRules` has
+**already been converted once**, and what remains in the tree is the differential oracle that
+the analyzer is measured against. `HttpClientReuseRules` is the second one: since #2148 it asks
+the same two questions through the analyzer (`HARCH005` and `HARCH006`), and its text matcher
+survives as the oracle of the differential. That is the shape every conversion ends in.
+
+## What was not analysed, and why
+
+- **Only the architecture suite.** The other 47 test projects carry their own guards, and they
+  are not in this population. #1726 measured the architecture suite's firings; the other
+  projects' firings were not harvested.
+- **Only the test tree.** The build-time analyzers in `src/Harbor.Arch.Analyzers/` (HARCH001
+  dynamic code, HARCH003 unobserved task) are product-side rules. Only HARCH003 is graded from
+  here, by `UnobservedTaskRuleTests`.
+- **The python gates are a different population.** The 25 python scripts in `tools/` and the 27
+  compiled gates of `tools/bin/harbor-gates-linux-*`, and the gate jobs in the workflows, are a
+  separate guard set with a separate measurement; they are not in this census.
+- **The tier is per class; the measurement is per method.** Seven classes hold both a
+  defect-catcher and a noise-firing sub-rule (for example `ReflectionConventionRule` and
+  `TuiReadLineContractRules`). The class tier is the WORSE of the two, and the JSON names the
+  method where the measurement came from.
+- **Nothing here was run.** The tiers come from reading the rule source, from the measured
+  firings in [GUARD_VALUE_MEASUREMENT.md](GUARD_VALUE_MEASUREMENT.md), and from the repository's
+  own history. Local `dotnet` is forbidden in this environment, so no rule was re-executed and no
+  verdict here rests on a green or a red run of this tree.
+- **The "defect" column is a reading, not a verdict.** For the 35 rules the measurement covered,
+  the class is the measured one. For the rest, it is the audit's reading of what the rule grades,
+  and the evidence string in the JSON says so (`"measured: no firing in the window"`).
+
+## How the census is reproduced
+
+The census is a computation over the tree, not a list anyone maintains:
+
+```bash
+# the population: one entry per class with at least one [Test]
+grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1121 test attributes
+
+# the files and the lines of the tree
+ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 190 files
+cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 110834 lines
+
+# the classes, and the ones that carry a [Test]. A [Test] method belongs to
+# the type that encloses it, so the last declaration before it is its class.
+awk 'match($0, /^(public|internal|private|protected)[A-Za-z ]*(class|record|struct|interface|enum) [A-Za-z_][A-Za-z0-9_]*/) { n = split(substr($0, RSTART, RLENGTH), a, " "); if (a[n-1] == "class") c[a[n]] = 1; cur = a[n] } /^[ \t]*\[Test/ { if (cur != "") t[cur] = 1 } END { nc = 0; for (k in c) nc++; nt = 0; for (k in t) if (k in c) nt++; print "top-level classes:", nc; print "classes with a [Test]:", nt }' \
+    tests/Harbor.Architecture.Tests/*.cs
+# top-level classes: 249
+# classes with a [Test]: 172
+
+# the tiers
+python3 -c "import json;d=json.load(open('tests/Harbor.Architecture.Tests/rule-tiers.json'));print(d['tier_counts'])"
+# {'A': 50, 'B': 100, 'C': 10}
+```
+
+## Related
+
+- #1724, the epic this audit belongs to.
+- #1726, the measurement this audit leans on: [docs/GUARD_VALUE_MEASUREMENT.md](GUARD_VALUE_MEASUREMENT.md)
+  and [`tools/guard-triage-classes.json`](../tools/guard-triage-classes.json).
+- #1727, the Tier C removal. The ten Tier C rules below are its input.
+- #1729, the pilot that turned two text rules into Roslyn analyzers -- the shape the 74
+  `roslyn-analyzer` candidates would take.
+- [docs/ARCHITECTURE_LAYERS.md](ARCHITECTURE_LAYERS.md), the contract the rules enforce.
+- [tests/Harbor.Architecture.Tests/README.md](../tests/Harbor.Architecture.Tests/README.md), the
+  suite's own description of what it covers.

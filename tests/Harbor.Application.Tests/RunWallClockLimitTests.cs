@@ -158,7 +158,7 @@ public class RunWallClockLimitTests
         // deliberate split as the step budget (#1011): a limit reported as a
         // FAILURE would turn into `SessionStatus.Error` plus a "failed" note
         // in `SubAgentRunner`, i.e. a ceiling reported as a malfunction.
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         // One clock delta burned on turn 1, the boundary check trips before
         // turn 2 — exact on any machine, no wall-clock tolerance to tune.
@@ -197,7 +197,7 @@ public class RunWallClockLimitTests
 
         var result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Limit).IsEqualTo(RunLimitKind.MaxSteps);
         await Assert.That(end.Limit).IsNotEqualTo(RunLimitKind.Timeout);
@@ -218,12 +218,11 @@ public class RunWallClockLimitTests
         var agent = Agent(maxSteps: 50);
         var loop = Loop(client, counter, bus, agent, clock, TimeSpan.FromMinutes(10));
 
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        using var cts = TestCancellation.Cancelled();
 
         var result = await loop.RunAsync(NewSession(), agent, cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Cancelled).IsTrue();
         await Assert.That(end.Limit).IsNull();

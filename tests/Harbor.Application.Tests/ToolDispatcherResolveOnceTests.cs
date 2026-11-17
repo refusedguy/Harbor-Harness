@@ -237,7 +237,7 @@ public class ToolDispatcherResolveOnceTests
             NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None);
 
         await Assert.That(result.Results.Count).IsEqualTo(1);
-        await Assert.That(result.Results[0].IsError).IsTrue();
+        await Assert.That(result.Results[0]).HasFailed();
         await Assert.That(result.Results[0].Output).Contains("Unknown tool");
         await Assert.That(result.Results[0].Output).Contains("noop");
     }

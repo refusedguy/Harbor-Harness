@@ -4,7 +4,7 @@ namespace TUnitAnalyzerCanary;
 
 /// <summary>
 ///     The planted offences of the TUnit analyzer gate (#1836). This file is
-///     never RUN — it is COMPILED by tools/check-tunit-analyzer-gate.py, and
+///     never RUN — it is COMPILED by harbor-gates check-tunit-analyzer-gate, and
 ///     the tool asserts what the compiler says about the two methods below.
 /// </summary>
 /// <remarks>

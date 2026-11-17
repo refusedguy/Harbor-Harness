@@ -47,7 +47,7 @@ if [[ ${#SELECTED[@]} -gt 0 ]]; then
   TAPES=("${SELECTED[@]}")
 fi
 
-report() { python3 tools/demo_repro.py report --dir assets/demo; }
+report() { tools/bin/harbor-gates-linux-x64 demo-repro report --dir assets/demo; }
 
 if [[ "$CHECK_ONLY" == true ]]; then
   report
@@ -67,7 +67,7 @@ record() { # record <tape> <outdir>
     "demo/$tape.tape" > "$staged"
   echo "== recording demo/$tape.tape"
   vhs "$staged"
-  python3 tools/demo_repro.py normalize \
+  tools/bin/harbor-gates-linux-x64 demo-repro normalize \
     --input "$outdir/$tape-raw.gif" --output "$outdir/$tape.gif"
 }
 
@@ -78,7 +78,7 @@ if [[ "$TWICE" == true ]]; then
   for tape in "${TAPES[@]}"; do
     record "$tape" "$work/pass-A"
     record "$tape" "$work/pass-B"
-    if ! python3 tools/demo_repro.py compare \
+    if ! tools/bin/harbor-gates-linux-x64 demo-repro compare \
       --a "$work/pass-A/$tape.gif" --b "$work/pass-B/$tape.gif" --name "$tape"; then
       failed=1
     fi

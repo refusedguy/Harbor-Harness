@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Providers;
+using Harbor.TestKit;
 using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 using Microsoft.Extensions.Logging.Abstractions;
@@ -32,7 +33,7 @@ public class ProviderHealthCheckTests
 
         var result = await check.CheckAsync(ProviderId.TryCreate("test").Value);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.ModelsCount).IsEqualTo(2);
         await Assert.That(result.Value.LatencyMs).IsGreaterThanOrEqualTo(0);
     }
@@ -45,7 +46,7 @@ public class ProviderHealthCheckTests
 
         var result = await check.CheckAsync(ProviderId.TryCreate("ghost").Value);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("not registered");
     }
 
@@ -56,7 +57,7 @@ public class ProviderHealthCheckTests
 
         var result = await check.CheckAsync(ProviderId.TryCreate("empty").Value);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("no models");
     }
 
@@ -68,7 +69,7 @@ public class ProviderHealthCheckTests
 
         var result = await check.CheckAsync(ProviderId.TryCreate("locked").Value);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("key is invalid");
     }
 
@@ -80,7 +81,7 @@ public class ProviderHealthCheckTests
 
         var result = await check.CheckAsync(ProviderId.TryCreate("dnsfail").Value);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("Unknown host");
     }
 
@@ -96,7 +97,7 @@ public class ProviderHealthCheckTests
 
         var result = await check.CheckAsync(ProviderId.TryCreate("slow").Value);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("unreachable");
     }
 

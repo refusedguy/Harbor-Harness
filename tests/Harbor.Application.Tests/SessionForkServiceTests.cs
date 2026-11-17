@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
@@ -91,7 +92,7 @@ public class SessionForkServiceTests
 
         var result = await fork.ForkAsync(store, parent.Id);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var child = result.Value.Session;
         await Assert.That(child.ParentSessionId).IsEqualTo(parent.Id);
         await Assert.That(child.Metadata.MessageCount).IsEqualTo(0);
@@ -119,7 +120,7 @@ public class SessionForkServiceTests
 
         var result = await fork.ForkAsync(store, parent.Id, upToMessageId: msgIds[1]);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var copied = store.Messages[result.Value.Session.Id];
         await Assert.That(copied.Count).IsEqualTo(2);
         await Assert.That(copied[^1].Id).IsEqualTo(msgIds[1]);
@@ -136,7 +137,7 @@ public class SessionForkServiceTests
 
         var result = await fork.ForkAsync(store, parent.Id, upToMessageId: "no-such-id");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(store.Sessions.Count).IsEqualTo(sessionsBefore);
     }
 
@@ -147,7 +148,7 @@ public class SessionForkServiceTests
 
         var result = await new SessionForkService().ForkAsync(store, "absent");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("absent");
     }
 
@@ -160,7 +161,7 @@ public class SessionForkServiceTests
 
         var result = await fork.ForkAsync(store, parent.Id);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         // No half-forked orphan may survive: the shell was created, then rolled back.
         await Assert.That(store.DeletedIds.Count()).IsEqualTo(1);
         await Assert.That(store.Sessions.ContainsKey(store.DeletedIds[0])).IsFalse();

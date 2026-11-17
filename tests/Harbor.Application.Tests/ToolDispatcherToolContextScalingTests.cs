@@ -345,7 +345,7 @@ public class ToolDispatcherToolContextScalingTests
             CodeAgent(),
             CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
 
         List<ToolExecutionUpdateEvent> updates = [.. bus.Events.OfType<ToolExecutionUpdateEvent>()];
         await Assert.That(updates.Count).IsEqualTo(2)
@@ -386,7 +386,7 @@ public class ToolDispatcherToolContextScalingTests
             CodeAgent(),
             CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
 
         object? progressTarget = tool.Progress?.Target;
         object? askTarget = tool.Ask?.Target;
@@ -422,7 +422,7 @@ public class ToolDispatcherToolContextScalingTests
             CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(message.Results.Count).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsFalse()
+        await Assert.That(message.Results[0]).HasSucceeded()
             .Because("§FP-003: a progress publish failure is logged and swallowed, never thrown into the tool run");
 
         // The start and end events still flowed around the failed update.

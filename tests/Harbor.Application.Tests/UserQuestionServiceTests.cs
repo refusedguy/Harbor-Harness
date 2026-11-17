@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Interaction;
 using Harbor.Application.Interaction;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -81,8 +82,7 @@ public class UserQuestionServiceTests
             return UserQuestionOutcome.Aborted("cancelled");
         });
 
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        using var cts = TestCancellation.Cancelled();
 
         await Assert.That(async () => await service.AskAsync(Request(TimeSpan.FromSeconds(30)), cts.Token))
             .Throws<OperationCanceledException>();

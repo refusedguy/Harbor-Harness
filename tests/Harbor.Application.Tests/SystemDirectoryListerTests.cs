@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Filesystem;
 using Harbor.Application.Filesystem;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -36,7 +37,7 @@ public sealed class SystemDirectoryListerTests
 
             Result<DirectoryListing> result = await Lister().ListAsync(dir);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             var names = result.Value.Entries.Select(static e => e.Name).ToList();
             await Assert.That(names).Contains("sub");
             await Assert.That(names).Contains("a.txt");
@@ -99,7 +100,7 @@ public sealed class SystemDirectoryListerTests
         {
             Result<DirectoryListing> result = await Lister().ListAsync(dir);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Entries.Count).IsEqualTo(0);
             await Assert.That(result.Value.Truncated).IsFalse();
         }
@@ -119,7 +120,7 @@ public sealed class SystemDirectoryListerTests
 
         Result<DirectoryListing> result = await Lister().ListAsync(missing);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(string.IsNullOrWhiteSpace(result.Error)).IsFalse()
             .Because("a failure the panel cannot render is the one thing worse than a throw");
     }
@@ -208,8 +209,7 @@ public sealed class SystemDirectoryListerTests
         string dir = Sandbox();
         try
         {
-            using var cts = new CancellationTokenSource();
-            await cts.CancelAsync();
+            using var cts = TestCancellation.Cancelled();
 
             await Assert.That(async () => await Lister().ListAsync(dir, cts.Token))
                 .Throws<OperationCanceledException>();

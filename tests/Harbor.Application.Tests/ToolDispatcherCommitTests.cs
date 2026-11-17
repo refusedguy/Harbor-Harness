@@ -132,7 +132,7 @@ public class ToolDispatcherCommitTests
         var message = await run.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(tool.Executions).IsEqualTo(0);
         await Assert.That(message.Results.Count).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].Output).Contains("cancelled before start");
     }
 
@@ -150,7 +150,7 @@ public class ToolDispatcherCommitTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
     }
 
     [Test]
@@ -177,7 +177,7 @@ public class ToolDispatcherCommitTests
 
         var message = await run.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].Output).Contains("cancelled");
     }
 
@@ -188,8 +188,7 @@ public class ToolDispatcherCommitTests
         var permissions = new GatedPermissions(null, PermissionAction.Deny);
         var tool = new CountingTool();
         var dispatcher = NewDispatcher(permissions, tool, coordinator);
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = TestCancellation.Cancelled();
 
         var message = await dispatcher
             .ExecuteAsync([Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token)
@@ -197,7 +196,7 @@ public class ToolDispatcherCommitTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(0);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].Output).Contains("cancelled before start");
     }
 

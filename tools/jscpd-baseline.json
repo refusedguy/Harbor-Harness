@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generator": "tools/check-dup-jscpd.py",
+  "generator": "tools/bin/harbor-gates-linux-x64 check-dup-jscpd",
   "tool": {
     "name": "jscpd",
     "version": "5.4.1",

@@ -169,7 +169,12 @@ internal static class OpenAiResponsesMapper
                     break;
 
                 case JsonTokenType.PropertyName:
-                    string prop = reader.GetString() ?? string.Empty;
+                    // The name is matched against this mapper's own literal
+                    // table, so the dispatch costs NO string: the old path
+                    // allocated one per property per chunk, and a chunk is
+                    // what every token of every answer arrives as (see
+                    // Utf8JsonReaderExtensions.PropertyName).
+                    string prop = ChunkPropertyName(ref reader);
                     if (!reader.Read())
                         throw new JsonException("Truncated chunk: property without value.");
                     HandleValue(ref reader, depth, prop, inItem, inResponse, inUsage, inReasoningDetails,
@@ -196,6 +201,43 @@ internal static class OpenAiResponsesMapper
         OutputItemAdded,
         Completed,
     }
+
+    /// <summary>
+    ///     The name of the property the reader is on, as one of the literals
+    ///     this mapper dispatches on — or <see cref="string.Empty" /> for a
+    ///     name it does not know. The table is matched against the RAW bytes
+    ///     of the name, so the dispatch allocates nothing; the literals are
+    ///     interned, so the comparisons are the same ones the old path made.
+    /// </summary>
+    private static string ChunkPropertyName(ref Utf8JsonReader reader)
+    {
+        string? known = MatchChunkProperty(reader.ValueSpan);
+        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
+    }
+
+    /// <summary>
+    ///     The property names this mapper dispatches on. The table is
+    ///     EXHAUSTIVE over the literals <see cref="HandleValue" /> compares
+    ///     against — a name missing from it would stop being dispatched on,
+    ///     which is why the parity test pins the whole set.
+    /// </summary>
+    private static string? MatchChunkProperty(ReadOnlySpan<byte> raw) => raw switch
+    {
+        // Ordered by how often a chunk carries them, not alphabetically.
+        var x when x.SequenceEqual("type"u8) => "type",
+        var x when x.SequenceEqual("delta"u8) => "delta",
+        var x when x.SequenceEqual("item"u8) => "item",
+        var x when x.SequenceEqual("response"u8) => "response",
+        var x when x.SequenceEqual("output_index"u8) => "output_index",
+        var x when x.SequenceEqual("usage"u8) => "usage",
+        var x when x.SequenceEqual("name"u8) => "name",
+        var x when x.SequenceEqual("call_id"u8) => "call_id",
+        var x when x.SequenceEqual("input_tokens"u8) => "input_tokens",
+        var x when x.SequenceEqual("output_tokens"u8) => "output_tokens",
+        var x when x.SequenceEqual("output_tokens_details"u8) => "output_tokens_details",
+        var x when x.SequenceEqual("reasoning_tokens"u8) => "reasoning_tokens",
+        _ => null
+    };
 
     private static void HandleValue(
         ref Utf8JsonReader reader, int depth, string prop, bool inItem, bool inResponse, bool inUsage, bool inReasoningDetails,

@@ -43,12 +43,11 @@ public class AgentLoopLifecycleTests
         var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        using var cts = TestCancellation.Cancelled();
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll(), cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -74,7 +73,7 @@ public class AgentLoopLifecycleTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(1);
         await Assert.That(System.Linq.Enumerable.Count(session.Messages.OfType<ToolResultMessage>())).IsEqualTo(1);
     }
@@ -102,11 +101,11 @@ public class AgentLoopLifecycleTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(0);
         var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
         await Assert.That(toolResults.Count).IsEqualTo(1);
-        await Assert.That(toolResults[0].Results.Single().IsError).IsTrue();
+        await Assert.That(toolResults[0].Results.Single()).HasFailed();
     }
 
     [Test]
@@ -132,7 +131,7 @@ public class AgentLoopLifecycleTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(0);
         var toolCalls = session.Messages.OfType<AssistantMessage>().SelectMany(m => m.Parts.OfType<ToolCallPart>()).ToList();
         await Assert.That(toolCalls.Count).IsEqualTo(1);
@@ -141,7 +140,7 @@ public class AgentLoopLifecycleTests
         await Assert.That(toolCalls[0].Args.GetRawText()).IsEqualTo("{}");
         var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
         await Assert.That(toolResults.Count).IsEqualTo(1);
-        await Assert.That(toolResults[0].Results.Single().IsError).IsTrue();
+        await Assert.That(toolResults[0].Results.Single()).HasFailed();
         await Assert.That(toolResults[0].Results.Single().ToolCallId).IsEqualTo("call-1");
     }
 
@@ -170,7 +169,7 @@ public class AgentLoopLifecycleTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(0);
         var toolCalls = session.Messages.OfType<AssistantMessage>().SelectMany(m => m.Parts.OfType<ToolCallPart>()).ToList();
         await Assert.That(toolCalls.Count).IsEqualTo(2);
@@ -184,7 +183,7 @@ public class AgentLoopLifecycleTests
         await Assert.That(toolResults[0].Results.Count).IsEqualTo(2);
         for (int i = 0; i < toolResults[0].Results.Count; i++)
         {
-            await Assert.That(toolResults[0].Results[i].IsError).IsTrue();
+            await Assert.That(toolResults[0].Results[i]).HasFailed();
         }
     }
 
@@ -213,7 +212,7 @@ public class AgentLoopLifecycleTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(1);
         await Assert.That(counter.ExecutedArgs.Single()).IsEqualTo("""{"n":7}""");
         var toolCalls = session.Messages.OfType<AssistantMessage>().SelectMany(m => m.Parts.OfType<ToolCallPart>()).ToList();
@@ -226,7 +225,7 @@ public class AgentLoopLifecycleTests
         var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
         await Assert.That(toolResults.Count).IsEqualTo(1);
         await Assert.That(toolResults[0].Results.Count).IsEqualTo(2);
-        await Assert.That(toolResults[0].Results.Single(r => r.ToolCallId == "call-2").IsError).IsTrue();
+        await Assert.That(toolResults[0].Results.Single(r => r.ToolCallId == "call-2")).HasFailed();
     }
 
     [Test]
@@ -267,12 +266,12 @@ public class AgentLoopLifecycleTests
 
             var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(counter.Executions).IsEqualTo(0);
             var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
             await Assert.That(toolResults.Count).IsEqualTo(1);
             var entry = toolResults[0].Results.Single(r => r.ToolCallId == "call-1");
-            await Assert.That(entry.IsError).IsTrue();
+            await Assert.That(entry).HasFailed();
             string expectedTail = payload.Substring(payload.Length - tailLength);
             await Assert.That(entry.Output.EndsWith(expectedTail)).IsTrue();
             await Assert.That(entry.Output.Length).IsLessThan(payload.Length);
@@ -299,7 +298,7 @@ public class AgentLoopLifecycleTests
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(compaction.Calls).IsEqualTo(1);
         await Assert.That(client.Requests.Count).IsEqualTo(1);
         await Assert.That(client.Requests[0].Messages.Count).IsLessThan(seed.Count);
@@ -329,7 +328,7 @@ public class AgentLoopLifecycleTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var steeredContents = session.Messages.OfType<UserMessage>().Select(m => m.Content).ToList();
         for (int i = 0; i < 5; i++)
         {
@@ -367,7 +366,7 @@ public class DefaultAgentConcurrencyTests
 
             var second = await agent.PromptAsync(TestMessages.User("second", sessionId: session.Id, agent: "user"));
 
-            await Assert.That(second.IsFailure).IsTrue();
+            await Assert.That(second).IsFailed();
             string error = second.Error;
             await Assert.That(
                     error.Contains("running", StringComparison.OrdinalIgnoreCase) ||
@@ -377,7 +376,7 @@ public class DefaultAgentConcurrencyTests
             gate.TrySetResult();
             var firstResult = await first;
 
-            await Assert.That(firstResult.IsSuccess).IsTrue();
+            await Assert.That(firstResult).IsSuccessful();
             await Assert.That(fakeLoop.Runs).IsEqualTo(1);
         }
         finally

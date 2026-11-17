@@ -961,7 +961,7 @@ The reasons, in the order they decided it:
    keep in sync, and no dependabot conflict that is not already a conflict
    on the props file. That is the follow-up, and it is not this change.
 
-**The gate that keeps the decision honest** is `tools/check-test-packages.py`
+**The gate that keeps the decision honest** is `harbor-gates check-test-packages`
 (the `test-packages` CI job). It reports the states the tree must never be
 in:
 

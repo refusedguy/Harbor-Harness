@@ -71,7 +71,7 @@ public class SteeringCrossSessionTests
 
         var result = await loop.RunAsync(session, agentDef);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(session.Messages.OfType<UserMessage>().Any(m => m.Content == "foreign injection")).IsFalse();
     }
 
@@ -119,7 +119,7 @@ public class SteeringCrossSessionTests
 
         var result = await loop.RunAsync(session, agentDef);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var steered = session.Messages.OfType<UserMessage>().Select(m => m.Content).ToList();
         await Assert.That(steered).Contains("own steer");
         await Assert.That(steered).DoesNotContain("foreign");
@@ -160,7 +160,7 @@ public class SteeringCrossSessionTests
 
             var run = await agent.PromptAsync("go");
 
-            await Assert.That(run.IsSuccess).IsTrue();
+            await Assert.That(run).IsSuccessful();
             var contents = store.MessagesOf(sessionA.Id).OfType<UserMessage>().Select(m => m.Content).ToList();
             await Assert.That(contents).Contains("go");
             await Assert.That(contents).DoesNotContain("stale for A");

@@ -65,7 +65,7 @@ public class AbortSelfHealTests
         try
         {
             var first = await agent.PromptAsync("first");
-            await Assert.That(first.IsSuccess).IsTrue();
+            await Assert.That(first).IsSuccessful();
 
             // Exactly what RequestDispatcher.HandleAbortAgent / InProcessHarborClient
             // .AbortAgentAsync do — no ResetAbortSource anywhere nearby.
@@ -73,7 +73,7 @@ public class AbortSelfHealTests
 
             var second = await agent.PromptAsync("second");
 
-            await Assert.That(second.IsSuccess).IsTrue();
+            await Assert.That(second).IsSuccessful();
             await Assert.That(loop.Runs).IsEqualTo(2);
             await Assert.That(agent.AbortToken.IsCancellationRequested).IsFalse();
         }
@@ -90,7 +90,7 @@ public class AbortSelfHealTests
         try
         {
             var run = await agent.PromptAsync("prime");
-            await Assert.That(run.IsSuccess).IsTrue();
+            await Assert.That(run).IsSuccessful();
             agent.RequestAbort();
 
             // F2: N racing resets must not double-dispose or strand sources.
@@ -98,7 +98,7 @@ public class AbortSelfHealTests
                 .Select(_ => Task.Run(() => agent.ResetAbortSource())));
 
             var next = await agent.PromptAsync("after-races");
-            await Assert.That(next.IsSuccess).IsTrue();
+            await Assert.That(next).IsSuccessful();
             await Assert.That(agent.AbortToken.IsCancellationRequested).IsFalse();
         }
         finally

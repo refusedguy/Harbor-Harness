@@ -2,6 +2,7 @@ using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Filesystem;
 using Harbor.Application.Filesystem;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -51,8 +52,8 @@ public sealed class SystemTextFileStoreTests
             Result written = await store.WriteAsync(path, "hello\nworld");
             Result<string> read = await store.ReadAsync(path);
 
-            await Assert.That(written.IsSuccess).IsTrue();
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(written).IsSuccessful();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value).IsEqualTo("hello\nworld");
         }
         finally
@@ -101,7 +102,7 @@ public sealed class SystemTextFileStoreTests
             Result written = await store.WriteAsync(path, "// new");
             Result<bool> present = await store.ExistsAsync(path);
 
-            await Assert.That(written.IsSuccess).IsTrue();
+            await Assert.That(written).IsSuccessful();
             await Assert.That(present.Value).IsTrue();
         }
         finally
@@ -174,7 +175,7 @@ public sealed class SystemTextFileStoreTests
 
             Result<string> read = await Store().ReadAsync(path);
 
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value).IsEqualTo("content");
         }
         finally
@@ -193,7 +194,7 @@ public sealed class SystemTextFileStoreTests
         {
             Result<string> read = await Store().ReadAsync(Path.Combine(dir, "absent.txt"));
 
-            await Assert.That(read.IsFailure).IsTrue();
+            await Assert.That(read).IsFailed();
         }
         finally
         {
@@ -209,7 +210,7 @@ public sealed class SystemTextFileStoreTests
         {
             Result<bool> present = await Store().ExistsAsync(Path.Combine(dir, "absent.txt"));
 
-            await Assert.That(present.IsSuccess).IsTrue();
+            await Assert.That(present).IsSuccessful();
             await Assert.That(present.Value).IsFalse();
         }
         finally
@@ -231,7 +232,7 @@ public sealed class SystemTextFileStoreTests
         {
             Result<bool> present = await Store().ExistsAsync(Path.Combine(dir, "with\0nul", "x.txt"));
 
-            await Assert.That(present.IsFailure).IsTrue()
+            await Assert.That(present).IsFailed()
                 .Because(
                     "a malformed path must come back as a FAILED result, not as `false`. `File.Exists` "
                     + "answers false for it, and inheriting that behaviour is exactly what the contract "
@@ -254,7 +255,7 @@ public sealed class SystemTextFileStoreTests
         {
             Result<string> read = await Store().ReadAsync(dir);
 
-            await Assert.That(read.IsFailure).IsTrue();
+            await Assert.That(read).IsFailed();
         }
         finally
         {
@@ -270,7 +271,7 @@ public sealed class SystemTextFileStoreTests
         {
             Result written = await Store().WriteAsync(Path.Combine(dir, "no-such-dir", "x.txt"), "c");
 
-            await Assert.That(written.IsFailure).IsTrue();
+            await Assert.That(written).IsFailed();
         }
         finally
         {
@@ -321,7 +322,7 @@ public sealed class SystemTextFileStoreTests
 
             Result written = await Store().WriteAsync(path, "y");
 
-            await Assert.That(written.IsFailure).IsTrue();
+            await Assert.That(written).IsFailed();
         }
         finally
         {
@@ -347,11 +348,11 @@ public sealed class SystemTextFileStoreTests
         Result<bool> absent = await store.ExistsAsync("/virtual/nope.cs");
         Result<string> missing = await store.ReadAsync("/virtual/nope.cs");
 
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
         await Assert.That(read.Value).IsEqualTo("class A { }");
         await Assert.That(present.Value).IsTrue();
         await Assert.That(absent.Value).IsFalse();
-        await Assert.That(missing.IsFailure).IsTrue();
+        await Assert.That(missing).IsFailed();
     }
 
     /// <summary>A fake, and the thing a test of the view-model now uses instead of a temp file.</summary>
