@@ -82,6 +82,7 @@ public class FilterListTests
         var list = List();
         list.SetQuery("cs"); // matches "clear session" at positions 0 and 6
         int row = IndexOf(list, "clear session");
+        await Assert.That(row).IsGreaterThan(-1);
 
         int count, first, second;
         {
@@ -229,6 +230,7 @@ public class FilterListTests
         await Assert.That(buffer.Get(22, 0).Rune).IsEqualTo((int)firstPreviewLine[0]);
     }
 
+    /// <summary>Index of <paramref name="value"/> in ranked results, or -1 when absent.</summary>
     private static int IndexOf(FilterList<string> list, string value)
     {
         for (int i = 0; i < list.Count; i++)
@@ -239,7 +241,7 @@ public class FilterListTests
             }
         }
 
-        throw new InvalidOperationException("item not in results: " + value);
+        return -1;
     }
 
     private static int FindPlain(string text, Span<int> matches, int count)
