@@ -1547,8 +1547,8 @@ public sealed class PanelKeyRouteReachabilityRule
         // second, parallel one. `FromStrippedText` takes the source as it
         // already is: these fixtures carry no comments, and the tree's files
         // arrive comment-stripped from the snapshot.
-        var wired = PanelKeyRouteProbe.Scan([SourceTreeFile.FromStrippedText("SyntheticRouter.cs", Wired)]);
-        var orphan = PanelKeyRouteProbe.Scan([SourceTreeFile.FromStrippedText("SyntheticRouter.cs", Orphan)]);
+        var wired = PanelKeyRouteProbe.Scan([SourceTreeFile.FromStrippedText("SyntheticRouter.cs", Wired)], TypeScanStrategy.PerLine);
+        var orphan = PanelKeyRouteProbe.Scan([SourceTreeFile.FromStrippedText("SyntheticRouter.cs", Orphan)], TypeScanStrategy.PerLine);
 
         await Assert.That(wired.HandOffs.Count).IsEqualTo(1).Because(
             "the control source declares one hand-off (`_consumer.OnKey(in key)`), and the scan "
