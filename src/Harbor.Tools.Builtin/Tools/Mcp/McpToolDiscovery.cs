@@ -61,7 +61,12 @@ internal static class McpToolDiscovery
                 continue;
             }
 
-            if (listed.IsFailure)
+            string payloadText;
+            if (listed.IsSuccess)
+            {
+                payloadText = listed.Value;
+            }
+            else
             {
                 logger?.LogWarning("Cannot list tools of MCP server '{Server}': {Error}; skipping its tools", server, listed.Error);
                 continue;
@@ -70,7 +75,7 @@ internal static class McpToolDiscovery
             JsonDocument payload;
             try
             {
-                payload = JsonDocument.Parse(listed.Value);
+                payload = JsonDocument.Parse(payloadText);
             }
             catch (JsonException)
             {
