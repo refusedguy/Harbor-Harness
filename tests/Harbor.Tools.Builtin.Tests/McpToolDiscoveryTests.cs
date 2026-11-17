@@ -1,11 +1,13 @@
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Tools;
+using Harbor.TestKit;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
