@@ -1,0 +1,620 @@
+{
+  "_comment": [
+    "THE single source of the `selftest` job's self-test steps (issue #2205).",
+    "",
+    "The `selftest` job of .github/workflows/docs.yml used to be a list that",
+    "every new gate appended to at ONE point. Two agents adding two gates",
+    "collided there on every merge (32 conflict episodes in one night). The",
+    "steps below are now the source; tools/ci-selftests.py generates the",
+    "list between the markers in docs.yml from them.",
+    "",
+    "Each entry keeps the comment that says WHAT the self-test proves next",
+    "to the step it describes (the prose moves into DATA, not into code).",
+    "The `key` is stable and unique; it is not a display name. To add a",
+    "self-test, append one entry here and run `python3 tools/ci-selftests.py",
+    "--write`, then commit both files. The gate (the same tool without the",
+    "flag) fails when the committed list says anything else."
+  ],
+  "version": 1,
+  "steps": [
+    {
+      "key": "check-md-links",
+      "name": "Link checker fails on a broken link",
+      "run": "tools/bin/harbor-gates-linux-x64 check-md-links --self-test",
+      "comment": []
+    },
+    {
+      "key": "md-lint",
+      "name": "Markdown lint fails on a malformed document",
+      "run": "tools/bin/harbor-gates-linux-x64 md-lint --self-test",
+      "comment": [
+        "      # The changelog assembler glues the per-pull-request fragments into",
+        "      # CHANGELOG.md. Its failure path is tested here for the same reason as",
+        "      # the others: a script edited until it assembles nothing is",
+        "      # indistinguishable from a script that assembles nothing."
+      ]
+    },
+    {
+      "key": "changelog-assemble",
+      "name": "Changelog assembler fails on a diverged CHANGELOG.md",
+      "run": "tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test",
+      "comment": [
+        "      # #664. The third gate is the only one that asks whether a `file:line`",
+        "      # in a normative document still points at a line, and whether a backticked",
+        "      # type is constructed by anything. Its failure path is tested here for",
+        "      # the same reason the other two are: a rule edited until it matches",
+        "      # nothing is indistinguishable from a rule that found nothing."
+      ]
+    },
+    {
+      "key": "check-doc-cites",
+      "name": "Citation checker fails on a stale file:line and an unwired type",
+      "run": "python3 tools/check-doc-cites.py --self-test",
+      "comment": [
+        "      # #1728. The eleventh gate is the only one that asks whether an",
+        "      # architecture rule may anchor on a line number AT ALL. Its failure path",
+        "      # is tested here for the same reason as the others: a rule edited until it",
+        "      # matches nothing is indistinguishable from a rule that found nothing."
+      ]
+    },
+    {
+      "key": "check-arch-anchors",
+      "name": "Architecture-anchor gate fails on a planted line-number anchor",
+      "run": "tools/bin/harbor-gates-linux-x64 check-arch-anchors --self-test",
+      "comment": [
+        "      # #933. The fourth gate is the only one that asks whether a COUNT the",
+        "      # onboarding documents state still equals the count of tracked files.",
+        "      # Its failure path is tested for the same reason as the other three: the",
+        "      # fixtures here include the two shapes that made a draft of this gate",
+        "      # wrong — a rule compared against the wrong population (green on a",
+        "      # number that is not the one in the document) and a rule whose capture",
+        "      # group was edited away (reported BLIND, the one verdict CI passes)."
+      ]
+    },
+    {
+      "key": "check-doc-facts",
+      "name": "Repo-map counter fails on a stale count and detects its own blindness",
+      "run": "tools/bin/harbor-gates-linux-x64 check-doc-facts --self-test",
+      "comment": [
+        "      # #428. The fifth gate is the only one that reads a `.csproj`, and the only",
+        "      # one that asks about a package rather than about a document: is every",
+        "      # PackageReference a guarded project declares load-bearing, and is every",
+        "      # non-BCL namespace its sources use declared. Its self-test carries fifteen",
+        "      # fixtures and six of them pin bugs this tool had while being written, so",
+        "      # its failure path is as much the point as its passing path. Every fixture",
+        "      # added after the first version was checked by mutation: it fails when its",
+        "      # own fix is reverted and the rest still pass. Two candidate mutations were",
+        "      # tried and found NOT reachable by any fixture, and the tool's comments say",
+        "      # so rather than implying coverage that is not there."
+      ]
+    },
+    {
+      "key": "check-abstractions-contract",
+      "name": "Guarded-project dependency gate fails on a phantom package",
+      "run": "tools/bin/harbor-gates-linux-x64 check-abstractions-contract --self-test",
+      "comment": [
+        "      # #431 (slice D3). The sixth gate is the only one that asks whether a",
+        "      # public member of the frozen contract assembly carries an XML doc (or",
+        "      # an explicit suppression with a reason). Its self-test carries fixtures",
+        "      # for every shape that made a draft of this gate wrong — a `record",
+        "      # struct` named \"struct\", a `= new(...)` tail donating the name \"new\",",
+        "      # parameter continuations named \"1\"/\"default\" — and the load-bearing",
+        "      # non-vacuity proof: one undocumented member fails, naming it."
+      ]
+    },
+    {
+      "key": "check-xml-doc-coverage",
+      "name": "XML-doc coverage gate fails on an undocumented member",
+      "run": "tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --self-test",
+      "comment": [
+        "      # #428 / #1845. The public-API freeze used to be a python text scan",
+        "      # with its own --self-test here. The scan is gone: the freeze is a",
+        "      # COMPILE-time gate now (Microsoft.CodeAnalysis.PublicApiAnalyzers,",
+        "      # RS0016/RS0017), and its non-vacuity proof is a CI job that builds a",
+        "      # throwaway project against the real analyzer — see",
+        "      # tools/public-api-nonvacuity.sh and the ci.yml `public-api` job.",
+        "      #",
+        "      # What is left in python is the re-signing half — the rule that a",
+        "      # change to the frozen surface is re-signed in the SAME COMMIT — which",
+        "      # the compiler cannot see because it sees one tree, not a history. Its",
+        "      # self-test is here, with the other gates that have one."
+      ]
+    },
+    {
+      "key": "check-public-api-resign",
+      "name": "Re-signing gate fails on an unreviewed change",
+      "run": "tools/bin/harbor-gates-linux-x64 check-public-api-resign --self-test",
+      "comment": [
+        "      # #1778. The eighth gate is the only one that reads the TEST tree, and",
+        "      # the only one that asks whether a test body is a copy of another test",
+        "      # body. Its failure path is tested here for the same reason as the",
+        "      # others: a rule edited until it matches nothing is indistinguishable",
+        "      # from a rule that found nothing, and the load-bearing fixture is the",
+        "      # planted duplicate — the gate MUST fail on it, and MUST stay quiet on",
+        "      # a same-shape body that shares no identifiers with it."
+      ]
+    },
+    {
+      "key": "check-local-merge-loss",
+      "name": "Merge-loss checker reports a dropped line",
+      "run": "tools/bin/harbor-gates-linux-x64 check-local-merge-loss --self-test",
+      "comment": [
+        "      # The changelog assembler is a RELEASE-time tool, not a gate on the",
+        "      # pull-request path: the fragments are glued into the [Unreleased] section",
+        "      # when the release is cut, so a pull request never edits CHANGELOG.md",
+        "      # itself. Its self-test runs here for the same reason every other gate's",
+        "      # does — a tool that quietly stopped noticing a diverged CHANGELOG.md is",
+        "      # indistinguishable from one that found nothing."
+      ]
+    },
+    {
+      "key": "changelog-assemble-2",
+      "name": "Changelog assembler fails on a diverged changelog",
+      "run": "tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test",
+      "comment": [
+        "      # #1778. The eighth gate is the only one that reads the TEST tree, and",
+        "      # the only one that asks whether a test body is a copy of another test"
+      ]
+    },
+    {
+      "key": "check-test-dup",
+      "name": "Duplicate-test-body gate fails on a planted duplicate",
+      "run": "tools/bin/harbor-gates-linux-x64 check-test-dup --self-test",
+      "comment": [
+        "      # #1847. The second duplication detector, the one that scans the",
+        "      # PRODUCT code and the duplication that is not a method body. Its",
+        "      # failure path is tested for the same reason as the others, and its",
+        "      # load-bearing fixture is the EMPTY scan: a scan that analysed nothing",
+        "      # must not be green, because a gate that measured nothing protects",
+        "      # nothing. The second fixture is the growth: a tree that duplicated",
+        "      # more than the baseline allows must fail."
+      ]
+    },
+    {
+      "key": "check-dup-jscpd",
+      "name": "Second duplication gate fails on an empty scan and on growth",
+      "run": "tools/bin/harbor-gates-linux-x64 check-dup-jscpd --self-test",
+      "comment": [
+        "      # #1823. The ninth gate is the only one that asks whether a test",
+        "      # project is claimed by a CI list AT ALL. The other gates read the",
+        "      # contents of the test tree; this one reads the lists that decide",
+        "      # which projects run, and the answer is a property of the workflow",
+        "      # files rather than of a test body. Its self-test carries the",
+        "      # load-bearing fixtures: a project left out of every list, a stale",
+        "      # list entry, a project claimed only behind a condition, and a",
+        "      # baseline row that no longer matches anything."
+      ]
+    },
+    {
+      "key": "check-test-projects",
+      "name": "Test-project completeness gate fails on a project left out of CI",
+      "run": "tools/bin/harbor-gates-linux-x64 check-test-projects --self-test",
+      "comment": [
+        "      # #1884. The last two are REPORTERS, not gates: they read the TRX",
+        "      # artifacts a CI run produced and print what they find (the per-test",
+        "      # measurements, the per-project wall census). They never fail a build,",
+        "      # which is exactly why their self-tests belong here: a reporter that",
+        "      # quietly stops reporting is green on every run and tells nobody",
+        "      # anything, and that is the same failure shape the gates above are",
+        "      # tested against. The census's self-test carries the load-bearing",
+        "      # fixture: a test that printed NOTHING is still counted, which is the",
+        "      # difference between a census and a measurement table."
+      ]
+    },
+    {
+      "key": "test-measurements",
+      "name": "Measurement reporter still finds the tests that printed something",
+      "run": "tools/bin/harbor-gates-linux-x64 test-measurements --self-test",
+      "comment": []
+    },
+    {
+      "key": "test-census",
+      "name": "Test census counts every test, printed or not",
+      "run": "tools/bin/harbor-gates-linux-x64 test-census --self-test",
+      "comment": [
+        "      # #1726. The third REPORTER: it reads what a CI run produced (a TRX or",
+        "      # a job log) and writes down what each guard firing MEANT - a defect, a",
+        "      # style rule, or noise on code the repository allows. Its failure path",
+        "      # is tested here for the same reason as the two above: a reporter that",
+        "      # stops reading a failure is green on every run and reports nothing, and",
+        "      # a reporter that GUESSES a class is worse than one that says",
+        "      # \"unknown\". The load-bearing fixtures are both: a failure it must",
+        "      # find, and a firing it must refuse to classify."
+      ]
+    },
+    {
+      "key": "guard-triage",
+      "name": "Guard triage finds a failure and refuses to guess its class",
+      "run": "tools/bin/harbor-gates-linux-x64 guard-triage --self-test",
+      "comment": [
+        "      # #1822. The tenth gate is the only one that asks whether a test",
+        "      # serializes through the SOURCE-GENERATED path or the reflection one.",
+        "      # Its failure path is tested here for the same reason as the others: a",
+        "      # rule edited until it matches nothing is indistinguishable from a rule",
+        "      # that found nothing, and the load-bearing fixture is the planted",
+        "      # reflection call — the gate MUST fail on it."
+      ]
+    },
+    {
+      "key": "check-test-json-reflection",
+      "name": "Reflection-JSON gate fails on a planted reflection call",
+      "run": "tools/bin/harbor-gates-linux-x64 check-test-json-reflection --self-test",
+      "comment": [
+        "      # #1888. The policy checker's failure path. It plants one defect per",
+        "      # rule in a synthetic tree and asserts that the rule fires, and that",
+        "      # the same tree without the defect is clean. A rule that cannot fire",
+        "      # is indistinguishable from a rule that found nothing, which is the",
+        "      # shape every other gate in this job is tested against."
+      ]
+    },
+    {
+      "key": "check-gate-policy",
+      "name": "Gate-policy checker fails on a planted divergence",
+      "run": "python3 tools/check-gate-policy.py --self-test",
+      "comment": [
+        "      # The changelog assembler owns CHANGELOG.md, and every pull request owns",
+        "      # a fragment instead. Its self-test proves it still notices a diverged",
+        "      # file and still glues a fragment: a PR that edits the assembler must",
+        "      # run it, or the edit lands unvalidated."
+      ]
+    },
+    {
+      "key": "changelog-assemble-3",
+      "name": "Changelog assembler glues a fragment and notices a diverged file",
+      "run": "tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test",
+      "comment": [
+        "      # #1888. The three tools whose self-test no workflow ran. The policy",
+        "      # says every gate and every reporter proves its own failure path in",
+        "      # CI, and these three had a self-test that nothing called — a",
+        "      # self-test nobody reads. The pack validator's self-test is offline",
+        "      # (it builds its own fixture package), and the two reporters' and the",
+        "      # helper's self-tests are offline too, so all three cost about a",
+        "      # second."
+      ]
+    },
+    {
+      "key": "pack-validate",
+      "name": "Pack validator still fails on a package without its metadata",
+      "run": "tools/bin/harbor-gates-linux-x64 pack-validate --selftest",
+      "comment": [
+        "      # #1795. The third reporter: the SKIPPED tests of a run, with the reason",
+        "      # each one declared. Same argument as the two above — a reporter that",
+        "      # stops reporting is green on every run and tells nobody anything. Its",
+        "      # self-test carries the two shapes that matter: a skip WITH a reason",
+        "      # (the reason must survive, marker stripped) and a skip WITHOUT one",
+        "      # (the report must say so instead of inventing a reason)."
+      ]
+    },
+    {
+      "key": "test-skips",
+      "name": "Skip reporter still finds a skipped test",
+      "run": "tools/bin/harbor-gates-linux-x64 test-skips TestResults --self-test",
+      "comment": []
+    },
+    {
+      "key": "normalize-mtimes",
+      "name": "Mtime normaliser still tells a changed file from an unchanged one",
+      "run": "tools/bin/harbor-gates-linux-x64 normalize-mtimes --self-test",
+      "comment": [
+        "      # #1558. The chain census. Its failure path is tested here for the same",
+        "      # reason as the others: a scanner edited until it matches nothing is",
+        "      # indistinguishable from a scanner that found nothing. The load-bearing",
+        "      # fixtures are the five shapes the census tells apart (a chain",
+        "      # candidate, a terminal guard, a side-effect guard, a guard that does",
+        "      # not return a Result, and the one shape the rewrite applies to), and",
+        "      # the rewrite itself — the census MUST produce the Bind call it says",
+        "      # it produces."
+      ]
+    },
+    {
+      "key": "check-result-chains",
+      "name": "Chain census finds every planted guard shape and rewrites the one it promises",
+      "run": "tools/bin/harbor-gates-linux-x64 check-result-chains --self-test",
+      "comment": [
+        "      # #1575. The string-switch gate is the only one that asks whether the",
+        "      # product dispatches on a string literal with a `case` ladder. Its",
+        "      # failure path is tested here for the same reason as the others: a rule",
+        "      # edited until it matches nothing is indistinguishable from a rule that",
+        "      # found nothing, and the load-bearing fixtures are the planted string",
+        "      # switch, the unlisted switch, the stale row and the floor."
+      ]
+    },
+    {
+      "key": "check-string-switch",
+      "name": "String-switch gate fails on an unlisted string switch",
+      "run": "tools/bin/harbor-gates-linux-x64 check-string-switch --self-test",
+      "comment": [
+        "      # #1731. The seam-graph gate is the only one that GENERATES a document",
+        "      # and then compares it with the committed one. Its failure path is the",
+        "      # whole point: a generator whose output drifts from the tree is a",
+        "      # generator that has stopped reading the tree, and the committed",
+        "      # document is then a hand-maintained document wearing a generated one's",
+        "      # name. The self-test plants a stale file and requires the check to",
+        "      # fail, and separately requires the route grader to tell a registering",
+        "      # route from a refusing one."
+      ]
+    },
+    {
+      "key": "gen-seam-graph",
+      "name": "Seam-graph gate fails on a stale document",
+      "run": "tools/bin/harbor-gates-linux-x64 gen-seam-graph --self-test",
+      "comment": [
+        "      # #1781. The shard-balance gate is the only one that asks whether the CI",
+        "      # TEST SHARDS are laid out by cost. Its failure path is tested here for",
+        "      # the same reason as the others: a rule edited until it matches nothing",
+        "      # is indistinguishable from a rule that found nothing. The load-bearing",
+        "      # fixture is the RUNAWAY SHARD — one project's cost blown up so that the",
+        "      # shards are 20x apart — and the gate MUST fail on it."
+      ]
+    },
+    {
+      "key": "check-shard-balance",
+      "name": "Shard-balance gate fails on a runaway shard",
+      "run": "tools/bin/harbor-gates-linux-x64 check-shard-balance --self-test",
+      "comment": [
+        "      # #1753. The coverage tools. The reporter reads the cobertura files",
+        "      # the nightly lane produced and prints the per-file tables; the gate",
+        "      # compares the registry of accepted holes against the measurement, in",
+        "      # both directions. Their failure paths are tested here for the same",
+        "      # reason as the others: a reader edited until it matches nothing is",
+        "      # indistinguishable from a reader that found nothing. The load-bearing",
+        "      # fixtures are the three states a file can be in — covered, a hole,",
+        "      # and a file with no code to cover — and the two defects the gate",
+        "      # exists for: a file that stopped being covered, and a row that is no",
+        "      # longer needed."
+      ]
+    },
+    {
+      "key": "coverage-report",
+      "name": "Coverage reporter still tells the three states of a file apart",
+      "run": "tools/bin/harbor-gates-linux-x64 coverage-report --self-test",
+      "comment": []
+    },
+    {
+      "key": "check-coverage-registry",
+      "name": "Coverage registry gate still fires on both sides of the ratchet",
+      "run": "tools/bin/harbor-gates-linux-x64 check-coverage-registry --self-test",
+      "comment": [
+        "      # #1780. The eleventh gate is the only one that asks whether the",
+        "      # parameter schema of a tool still is the one that was pinned. Its",
+        "      # failure path is tested here for the same reason as the others, and",
+        "      # the fixture is the one that matters: a schema that moved while the",
+        "      # pin did not. The gate MUST fail on it, or the pin protects nothing."
+      ]
+    },
+    {
+      "key": "check-tool-schema-pin",
+      "name": "Tool-schema pin gate fails on a planted divergence",
+      "run": "tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --selftest",
+      "comment": [
+        "      # #1722. The plugin-inventory gate compares the committed snapshot with",
+        "      # the tree it describes, so its failure path has to be tested here for",
+        "      # the same reason as the others: a gate edited until it matches nothing",
+        "      # is indistinguishable from a gate that found nothing. The load-bearing",
+        "      # fixture is a stale snapshot AND a product writer that renamed a",
+        "      # member - the gate MUST fail on both, and MUST stay quiet on a tree",
+        "      # that matches."
+      ]
+    },
+    {
+      "key": "gen-plugin-inventory",
+      "name": "Plugin-inventory gate fails on a stale snapshot",
+      "run": "tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --self-test",
+      "comment": [
+        "      # The changelog assembler glues the per-pull-request fragments into the",
+        "      # [Unreleased] section of CHANGELOG.md at release time, so a PR that",
+        "      # adds a fragment must NOT edit CHANGELOG.md itself. The gate over the",
+        "      # table in docs/CI_GATES.md asks every script with a self-test to be",
+        "      # run by some workflow; without this step the assembler is a tool whose",
+        "      # self-test nobody calls, and the table cannot say honestly that it",
+        "      # exists."
+      ]
+    },
+    {
+      "key": "changelog-assemble-4",
+      "name": "Changelog assembler notices a diverged CHANGELOG.md",
+      "run": "tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test",
+      "comment": [
+        "      # The project-graph measurement: the depth, the level widths and the",
+        "      # critical path of the dependency graph. It is a tool a human runs, and",
+        "      # no workflow runs it — but its self-test is called here for the same",
+        "      # reason as the others: a measurement edited until it measures nothing",
+        "      # is indistinguishable from a measurement of an empty graph."
+      ]
+    },
+    {
+      "key": "measure-project-graph",
+      "name": "Project-graph measurement still measures a planted graph",
+      "run": "tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test",
+      "comment": [
+        "      # #2085. The two E2E plan tools. The generator derives the class",
+        "      # universe from the source tree, and the runner reads the plan the",
+        "      # generator wrote: a generator that stops finding the classes writes a",
+        "      # plan that drops them, and a runner that stops noticing a dropped class",
+        "      # reports a green suite with fewer tests than it has. Neither had a",
+        "      # self-test before the port; both have one now, and both run it here."
+      ]
+    },
+    {
+      "key": "gen-e2e-shards",
+      "name": "E2E shard generator still finds the classes of the tree",
+      "run": "tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test",
+      "comment": []
+    },
+    {
+      "key": "run-e2e-avalonia-shards",
+      "name": "E2E shard runner still refuses a plan it cannot run",
+      "run": "tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test",
+      "comment": [
+        "      # The pull-request cost measurement: the runner-minutes, the wall, the",
+        "      # critical path, the peak width, and the bill split by article. It is a",
+        "      # tool a human runs over the job list of a CI run, and no workflow runs",
+        "      # it — but its self-test is called here for the same reason as the",
+        "      # others: an instrument edited until it measures nothing is",
+        "      # indistinguishable from an instrument that measured an empty pull",
+        "      # request. The load-bearing fixtures are the three numbers a hand-",
+        "      # written table gets wrong — the wall (which is the MAXIMUM of two",
+        "      # parallel workflows, not their sum), the busy time (which excludes the",
+        "      # wait for a runner) and the peak width (which counts a job that ends",
+        "      # as the next one starts ONCE, not twice) — and the one refusal: a",
+        "      # timestamp that cannot be parsed must be an error, because a bill of",
+        "      # zero is the number that looks like good news."
+      ]
+    },
+    {
+      "key": "pr-cost",
+      "name": "Pull-request cost measurement still measures a planted pull request",
+      "run": "tools/bin/harbor-gates-linux-x64 pr-cost --self-test",
+      "comment": [
+        "      # The gate over the Go sources of the gates themselves. Its failure path",
+        "      # is tested here for the same reason as the others: a rule edited until",
+        "      # it matches nothing is indistinguishable from a rule that found",
+        "      # nothing. The load-bearing fixtures are the three shapes -- an",
+        "      # unformatted file, a package the registry does not name, and a package",
+        "      # without a self-test -- and the fixture that needs the Go toolchain",
+        "      # (a printf `go vet` must reject) says it did not run when the",
+        "      # toolchain is absent, which is the case HERE: this workflow installs",
+        "      # no Go. The toolchain's own fixtures run in gates-binary.yml."
+      ]
+    },
+    {
+      "key": "go-quality",
+      "name": "Go-quality gate fails on an unformatted file and a diverged registry",
+      "run": "tools/bin/harbor-gates-linux-x64 go-quality --self-test",
+      "comment": [
+        "      # #2119. The event-topology gate is the only one that asks whether the",
+        "      # producer table of a normative document still names the tree's real",
+        "      # PublishAsync call sites. The `file:line` fence asks whether a line",
+        "      # EXISTS, and in that table the line number is the content of the row,",
+        "      # so the fence passed a table that named four sites where the file had",
+        "      # seven. Its failure path is tested here for the same reason as the",
+        "      # others: a rule edited until it matches nothing is indistinguishable",
+        "      # from a rule that found nothing."
+      ]
+    },
+    {
+      "key": "check-event-topology",
+      "name": "Event-topology gate fails on a drifted producer row",
+      "run": "tools/bin/harbor-gates-linux-x64 check-event-topology --self-test",
+      "comment": [
+        "      # The workflow gate: a file with a duplicate key in a mapping is a file",
+        "      # GitHub refuses to parse, and the refusal is silent — the run is",
+        "      # created with ZERO jobs. The gate's own proof that it can fail, run",
+        "      # here because the gate itself lives in the `workflows` job below, and",
+        "      # a job that cannot start cannot prove anything."
+      ]
+    },
+    {
+      "key": "check-workflows",
+      "name": "Workflow gate fails on a duplicate key and stays quiet on a legal repeat",
+      "run": "tools/bin/harbor-gates-linux-x64 check-workflows --self-test",
+      "comment": [
+        "      # #2086. The demo gate moved into the compiled binary, and its self-test",
+        "      # runs here for the same reason as the others: a rule edited until it",
+        "      # matches nothing is indistinguishable from a rule that found nothing.",
+        "      # The demo workflow runs the gate on real recordings, but that workflow",
+        "      # fires on a pull request only for `assets/demo/**`, so a pull request",
+        "      # that edits the GATE itself would never reach a self-test placed there.",
+        "      # The fixtures are hand-made and need neither ffmpeg nor a recording."
+      ]
+    },
+    {
+      "key": "demo-repro",
+      "name": "Demo gate still reads a recording and names a missing baseline field",
+      "run": "tools/bin/harbor-gates-linux-x64 demo-repro --self-test",
+      "comment": [
+        "      # #1730. The banned-API exemption gate compares the catalogue in",
+        "      # BannedSymbols.txt with the RS0030 suppressions the product tree",
+        "      # carries. Its self-test plants an unjustified suppression, a stale",
+        "      # row, a count mismatch and an emptied catalogue, and asserts that",
+        "      # each fires - a gate that cannot say no enforces nothing. The gate",
+        "      # itself is run by the `tree` job below, with the list of the tree",
+        "      # runner."
+      ]
+    },
+    {
+      "key": "banned-api-exemptions",
+      "name": "Banned-API exemption gate fails on an unjustified suppression",
+      "run": "tools/bin/harbor-gates-linux-x64 banned-api-exemptions --self-test",
+      "comment": [
+        "      # #2122. The runner of the tree gates, and the list it runs. Its failure",
+        "      # path is the same shape as every other gate's: a gate that cannot",
+        "      # start, a gate that is missing, a report whose order depends on the",
+        "      # speed of the machine are all failures that only a planted fixture",
+        "      # catches."
+      ]
+    },
+    {
+      "key": "all",
+      "name": "The tree-gate runner fails on a planted defect",
+      "run": "tools/bin/harbor-gates-linux-x64 all --self-test",
+      "comment": [
+        "      # #2131. The gate that keeps the benchmark's gate set and the CI's gate",
+        "      # set from drifting apart: the file that lists the gates the benchmark",
+        "      # measures must list every gate a workflow runs, and the gates that are",
+        "      # out of the set must say why. Its failure path is tested here for the",
+        "      # same reason as the others: a gate edited until it matches nothing is",
+        "      # indistinguishable from a gate that found nothing."
+      ]
+    },
+    {
+      "key": "check-gate-bench-set",
+      "name": "The gate-bench-set gate fails on a gate the set does not hold",
+      "run": "tools/bin/harbor-gates-linux-x64 check-gate-bench-set --self-test",
+      "comment": [
+        "      # #2185. The gate that makes a workflow file an artifact has to be",
+        "      # able to FAIL: a checker that cannot tell a hand edit from a",
+        "      # generated file is a checker that finds nothing. The fixtures here",
+        "      # are a generated file, one line of it changed by hand, and the file",
+        "      # deleted."
+      ]
+    },
+    {
+      "key": "gen-workflows",
+      "name": "Generated-workflow gate fails on a hand-edited file",
+      "run": "tools/bin/harbor-gates-linux-x64 gen-workflows --self-test",
+      "comment": [
+        "      # #2113. The instrument that measures the two contract roots: which",
+        "      # projects use which type, which groups of types have a consumer set",
+        "      # of their own, and whether the cut that moves a group out crosses a",
+        "      # dependency. Its failure path is the CHECK path: a committed census",
+        "      # that does not match the tree must make the instrument go red, or",
+        "      # the \"before and after\" of a split has nothing to compare against."
+      ]
+    },
+    {
+      "key": "contract-domains",
+      "name": "Contract-domain census fails on a moved snapshot",
+      "run": "tools/bin/harbor-gates-linux-x64 contract-domains --self-test",
+      "comment": [
+        "      # #2100. The gate that proves the lane compiled the tree it was given.",
+        "      # Its failure path is tested here for the same reason as the others: a",
+        "      # gate edited until it matches nothing is indistinguishable from a gate",
+        "      # that found nothing. The load-bearing fixture is the PLANTED ERROR — a",
+        "      # project whose changed source does not compile, with the outputs the",
+        "      # cache left behind. Nothing about that tree says \"this will not",
+        "      # compile\" except the compiler itself, and the compiler never ran,",
+        "      # because the compile SKIPPED the project. The gate MUST fail on it, or",
+        "      # a green lane proves nothing."
+      ]
+    },
+    {
+      "key": "check-compiled-tree",
+      "name": "Compiled-tree gate fails on a cached project that was skipped",
+      "run": "tools/bin/harbor-gates-linux-x64 check-compiled-tree --self-test",
+      "comment": []
+    },
+    {
+      "key": "ci-selftests",
+      "name": "Self-test-list gate fails on a desynced step list",
+      "run": "python3 tools/ci-selftests.py --self-test",
+      "comment": [
+        "      # #2205. The gate that keeps THIS step list generated from its",
+        "      # source has to be able to fail: its self-test plants a desync in",
+        "      # the list and asserts the gate names it, then asserts the clean",
+        "      # tree passes. Without it a checker edited until it matches",
+        "      # anything would be green without checking anything."
+      ]
+    }
+  ]
+}

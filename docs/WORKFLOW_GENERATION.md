@@ -494,7 +494,7 @@ public override IEnumerable<AbsolutePath> GeneratedFiles => new[] { Configuratio
 
 Форма `setup-dotnet` — одна из двух (с кэшем и без), `checkout` — одна из семи (`fetch-depth`, `ref`, `submodules`), `upload-artifact` — одна из одной (те же четыре ключа `with:`, разные значения). Уже существующий образец — `.github/actions/queue-wait`: 14 мест вызова в двух файлах, 217 строк на само действие.
 
-**Что в composite action не переносится:** три пары близнецов x64/arm64 в джобе `test` файла `ci.yml` (`.github/workflows/ci.yml:2711` — `.github/workflows/ci.yml:2770`, 60 строк на 3 логических шага). Близнецы отличаются бинарём, который зовут (`harbor-gates-linux-x64` против `harbor-gates-linux-arm64`), и параметром одного действия это не выражается.
+**Близнецы x64/arm64 перенесены в composite action (#2205).** Три пары шагов в джобе `test` файла `ci.yml` (measurements, census, skipped tests) отличались только бинарём (`harbor-gates-linux-x64` против `harbor-gates-linux-arm64`) и `if: runner.arch == …`. Здесь раньше стояло, что это не выражается параметром действия; теперь `.github/actions/arch-gate` выбирает бинарь по `runner.arch` внутри действия, и один вызов заменяет пару. Гейт `tools/check-arch-twins.py` следит, что оба `runner.arch`-условия остались буквальными и ни одного близнеца не осталось.
 
 ---
 
