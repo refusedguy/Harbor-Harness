@@ -24,5 +24,13 @@ public readonly struct TerminalCapabilities
     /// </summary>
     public bool SyncUpdates { get; init; }
 
+    /// <summary>
+    /// OSC 8 hyperlinks confirmed by <see cref="Osc8HyperlinkProbe"/> (issue
+    /// #2217). No wire query exists for OSC 8, so this is an environmental
+    /// result composed into the probe output; when false, link escape bytes
+    /// are suppressed and only the visible text is emitted.
+    /// </summary>
+    public bool Osc8Hyperlinks { get; init; }
+
     public static TerminalCapabilities Unprobed() => default;
 }

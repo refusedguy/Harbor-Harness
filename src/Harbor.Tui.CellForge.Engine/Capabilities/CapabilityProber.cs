@@ -82,13 +82,17 @@ public sealed class CapabilityProber
         TimeSpan? kittyTimeout = null,
         CancellationToken cancellationToken = default)
     {
+        // OSC 8 has no wire query; compose the environmental probe result into
+        // whatever the kitty/DECRQM ladder below concludes (#2217).
+        bool osc8 = Osc8HyperlinkProbe.Detect(_environmentLookup);
+
         if (!IsInsideMultiplexer())
         {
             await transport.SendAsync(TerminalQueries.KittyQuery, cancellationToken).ConfigureAwait(false);
             var kittyAnswer = await transport.WaitAsync(kittyTimeout ?? DefaultKittyTimeout, cancellationToken).ConfigureAwait(false);
             if (kittyAnswer is { Kind: CapabilityEventKind.KittyFlagsReport } kittyReport)
             {
-                return Evaluate([kittyReport]);
+                return Evaluate([kittyReport]) with { Osc8Hyperlinks = osc8 };
             }
         }
 
@@ -97,7 +101,7 @@ public sealed class CapabilityProber
         var decrqm = await transport.WaitAsync(DefaultFallbackTimeout, cancellationToken).ConfigureAwait(false);
 
         return decrqm is null
-            ? TerminalCapabilities.Unprobed() with { Probed = true }
-            : Evaluate([decrqm.GetValueOrDefault()]);
+            ? TerminalCapabilities.Unprobed() with { Probed = true, Osc8Hyperlinks = osc8 }
+            : Evaluate([decrqm.GetValueOrDefault()]) with { Osc8Hyperlinks = osc8 };
     }
 }
