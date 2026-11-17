@@ -87,6 +87,23 @@ public sealed record TerminalUiState
         = ImmutableDictionary<string, FileTreeSnapshot>.Empty;
 
     /// <summary>
+    ///     Per-panel set of expanded directory paths (#1487). A path in the set
+    ///     has its loaded <see cref="FileTreeEntry.ChildEntries" /> shown in place;
+    ///     a path outside it is collapsed. Missing key means nothing is expanded.
+    ///     This lives in the store beside <see cref="PanelCursors" /> and
+    ///     <see cref="PanelDirs" /> for the same reason: expansion is selection
+    ///     state, so it must survive repaints and refreshes (FP-005/TEA, #360).
+    /// </summary>
+    public ImmutableDictionary<string, ImmutableHashSet<string>> PanelExpandedDirs { get; init; }
+        = ImmutableDictionary<string, ImmutableHashSet<string>>.Empty;
+
+    /// <summary>Whether <paramref name="path" /> is expanded for <paramref name="id" />.</summary>
+    /// <param name="id">The panel id.</param>
+    /// <param name="path">The full path of the directory node.</param>
+    public bool IsFileTreeNodeExpanded(string id, string path)
+        => PanelExpandedDirs.TryGetValue(id, out ImmutableHashSet<string>? set) && set.Contains(path);
+
+    /// <summary>
     ///     Id of the panel currently owning keyboard focus, or <see langword="null" />
     ///     when the chat / input box owns focus. Driven by <c>FocusPanel</c> /
     ///     <c>CyclePanelFocus</c> messages.

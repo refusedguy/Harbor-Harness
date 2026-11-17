@@ -415,6 +415,41 @@ public sealed class FileTreeLoaderTests
         await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirA).Entries.Length).IsEqualTo(1);
     }
 
+    // ── #1487: the bounded subtree behind in-place expansion ─────────────
+
+    [Test]
+    public async Task Request_BuildsNestedChildren_ThroughTheSamePort()
+    {
+        // The loader fetches a small nested tree off-thread; Build only flattens it.
+        var lister = new TreeLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await Settled(loader);
+
+        FileTreeSnapshot root = store.State.Ui.FileTreeFor(PanelId, DirA);
+        FileTreeEntry sub = root.Entries.Single(e => e.IsDirectory);
+        await Assert.That(sub.ChildEntries.Length).IsEqualTo(1);
+        await Assert.That(sub.ChildEntries[0].ChildEntries.Length).IsEqualTo(1);
+        await Assert.That(sub.ChildEntries[0].ChildEntries[0].Name).IsEqualTo("leaf.txt");
+    }
+
+    [Test]
+    public async Task ARecursiveSymlinkCycle_StopsAtTheDepthCap()
+    {
+        // A link that produces a fresh path at every level defeats the visited-path
+        // guard; the depth cap must still make the walk finite instead of hanging.
+        var lister = new CycleLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+
+        loader.Request(PanelId, DirA, PointedAt(DirA));
+        await Settled(loader);
+
+        await Assert.That(lister.Calls).IsEqualTo(FileTreeLoader.MaxTreeDepth)
+            .Because("the walk must terminate at the depth cap, not on a symlink loop");
+    }
+
     // ── fixtures ──────────────────────────────────────────────────────────
 
     /// <summary>A store whose panel is pointed at <paramref name="dir" />.</summary>
@@ -437,6 +472,41 @@ public sealed class FileTreeLoaderTests
         for (int i = 0; i < 500 && loader.InFlightCount > 0; i++)
         {
             await Task.Delay(10);
+        }
+    }
+
+    /// <summary>A three-level tree for the nested-children test (#1487).</summary>
+    private sealed class TreeLister : IDirectoryLister
+    {
+        public async Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            IReadOnlyList<DirectoryEntry> entries = directory switch
+            {
+                DirA => [new DirectoryEntry("sub", DirA + "/sub", true, false)],
+                _ when directory == DirA + "/sub" =>
+                    [new DirectoryEntry("inner", DirA + "/sub/inner", true, false)],
+                _ when directory == DirA + "/sub/inner" =>
+                    [new DirectoryEntry("leaf.txt", DirA + "/sub/inner/leaf.txt", false, false)],
+                _ => [],
+            };
+            return Result.Success(new DirectoryListing(directory, entries));
+        }
+    }
+
+    /// <summary>Returns a directory whose path is new at every level, modelling a symlink loop (#1487).</summary>
+    private sealed class CycleLister : IDirectoryLister
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public async Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            int call = Interlocked.Increment(ref _calls);
+            string child = directory + "/loop" + call;
+            return Result.Success(new DirectoryListing(directory, [new DirectoryEntry("loop", child, true, false)]));
         }
     }
 

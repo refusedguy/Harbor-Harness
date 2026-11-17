@@ -10,14 +10,33 @@ namespace Harbor.Ui.Framework.State;
 /// </summary>
 /// <param name="Name">Bare display name — a view adds its own separator for directories.</param>
 /// <param name="FullPath">Absolute path, used when descending into a directory.</param>
-/// <param name="IsDirectory">Directories sort first and are the only entries <c>Enter</c> descends into.</param>
+/// <param name="IsDirectory">Directories sort first and are the only entries <c>Enter</c> expands in place (#1487).</param>
 /// <param name="IsHidden">Hidden/dot-prefixed; drives the row marker only.</param>
-public sealed record FileTreeEntry(string Name, string FullPath, bool IsDirectory, bool IsHidden)
+/// <param name="Children">Loaded subtree of a directory node (#1487); empty for files and unexpanded nodes.</param>
+public sealed record FileTreeEntry(
+    string Name,
+    string FullPath,
+    bool IsDirectory,
+    bool IsHidden,
+    ImmutableArray<FileTreeEntry> Children = default)
 {
+    /// <summary>
+    ///     The loaded subtree of a directory node (#1487). Empty for files and for
+    ///     a directory whose children were not loaded. The optional parameter uses
+    ///     <c>default</c> because <see cref="ImmutableArray{T}.Empty" /> is not a
+    ///     compile-time constant; readers go through <see cref="ChildEntries" />.
+    /// </summary>
+    public ImmutableArray<FileTreeEntry> ChildEntries
+        => Children.IsDefault ? ImmutableArray<FileTreeEntry>.Empty : Children;
+
     /// <summary>Project a Domain listing entry into the view's vocabulary.</summary>
     /// <param name="entry">The entry the loader produced.</param>
     public static FileTreeEntry From(Abstractions.Filesystem.DirectoryEntry entry) =>
         new(entry.Name, entry.FullPath, entry.IsDirectory, entry.IsHidden);
+
+    /// <summary>Return a copy with <paramref name="children" /> attached as the loaded subtree.</summary>
+    /// <param name="children">The already-loaded children, in display order.</param>
+    public FileTreeEntry WithChildren(ImmutableArray<FileTreeEntry> children) => this with { Children = children };
 }
 
 /// <summary>

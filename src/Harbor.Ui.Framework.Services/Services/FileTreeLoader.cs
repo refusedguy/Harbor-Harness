@@ -62,6 +62,19 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
     /// <summary>Hard ceiling on one walk, mirroring the port's own limit.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    ///     How many levels of children the loader fetches for the in-place tree
+    ///     (#1487). The root's children are level 1, so the default shows a
+    ///     three-level tree. This is also the hard stop for a symlink cycle: a
+    ///     link that points back at an ancestor produces a fresh path string at
+    ///     every level, so the visited-path guard below cannot see it, but the
+    ///     walk still cannot descend past this cap.
+    /// </summary>
+    public const int MaxTreeDepth = 3;
+
+    /// <summary>Total nodes across all levels of one tree (#1487). Stops a wide tree from exploding.</summary>
+    public const int MaxTreeNodes = 256;
+
     private readonly IDirectoryLister _lister;
     private readonly ILogger<FileTreeLoader> _logger;
     private readonly Lock _gate = new();
@@ -256,8 +269,7 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
     {
         try
         {
-            Result<DirectoryListing> result = await _lister
-                .ListAsync(directory, flight.Cts.Token)
+            Result<TreeResult> result = await LoadTreeAsync(directory, flight.Cts.Token)
                 .ConfigureAwait(false);
 
             if (!Publish(panelId, flight))
@@ -270,7 +282,7 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
                 store.Dispatch(new AppMsg.SetFileTreeLoaded(
                     panelId,
                     directory,
-                    ToEntries(result.Value),
+                    result.Value.Entries,
                     result.Value.Truncated,
                     result.Value.TotalCount));
                 return;
@@ -359,20 +371,114 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
         }
     }
 
-    /// <summary>
-    ///     Project the port's vocabulary into the state's. Both sides define their
-    ///     own entry type on purpose — see <see cref="FileTreeEntry" /> — so the
-    ///     seam can be reshaped without a state migration, and the state assembly
-    ///     never has to reference a port contract it does not implement.
-    /// </summary>
-    private static ImmutableArray<FileTreeEntry> ToEntries(DirectoryListing listing)
+    /// <summary>Root listing plus the flags the store's snapshot needs (#1487).</summary>
+    private sealed record TreeResult(ImmutableArray<FileTreeEntry> Entries, bool Truncated, int TotalCount);
+
+    /// <summary>Counts nodes across every level so a wide tree cannot exhaust memory (#1487).</summary>
+    private sealed class NodeBudget(int max)
     {
-        var builder = ImmutableArray.CreateBuilder<FileTreeEntry>(listing.Entries.Count);
-        foreach (DirectoryEntry entry in listing.Entries)
+        private int _remaining = max;
+
+        public bool Take()
         {
-            builder.Add(FileTreeEntry.From(entry));
+            if (_remaining <= 0)
+            {
+                return false;
+            }
+
+            _remaining--;
+            return true;
+        }
+    }
+
+    /// <summary>
+    ///     Fetch the root listing and its bounded subtree, all off the render thread
+    ///     (#1487). The recursion goes through the same <see cref="IDirectoryLister" />
+    ///     port as the root, so the "no I/O in Build" guarantee of #667 is untouched;
+    ///     the walk simply asks the port for a few more directories while it is
+    ///     already on a worker. A child that fails is left with empty children —
+    ///     a partial tree is still a true statement about what could be read.
+    /// </summary>
+    private async Task<Result<TreeResult>> LoadTreeAsync(string directory, CancellationToken cancellationToken)
+    {
+        Result<DirectoryListing> root = await _lister
+            .ListAsync(directory, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (root.IsFailure)
+        {
+            return Result.Failure<TreeResult>(root.Error);
+        }
+
+        // Exact repeats of a reported path are skipped (a symlink pointing at an
+        // already-seen directory). Depth and node caps cover the case where a link
+        // produces a NEW path string at each level. All pure string handling: the
+        // port owns the filesystem, this class only decides what to ask it for.
+        var visited = new HashSet<string>(StringComparer.Ordinal) { NormalizePath(directory) };
+        var budget = new NodeBudget(MaxTreeNodes);
+        ImmutableArray<FileTreeEntry> entries = await BuildLevelAsync(
+            root.Value.Entries, 1, visited, budget, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(new TreeResult(entries, root.Value.Truncated, root.Value.TotalCount));
+    }
+
+    /// <summary>Build one level, recursing into directory children while the caps allow.</summary>
+    private async Task<ImmutableArray<FileTreeEntry>> BuildLevelAsync(
+        IReadOnlyList<DirectoryEntry> listing,
+        int depth,
+        HashSet<string> visited,
+        NodeBudget budget,
+        CancellationToken cancellationToken)
+    {
+        var builder = ImmutableArray.CreateBuilder<FileTreeEntry>(listing.Count);
+        foreach (DirectoryEntry entry in listing)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!budget.Take())
+            {
+                break;
+            }
+
+            // Project the port's vocabulary into the state's. Both sides define
+            // their own entry type on purpose — see FileTreeEntry — so the seam
+            // can be reshaped without a state migration.
+            FileTreeEntry view = FileTreeEntry.From(entry);
+
+            if (entry.IsDirectory && depth < MaxTreeDepth && visited.Add(NormalizePath(entry.FullPath)))
+            {
+                try
+                {
+                    Result<DirectoryListing> children = await _lister
+                        .ListAsync(entry.FullPath, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (children.IsSuccess)
+                    {
+                        view = view.WithChildren(await BuildLevelAsync(
+                            children.Value.Entries,
+                            depth + 1,
+                            visited,
+                            budget,
+                            cancellationToken).ConfigureAwait(false));
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw; // superseded or timed out: cancellation is not a failed subtree
+                }
+                catch (Exception ex)
+                {
+                    // A broken child subtree must not take down the whole tree.
+                    _logger.LogDebug(ex, "File-tree child {Dir} could not be expanded", entry.FullPath);
+                }
+            }
+
+            builder.Add(view);
         }
 
         return builder.ToImmutable();
     }
+
+    /// <summary>Normalise a reported path for the cycle guard without touching the filesystem.</summary>
+    private static string NormalizePath(string path)
+        => path.Replace('\\', '/').TrimEnd('/');
 }

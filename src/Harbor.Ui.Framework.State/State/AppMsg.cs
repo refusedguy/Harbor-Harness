@@ -208,4 +208,14 @@ public abstract record AppMsg
     /// </summary>
     /// <param name="Id">The panel id owning the listing.</param>
     public sealed record InvalidateFileTree(string Id) : AppMsg;
+
+    /// <summary>
+    ///     Toggle the in-place expansion of one directory node (#1487). Carries
+    ///     only the full path: the children themselves are already in the
+    ///     snapshot's <see cref="FileTreeEntry.ChildEntries" />, so this message
+    ///     is pure selection state and never asks for I/O.
+    /// </summary>
+    /// <param name="Id">The panel id owning the tree.</param>
+    /// <param name="Path">The full path of the directory node being toggled.</param>
+    public sealed record ToggleFileTreeExpansion(string Id, string Path) : AppMsg;
 }

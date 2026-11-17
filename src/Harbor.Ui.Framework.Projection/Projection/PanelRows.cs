@@ -330,8 +330,19 @@ public static class PanelRows
         return rows;
     }
 
-    /// <summary>One file-tree entry for row building (navigation state stays in the panel).</summary>
-    public sealed record FileTreeRow(string Name, bool IsDirectory, bool IsHidden);
+    /// <summary>
+    ///     One file-tree entry for row building (#1487). <paramref name="Guide" />
+    ///     carries the box-drawing prefix (for example a 'vertical bar plus three
+    ///     spaces' followed by a branch) that shows depth and sibling position;
+    ///     <paramref name="Expanded" /> selects the open arrow for a directory. Both
+    ///     default so flat callers are unaffected.
+    /// </summary>
+    public sealed record FileTreeRow(
+        string Name,
+        bool IsDirectory,
+        bool IsHidden,
+        string Guide = "",
+        bool Expanded = false);
 
     /// <summary>
     ///     File-tree rows for a loaded listing: cursor window with over/underflow
@@ -432,13 +443,16 @@ public static class PanelRows
             rows.Add("  ↑ more above");
         }
 
-        int nameBudget = Math.Max(1, width - 6);
         for (int i = start; i < end; i++)
         {
             var entry = entries[i];
             string marker = i == cursor ? ">" : " ";
-            string icon = entry.IsDirectory ? "▸" : entry.IsHidden ? "·" : " ";
-            rows.Add($"{marker} {icon} {PanelText.Truncate(entry.Name, nameBudget)}");
+            string icon = entry.Expanded ? "▾" : entry.IsDirectory ? "▸" : entry.IsHidden ? "·" : " ";
+            string guide = entry.Guide;
+            // Guide is box-drawing/ASCII (one cell per char); reserve its width
+            // so long names are still cut with ellipsis rather than overflowing.
+            int nameBudget = Math.Max(1, width - 4 - guide.Length);
+            rows.Add($"{marker} {icon} {guide}{PanelText.Truncate(entry.Name, nameBudget)}");
         }
 
         if (end < entries.Count)
@@ -447,7 +461,7 @@ public static class PanelRows
         }
 
         rows.Add(PanelText.Separator);
-        rows.Add("j/k move · Enter open · h parent · r refresh");
+        rows.Add("j/k move · Enter expand · h parent · r refresh");
         if (!string.IsNullOrEmpty(footerNote))
         {
             rows.Add(footerNote);
