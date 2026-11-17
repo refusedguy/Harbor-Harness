@@ -1156,6 +1156,18 @@ $ harbor plugin uninstall myplugin
 
 ---
 
+## Showcase: Echo plugin one-minute install
+
+The [Echo sample plugin](../samples/plugins/Harbor.Plugin.Echo/README.md) is a minimal, dependency-free `IToolPlugin` that registers one `echo` tool. It uses the existing tool axis only, with no new extension axis (#555 freeze). Install it in one command:
+
+```bash
+bash samples/plugins/Harbor.Plugin.Echo/install.sh
+```
+
+Restart Harbor. The `.cs` drop-in is compiled at startup and the `echo` tool appears in `/plugins`. Ask the agent to call `echo` with `{"text": "hello"}`; it returns `Echo: hello`. The installer copies `EchoPlugin.cs` into `~/.harbor/plugins/` (override with `HARBOR_PLUGINS_DIR`).
+
+---
+
 ## Gotchas
 
 ### `using Harbor.Abstractions.Models.Identifiers`

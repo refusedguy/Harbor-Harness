@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Plugin.Echo</PackageId>
+    <Description>Sample Harbor plugin, a minimal dependency-free echo tool (plugin showcase, #1434).</Description>
+    <PackageTags>harbor;plugin;echo;sample</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <PackageReference Include="Microsoft.Extensions.Logging"/>
+  </ItemGroup>
+
+</Project>
