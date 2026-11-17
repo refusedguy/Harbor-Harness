@@ -127,6 +127,45 @@ public static class FuzzyMatcher
     }
 
     /// <summary>
+    /// Writes the candidate positions matched by <paramref name="query" /> into
+    /// <paramref name="indices" /> using the same leftmost, case-insensitive
+    /// subsequence walk as <see cref="ScoreGreedy" />. This is the single
+    /// match-position source used for highlighting — <see cref="FilterList{T}" />
+    /// consumes it instead of growing a second scorer.
+    /// </summary>
+    /// <returns>
+    /// The number of indices written when <paramref name="query" /> is a full
+    /// subsequence of <paramref name="candidate" />, otherwise 0 (which also
+    /// covers an empty query). Pass a span of at least <c>query.Length</c> to
+    /// receive every position. Allocates nothing.
+    /// </returns>
+    public static int MatchIndices(string query, string candidate, Span<int> indices)
+    {
+        if (string.IsNullOrEmpty(query) || string.IsNullOrEmpty(candidate) || query.Length > candidate.Length)
+        {
+            return 0;
+        }
+
+        int qi = 0;
+        int count = 0;
+        for (int ci = 0; ci < candidate.Length && qi < query.Length; ci++)
+        {
+            if (char.ToLowerInvariant(candidate[ci]) == char.ToLowerInvariant(query[qi]))
+            {
+                if (count < indices.Length)
+                {
+                    indices[count] = ci;
+                }
+
+                count++;
+                qi++;
+            }
+        }
+
+        return qi == query.Length && indices.Length >= count ? count : 0;
+    }
+
+    /// <summary>
     /// Ranks <paramref name="candidates" /> by <paramref name="query" />:
     /// matching items first (best score first), non-matching dropped.
     /// Stable for equal scores — suggested order survives.
