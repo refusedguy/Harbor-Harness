@@ -143,7 +143,7 @@
     <!-- DI + hosting -->
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
     <PackageReference Include="Serilog.Extensions.Hosting"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
+    <!-- #957: Microsoft.Extensions.Logging.Console removed — no console logger API used; Serilog writes to console. -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
   </ItemGroup>
 
