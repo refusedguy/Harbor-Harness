@@ -2846,6 +2846,23 @@ one line that is left. Until that lands, the cache costs its download and
 buys nothing: the honest number for this change is "the cache fires", not
 "the lane is faster".
 
+> **CORRECTION (2026-11-17, issue #2107).** The paragraph above was the
+> honest reading of the runs it names, but its diagnosis was wrong, and the
+> tree is incremental. Measured again on 2026-10-22 on `dev` @ `bfa1c99d`:
+> the cache HIT and the compile rebuilt **3 of 117 projects in 36.7 s** (run
+> [39723477934](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723477934));
+> MSBuild itself answered "Skipping target CoreCompile because all output
+> files are up-to-date" on run 39725284841. The compile's `dotnet restore`
+> does NOT rewrite the NuGet-generated files, as their content is unchanged, so
+> NuGet leaves them alone. The "one line that is left" was never a real line.
+> §6.4.2 has the table and the three named causes of an actual cache MISS.
+> The evidence that made the restored tree look stale ("118 of 118 generated
+> inputs newer than the stamp") was the diagnostic's own truncated epoch: the
+> Go stamper writes fractional seconds and the workflow printed only the
+> whole-second part, so the stamp counted as newer than itself. The workflow
+> now anchors the comparison to a full-precision marker written after the
+> stamp; a correct run prints **0 of 118** for every generated-input kind.
+
 **What is left on the critical path after the cache works** (the same step
 list, run 39545372020, on the tree that has the pack job and the arch shard):
 setup .NET 21 s, restore 20 s, compile 265 s, the pack inputs upload 21 s, the
@@ -3173,6 +3190,14 @@ the restored outputs are there, and the analyzer assemblies in the NuGet
 folder are newer than every one of them, so MSBuild rebuilds the tree either
 way (§6.4.1 names the one line that is left). The number below therefore
 still describes the pull-request lane.
+
+> **CORRECTION (2026-11-17, issue #2107).** The "still a full rebuild" claim
+> above was falsified on 2026-10-22: with the cache HIT the compile rebuilt
+> **3 of 117 projects in 36.7 s** (run
+> [39723477934](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723477934),
+> full table in §6.4.2). These wall numbers remain valid as a COLD-build
+> measurement, which is what this section set out to measure; they no longer
+> describe a cache-hitting pull-request lane.
 
 **The meter is calibrated, not asserted.** A known 1-way load reads 1.11 busy
 cores and a known 4-way load reads 4.00 (`calib-1-way` / `calib-4-way` in the
