@@ -177,8 +177,9 @@ public class FullLayerMatrixTests
         "Harbor.Tui.CellForge.Prompts",
         // Application
         "Harbor.Application", "Harbor.ChangeTracking",
-        // #1626: first leaf of the Intelligence assembly — the read-only git
-        // probes moved verbatim out of Harbor.Application/Git.
+        // #1626: the Intelligence assembly — read-only git probes (first leaf,
+        // moved out of Harbor.Application/Git) and the provider health-check
+        // (second leaf, moved out of Harbor.Application/Providers), both verbatim.
         "Harbor.Intelligence",
         // #1614: first-run wizard + setup-checklist detection, one-way leaf
         // over Harbor.Application's configuration family (0 reverse edges).
@@ -598,11 +599,13 @@ public class FullLayerMatrixTests
         // The Application row is back to a single Harbor.Abstractions edge.
         ["Harbor.Application"] = new(Layer.Application,
             ["Harbor.Abstractions"]),
-        // #1626: Harbor.Intelligence — first leaf of the Intelligence assembly,
+        // #1626: Harbor.Intelligence — the Intelligence assembly. First leaf:
         // the verbatim extraction of Harbor.Application/Git (read-only git
-        // probes). It binds the git vocabulary from Abstractions and the pooled
-        // builders from Extensions; never Application, Infrastructure or
-        // Presentation. Namespace stays Harbor.Application.Git so consumers
+        // probes). Second leaf: Harbor.Application/Providers/ProviderHealthCheck
+        // (the IProviderHealthCheck adapter). Both bind the contract vocabulary
+        // from Abstractions; the git probes also use the pooled builders from
+        // Extensions. Never Application, Infrastructure or Presentation. Namespaces
+        // stay Harbor.Application.Git / Harbor.Application.Providers so consumers
         // keep their usings (same convention as #1623/#1613/#1625).
         ["Harbor.Intelligence"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
@@ -777,7 +780,8 @@ public class FullLayerMatrixTests
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
             "Harbor.Application", "Harbor.Onboarding", "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime", "Harbor.SessionContext", "Harbor.Registries",
-            // #1626: TuiModule registers IGitQuery -> ProcessGitQuery from the first Intelligence leaf.
+            // #1626: TuiModule registers IGitQuery -> ProcessGitQuery and CoreModule
+            // registers IProviderHealthCheck -> ProviderHealthCheck from the Intelligence leaves.
             "Harbor.Intelligence",
             // #1625: the configuration family — ConfigurationModule registers the
             // config stores and the #1615 PermissionConfigStoreAdapter.
