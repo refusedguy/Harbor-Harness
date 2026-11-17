@@ -1,8 +1,10 @@
 name: fallout pilot
 
-# Issue #2179 — step 0 of ADR-023. The NUKE path stays untouched; this lane
-# BUILDS a second orchestrator (build/_build.fallout/) and proves that its
-# `Pack` target is argv-compatible and byte-compatible with NUKE's.
+# Issues #2179 (step 0) and #2180 (step 1) of ADR-023. The NUKE path stays
+# untouched until step 4; this lane BUILDS the primary Fallout orchestrator
+# (build/_build.fallout/) and proves that its 15 targets are argv- and
+# exit-code-compatible with NUKE's, that restore is free of NU1605, and that
+# PublishVariant.AOT produces a working native binary (risk R9).
 #
 # Local dotnet is deliberately not used to verify this change: the verifier
 # is CI only. Every check below runs on the runner, with the exact SDK that
@@ -13,6 +15,7 @@ on:
     paths:
       - 'build/**'
       - '.nuke/**'
+      - '.fallout/**'
       - '.github/workflows/fallout-pilot.yml'
       - 'global.json'
       - 'Directory.Build.props'
@@ -235,3 +238,237 @@ jobs:
           echo 'package parity:   see the "Compare package sets" step'
           echo 'NUKE path:        unchanged'
           echo 'fallout sources:  no Nuke reference'
+
+  full-parity:
+    name: Full parity (15 targets + restore)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install the exact SDK global.json asks for
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.402'
+
+      - name: Guardrails — NUKE path untouched, no Nuke left, .fallout/ added
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- build/_build build/_build.csproj; then
+            echo '::error::NUKE build path was modified at step 1'
+            git diff -- build/_build build/_build.csproj
+            exit 1
+          fi
+          if grep -rn 'Nuke' build/_build.fallout/; then
+            echo '::error::a Nuke reference survived in build/_build.fallout/'
+            exit 1
+          fi
+          test -f .fallout/build.schema.json
+          test -f .fallout/parameters.json
+          cmp .nuke/build.schema.json .fallout/build.schema.json
+          cmp .nuke/parameters.json .fallout/parameters.json
+          echo 'NUKE path unchanged; no Nuke in Fallout copy; .fallout/ matches .nuke/'
+
+      - name: Restore both build projects (no NU1605)
+        run: |
+          set -euo pipefail
+          for proj in build/_build.csproj build/_build.fallout/_build.fallout.csproj; do
+            log="$RUNNER_TEMP/restore.$(basename "$proj").log"
+            dotnet restore "$proj" --nologo 2>&1 | tee "$log"
+            if grep -q 'NU1605' "$log"; then
+              echo "::error::NU1605 in restore of $proj"
+              exit 1
+            fi
+          done
+          echo 'restore: no NU1605 on either build project'
+
+      - name: Build both orchestrators
+        run: |
+          set -euo pipefail
+          dotnet build build/_build.csproj -c Release --nologo -v:minimal
+          dotnet build build/_build.fallout/_build.fallout.csproj -c Release --nologo -v:minimal
+
+      - name: Locate the two built assemblies
+        run: |
+          set -euo pipefail
+          NUKE_DLL="$(find "$GITHUB_WORKSPACE/build/bin" -name '_build.dll' -path '*/Release/*' -print -quit)"
+          FALLOUT_DLL="$(find "$GITHUB_WORKSPACE/build/_build.fallout/bin" -name '_build.fallout.dll' -path '*/Release/*' -print -quit)"
+          test -n "$NUKE_DLL"
+          test -n "$FALLOUT_DLL"
+          echo "NUKE_DLL=$NUKE_DLL" >> "$GITHUB_ENV"
+          echo "FALLOUT_DLL=$FALLOUT_DLL" >> "$GITHUB_ENV"
+
+      - name: argv + exit-code parity for all 15 targets
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/parity"
+          TARGETS="Clean Restore Compile Test ArchitectureTests Publish PublishArchive Release Pack PublishIpcServer PublishIpcClient List Help Doctor What"
+          for target in $TARGETS; do
+            extra=()
+            case "$target" in
+              What) extra=(--path README.md) ;;
+              Release) extra=(--release-tag v0.0.0-parity) ;;
+            esac
+            set +e
+            dotnet "$NUKE_DLL" "$target" --dry-run --format json "${extra[@]}" \
+              > "$RUNNER_TEMP/parity/nuke.$target.out" 2> "$RUNNER_TEMP/parity/nuke.$target.err"
+            nuke_rc=$?
+            dotnet "$FALLOUT_DLL" "$target" --dry-run --format json "${extra[@]}" \
+              > "$RUNNER_TEMP/parity/fallout.$target.out" 2> "$RUNNER_TEMP/parity/fallout.$target.err"
+            fallout_rc=$?
+            set -e
+            printf '%-20s NUKE=%d Fallout=%d\n' "$target" "$nuke_rc" "$fallout_rc"
+            if [ "$nuke_rc" -ne "$fallout_rc" ]; then
+              echo "::error::exit-code divergence for $target: NUKE=$nuke_rc Fallout=$fallout_rc"
+              cat "$RUNNER_TEMP/parity/nuke.$target.err" || true
+              cat "$RUNNER_TEMP/parity/fallout.$target.err" || true
+              exit 1
+            fi
+          done
+
+          # AOT variant: both builds must plan the same argv. Explicit feature
+          # flags keep the legacy Resolved() no-op out of the picture.
+          set +e
+          dotnet "$NUKE_DLL" Publish --variant AOT --with-plugins false \
+            --with-scripting false --with-spectre-tui false \
+            --dry-run --format json \
+            > "$RUNNER_TEMP/parity/nuke.aot.out" 2> "$RUNNER_TEMP/parity/nuke.aot.err"
+          aot_nuke_rc=$?
+          dotnet "$FALLOUT_DLL" Publish --variant AOT --with-plugins false \
+            --with-scripting false --with-spectre-tui false \
+            --dry-run --format json \
+            > "$RUNNER_TEMP/parity/fallout.aot.out" 2> "$RUNNER_TEMP/parity/fallout.aot.err"
+          aot_fallout_rc=$?
+          set -e
+          echo "AOT argv plan: NUKE=$aot_nuke_rc Fallout=$aot_fallout_rc"
+          if [ "$aot_nuke_rc" -ne "$aot_fallout_rc" ]; then
+            echo '::error::AOT dry-run exit-code divergence'
+            cat "$RUNNER_TEMP/parity/nuke.aot.err" || true
+            cat "$RUNNER_TEMP/parity/fallout.aot.err" || true
+            exit 1
+          fi
+
+          python3 - "$RUNNER_TEMP/parity" "$TARGETS" <<'PY'
+          import json, pathlib, sys
+
+          root = pathlib.Path(sys.argv[1])
+          targets = sys.argv[2].split()
+          keys = targets + ['aot']
+
+          def cmds(path):
+              out = []
+              for line in path.read_text(encoding='utf-8').splitlines():
+                  line = line.strip()
+                  if not line.startswith('{'):
+                      continue
+                  obj = json.loads(line)
+                  if obj.get('v') == 1 and obj.get('kind') == 'cmd':
+                      out.append((obj.get('target'), obj.get('argv')))
+              return out
+
+          bad = []
+          for name in keys:
+              a = cmds(root / f'nuke.{name}.out')
+              b = cmds(root / f'fallout.{name}.out')
+              print(f'{name:20s} nuke cmds={len(a)} fallout cmds={len(b)}')
+              if a != b:
+                  bad.append(name)
+                  print('  NUKE    :', a)
+                  print('  Fallout :', b)
+          if bad:
+              print('::error::argv divergence for: ' + ', '.join(bad))
+              sys.exit(1)
+          print(f'argv + exit-code parity: OK ({len(targets)}/15 targets + AOT plan)')
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          echo '--- full parity (#2180 step 1) ---'
+          echo 'targets: 15/15 dry-run argv + exit code compared'
+          echo 'restore: no NU1605 on either build project'
+
+  aot-r9:
+    name: AOT / R9 (PublishVariant.AOT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install the exact SDK global.json asks for
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.402'
+
+      - name: Install the NativeAOT toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang lld binutils zlib1g-dev
+
+      - name: Build the Fallout orchestrator
+        run: |
+          set -euo pipefail
+          dotnet build build/_build.fallout/_build.fallout.csproj -c Release --nologo -v:minimal
+          FALLOUT_DLL="$(find "$GITHUB_WORKSPACE/build/_build.fallout/bin" -name '_build.fallout.dll' -path '*/Release/*' -print -quit)"
+          test -n "$FALLOUT_DLL"
+          echo "FALLOUT_DLL=$FALLOUT_DLL" >> "$GITHUB_ENV"
+
+      - name: Publish with PublishVariant.AOT
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aot"
+          dotnet "$FALLOUT_DLL" Publish \
+            --variant AOT --minimal \
+            --with-plugins false --with-scripting false --with-spectre-tui false \
+            --format json \
+            > "$RUNNER_TEMP/aot/publish.json" 2> "$RUNNER_TEMP/aot/publish.err"
+          rc=$?
+          echo "AOT publish exit code: $rc"
+          exit "$rc"
+
+      - name: Verify AOT argv and smoke the native binary
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/aot/publish.json" <<'PY'
+          import json, sys
+
+          cmds = []
+          for line in open(sys.argv[1], encoding='utf-8'):
+              line = line.strip()
+              if not line.startswith('{'):
+                  continue
+              obj = json.loads(line)
+              if obj.get('v') == 1 and obj.get('kind') == 'cmd' and obj.get('target') == 'Publish':
+                  cmds.append(obj['argv'])
+          if len(cmds) != 1:
+              raise SystemExit(f'::error::expected one Publish cmd, got {len(cmds)}')
+          argv = cmds[0]
+          print('AOT publish argv:', ' '.join(argv))
+          for required in ('-p:PublishAot=true', '-p:HARBOR_MINIMAL=true', '-r', 'linux-x64'):
+              if required not in argv:
+                  raise SystemExit(f'::error::AOT argv missing {required}: {argv}')
+          print('AOT argv: OK')
+          PY
+          bin="artifacts/publish/Harbor.App.Cli/aot/Harbor.App.Cli"
+          test -x "$bin" || { echo "::error::no native binary at $bin"; exit 1; }
+          "$bin" --version
+          "$bin" --help > "$RUNNER_TEMP/aot/help.txt" 2>&1
+          test -s "$RUNNER_TEMP/aot/help.txt"
+          grep -q -i -e 'ask' -e 'usage' "$RUNNER_TEMP/aot/help.txt"
+          echo 'R9: NativeAOT publish via the Fallout orchestrator produced a working binary'
+
+      - name: Record R9 result in the job summary
+        if: always()
+        run: |
+          {
+            echo '### R9 / NativeAOT (#2180 step 1)'
+            echo
+            echo '- Driver: primary Fallout orchestrator `build/_build.fallout/`'
+            echo '- Command: `Publish --variant AOT --minimal` with AOT-compatible flags'
+            echo '- Verified: `PublishAot=true` in argv, native binary exists and runs `--version` / `--help`'
+          } >> "$GITHUB_STEP_SUMMARY"
