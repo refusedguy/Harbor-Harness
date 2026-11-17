@@ -96,6 +96,46 @@ public sealed class PluginLifecycleTests
     }
 
     /// <summary>
+    ///     #2229: a manifest that declares skills, hooks and MCP servers still
+    ///     travels through the ordinary load path, and reversible loading keeps
+    ///     working: stopping the plugin takes back exactly what it registered.
+    /// </summary>
+    [Test]
+    public async Task Stop_WithBundleDeclarationsInTheManifest_RollsBackRegistrations()
+    {
+        using var fixture = await PluginTestFixture.CreateAsync("lifecycle-bundle").ConfigureAwait(false);
+        Directory.CreateDirectory(fixture.CacheDir);
+
+        var host = new FakePluginLoadHost();
+        var plugin = new LifecyclePlugin("lifecycle-plugin", "lifecycle_tool_v1");
+        var script = new PluginScript(
+            "lifecycle.cs",
+            "source-v1",
+            new PluginManifest
+            {
+                Skills = [new PluginSkillDeclaration { Path = "skills/a.md" }],
+                Hooks = [new PluginHookDeclaration { Path = "hooks/a.cs", Event = "session.end" }],
+                McpServers = [new PluginMcpServerDeclaration { Name = "s", Command = "c" }],
+            });
+        PluginHost pluginHost = BuildHost(
+            new InMemoryPluginSource(new[] { script }),
+            _ => plugin,
+            fixture.PluginsDir);
+
+        var load = await pluginHost.LoadAllAsync(host).ConfigureAwait(false);
+
+        await Assert.That(load.IsSuccess).IsTrue();
+        await Assert.That(host.RegisteredTools.Count).IsEqualTo(1);
+
+        var stopped = await pluginHost.StopAsync("lifecycle-plugin").ConfigureAwait(false);
+
+        await Assert.That(stopped.IsSuccess).IsTrue();
+        await Assert.That(host.RegisteredTools.Count).IsEqualTo(0)
+            .Because("stop takes back what the run registered, whatever else the manifest declared");
+        await Assert.That(plugin.ShutdownCount).IsEqualTo(1);
+    }
+
+    /// <summary>
     ///     An update REPLACES the running version: the old registration is taken
     ///     back and the new one lands, under the same name.
     /// </summary>

@@ -50,6 +50,8 @@ import (
 	changelog "harbor.local/gates/changelog-assemble"
 	checkabstractionscontract "harbor.local/gates/check-abstractions-contract"
 	checkanalyzerscope "harbor.local/gates/check-analyzer-scope"
+	archanchors "harbor.local/gates/check-arch-anchors"
+	archsuiteonce "harbor.local/gates/check-arch-suite-once"
 	checkcompiledtree "harbor.local/gates/check-compiled-tree"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
@@ -57,11 +59,14 @@ import (
 	eventtopology "harbor.local/gates/check-event-topology"
 	benchset "harbor.local/gates/check-gate-bench-set"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
+	mdlinks "harbor.local/gates/check-md-links"
 	checknotestsdk "harbor.local/gates/check-no-test-sdk"
 	checkpublicapiresign "harbor.local/gates/check-public-api-resign"
 	checkreferencetrimmer "harbor.local/gates/check-reference-trimmer"
+	resultchains "harbor.local/gates/check-result-chains"
 	checkrulesetchecks "harbor.local/gates/check-ruleset-checks"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	stringswitch "harbor.local/gates/check-string-switch"
 	testdup "harbor.local/gates/check-test-dup"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
 	testpackages "harbor.local/gates/check-test-packages"
@@ -81,7 +86,9 @@ import (
 	genseamgraph "harbor.local/gates/gen-seam-graph"
 	genworkflows "harbor.local/gates/gen-workflows"
 	goquality "harbor.local/gates/go-quality"
+	guardtriage "harbor.local/gates/guard-triage"
 	gate "harbor.local/gates/internal/gate"
+	mdlint "harbor.local/gates/md-lint"
 	measurebuildcpu "harbor.local/gates/measure-build-cpu"
 	measurecompilecost "harbor.local/gates/measure-compile-cost"
 	measureprojectgraph "harbor.local/gates/measure-project-graph"
@@ -142,6 +149,16 @@ var registry = []registered{
 		run:     changelog.Run,
 	},
 	{
+		name:    "check-arch-anchors",
+		summary: "may an architecture rule anchor on a line number",
+		run:     archanchors.Run,
+	},
+	{
+		name:    "check-arch-suite-once",
+		summary: "the architecture suite runs exactly once on every lane",
+		run:     archsuiteonce.Run,
+	},
+	{
 		name:    "check-abstractions-contract",
 		summary: "every dependency the five guarded src/ projects declare is load-bearing",
 		run:     checkabstractionscontract.Run,
@@ -182,6 +199,11 @@ var registry = []registered{
 		run:     benchset.Run,
 	},
 	{
+		name:    "check-md-links",
+		summary: "every internal link, anchor and file:line reference resolves",
+		run:     mdlinks.Run,
+	},
+	{
 		name:    "check-local-merge-loss",
 		summary: "a local squash-merge into dev dropped no content",
 		run:     mergeloss.Run,
@@ -200,6 +222,11 @@ var registry = []registered{
 		name:    "check-reference-trimmer",
 		summary: "does any project in the tree reference a package the compiler never uses",
 		run:     checkreferencetrimmer.Run,
+	},
+	{
+		name:    "check-result-chains",
+		summary: "the chain candidates among the if (x.IsFailure) guard sites",
+		run:     resultchains.Run,
 	},
 	{
 		name:    "check-ruleset-checks",
@@ -240,6 +267,11 @@ var registry = []registered{
 		name:    "check-tunit-analyzer-gate",
 		summary: "the analyzer must report a planted offender, and a waiver must suppress exactly its own site",
 		run:     tunitanalyzer.Run,
+	},
+	{
+		name:    "check-string-switch",
+		summary: "does a switch compare a string literal, and is every ladder listed",
+		run:     stringswitch.Run,
 	},
 	{
 		name:    "check-workflows",
@@ -305,6 +337,16 @@ var registry = []registered{
 		name:    "go-quality",
 		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
 		run:     goquality.Run,
+	},
+	{
+		name:    "guard-triage",
+		summary: "what each architecture-guard firing MEANT: defect, style, noise or unknown",
+		run:     guardtriage.Run,
+	},
+	{
+		name:    "md-lint",
+		summary: "the tracked markdown obeys the invariants the repository claims",
+		run:     mdlint.Run,
 	},
 	{
 		name:    "measure-build-cpu",

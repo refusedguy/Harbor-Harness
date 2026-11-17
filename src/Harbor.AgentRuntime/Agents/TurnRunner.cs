@@ -326,7 +326,7 @@ internal sealed class TurnRunner(
         // an agent step IS a model request, so the two are one checkpoint.
         // Everything the preceding step committed, including the tool
         // results, is covered by it.
-        Result checkpoint = await session.CheckpointAsync(ModelRequestCheckpointReason, ct).ConfigureAwait(false);
+        Result checkpoint = await CheckpointBeforeModelRequestAsync(session, ct).ConfigureAwait(false);
         if (checkpoint.IsFailure)
         {
             // The error is the run's terminal fact: the user has to know the
@@ -1204,6 +1204,48 @@ internal sealed class TurnRunner(
         }
 
         return built;
+    }
+
+    /// <summary>
+    ///     How long the durability checkpoint may take to settle once the run
+    ///     token is gone (#2216). Crush settles a cancelled turn with
+    ///     <c>WithTimeout(WithoutCancel(ctx), 5s)</c>: the stop may not reach
+    ///     the durable write, but a store that stopped answering must not pin
+    ///     the turn forever.
+    /// </summary>
+    private static readonly TimeSpan CheckpointSettleTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    ///     Take the model-request checkpoint on the run token, and SETTLE it on
+    ///     a detached, bounded token when a stop lands on the write (#2216).
+    /// </summary>
+    /// <remarks>
+    ///     A checkpoint is the record that the state committed so far survives a
+    ///     crash. A cancel that interrupts that record would leave exactly the
+    ///     partial write with no terminal fact the durable-write rule forbids.
+    ///     The settle token is a fresh one: the stop cannot cancel it, and its
+    ///     5-second bound is the "WithTimeout" half of the crush pattern. A
+    ///     retry after an interrupted first attempt is safe. A checkpoint
+    ///     captures the current head and its reason, so a second capture
+    ///     records the same fact.
+    /// </remarks>
+    private static async Task<Result> CheckpointBeforeModelRequestAsync(ISessionContext session, CancellationToken ct)
+    {
+        if (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                return await session.CheckpointAsync(ModelRequestCheckpointReason, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // The stop landed ON the write. Fall through and settle it on
+                // a token the stop cannot reach.
+            }
+        }
+
+        using var settleCts = new CancellationTokenSource(CheckpointSettleTimeout);
+        return await session.CheckpointAsync(ModelRequestCheckpointReason, settleCts.Token).ConfigureAwait(false);
     }
 }
 

@@ -1,6 +1,6 @@
 # arch-anchor-exceptions — the line-number anchors in the architecture rule tree
 # that are part of the CHECKED FACT rather than a pointer to it, and why.
-# Read by tools/check-arch-anchors.py.
+# Read by the check-arch-anchors gate (tools/gates/check-arch-anchors/).
 #
 # THIS IS A RATCHET IN BOTH DIRECTIONS, NOT A TARGET. The gate passes only when
 # the set of anchors the tree produces is exactly the set written here:

@@ -2,11 +2,11 @@
 """Check that the repo's *normative* markdown still cites code that exists.
 
 Stdlib only — no pip install, no network, no dotnet. Third sibling of
-check-md-links.py and md-lint.py, wired by the same workflow
+the check-md-links and md-lint gates, wired by the same workflow
 (.github/workflows/docs.yml, issue #509). The three gates must not overlap:
 
-  check-md-links.py  does the link resolve?
-  md-lint.py         is the file shaped the way the repo says it is?
+  check-md-links      does the link resolve?
+  md-lint             is the file shaped the way the repo says it is?
   THIS ONE           does the `file:line` it asserts still point at a line?
 
 WHY THIS FILE EXISTS (issue #664)
