@@ -42,6 +42,14 @@ internal sealed record ArchiveSessionLine(
     [property: JsonPropertyName("session")] Session Session);
 
 /// <summary>
+///     The discriminator of one archive log record (#2224): just the
+///     <c>type</c> tag, read through the AOT-safe context so the reader can
+///     route the line to its typed DTO without a <c>JsonDocument.Parse</c>.
+/// </summary>
+internal sealed record ArchiveRecordTypeLine(
+    [property: JsonPropertyName("type")] string Type);
+
+/// <summary>
 ///     One message record of the archive's log (#1750).
 /// </summary>
 internal sealed record ArchiveMessageLine(

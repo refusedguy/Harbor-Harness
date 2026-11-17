@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.Application.Sessions;
 
@@ -32,9 +34,10 @@ namespace Harbor.Application.Sessions;
 ///         Project-local skills shadow global ones with the same name.
 ///     </para>
 ///     <para>
-///         Per-turn cost is bounded: two directory enumerations plus reading at
-///         most the first few lines of every skill file and the full text of the
-///         two context files. The expensive prompt assembly itself stays behind
+///         Per-turn cost is bounded: two directory enumerations, a content
+///         fingerprint of at most <see cref="MaxContextBytes" /> bytes per
+///         context file, and the first few lines of every skill file. The
+///         expensive prompt assembly itself stays behind
 ///         <c>CachingSystemPromptBuilder</c>'s content hash.
 ///     </para>
 /// </remarks>
@@ -46,8 +49,18 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     private const string ProjectSkillsDir = ".harbor/skills";
     private const string SkillFileName = "SKILL.md";
     private const int MaxDescriptionLength = 160;
-    // Safety valve so a stray huge file cannot swallow the model's context window.
-    private const long MaxContextFileBytes = 256 * 1024;
+
+    /// <summary>
+    ///     Total byte budget shared by <em>all</em> project context files (#2230).
+    ///     The old per-file 256 KiB valve did not bound the prompt at all: two
+    ///     files under the cap contributed 512 KiB. Files are added in probed
+    ///     order and the file that would cross the budget is cut to the bytes
+    ///     that remain; later files are skipped with a warning.
+    /// </summary>
+    public const int MaxContextBytes = 32 * 1024;
+
+    private static readonly byte[] Utf8Bom = Encoding.UTF8.GetPreamble();
+    private static readonly byte[] Separator = [0];
 
     private sealed record CachedSnapshot(
         IReadOnlyList<ContextFile> Files,
@@ -55,35 +68,35 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         long Version);
 
     private readonly ConcurrentDictionary<string, CachedSnapshot> _cache = new(StringComparer.Ordinal);
+    private ILogger<WorkspaceContextService>? _logger;
 
     /// <summary>
-    ///     Cached variant of the two per-turn loads. Version = XOR of last-write ticks of
-    ///     AGENTS.md/CLAUDE.md and both skill directories. Fast path reuses the cached
-    ///     lists without touching skill-file contents.
+    ///     Create a workspace source. The logger is optional: the static migration
+    ///     facade and tests that only assert discovery do not need it, while the
+    ///     composition root supplies one so truncation warnings reach the log.
+    /// </summary>
+    public WorkspaceContextService(ILogger<WorkspaceContextService>? logger = null) => _logger = logger;
+
+    /// <summary>
+    ///     Give the shared facade instance its host logger once, at composition
+    ///     time. The static facade owns one process-wide instance so DI and
+    ///     pre-DI callers share a cache; attaching here keeps that identity while
+    ///     letting budget warnings reach the log (#2230).
+    /// </summary>
+    public void SetLogger(ILogger<WorkspaceContextService> logger) => _logger = logger;
+
+    /// <summary>
+    ///     Cached variant of the two per-turn loads. The version is a SHA-256
+    ///     fingerprint of the context files' <em>contents</em> plus the two skill
+    ///     directories' last-write ticks. Contents must be in the key because the
+    ///     shared budget truncates by byte count and total: a same-length edit or
+    ///     a change to one file that changes another file's cut still changes the
+    ///     prompt, so a timestamp-only key would serve a stale snapshot (#2230).
+    ///     Fast path reuses the cached lists without enumerating skills.
     /// </summary>
     public (IReadOnlyList<ContextFile> Files, IReadOnlyList<SkillDescriptor> Skills) GetOrLoadCached(string workingDirectory)
     {
-        long version = 0;
-        try
-        {
-            foreach (string name in ContextFileNames)
-            {
-                string path = Path.Combine(workingDirectory, name);
-                if (File.Exists(path))
-                    version ^= new FileInfo(path).LastWriteTimeUtc.Ticks;
-            }
-            string projectSkillsDir = Path.Combine(workingDirectory, ProjectSkillsDir);
-            if (Directory.Exists(projectSkillsDir))
-                version ^= new DirectoryInfo(projectSkillsDir).LastWriteTimeUtc.Ticks;
-            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (!string.IsNullOrEmpty(userProfile))
-            {
-                string globalSkillsDir = Path.Combine(userProfile, ProjectSkillsDir);
-                if (Directory.Exists(globalSkillsDir))
-                    version ^= new DirectoryInfo(globalSkillsDir).LastWriteTimeUtc.Ticks;
-            }
-        }
-        catch { /* best-effort version */ }
+        long version = ComputeVersion(workingDirectory);
 
         if (_cache.TryGetValue(workingDirectory, out var snap) && snap.Version == version)
             return (snap.Files, snap.Skills);
@@ -95,13 +108,83 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         return (files, skills);
     }
 
+    /// <summary>
+    ///     Content-derived snapshot version. Context-file bytes (and their
+    ///     lengths) feed the hash so any edit that changes what the budget embeds
+    ///     invalidates the cache. Only the first <see cref="MaxContextBytes" />
+    ///     bytes of a file can ever reach the prompt, so the hash is bounded by
+    ///     the same budget even for an oversized file on disk.
+    /// </summary>
+    private static long ComputeVersion(string workingDirectory)
+    {
+        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Span<byte> scratch = stackalloc byte[sizeof(long)];
+        try
+        {
+            foreach (string name in ContextFileNames)
+            {
+                AppendChars(hash, name);
+                hash.AppendData(Separator); // field separator
+                string path = Path.Combine(workingDirectory, name);
+                if (File.Exists(path))
+                {
+                    using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    AppendLong(hash, stream.Length, scratch);
+                    byte[] buffer = new byte[(int)Math.Min(stream.Length, MaxContextBytes)];
+                    int read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+                    hash.AppendData(buffer.AsSpan(0, read));
+                }
+                hash.AppendData(Separator); // record separator
+            }
+
+            string projectSkillsDir = Path.Combine(workingDirectory, ProjectSkillsDir);
+            if (Directory.Exists(projectSkillsDir))
+                AppendLong(hash, new DirectoryInfo(projectSkillsDir).LastWriteTimeUtc.Ticks, scratch);
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(userProfile))
+            {
+                string globalSkillsDir = Path.Combine(userProfile, ProjectSkillsDir);
+                if (Directory.Exists(globalSkillsDir))
+                    AppendLong(hash, new DirectoryInfo(globalSkillsDir).LastWriteTimeUtc.Ticks, scratch);
+            }
+        }
+        catch { /* best-effort version */ }
+
+        return BitConverter.ToInt64(hash.GetHashAndReset(), 0);
+    }
+
+    private static void AppendLong(IncrementalHash hash, long value, Span<byte> scratch)
+    {
+        System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(scratch, value);
+        hash.AppendData(scratch);
+    }
+
+    private static void AppendChars(IncrementalHash hash, ReadOnlySpan<char> chars)
+    {
+        Span<byte> scratch = stackalloc byte[128];
+        while (chars.Length > 0)
+        {
+            int take = Math.Min(chars.Length, 32);
+            int written = Encoding.UTF8.GetBytes(chars[..take], scratch);
+            hash.AppendData(scratch[..written]);
+            chars = chars[take..];
+        }
+    }
+
     /// <summary>Evict one directory from this instance's workspace cache (tests/benchmarks).</summary>
     public void Invalidate(string workingDirectory) => _cache.TryRemove(workingDirectory, out _);
 
-    /// <summary>Load project context files found in <paramref name="workingDirectory" />.</summary>
+    /// <summary>
+    ///     Load project context files found in <paramref name="workingDirectory" />,
+    ///     enforcing one byte budget across ALL of them (#2230). Files are added
+    ///     in probed order; the file that would exceed the remaining budget is cut
+    ///     to that remainder and every later file is skipped. Both decisions emit
+    ///     a warning so the cut is visible in the log.
+    /// </summary>
     public IReadOnlyList<ContextFile> LoadContextFiles(string workingDirectory)
     {
         var files = new List<ContextFile>(ContextFileNames.Length);
+        int remaining = MaxContextBytes;
         foreach (string name in ContextFileNames)
         {
             string path = Path.Combine(workingDirectory, name);
@@ -110,15 +193,37 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
                 continue;
             }
 
+            if (remaining <= 0)
+            {
+                _logger?.LogWarning(
+                    "Project context budget: skipped '{File}' because the combined {Budget}-byte budget is already exhausted. Trim AGENTS.md/CLAUDE.md or move content into a skill.",
+                    name, MaxContextBytes);
+                continue;
+            }
+
             try
             {
                 var info = new FileInfo(path);
-                if (info.Length == 0 || info.Length > MaxContextFileBytes)
+                if (info.Length == 0)
                 {
                     continue;
                 }
 
-                files.Add(new ContextFile(name, File.ReadAllText(path)));
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes.Length > remaining)
+                {
+                    _logger?.LogWarning(
+                        "Project context budget: truncated '{File}' to {Kept} of {Total} bytes under the combined {Budget}-byte budget. Trim AGENTS.md/CLAUDE.md or move content into a skill.",
+                        name, remaining, bytes.Length, MaxContextBytes);
+                    bytes = bytes[..remaining];
+                    remaining = 0;
+                }
+                else
+                {
+                    remaining -= bytes.Length;
+                }
+
+                files.Add(new ContextFile(name, Decode(bytes)));
             }
             catch (IOException)
             {
@@ -127,6 +232,17 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         }
 
         return files;
+    }
+
+    /// <summary>Decode context bytes as UTF-8, dropping a leading BOM like <c>File.ReadAllText</c>.</summary>
+    private static string Decode(byte[] bytes)
+    {
+        ReadOnlySpan<byte> span = bytes;
+        if (span.StartsWith(Utf8Bom))
+        {
+            span = span[Utf8Bom.Length..];
+        }
+        return Encoding.UTF8.GetString(span);
     }
 
     /// <summary>

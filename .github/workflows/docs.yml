@@ -710,6 +710,18 @@ jobs:
       # the "before and after" of a split has nothing to compare against.
       - name: Contract-domain census fails on a moved snapshot
         run: tools/bin/harbor-gates-linux-x64 contract-domains --self-test
+      
+      # #2100. The gate that proves the lane compiled the tree it was given.
+      # Its failure path is tested here for the same reason as the others: a
+      # gate edited until it matches nothing is indistinguishable from a gate
+      # that found nothing. The load-bearing fixture is the PLANTED ERROR — a
+      # project whose changed source does not compile, with the outputs the
+      # cache left behind. Nothing about that tree says "this will not
+      # compile" except the compiler itself, and the compiler never ran,
+      # because the compile SKIPPED the project. The gate MUST fail on it, or
+      # a green lane proves nothing.
+      - name: Compiled-tree gate fails on a cached project that was skipped
+        run: tools/bin/harbor-gates-linux-x64 check-compiled-tree --self-test
 
   # The tree gates, in ONE command.
   #
@@ -789,6 +801,18 @@ jobs:
       # indistinguishable from a rule that matched nothing.
       - name: Event-topology gate fails on a stale producer citation
         run: tools/bin/harbor-gates-linux-x64 check-event-topology --self-test
+
+      # #2112. The compile-cost instrument: what every project of the tree
+      # costs the compiler, and what a change in one of them costs everybody
+      # who depends on it. Its failure path is the point, and it is tested
+      # here for the same reason as the others: an instrument that cannot say
+      # "this project grew past its budget" cannot keep anybody from splitting
+      # a project on a guess. The load-bearing fixture is the INFLATED
+      # PROJECT — the self-test writes a build log in which one project costs
+      # sixty seconds more than it did, and the gate MUST go red on it, and
+      # MUST stay green on the same log without the inflation.
+      - name: Compile-cost gate fails on an inflated project
+        run: tools/bin/harbor-gates-linux-x64 measure-compile-cost --self-test
 
   links:
     name: internal links

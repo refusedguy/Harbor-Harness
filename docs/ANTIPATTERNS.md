@@ -55,9 +55,16 @@ public sealed class ToolCallDispatcher { /* tool execution */ }
 public sealed class TurnEventPublisher { /* event publishing */ }
 ```
 
-> **Harbor status:** `AgentLoop` is currently a god class (650 lines, 8
-> responsibilities). See §SOLID-001 in [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md).
-> Planned split: v0.3.
+> **Harbor status (historical / partially resolved):** this section used to say
+> "`AgentLoop` is currently a god class (650 lines, 8 responsibilities), planned
+> split v0.3." The split happened: `AgentLoop` is now 542 lines at
+> `src/Harbor.AgentRuntime/Agents/AgentLoop.cs`, with streaming coalescing in
+> `StreamingCoalescer.cs`, tool dispatch in `ToolDispatcher.cs`, and per-turn work
+> (including the `LlmEvent` switch at `TurnRunner.cs:707-814`) in `TurnRunner.cs`.
+> The 650-line figure and the example above describe the old tree, not today's.
+> The one responsibility that remains a real finding is the OCP-violating
+> switch, tracked as §OOP-004 in
+> [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md).
 
 ### 2. Switch on type (OCP violation)
 
@@ -133,8 +140,12 @@ public async IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest req, ...)
 private readonly ConcurrentDictionary<string, string> _shared = new();
 ```
 
-> **Harbor status:** `OpenAiCompatibleLlmClient._toolCallIndexToId` is a known
-> instance-level mutable. See §OOP-001.
+> **Harbor status (historical / resolved):** `_toolCallIndexToId` no longer
+> exists. `OpenAiCompatibleLlmClient.StreamAsync` creates a per-call
+> `ChunkStreamState` (id map + malformed-chunk counter) at
+> `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs:84-86`.
+> The instance-level mutable in the example above is a historical illustration,
+> not current code. See §OOP-001.
 
 ### 4. Throw exceptions for control flow
 
@@ -364,8 +375,14 @@ TaskFireAndForget.Forget(
 > `_theme.SetThemeAsync(value)` and `_toasts.InfoAsync(…)` bare. Policing a
 > perimeter nobody converted would be a guard that cries wolf, so widening
 > `GuardedProjects` is reserved for the commit that actually converts it.
-> `AgentLoop.ReportProgress` and `TuiEffectHost.Run` also still have
-> fire-and-forget. See §FP-003, §FP-006.
+> `AgentLoop.ReportProgress` and `TuiEffectHost.Run` no longer have bare
+> fire-and-forget: both were converted (§FP-003, §FP-006). The `_ =` on a Task in
+> the agent runtime is now a deliberate fault-observer, not a lost exception:
+> `ToolDispatcher.AbandonLeftoverAsync` at
+> `src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:584` attaches
+> `ContinueWith(..., OnlyOnFaulted, TaskScheduler.Default)` to log a late tool
+> call's fault. That is the sanctioned pattern this section asks for. See
+> §FP-003, §FP-006.
 
 ### 10. Mutating state in render path
 

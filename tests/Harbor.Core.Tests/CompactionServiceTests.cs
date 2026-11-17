@@ -296,11 +296,14 @@ public class CompactionServiceTests
 
         int headEstimate = new TokenTracker().EstimateTokens(messages);
         // Budget lands mid-head: the full head does not fit, one message does.
+        // Mirror SummaryMaxOutputTokens so the test keeps testing a mid-head cut
+        // when the summary output budget moves (8192 since #2231).
+        const int summaryOutputTokens = 8192;
         var tight = new ModelInfo(
             "test-model",
             "test",
             "Test Model",
-            4096 + tracker.ReserveTokens + headEstimate / 2,
+            summaryOutputTokens + tracker.ReserveTokens + headEstimate / 2,
             1_024,
             false,
             false,
@@ -308,7 +311,7 @@ public class CompactionServiceTests
             Pricing.Unknown,
             "openai");
 
-        await Assert.That(headEstimate).IsGreaterThan(tight.ContextWindow - 4096 - tracker.ReserveTokens);
+        await Assert.That(headEstimate).IsGreaterThan(tight.ContextWindow - summaryOutputTokens - tracker.ReserveTokens);
 
         var result = await svc.CompactAsync("session-1", messages, tight);
 

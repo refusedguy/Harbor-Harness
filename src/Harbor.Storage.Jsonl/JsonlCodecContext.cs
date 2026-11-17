@@ -63,6 +63,7 @@ namespace Harbor.Storage.Jsonl;
 [JsonSerializable(typeof(SessionArchiveAttachment))]
 [JsonSerializable(typeof(SessionArchiveIntegrity))]
 [JsonSerializable(typeof(ArchiveSessionLine))]
+[JsonSerializable(typeof(ArchiveRecordTypeLine))]
 [JsonSerializable(typeof(ArchiveMessageLine))]
 [JsonSerializable(typeof(ArchiveRewindLine))]
 [JsonSerializable(typeof(ArchiveUserPayload))]

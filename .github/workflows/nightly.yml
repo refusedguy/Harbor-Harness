@@ -694,6 +694,30 @@ jobs:
       - name: The vCPU aggregator still reads the measurements
         run: tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu --self-test
 
+      # #2112. What every project of the tree costs the compiler, and what a
+      # change in one of them costs everybody who depends on it. The
+      # instrument reads the SERIAL arm's log (the parallel arm's per-project
+      # numbers are dominated by waiting, and the instrument refuses that
+      # log), and compares the per-project and per-radius shares with the
+      # recorded baseline.
+      #
+      # It is a measurement, so it reports into the job summary and does not
+      # fail the lane: the verdict a human gets is the exit code (1 when a
+      # project grew by more than 20 % AND by more than 10 s), and the
+      # nightly lane is where the measurement is taken, not where the budget
+      # is enforced.
+      - name: The compile cost of every project, against the recorded baseline
+        if: always()
+        run: |
+          if [ -f meas/c-m1-r1.log ]; then
+            tools/bin/harbor-gates-linux-x64 measure-compile-cost \
+              --log meas/c-m1-r1.log \
+              --baseline tools/compile-cost-baseline.txt \
+              --min-projects 100 || true
+          else
+            echo "no serial build log: the serial arm did not run, so there is nothing to price"
+          fi
+
       - name: Upload the measurements
         if: always()
         uses: actions/upload-artifact@v7

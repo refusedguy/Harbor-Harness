@@ -121,9 +121,20 @@ public sealed class TokenTracker : ITokenTracker
         Ensure.NotNull(messages);
         Ensure.NotNull(model);
 
-        // Degenerate window (#80 companion): missing provider metadata surfaces
-        // as ContextWindow == 0, which used to make `estimated > negative`
-        // true on EVERY turn. Refuse instead of compacting blindly.
+        // An unreported window (0, the sentinel ProviderConfig uses when
+        // context_length is missing) cannot produce a token budget. Refuse to
+        // compact, but say so at Warning: the old code folded this into the
+        // small-window case and logged only at Debug, so a provider that omits
+        // context_length silently disabled compaction for the whole session.
+        if (model.ContextWindow <= 0)
+        {
+            TokenTrackerLog.UnknownContextWindow(_logger, model.Id, model.ProviderId);
+            return false;
+        }
+
+        // Degenerate but reported window (#80 companion): at or below the
+        // reserve it would make `estimated > negative` true on EVERY turn.
+        // Refuse instead of compacting blindly.
         if (model.ContextWindow <= ReserveTokens)
         {
             TokenTrackerLog.SkippingCompactionCheck(_logger, model.ContextWindow, ReserveTokens);
@@ -185,5 +196,8 @@ internal static partial class TokenTrackerLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Skipping compaction check: context window {ContextWindow} does not exceed reserve {ReserveTokens}")]
     public static partial void SkippingCompactionCheck(ILogger logger, int contextWindow, int reserveTokens);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Model {ModelId} ({ProviderId}) reports no context window; compaction checks are disabled because the token budget cannot be computed")]
+    public static partial void UnknownContextWindow(ILogger logger, string modelId, string providerId);
 
 }

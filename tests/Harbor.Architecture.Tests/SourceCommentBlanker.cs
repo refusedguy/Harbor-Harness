@@ -47,6 +47,8 @@
 // whole live tree, byte for byte, against an oracle that is the old regular
 // expressions with the quadratic read replaced by a linear one.
 
+using System.Buffers;
+
 namespace Harbor.Architecture.Tests;
 
 /// <summary>
@@ -75,10 +77,61 @@ internal static class SourceCommentBlanker
         // cursor, because a line comment only ever removes characters). So the
         // whole strip costs one array and one string — 4 bytes per input
         // character — instead of the old implementation's quadratic term.
+        //
+        // THE ARRAY IS RENTED (the allocation census, #2136), and that is the
+        // half of the 4 bytes per character that is pure waste: the buffer is
+        // dead the moment the string is built, and every rule that strips a
+        // file pays for a fresh one. The tree is stripped once per rule that
+        // walks it, so the array is the second-largest term in the strip's
+        // cost after the string itself.
+        //
+        // The rented array is LONGER than the text, so the length travels with
+        // every step: a scan that trusted `buffer.Length` would read past the
+        // text into the pool's leftovers, and a `*/` in another tenant's
+        // buffer would close this file's block comment.
+        char[] buffer = ArrayPool<char>.Shared.Rent(length);
+        try
+        {
+            source.CopyTo(0, buffer, 0, length);
+
+            BlankBlockComments(buffer, length);
+            int written = BlankLineComments(buffer, length);
+
+            return new string(buffer, 0, written);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
+    }
+
+    /// <summary>
+    ///     The PREVIOUS implementation — the same scan over a buffer of its
+    ///     own — kept as the baseline the allocation measurement compares
+    ///     against.
+    /// </summary>
+    /// <remarks>
+    ///     It is the body <see cref="Blank" /> had before the buffer was
+    ///     rented, and it is here for the same reason `CommentStripperOracle`
+    ///     is: a number without a baseline is a number nobody can act on. The
+    ///     two produce the same bytes — that is what
+    ///     `CommentStripperEquivalenceTests` proves — so the only difference
+    ///     between them is the allocation.
+    /// </remarks>
+    /// <param name="source">The text to blank.</param>
+    /// <returns>The blanked text.</returns>
+    internal static string BlankUnpooled(string source)
+    {
+        int length = source.Length;
+        if (length == 0)
+        {
+            return string.Empty;
+        }
+
         char[] buffer = source.ToCharArray();
 
-        BlankBlockComments(buffer);
-        int written = BlankLineComments(buffer);
+        BlankBlockComments(buffer, length);
+        int written = BlankLineComments(buffer, length);
 
         return new string(buffer, 0, written);
     }
@@ -87,9 +140,9 @@ internal static class SourceCommentBlanker
     ///     Blanks every block comment in <paramref name="buffer" />, in place.
     /// </summary>
     /// <param name="buffer">The text to blank; modified in place.</param>
-    private static void BlankBlockComments(char[] buffer)
+    /// <param name="length">How many characters of the buffer hold the text.</param>
+    private static void BlankBlockComments(char[] buffer, int length)
     {
-        int length = buffer.Length;
         int i = 0;
 
         while (i < length - 1)
@@ -100,7 +153,7 @@ internal static class SourceCommentBlanker
                 continue;
             }
 
-            int close = IndexOfBlockClose(buffer, i + 2);
+            int close = IndexOfBlockClose(buffer, length, i + 2);
             if (close < 0)
             {
                 // An unclosed `/*` does not swallow the rest of the file: the
@@ -127,10 +180,11 @@ internal static class SourceCommentBlanker
     ///     <paramref name="from" />, or -1 when there is none.
     /// </summary>
     /// <param name="buffer">The text to search.</param>
+    /// <param name="length">How many characters of the buffer hold the text.</param>
     /// <param name="from">Where the search starts.</param>
-    private static int IndexOfBlockClose(char[] buffer, int from)
+    private static int IndexOfBlockClose(char[] buffer, int length, int from)
     {
-        ReadOnlySpan<char> tail = buffer.AsSpan(from);
+        ReadOnlySpan<char> tail = buffer.AsSpan(from, length - from);
         int at = tail.IndexOf("*/".AsSpan());
         return at < 0 ? -1 : from + at;
     }
@@ -139,10 +193,10 @@ internal static class SourceCommentBlanker
     ///     Replaces every line comment with one space, compacting the buffer.
     /// </summary>
     /// <param name="buffer">The text to compact; modified in place.</param>
+    /// <param name="length">How many characters of the buffer hold the text.</param>
     /// <returns>How many characters the result has.</returns>
-    private static int BlankLineComments(char[] buffer)
+    private static int BlankLineComments(char[] buffer, int length)
     {
-        int length = buffer.Length;
         int read = 0;
         int write = 0;
 

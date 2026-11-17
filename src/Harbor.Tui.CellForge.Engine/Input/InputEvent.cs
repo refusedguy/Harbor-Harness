@@ -14,6 +14,9 @@ public enum InputEventKind : byte
     /// <summary>A malformed/unparseable sequence was discarded (resync signal
     /// for diagnostics; carries no payload).</summary>
     Unknown = 6,
+
+    /// <summary>Terminal focus gained/lost via CSI ?1004h (issue #2218).</summary>
+    Focus = 7,
 }
 
 /// <summary>
@@ -23,7 +26,7 @@ public enum InputEventKind : byte
 /// </summary>
 public readonly struct InputEvent
 {
-    private InputEvent(InputEventKind kind, KeyEvent key, MouseEvent mouse, PasteEvent paste, ResizeSignal resize, CapabilityEvent capability)
+    private InputEvent(InputEventKind kind, KeyEvent key, MouseEvent mouse, PasteEvent paste, ResizeSignal resize, CapabilityEvent capability, FocusEvent focus)
     {
         Kind = kind;
         Key = key;
@@ -31,6 +34,7 @@ public readonly struct InputEvent
         Paste = paste;
         Resize = resize;
         Capability = capability;
+        Focus = focus;
     }
 
     public InputEventKind Kind { get; }
@@ -39,13 +43,15 @@ public readonly struct InputEvent
     public PasteEvent Paste { get; }
     public ResizeSignal Resize { get; }
     public CapabilityEvent Capability { get; }
+    public FocusEvent Focus { get; }
 
-    public static InputEvent FromKey(KeyEvent evt) => new(InputEventKind.Key, evt, default, default, default, default);
-    public static InputEvent FromMouse(MouseEvent evt) => new(InputEventKind.Mouse, default, evt, default, default, default);
-    public static InputEvent FromPaste(PasteEvent evt) => new(InputEventKind.Paste, default, default, evt, default, default);
-    public static InputEvent FromResize(ResizeSignal evt) => new(InputEventKind.Resize, default, default, default, evt, default);
-    public static InputEvent FromCapability(CapabilityEvent evt) => new(InputEventKind.Capability, default, default, default, default, evt);
-    public static InputEvent Unknown() => new(InputEventKind.Unknown, default, default, default, default, default);
+    public static InputEvent FromKey(KeyEvent evt) => new(InputEventKind.Key, evt, default, default, default, default, default);
+    public static InputEvent FromMouse(MouseEvent evt) => new(InputEventKind.Mouse, default, evt, default, default, default, default);
+    public static InputEvent FromPaste(PasteEvent evt) => new(InputEventKind.Paste, default, default, evt, default, default, default);
+    public static InputEvent FromResize(ResizeSignal evt) => new(InputEventKind.Resize, default, default, default, evt, default, default);
+    public static InputEvent FromCapability(CapabilityEvent evt) => new(InputEventKind.Capability, default, default, default, default, evt, default);
+    public static InputEvent FromFocus(FocusEvent evt) => new(InputEventKind.Focus, default, default, default, default, default, evt);
+    public static InputEvent Unknown() => new(InputEventKind.Unknown, default, default, default, default, default, default);
 
     public override string ToString() => Kind switch
     {
@@ -54,6 +60,7 @@ public readonly struct InputEvent
         InputEventKind.Paste => Paste.ToString(),
         InputEventKind.Resize => Resize.ToString(),
         InputEventKind.Capability => $"Capability({Capability.Kind})",
+        InputEventKind.Focus => Focus.IsFocused ? "Focus(Gained)" : "Focus(Lost)",
         InputEventKind.Unknown => "Unknown(malformed sequence)",
         _ => "None",
     };

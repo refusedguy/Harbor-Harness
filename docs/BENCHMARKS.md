@@ -275,6 +275,42 @@ Wall and RSS as above. Publish dir: 41 MB (41 868 731 bytes); binary: 29 MB, sel
 
 Answer to the #411 decision question, quantified: AOT buys **7.7x / 7.1x / 7.9x** spawn-to-exit on `--version` / `--help` / `providers`, **1.5x** RSS on the light verbs (43 → 29 MB) and **2.7x** on the DI-heavy verb (94 → 35 MB), with a 29 MB self-contained binary replacing a 40 MB framework-dependent apphost. The §4.1 target (<100 ms cold start) is met as a measurement on all three verbs (18 / 19 / 58 ms). On this workload the trade of #48 answers **yes**: the startup win is measured, and the thing given up for it — in-process Roslyn plugin compile — already has its default out-of-process route (#1055, 0.021 ms mean loopback dispatch). What this table still does not cover, for either mode: time-to-first-frame, steady-state allocs/op, and input-latency p50/p95 from the #411 criteria — spawn-to-exit plus RSS peak is the evidence that exists.
 
+### 4.5 Interactive render metrics: measured vs not yet measured (#2221)
+
+The terminal-interactivity metrics that kitty and Ghostty publish are not all in this file yet. This subsection records the boundary honestly. Every number in Table 1 is copied from a measurement that already has a run and a machine in this document. No estimate is written in place of a missing measurement. Where a metric has no run, the method to produce it is described and the item stays open.
+
+Table 1: already measured, evidence in this file
+
+| Metric | Value | Provenance | Machine and method |
+|---|---|---|---|
+| Spawn-to-exit, JIT `--version` / `--help` / `providers` | 138 / 134 / 459 ms median | §4.4, Actions run 37935894413, 2026-10-09, commit `eebc9be3` | AMD EPYC 7763, 4 vCPU, Ubuntu 24.04.5, .NET SDK 10.0.401, Release apphost |
+| Spawn-to-exit, AOT same three verbs | 18 / 19 / 58 ms median | §4.4, Actions run 38110959202, 2026-10-11, commit `1ef2e522` | Same machine class, self-contained linux-x64, #413 recipe |
+| RSS peak, JIT light / DI-heavy verb | 43 MB / 96 MB | §4.4, run 37935894413 | `ru_maxrss` median |
+| RSS peak, AOT light / DI-heavy verb | 29 MB / 35 MB | §4.4, run 38110959202 | `ru_maxrss` median |
+| Hinted cell-diff, 120x500 live chat timeline | 0.317 ms | Renderer-moat probes, 2026-08-31, `RendererMoatPerfTests` | Linux x64, .NET 10 Release JIT, discarding backend, no tty I/O |
+| Full frame, solve+paint+hinted diff+encode | 0.805 ms | Same probe | Same |
+| Armed post-fx glow frame | 0.671 ms | Same probe, within noise of the 0.805 ms base | Same |
+| Steady-frame allocations, 2 000 hinted frames | 0 B | Same probe | Same |
+
+Spawn-to-exit and cold start are not time-to-first-frame. The §4.1 median of 966 ms is wall-clock from process spawn to the first stdout byte of `--version`, not to the first rendered frame on a PTY. None of the Table 1 values may be relabeled as TTFF, input latency, or steady-state allocs/op.
+
+Table 2: requested metrics with no run yet, tasks and not estimates
+
+| Metric | Status | Instrument and method | Acceptance when added |
+|---|---|---|---|
+| Time-to-first-frame, JIT and AOT | NOT MEASURED | PTY harness with `HARBOR_TUI=cellforge`; timestamp process spawn and the first `WriteAsync` surfaced through `EngineStageCounters`; report spawn to the first byte of the first frame, not spawn to exit | N >= 7, median plus spread, both modes, run id and machine recorded |
+| Input latency p50/p95/p99 | NOT MEASURED | Timestamp the `InputEvent` in `TerminalInputSource` and the first frame whose diff carries its effect (caret move or prompt delta); measure pacer hysteresis separately so `CommitTickPacer` does not shift p95 | Report the distribution, not the mean; keyboard-to-screen analog of kitty |
+| Frame budget distribution | NOT MEASURED | Per-frame `solve+paint+diff+encode` over the same 120x500 live timeline as `RendererMoatPerfTests`, with a separate line for armed glow | p50/p95/p99, not only the 0.805 ms mean |
+| Steady-state allocs/op | NOT MEASURED | `GC.GetAllocatedBytesForCurrentThread` or BenchmarkDotNet around each scenario: stream token, tool-call delta, spinner tick, mouse wheel, paste, resize, overlay open/close | Bytes per operation per scenario; a 0 B/op claim only where measured |
+| Damage ratio | NOT MEASURED | Count cells emitted against screen area (cols x rows) via `DiffEngine.HintArea()`; count hint hits versus full-scan fallback at the 25% threshold | Emitted/area ratio and fallback frequency, with the run recorded |
+| GC pause / Gen0 over a 30 s stream | NOT MEASURED | `dotnet-counters` against a 30-second stream, Gen0 count and pause histogram; closes the §4.3 gap | Counter output attached and run id recorded |
+| AOT versus JIT at steady state | NOT MEASURED | Same PTY workload in both binaries, compare p95 frame time and Gen0 count | p95 and GC in both modes; no claim inferred from startup numbers |
+| Parser throughput, bytes/s | NOT MEASURED | Feed a bootstrap ANSI stream into `EscapeSequenceParser` with rendering disabled, count input bytes per second | Comparable to kitty throughput with the explicit caveat that this is a parser, not a terminal emulator |
+
+Verdict on "fast as Rust": unconfirmed. What this file proves is a zero-allocation cell-diff core (0 B over 2 000 frames), a 0.317 ms hinted diff against a 16 ms budget, and a 7 to 8x startup win under AOT. It does not yet prove time-to-first-frame, p95 input latency, or steady-state allocs/op in the form kitty and Ghostty publish. Until Table 2 has recorded runs, the defensible claim is that the engine has measured microbenchmarks and the architectural preconditions, not parity with Rust-grade terminal performance.
+
+This subsection changes no portable threshold and no CI gate. It is documentation only.
+
 ## 5. Microbenchmarks (BenchmarkDotNet)
 
 Located in `tests/Harbor.Benchmarks/`. Run with:
@@ -3818,17 +3854,18 @@ gate that costs minutes costs every pull request. This section holds the
 numbers for the gate set, measured the way the workflows run it.
 
 **Method.** A clean checkout of the commit under test, with the git
-history (the gates that read the history — `check-doc-cites.py` and
-`check-local-merge-loss.py` — need it, and a tree without it is not the
-tree CI runs). Every gate is run with the arguments its workflow passes,
-from `bench/gates/tools.tsv`, five times, and the MINIMUM wall time is
-kept: the machine is shared and its load is 18-26, so the minimum is the
-estimate that the least foreign work distorts. The peak RSS is
-`/proc/<pid>/status VmHWM`, polled while the child runs, and not
-`getrusage(RUSAGE_CHILDREN).ru_maxrss`: on this host the latter carries a
-value the child never reached, because it inherits the accounting of the
-parent's own high-water mark. The measuring parent is a 2 KB C program
-(`bench/gates/maxrss.c`) for the same reason.
+history (the gates that read the history, `check-doc-cites.py` and
+`check-local-merge-loss`, need it, and a tree without it is not the tree
+CI runs). Every gate is run with the arguments its workflow passes, from
+`bench/gates/tools.tsv`, five times, and the MINIMUM wall time is kept.
+On the shared laptop that produced the older tables the load was 18-26,
+so the minimum was the estimate the least foreign work distorted. The
+current table was taken on a CI runner; §10.2 names the run and the tree.
+The peak RSS is `/proc/<pid>/status VmHWM`, polled while the child runs,
+and not `getrusage(RUSAGE_CHILDREN).ru_maxrss`: on the laptop the latter
+carried a value the child never reached, because it inherited the
+accounting of the parent's own high-water mark. The measuring parent is
+a 2 KB C program (`bench/gates/maxrss.c`) for the same reason.
 
 **The set is the set CI runs**, and the gate `harbor-gates
 check-gate-bench-set` says so: it reads the workflow files, the measured
@@ -3975,113 +4012,109 @@ two files are checked against the workflow files by the gate
 `harbor-gates check-gate-bench-set`, which fails when a gate a workflow runs
 is in neither file, when a row names a gate no workflow runs, and when a row
 passes arguments CI does not pass. The set below is therefore complete by
-construction, not by memory: **41 gates**, and a gate added to a workflow
+construction, not by memory: **43 gates**, and a gate added to a workflow
 without a row in the table is red. The tree runner counts: a workflow that
 calls `harbor-gates all` runs the gates of the runner's list, and the gate
 reads that list out of the runner's Go source, so a row for a gate the
 runner starts is a row for a gate CI runs.
 
-**Method.** The tree at `536e660e` (`origin/dev` at `ff1e2955` plus this
-branch's commits), with the git history. Forty-one gates, five runs per
-gate, the MINIMUM wall time kept. The exit code is the gate's own: `0` is
-a clean run, `1` is a run that found something, and `2` is "could not run".
+**The cost has two numbers, and they answer two different questions.**
 
-**THE BOX WAS NOT QUIET, and the numbers below carry that.** The load
-average was 20 to 33 during the measurement and the CPU was 99 % busy with
-other agents' runs, so the numbers below are the set's cost UNDER LOAD.
-Three measurements of the same harness say how much the load costs:
+| what | number | where it comes from |
+|---|---:|---|
+| the set, gates run one after another with the arguments CI passes | **25.644 s** | the table below, on commit `be078f5a` |
+| the same gates in the pull-request lane, spread over jobs | **5.0 runner-min** (3.8 in `docs.yml` + 1.2 in `ci.yml`), **0 s of wall** | §11.4, the twelve pull requests of 2026-10-21 |
 
-| what | number |
-|---|---:|
-| the 37-gate set on the PRE-merge tree, on this box on this day | **164.4 s** |
-| the same 37-gate set on the pre-merge tree, on a QUIET machine (published before) | **39.7 s** |
-| the 41-gate set on the merged tree, on this box | **222.3 s** |
+The first number is what the harness measures. The second is what the lane
+bills: the gates run in separate jobs, in parallel with a build that takes
+longer than they do, so they never set the pull request's wall. The two
+numbers come from different samples (one commit on a runner, twelve pull
+requests on the lane of that day), so they are not two columns of one table
+and must not be subtracted from each other. §11.4 names that sample.
 
-The load is worth about four times, and it is worth knowing that: the
-minimum of five runs is the estimate that the least foreign work distorts,
-but on a box that never went quiet it is the best of five bad samples. Two
-runs of the same set half an hour apart differed by nineteen per cent
-(**186.0 s** and **221.1 s**, on the tree before the last merge). The table
-below is the more expensive of the runs on the merged tree.
+**Method.** Commit `be078f5a442fda2fc46754a7882600797d59c73e`, checked out
+with its full history on an `ubuntu-latest` runner. The measurement is CI
+run `44040241183`, `workflow_dispatch` of `benchmark.yml`, job `gate-suite`;
+the manual-only job is the instrument, not a gate a pull request pays for.
+It runs `bench/gates/measure.sh` with `TREE=$GITHUB_WORKSPACE` and `RUNS=5`.
+Forty-three gates, five runs per gate, the MINIMUM wall time kept, the peak
+RSS of the child read from `/proc/<pid>/status VmHWM`. The exit code is the
+gate's own: `0` is a clean run, `1` is a run that found something, and `2`
+is "could not run". The raw table is the `gate-suite-results` artifact of
+that run and is reproduced in the job summary.
 
-**What the merge changed, measured under one load.** The two gates that
-carry the set, the same pair of trees, back to back on the same box, each
-timed around the whole process:
-
-| | pre-merge tree `1f19a8c9` | merged tree `db3fd419` | |
-|---|---:|---:|---:|
-| `check-doc-cites.py` | 113.5 s | 120.5 s | **+6 %** |
-| `check-local-merge-loss` | 52.9 s | 52.3 s | **-1 %** |
-
-The tree grew by sixteen commits and the set grew by four gates; the cost
-moved by less than the load moved it.
+**This table is not comparable with the 222.3 s table that was here.** That
+one measured 41 gates on a shared laptop at load 20 to 33, on tree
+`536e660e`; this one measures 43 gates on a runner whose git objects came
+from that run's checkout. Two gates were added after `536e660e`
+(`banned-api-exemptions` and `gen-workflows`), and the machine changed too,
+so neither the difference in gates nor the difference in seconds can be
+assigned to a cause here. The older table stays in §10.2.1 as the
+measurement that decided the port, not as a row of a comparison.
 
 | gate | wall (s) | median (s) | peak RSS | exit |
 |---|---:|---:|---:|---:|
-| `check-doc-cites.py` | 136.206 | 145.054 | 56.9 MB | 0 |
-| `check-local-merge-loss` | 34.768 | 37.310 | 42.0 MB | 0 |
-| `check-test-dup.py` | 7.968 | 10.068 | 52.9 MB | 0 |
-| `check-test-projects.py` | 7.710 | 9.355 | 23.3 MB | 0 |
-| `check-string-switch.py` | 7.547 | 8.169 | 18.0 MB | 0 |
-| `check-result-chains.py` | 6.975 | 7.670 | 18.3 MB | 0 |
-| `check-gate-policy.py` | 4.705 | 5.070 | 25.6 MB | 0 |
-| `check-abstractions-contract` | 4.202 | 5.953 | 13.0 MB | 0 |
-| `guard-triage.py` | 1.644 | 1.888 | 31.0 MB | 0 |
-| `check-md-links.py` | 1.539 | 2.068 | 20.6 MB | 0 |
-| `check-arch-anchors.py` | 1.462 | 2.560 | 17.3 MB | 0 |
-| `md-lint.py` | 1.259 | 1.311 | 19.2 MB | 1 |
-| `changelog-assemble` | 1.036 | 1.484 | 16.7 MB | 0 |
-| `gen-seam-graph` | 1.031 | 1.242 | 79.4 MB | 0 |
-| `check-arch-suite-once.py` | 0.651 | 0.939 | 17.6 MB | 0 |
-| `check-event-topology` | 0.464 | 0.687 | 19.1 MB | 0 |
-| `check-test-json-reflection.py` | 0.459 | 0.504 | 17.0 MB | 0 |
-| `check-analyzer-scope` | 0.409 | 0.488 | 12.3 MB | 0 |
-| `check-public-api-resign` | 0.289 | 0.317 | 10.9 MB | 0 |
-| `normalize-mtimes` | 0.284 | 0.476 | 12.3 MB | 0 |
-| `ci-shard-slices.py` | 0.260 | 0.274 | 19.4 MB | 0 |
-| `check-test-packages.py` | 0.251 | 0.265 | 18.8 MB | 1 |
-| `check-tool-schema-pin.py` | 0.236 | 0.249 | 19.4 MB | 0 |
-| `gen-plugin-inventory.py` | 0.206 | 0.300 | 18.1 MB | 0 |
-| `check-coverage-registry` | 0.160 | 0.534 | 10.8 MB | 1 |
-| `coverage-report` | 0.103 | 0.172 | 11.6 MB | 0 |
-| `check-doc-facts` | 0.090 | 0.098 | 9.3 MB | 0 |
-| `check-xml-doc-coverage` | 0.063 | 0.082 | 11.1 MB | 0 |
-| `check-no-test-sdk` | 0.051 | 0.076 | 13.5 MB | 0 |
-| `aggregate-analyzer-cost` | 0.044 | 0.064 | 7.3 MB | 1 |
-| `check-workflows` | 0.040 | 0.046 | 10.5 MB | 0 |
-| `check-shard-balance` | 0.038 | 0.042 | 7.6 MB | 0 |
-| `pack-validate` | 0.031 | 0.058 | 8.0 MB | 1 |
-| `check-gate-bench-set` | 0.026 | 0.052 | 10.5 MB | 0 |
-| `aot-publish-gate` | 0.023 | 0.043 | 7.1 MB | 2 |
-| `test-census` | 0.020 | 0.041 | 7.2 MB | 0 |
-| `aggregate-build-vcpu` | 0.016 | 0.078 | 11.4 MB | 1 |
-| `demo-repro` | 0.015 | 0.033 | 7.4 MB | 0 |
-| `test-measurements` | 0.014 | 0.018 | 7.2 MB | 0 |
-| `test-skips` | 0.013 | 0.025 | 7.0 MB | 0 |
-| `check-reference-trimmer` | 0.009 | 0.009 | 7.1 MB | 1 |
-| **the whole set** | **222.317** | | | |
+| `check-doc-cites.py` | 15.226 | 15.439 | 57.1 MB | 0 |
+| `check-test-projects` | 1.786 | 1.794 | 17.6 MB | 0 |
+| `check-string-switch.py` | 1.545 | 1.551 | 17.7 MB | 0 |
+| `check-result-chains.py` | 1.352 | 1.366 | 18.1 MB | 0 |
+| `check-local-merge-loss` | 1.330 | 1.342 | 54.4 MB | 0 |
+| `check-gate-policy.py` | 0.980 | 0.984 | 26.4 MB | 0 |
+| `gen-seam-graph` | 0.472 | 0.482 | 87.1 MB | 0 |
+| `check-abstractions-contract` | 0.381 | 0.400 | 15.8 MB | 0 |
+| `guard-triage.py` | 0.356 | 0.361 | 30.7 MB | 0 |
+| `check-md-links.py` | 0.333 | 0.349 | 20.1 MB | 0 |
+| `check-test-dup` | 0.290 | 0.295 | 54.7 MB | 0 |
+| `changelog-assemble` | 0.277 | 0.281 | 18.2 MB | 0 |
+| `banned-api-exemptions` | 0.259 | 0.261 | 27.1 MB | 0 |
+| `md-lint.py` | 0.241 | 0.254 | 18.8 MB | 0 |
+| `check-arch-anchors.py` | 0.207 | 0.213 | 16.6 MB | 0 |
+| `check-event-topology` | 0.102 | 0.103 | 16.1 MB | 0 |
+| `ci-shard-slices.py` | 0.074 | 0.075 | 18.9 MB | 0 |
+| `normalize-mtimes` | 0.068 | 0.070 | 15.4 MB | 0 |
+| `check-arch-suite-once.py` | 0.058 | 0.060 | 17.1 MB | 0 |
+| `check-test-packages` | 0.039 | 0.039 | 15.1 MB | 1 |
+| `check-test-json-reflection` | 0.034 | 0.035 | 16.1 MB | 0 |
+| `coverage-report` | 0.024 | 0.025 | 13.5 MB | 0 |
+| `check-xml-doc-coverage` | 0.023 | 0.024 | 13.7 MB | 0 |
+| `check-coverage-registry` | 0.022 | 0.023 | 13.3 MB | 1 |
+| `check-analyzer-scope` | 0.017 | 0.017 | 14.9 MB | 0 |
+| `check-doc-facts` | 0.017 | 0.017 | 12.2 MB | 0 |
+| `check-no-test-sdk` | 0.014 | 0.015 | 13.9 MB | 0 |
+| `check-workflows` | 0.014 | 0.016 | 13.4 MB | 0 |
+| `check-public-api-resign` | 0.012 | 0.013 | 13.0 MB | 0 |
+| `check-tool-schema-pin` | 0.011 | 0.012 | 13.3 MB | 0 |
+| `check-gate-bench-set` | 0.010 | 0.010 | 12.9 MB | 0 |
+| `gen-plugin-inventory` | 0.010 | 0.010 | 11.4 MB | 0 |
+| `pack-validate` | 0.008 | 0.008 | 10.8 MB | 1 |
+| `aggregate-analyzer-cost` | 0.006 | 0.006 | 9.9 MB | 1 |
+| `check-shard-balance` | 0.006 | 0.006 | 10.2 MB | 0 |
+| `aggregate-build-vcpu` | 0.005 | 0.005 | 9.9 MB | 1 |
+| `aot-publish-gate` | 0.005 | 0.005 | 10.0 MB | 2 |
+| `check-reference-trimmer` | 0.005 | 0.005 | 9.9 MB | 1 |
+| `demo-repro` | 0.005 | 0.006 | 10.1 MB | 0 |
+| `gen-workflows` | 0.005 | 0.005 | 10.0 MB | 0 |
+| `test-census` | 0.005 | 0.005 | 9.8 MB | 0 |
+| `test-measurements` | 0.005 | 0.005 | 9.9 MB | 0 |
+| `test-skips` | 0.005 | 0.005 | 9.9 MB | 0 |
+| **the whole set** | **25.644** | | | |
 
-**The set costs 222.3 s on a loaded box**, and two gates are 77 % of it: the
-doc-cites gate (136.2 s, 61 %) and the merge-loss gate (34.8 s, 16 %). The
-other 39 gates together cost 51.3 s.
-
-**PROJECTION, not a measurement: on a quiet machine the set costs about 40
-to 42 s.** The pre-merge tree's quiet cost was 39.7 s for the 37 gates of
-that set; the four gates this branch's merge added cost about 1.5 s under
-load and about 0.4 s quiet, and the two gates that carry the set moved by
-the percentages of the comparison above (+1.3 s and -0.1 s). The box never
-went quiet during the measurement window, so the quiet number is not
-measured here, and the honest form of it is a range.
+**One gate is more than half of the set on this runner.**
+`check-doc-cites.py` costs 15.226 s of 25.644 s (59 %), and the next gate,
+`check-test-projects`, costs 1.786 s. The other 42 gates together cost
+10.418 s. The merge-loss gate that issue #2131 called out as
+costing 24 s to 87 s on the laptop is 1.330 s here, which is the same work
+on a different machine and a different load, not a speed-up measured here.
 
 **What the exit codes mean here.** Twelve gates read an artifact the build
-produced, and the measuring machine has none of them, so they were measured
+produced, and the measuring runner has none of them, so they were measured
 against an EMPTY directory of the right shape: the TRX directory
 (`test-census`, `test-skips`, `test-measurements`, `guard-triage.py`), the
 packed packages (`pack-validate`), the coverage directory
 (`check-coverage-registry`, `coverage-report`), the measurement
 directory (`aggregate-analyzer-cost`, `aggregate-build-vcpu`), the analyzer's
 two files (`check-reference-trimmer`), the resolved package graph
-(`check-test-packages.py`) and the AOT publish log (`aot-publish-gate`).
+(`check-test-packages`) and the AOT publish log (`aot-publish-gate`).
 Their number is the cost of walking the tree and finding nothing, and the
 parse is NOT in it: for the six gates that report a finding (exit 1) and for
 the one that cannot judge what it was given (exit 2, the AOT publish log)
@@ -4192,11 +4225,11 @@ therefore worth roughly 619 s to 60 s, and the batching is worth 619 s to
 117 s on its own.
 
 Since then the port landed: twenty-six gates are compiled, and the set is
-measured again above. The 117 s of that table is the set of 28 gates on
-the tree of that day; the quiet cost of the set of 41 gates on today's
-tree is 40 to 42 s (the projection above), and the two numbers differ by
-the gates that were not in the old set at all, by the language mix, and by
-the machine's load.
+measured again in §10.2. The 117 s of that table is the set of 28 gates on
+the tree of that day; the set of 43 gates on commit `be078f5a` costs
+25.644 s on a runner (§10.2), and the two numbers differ by the gates that
+were not in the old set at all, by the language mix, by the tree and by the
+machine.
 
 ## 10.3 One command for the tree: `harbor-gates all`
 
@@ -4247,7 +4280,7 @@ lane were known, and none of them was the price of a pull request:
   `39556560488`;
 * issue [#2110](https://github.com/refusedguy/Harbor-Harness/issues/2110)
   measured what CLOSES the lane (the arch shard);
-* §10 measured the gate set, on a laptop, one gate at a time.
+* §10 measured the gate set, on a runner, one gate at a time.
 
 What nobody had was the whole bill: the runner-minutes, the wall, the
 critical path and the peak width of one pull request, and the split of that

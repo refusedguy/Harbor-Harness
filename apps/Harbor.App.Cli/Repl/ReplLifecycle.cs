@@ -167,6 +167,13 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 return ValueTask.CompletedTask;
             });
 
+        // #2218: CSI ?1004h is armed after the capability probes and the bus
+        // subscription above. It is a DEC private mode, so terminals without
+        // the protocol ignore it and never report focus. The session then keeps
+        // animating as before. CSI I / CSI O arrive as typed Focus input events
+        // and park the heartbeat while the window is unfocused.
+        await host.Backend.WriteAsync(Utf8(TerminalQueries.FocusTrackingEnable), ct).ConfigureAwait(false);
+
         // One spinner heartbeat while the status bar animates; re-armed per frame.
         using var spinnerTimer = new Timer(
             _ => host._wake.Writer.TryWrite(null),
@@ -195,7 +202,10 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             host._diagnosticsSync?.Dispose();
             try
             {
-                await host.Backend.WriteAsync(Utf8(CellForgeReplRunner.SeqLeaveAltScreen), CancellationToken.None).ConfigureAwait(false);
+                // #2218: drop focus reporting before leaving the alternate
+                // screen so a stale ?1004h never survives into the caller's
+                // shell. The leave sequence itself stays byte-identical.
+                await host.Backend.WriteAsync(Utf8(TerminalQueries.FocusTrackingDisable + CellForgeReplRunner.SeqLeaveAltScreen), CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -418,10 +428,16 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         _ = drained; // count intentionally unused; coalescing is the point
     }
 
-    /// <summary>80 ms heartbeat only while an animation is on screen.</summary>
+    /// <summary>80 ms heartbeat only while an animation is on screen and the
+    /// terminal window has focus (#2218). Unfocused sessions stop both the
+    /// heartbeat and the animation clock, so spinner frames and gate glow hold
+    /// still instead of spending frames in the background.</summary>
     private void ArmSpinner(Timer spinnerTimer, AnimationClock animationClock)
     {
-        bool keep = ShouldKeepHeartbeat(host._status.Mode, host.Bridge.IsMascotAnimating);
+        bool keep = ShouldKeepHeartbeat(
+            host._status.Mode,
+            host.Bridge.IsMascotAnimating,
+            host._windowFocused);
         spinnerTimer.Change(keep ? 80 : Timeout.Infinite, Timeout.Infinite);
 
         // ENG5: the background animation clock lives exactly as long as the
@@ -440,10 +456,12 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// Heartbeat condition (#170): the Running/Compacting spinner plus any
     /// mascot reaction/latch still playing out in Idle — the error/success face
     /// revives by itself once the latch expires instead of freezing mid-sequence
-    /// forever. Internal for the heartbeat unit tests (InternalsVisibleTo).
+    /// forever. #2218 adds the focus gate: an unfocused window never keeps a
+    /// heartbeat, regardless of mode, so animation pauses in the background.
+    /// Internal for the heartbeat unit tests (InternalsVisibleTo).
     /// </summary>
-    internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating) =>
-        mode is StatusBarMode.Running or StatusBarMode.Compacting || mascotAnimating;
+    internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating, bool windowFocused = true) =>
+        windowFocused && (mode is StatusBarMode.Running or StatusBarMode.Compacting || mascotAnimating);
 
     /// <summary>Forwarder — the ENG7-gated frame lives on <see cref="ReplFrameRenderer"/>.</summary>
     private Task RenderFrameGatedAsync(AnimationClock animationClock, CancellationToken ct) =>

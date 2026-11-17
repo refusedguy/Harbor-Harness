@@ -50,6 +50,7 @@ import (
 	changelog "harbor.local/gates/changelog-assemble"
 	checkabstractionscontract "harbor.local/gates/check-abstractions-contract"
 	checkanalyzerscope "harbor.local/gates/check-analyzer-scope"
+	checkcompiledtree "harbor.local/gates/check-compiled-tree"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	dupjscpd "harbor.local/gates/check-dup-jscpd"
@@ -81,6 +82,7 @@ import (
 	goquality "harbor.local/gates/go-quality"
 	gate "harbor.local/gates/internal/gate"
 	measurebuildcpu "harbor.local/gates/measure-build-cpu"
+	measurecompilecost "harbor.local/gates/measure-compile-cost"
 	measureprojectgraph "harbor.local/gates/measure-project-graph"
 	msbuildevaluationcost "harbor.local/gates/msbuild-evaluation-cost"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
@@ -147,6 +149,11 @@ var registry = []registered{
 		name:    "check-analyzer-scope",
 		summary: "where each analyzer package is allowed to run",
 		run:     checkanalyzerscope.Run,
+	},
+	{
+		name:    "check-compiled-tree",
+		summary: "every project whose sources changed was compiled in this run, not skipped",
+		run:     checkcompiledtree.Run,
 	},
 	{
 		name:    "check-coverage-registry",
@@ -299,8 +306,13 @@ var registry = []registered{
 		run:     measurebuildcpu.Run,
 	},
 	{
+		name:    "measure-compile-cost",
+		summary: "what every project costs the compiler, and what a change in it costs",
+		run:     measurecompilecost.Run,
+	},
+	{
 		name:    "measure-project-graph",
-		summary: "the shape of the project dependency graph",
+		summary: "the shape of the project dependency graph, and the radius of a change",
 		run:     measureprojectgraph.Run,
 	},
 	{

@@ -57,6 +57,17 @@ public static class TerminalQueries
     /// <summary>Disable all mouse tracking in reverse-enable order.</summary>
     public const string MouseDisable = "\u001B[?1006l\u001B[?1002l\u001B[?1000l";
 
+    // ── Terminal focus tracking (issue #2218) ─────────────────────────────
+
+    /// <summary>Enable focus reporting: CSI ?1004h. The terminal then sends
+    /// <c>CSI I</c> on focus gain and <c>CSI O</c> on focus loss. Written only
+    /// after the capability probes; terminals without the mode ignore it.
+    /// </summary>
+    public const string FocusTrackingEnable = "\u001B[?1004h";
+
+    /// <summary>Disable focus reporting: CSI ?1004l (reverse of <see cref="FocusTrackingEnable" />).</summary>
+    public const string FocusTrackingDisable = "\u001B[?1004l";
+
     // ── Bracketed paste ───────────────────────────────────────────────────
 
     public const string PasteEnable = "\u001B[?2004h";
