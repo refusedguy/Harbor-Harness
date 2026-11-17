@@ -64,6 +64,7 @@ import (
 	checkpublicapiresign "harbor.local/gates/check-public-api-resign"
 	checkreferencetrimmer "harbor.local/gates/check-reference-trimmer"
 	resultchains "harbor.local/gates/check-result-chains"
+	checkrulesetchecks "harbor.local/gates/check-ruleset-checks"
 	shardbalance "harbor.local/gates/check-shard-balance"
 	stringswitch "harbor.local/gates/check-string-switch"
 	testdup "harbor.local/gates/check-test-dup"
@@ -226,6 +227,11 @@ var registry = []registered{
 		name:    "check-result-chains",
 		summary: "the chain candidates among the if (x.IsFailure) guard sites",
 		run:     resultchains.Run,
+	},
+	{
+		name:    "check-ruleset-checks",
+		summary: "every required status check in a ruleset has a workflow job able to publish it",
+		run:     checkrulesetchecks.Run,
 	},
 	{
 		name:    "check-shard-balance",

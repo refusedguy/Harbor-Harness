@@ -708,6 +708,36 @@ jobs:
       # a green lane proves nothing.
       - name: Compiled-tree gate fails on a cached project that was skipped
         run: tools/bin/harbor-gates-linux-x64 check-compiled-tree --self-test
+      # #2191. The ruleset gate's failure path: a ruleset that requires a
+      # status-check name no workflow job publishes. Every pull request into
+      # that branch is blocked with no job able to satisfy the rule, and
+      # nothing in CI says why. The self-test plants exactly that rule.
+      - name: Ruleset gate fails on a check with no job
+        run: tools/bin/harbor-gates-linux-x64 check-ruleset-checks --self-test
+
+  # #2191. A branch-protection ruleset can require a status check whose name
+  # no workflow job publishes, and GitHub never says so: the rule simply
+  # waits for a check that never arrives, so EVERY pull request into the
+  # branch is blocked forever and nothing in the tree explains it. It
+  # happened with #2159: two jobs were removed while the ruleset still
+  # required their names, and the rule had to be repaired through the API
+  # after the merge. This gate reads the rulesets and the workflow files and
+  # fails when a required context has no job able to publish it. It lives in
+  # the documentation lane, which starts on every pull request.
+  #
+  # The floors are the number of ruleset files and of required-check entries
+  # the tree holds (2 and 16): a scan that matched fewer cannot say the tree
+  # is clean.
+  rulesetchecks:
+    name: ruleset checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Every required status check has a workflow job
+        run: tools/bin/harbor-gates-linux-x64 check-ruleset-checks --min-rulesets 2 --min-checks 16
 
   # The tree gates, in ONE command.
   #

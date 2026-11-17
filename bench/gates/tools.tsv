@@ -47,6 +47,7 @@ check-no-test-sdk	tools/bin/harbor-gates-linux-x64 check-no-test-sdk --min-files
 check-public-api-resign	tools/bin/harbor-gates-linux-x64 check-public-api-resign --base HEAD~1 --min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269
 check-reference-trimmer	tools/bin/harbor-gates-linux-x64 check-reference-trimmer --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
 check-result-chains	tools/bin/harbor-gates-linux-x64 check-result-chains --check --baseline tools/result-chains-baseline.json
+check-ruleset-checks	tools/bin/harbor-gates-linux-x64 check-ruleset-checks --min-rulesets 2 --min-checks 16
 check-shard-balance	tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
 check-string-switch	tools/bin/harbor-gates-linux-x64 check-string-switch --check --min-labels 280
 check-test-dup	tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
