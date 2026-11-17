@@ -420,13 +420,15 @@ jobs:
 
       - name: Publish with PublishVariant.AOT
         run: |
-          set -euo pipefail
+          set -uo pipefail
           mkdir -p "$RUNNER_TEMP/aot"
+          # stderr is deliberately NOT redirected: in Json mode the build
+          # re-points Console.Out to stderr, so the publish diagnostics are
+          # the only evidence when ILC fails. Keep them in the job log.
           dotnet "$FALLOUT_DLL" Publish \
             --variant AOT --minimal \
             --with-plugins false --with-scripting false --with-spectre-tui false \
-            --format json \
-            > "$RUNNER_TEMP/aot/publish.json" 2> "$RUNNER_TEMP/aot/publish.err"
+            --format json > "$RUNNER_TEMP/aot/publish.json"
           rc=$?
           echo "AOT publish exit code: $rc"
           exit "$rc"
