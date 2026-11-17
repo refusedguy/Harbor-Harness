@@ -279,6 +279,63 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `ScanVisibilityRule` | `ScanVisibilityRule.cs` | Walks each tree through the shared helper and reports the trees that come back empty. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the first form of 'a measurement that cannot see its subject'. | The invisible-tree set is a written-down list; adding a tree changes the answer. | 2 |
 | `SharedSourceLinkRules` | `SharedSourceLinkRules.cs` | Walks the src/ folders that hold shared source, computes which project links each file, and compares the link inventory with a written-down count (22… | #456: a shared-source folder grew a file that no project linked, so the file was in the tree and in no build. | The count is a written-down literal. Commit 38516394743 (perf/1102-requestbuild-args) and 38854377103 (nightshift/1563-utf8jsonreader-helpers) both f… | 2 |
 
+## The three cross-cutting lists #1727 needs
+
+The table above is the per-rule answer. The issue also asks for three questions about the
+set: which rules check the same thing twice, which are already decided by a tool we run,
+and what a B-tier migration costs. They are collected here so the Tier C removal can spend
+them without re-reading 160 entries. The verdict column is a decision, not a to-do: a pair
+marked "keep" is a duplicate the tree needs.
+
+### Duplicates by essence
+
+| pair | shared subject | verdict |
+|---|---|---|
+| `DesignSystemLeafTakesNoIoRules`, `DesktopSharedTakesNoIoRules`, `DesktopAbstractionsLeafTakesNoIoRules` | the same disk-call and environment scan of one leaf assembly (#534, #535, #536); each file carries its own `ParseDiskCall` / `ParseEnvLookup` | **merge the scanner**, keep one verdict per assembly in a table; 2 rules off |
+| `BackgroundTaskSyncResultRule`, `ToolDispatcherSyncResultRule` | both are #1099's blocking `.Result` behind `IsCompletedSuccessfully` in `src/Harbor.AgentRuntime/Agents`; both copy `ParseSyncResultReads`, `MethodWindow` and `FindSyncResultLines` | **merge into one rule** with a per-method table; 1 rule off |
+| `LayerDependencyTests`, `NetArchLayerRules` | the same layer edges from `docs/ARCHITECTURE_LAYERS.md` §2, read by reflection and by the NetArchTest DSL | **keep both**; both headers state the overlap is deliberate, so a breaking change in either tool surface cannot silently disable the invariant |
+| `ProjectKeyedScanRule`, `ScanVisibilityRule` | both measure the #877 "cannot see its subject" family | **keep both**; the `ProjectKeyedScanRule` header says they fail in opposite directions (absent project key vs path dropped by a filter) and no single edit fixes both |
+
+The four Result-family rules (`HandRolledResultShapeTests`, `ResultFailureConversionTests`,
+`MapErrorFailureShapeTests`, `ResultTryAdoptionTests`) look like the same family but are not
+duplicates: each bans a different hand-rolled spelling of a different library member
+(a `Result<T>` facade, `ConvertFailure`, `MapError`, `Result.Try`). The three dead-surface
+rules (`DeadPublicInterfaceRule`, `DeadPublicMemberRule`, `PublicAbstractBaseLivenessRules`)
+likewise grade different kinds of published promise. Merge their tree walk if #1727 wants,
+but keep their verdicts.
+
+### Logic already covered by a tool we run
+
+| rule | tool that decides the same question | what is left in the file |
+|---|---|---|
+| `AvaloniaFireAndForgetRules` | HARCH003, the Roslyn analyzer that asks the type question | a non-gating differential oracle; the file's own header says it decides nothing |
+| `HttpClientReuseRules` | HARCH005 / HARCH006, the analyzers adopted in #2148 | the text matcher as the oracle of the differential; the owner table stays as documentation |
+| `ReflectionConventionRule` | RS0030 over `BannedSymbols.DynamicCode.txt` (#1844) | the ban-file coverage tests: the compiler reads the ban, the rule proves the ban cannot silently shrink |
+| `LayerDependencyTests` | `NetArchLayerRules`, and `docs/ARCHITECTURE_LAYERS.md` §2 as the table | the reflection reader; kept on purpose, see the duplicate verdict above |
+
+For the rest of the set, `SourceScan`, `RepoPaths` and `Harbor.TestKit` are instruments the
+guards use, not decisions the guards duplicate. The public-API baseline freezes a published
+promise but cannot say whether anyone keeps it, which is exactly the gap
+`DeadPublicInterfaceRule` and `DeadPublicMemberRule` close.
+
+### Migration cost (S/M/L) for Tier B
+
+The JSON carries the primitive (`semantic_kind`) and the projected size
+(`estimated_lines_saved`) of each conversion, but not a letter. The letter is derived here
+so the axis in #1725 is answered without a second registry:
+
+| cost | definition | rules out of 100 |
+|---|---|---:|
+| S | the question is already decided by symbol (`il-probe`) or by comparing a derived value (`derived-value`); the migration is to delete the oracle | 23 |
+| M | a Roslyn analyzer over fewer than 300 projected lines, or a rule whose primitive has not been named yet | 59 |
+| L | a Roslyn analyzer over 300 or more projected lines | 18 |
+
+The primitive is the `semantic_kind` field: `roslyn-analyzer` for 51 B rules,
+`il-probe` for 22, `derived-value` for 1, and **unidentified for the remaining 26**.
+Those 26 are costed M above only in the sense that the work is nonzero; their primitive
+has to be chosen before #1729 can schedule them. The three sizes are a projection from
+line counts, not a measured engineering estimate.
+
 ## The tier is not invented: ten commits that forced a manual repair
 
 A tier that says "B: noisy" has to be backed by something that happened, not by an opinion about
