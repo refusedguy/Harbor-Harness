@@ -4198,6 +4198,45 @@ tree is 40 to 42 s (the projection above), and the two numbers differ by
 the gates that were not in the old set at all, by the language mix, and by
 the machine's load.
 
+## 10.3 One command for the tree: `harbor-gates all`
+
+**The question.** One binary, one command, no dotnet and no python: run every
+gate that needs nothing but the tree and print one verdict. Issue #2135 asks
+for this. The command is already in the tree: it landed with the work recorded
+under #2122, it is registered in `tools/gates/main.go`, its list lives in
+`tools/gates/all/gates.go`, `docs.yml` runs it in the `tree gates` job, and
+`tools/check-local.sh` calls it on a developer machine.
+
+**What it runs.** The list has 26 gates. The command starts the gates that are
+compiled into the binary and reports the rest without starting them: a gate
+that is still a python script needs a workflow of its own, because the binary
+must not need python. On the measured tree that is 16 compiled gates, 9 python
+gates and one writer (`normalize-mtimes`, which rewrites the tree and so cannot
+be part of a check). The self-test, `harbor-gates all --self-test`, proves that
+a red gate gives exit 1 and names itself, that a gate that cannot start gives
+exit 2, that the report order does not depend on the order gates finish, and
+that the list names only gates a workflow runs with nothing that the build
+produces.
+
+**The number.** CI run `44035166979` (`docs.yml`, 2026-11-17, ubuntu-26.04,
+tree at `3f79e00f`) spent **17 s** on the `tree gates` job: 11 s in checkout,
+**3 s** in the step that runs `harbor-gates all`, and the rest in setup. The
+report printed 16 gates with exit 0 and a sum of gate times of **7.493 s**.
+The slowest compiled gates were `check-test-projects` at 2.216 s,
+`check-local-merge-loss` at 1.894 s and `check-abstractions-contract` at
+934 ms. The 3 s step is under the 25 s budget the issue sets.
+
+The 9 python gates are not in that number: they run in their own `docs.yml`
+jobs. `check-doc-cites`, the gate the issue calls out as taking 68 s to 120 s,
+is one of them. The split answers the open question in the issue without a
+speed-up to that gate: the compiled command is fast because the expensive gate
+stays python and runs elsewhere, and `tools/check-local.sh` still runs the
+python gates on a local machine. A reader who wants full tree coverage in one
+local call runs that script, not the binary alone.
+
+Reproduce the number with `gh run view 44035166979 --log` and filter for
+`tree gates`.
+
 ## 11. What a pull request costs
 
 **The question this section answers.** Three numbers about the pull-request
