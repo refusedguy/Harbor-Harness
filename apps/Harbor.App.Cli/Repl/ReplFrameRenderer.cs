@@ -322,26 +322,26 @@ internal sealed class ReplFrameRenderer(CellForgeReplRunner host)
 
     /// <summary>
     /// Translates the frame's change sources into diff hints. Conservative by
-    /// construction: narrow hints only while the frame was NOT triggered by
-    /// input/events, and only for regions with clock-driven animation. Any
-    /// doubt falls back to the full scan (empty hints — the engine's default).
+    /// construction: a broad mark (input/events, layout animation, timeline
+    /// fx) keeps the fused full scan; precise marks on the store's damage
+    /// ledger are resolved through a <see cref="EngineCells.ViewDamageTracker"/>
+    /// <see cref="EngineCells.DirtyRect"/> tree into narrow hints, so a single
+    /// edited composer row no longer repaints the whole screen (issue #2354).
     /// </summary>
     internal void ApplyFrameDamageHints(int cols)
     {
-        bool broad = host._broadDamageNextFrame || host.Screen.Tree.IsAnimating;
+        int rows = host.ScreenSession.CurrentRows;
         int fxCount = 0;
-        if (!broad)
-        {
-            broad = host._timeline.ConsumeFrameDamage(host._fxDamageScratch, out fxCount);
-        }
-        else
-        {
-            host._timeline.ConsumeFrameDamage(host._fxDamageScratch, out _);
-        }
+        bool fxFullScan = host._timeline.ConsumeFrameDamage(host._fxDamageScratch, out fxCount);
 
-        host._broadDamageNextFrame = false;
+        // Take the addressable ledger exactly once per frame. A broad mark
+        // keeps the old conservative behavior; precise marks name a subgraph.
+        var tracker = host.DamageTracker;
+        bool broad = host._replStore.DamageLedger.DrainInto(host._damageIdScratch, host._damageRectScratch);
+        broad |= host.Screen.Tree.IsAnimating || fxFullScan;
         if (broad)
         {
+            tracker.Reset();
             return; // hints empty → engine runs the fused full scan
         }
 
@@ -361,12 +361,12 @@ internal sealed class ReplFrameRenderer(CellForgeReplRunner host)
             host.ScreenSession.Damage(mascotRect);
         }
 
-        if (host._palette.Visible && host.ScreenSession.CurrentRows > 0)
+        if (host._palette.Visible && rows > 0)
         {
             int w = Math.Clamp(cols - 8, 20, 56);
-            int h = Math.Min(host._palette.Results.Count + 5, Math.Max(5, host.ScreenSession.CurrentRows - 4));
+            int h = Math.Min(host._palette.Results.Count + 5, Math.Max(5, rows - 4));
             int x = Math.Max(0, (cols - w) / 2);
-            int y = Math.Max(0, (host.ScreenSession.CurrentRows - h) / 3);
+            int y = Math.Max(0, (rows - h) / 3);
             host.ScreenSession.Damage(new Rect(x, y, w, h));
         }
 
@@ -374,5 +374,49 @@ internal sealed class ReplFrameRenderer(CellForgeReplRunner host)
         {
             host.ScreenSession.Damage(host._fxDamageScratch[i]);
         }
+
+        // Addressable subgraph damage: register this frame's view geometry,
+        // transfer the ledger's marks, and emit only the intersecting rects.
+        tracker.SetViewport(cols, rows);
+        tracker.ClearRegions();
+        RegisterDamageRegion(tracker, ChatScreen.StatusId, host.Screen.Status.Rect);
+        RegisterDamageRegion(tracker, ChatScreen.ComposerId, host.Screen.Composer.Rect);
+        RegisterDamageRegion(tracker, ChatScreen.TimelineId, host.Screen.Timeline.Rect);
+        RegisterDamageRegion(tracker, ChatScreen.MascotId, mascotRect);
+        if (host._palette.Visible && rows > 0)
+        {
+            int w = Math.Clamp(cols - 8, 20, 56);
+            int h = Math.Min(host._palette.Results.Count + 5, Math.Max(5, rows - 4));
+            int x = Math.Max(0, (cols - w) / 2);
+            int y = Math.Max(0, (rows - h) / 3);
+            tracker.Register("palette", new EngineCells.Rect(x, y, w, h));
+        }
+
+        var ids = host._damageIdScratch;
+        for (int i = 0; i < ids.Count; i++)
+        {
+            tracker.Damage(ids[i]);
+        }
+
+        var rects = host._damageRectScratch;
+        for (int i = 0; i < rects.Count; i++)
+        {
+            var r = rects[i];
+            tracker.Damage(new EngineCells.Rect(r.X, r.Y, r.Width, r.Height));
+        }
+
+        Span<EngineCells.Rect> hints = stackalloc EngineCells.Rect[16];
+        if (!tracker.Drain(hints, out int hintCount))
+        {
+            for (int i = 0; i < hintCount; i++)
+            {
+                var h = hints[i];
+                host.ScreenSession.Damage(new Rect(h.X, h.Y, h.Width, h.Height));
+            }
+        }
     }
+
+    private static void RegisterDamageRegion(
+        Harbor.Tui.CellForge.Rendering.ViewDamageTracker tracker, string id, Rect rect) =>
+        tracker.Register(id, new EngineCells.Rect(rect.X, rect.Y, rect.Width, rect.Height));
 }

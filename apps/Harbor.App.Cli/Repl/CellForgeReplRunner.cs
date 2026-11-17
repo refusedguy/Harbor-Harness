@@ -95,7 +95,14 @@ internal sealed class CellForgeReplRunner(
     /// <summary>TEA accumulator (epic C): every agent event is dual-written here
     /// alongside the bridge. Nothing paints from it yet (status does in step 3) —
     /// it only accumulates Lines/Cost/Status so projection has real state later.</summary>
-    internal readonly UiStore _replStore = new();
+    internal readonly UiStore _replStore = CreateReplStore();
+
+    private static UiStore CreateReplStore()
+    {
+        var store = new UiStore();
+        store.DamageAll(); // cold start paints the whole screen (old flag defaulted true)
+        return store;
+    }
 
     /// <summary>
     ///     Pushes the headless core's diagnostic snapshots into
@@ -325,11 +332,13 @@ internal sealed class CellForgeReplRunner(
     /// <summary>Last total-lines count pushed to the TEA store (changed-only).</summary>
     internal int _lastStoreTotal = -1;
 
-    /// <summary>Partial-scan damage ledger (renderer-moat sprint): frames
-    /// triggered by user input or event-driven state changes repaint via the
-    /// plain full scan; only quiet animation frames (spinner, gate pulse,
-    /// entrance fades) narrow the diff to hinted rects.</summary>
-    internal bool _broadDamageNextFrame = true;
+    /// <summary>Addressable subgraph damage (issue #2354). Broad/untrackable
+    /// changes are marked on the store's damage ledger; precise ones name a
+    /// view id or rect. The frame loop resolves them through this DirtyRect
+    /// tracker into narrow hints, replacing the old broad-only flag.</summary>
+    internal readonly Harbor.Tui.CellForge.Rendering.ViewDamageTracker DamageTracker = new();
+    internal readonly List<string> _damageIdScratch = [];
+    internal readonly List<UIR.Rect> _damageRectScratch = [];
     internal readonly UIR.Rect[] _fxDamageScratch = new UIR.Rect[VirtualizedChatTimeline.MaxFxDamage];
 
     /// <summary>Post-render glow slots (renderer-moat T3): preallocated effect
