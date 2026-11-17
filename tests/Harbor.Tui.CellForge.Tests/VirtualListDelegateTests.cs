@@ -112,8 +112,13 @@ public class VirtualListDelegateTests
         await AssertRange(layout, 0, 10, 0, 9);
         await AssertRange(layout, 5, 10, 5, 14);
         await AssertRange(layout, 95, 10, 95, 99);
-        await AssertRange(layout, -5, 10, 0, 9);
-        await AssertRange(layout, 500, 10, 90, 99);
+        // Same window rule as TimelineLayoutCache: first is clamped to zero,
+        // the end is the raw [scrollY, scrollY + viewportH) span, so a window
+        // starting above zero overlaps only rows 0..4.
+        await AssertRange(layout, -5, 10, 0, 4);
+        // Past the tail the binary search lands on the last item and the raw
+        // window still contains its top row.
+        await AssertRange(layout, 500, 10, 99, 99);
         await Assert.That(layout.VisibleRange(0, 0).First).IsEqualTo(-1);
     }
 

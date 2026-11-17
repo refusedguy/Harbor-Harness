@@ -93,6 +93,15 @@ public sealed class VirtualListLayout
 
         _unmeasuredFrom = _count;
 
+        // Fold the estimates into the prefix BEFORE asking for the visible
+        // window: EntryAtY binary-searches _virtual, and a prefix of zeroes
+        // would resolve every scroll offset to the last item.
+        if (patchFrom != int.MaxValue)
+        {
+            PatchVirtualFrom(patchFrom);
+            patchFrom = int.MaxValue;
+        }
+
         if (_count > 0 && viewportH > 0)
         {
             var (first, last) = VisibleRange(scrollY, viewportH);
