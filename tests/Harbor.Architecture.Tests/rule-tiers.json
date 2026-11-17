@@ -4,22 +4,22 @@
   "issue": 1725,
   "population": {
     "tree": "tests/Harbor.Architecture.Tests",
-    "cs_files": 190,
-    "top_level_classes": 249,
-    "classes_with_tests": 172,
-    "guards": 160,
+    "cs_files": 189,
+    "top_level_classes": 247,
+    "classes_with_tests": 171,
+    "guards": 159,
     "instrument_self_tests": 14,
     "engine_or_probe": 2,
-    "helper_classes_without_tests": 77,
-    "test_attributes": 1121,
-    "tree_lines": 110834,
+    "helper_classes_without_tests": 76,
+    "test_attributes": 1116,
+    "tree_lines": 110064,
     "ticket_claim_110": {
       "value": 110,
       "measured_at_commit": "d96b66ec",
       "measured_at_date": "2026-10-20",
       "what_it_counted": "classes whose name ends in Rule or Rules, in tests/Harbor.Architecture.Tests",
       "still_true": false,
-      "note": "The 110 was exact on 2026-10-20 and is stale. On this tree there are 129 classes named *Rule or *Rules, one of which (ScanRule) is the shared engine rather than a guard, so 128 guards carry that name -- and 32 more guards do not follow the convention at all (FullLayerMatrixTests, ResultFailureConversionTests, MaybeAbsenceTests, TokenTrackingRatchet, FatInterfaceShapeRatchet and the other *Tests-named guards). The real population is 160."
+      "note": "The 110 was exact on 2026-10-20 and is stale. On the audit tree there were 129 classes named *Rule or *Rules, one of which (ScanRule) is the shared engine rather than a guard, so 128 guards carried that name; after #1727 removed ScanUniverseRule the count is 127 -- and 32 more guards do not follow the convention at all (FullLayerMatrixTests, ResultFailureConversionTests, MaybeAbsenceTests, TokenTrackingRatchet, FatInterfaceShapeRatchet and the other *Tests-named guards). The real population was 160 at audit time and is 159 after the #1727 removal."
     }
   },
   "tiers": {
@@ -47,17 +47,17 @@
   "tier_counts": {
     "A": 50,
     "B": 100,
-    "C": 10
+    "C": 9
   },
   "false_positive_cost_counts": {
     "0": 51,
     "1": 86,
-    "2": 23
+    "2": 22
   },
   "semantic_candidates": {
-    "count": 77,
+    "count": 76,
     "kinds": {
-      "derived-value": 4,
+      "derived-value": 3,
       "roslyn-analyzer": 73
     },
     "kind_legend": {
@@ -66,7 +66,7 @@
       "il-probe": "the rule already decides by symbol (reflection over the loaded assembly, or Mono.Cecil over the IL). No conversion needed -- it is the shape the others should move to."
     },
     "already_semantic_rules": 43,
-    "estimated_lines_saved": 17840,
+    "estimated_lines_saved": 17800,
     "share_of_tree_lines": 0.161
   },
   "rules": [
@@ -2801,27 +2801,6 @@
       "estimated_lines_saved": 0
     },
     {
-      "id": "ScanUniverseRule",
-      "file": "tests/Harbor.Architecture.Tests/ScanUniverseRule.cs",
-      "kind": "guard",
-      "note": null,
-      "tests": 5,
-      "file_lines": 770,
-      "subject": "What is in the reflection scan universe of the architecture suite, and what is not.",
-      "checks": "Walks the trees, loads the assemblies and compares the non-product members and the blind projects with two written-down baselines.",
-      "defect_signal": "Nothing by its own header: it is 'a MEASUREMENT, not a fix'.",
-      "refactor_signal": "Both baselines are written-down literals. Every test project that is added moves the count, and the rule fires on the count: runs 39117642149, 39365793623, 39380697456 and 39416159291 all fired on a test-project count that moved.",
-      "false_positive_cost": 2,
-      "tier": "C",
-      "evidence": [
-        "run 39117642149, 39365793623, 39380697456, 39416159291 (5 firings): class=noise, ratchet=fix-the-rule; commits 6ba00729 and 40df718b edited ScanUniverseRule.cs in the same commit as the test-tree change"
-      ],
-      "semantic_candidate": true,
-      "semantic_kind": "derived-value",
-      "already_semantic": false,
-      "estimated_lines_saved": 40
-    },
-    {
       "id": "ScanVisibilityRule",
       "file": "tests/Harbor.Architecture.Tests/ScanVisibilityRule.cs",
       "kind": "guard",
@@ -3765,6 +3744,17 @@
       "semantic_kind": "il-probe",
       "already_semantic": true,
       "estimated_lines_saved": 0
+    }
+  ],
+  "removals": [
+    {
+      "id": "ScanUniverseRule",
+      "file": "tests/Harbor.Architecture.Tests/ScanUniverseRule.cs",
+      "issue": 1727,
+      "tier": "C",
+      "removed_at": "2026-11-17",
+      "reason": "Pure one-off MEASUREMENT ('a MEASUREMENT, not a fix' per its own header). Its two baselines are written-down literals pinned to the shape of the test tree: all 5 measured firings (runs 39117642149, 39365793623, 39380697456, 39416159291) were class=noise, and commits 6ba00729 and 40df718b had to edit this rule in the same commit as the test-tree change. That is the definition of a rule bound to form: the repair is to the guard, not to the code.",
+      "invariant_disposition": "No code invariant is lost. The header itself records that the product side is already complete (LayerDependencyTests.AllExpectedHarborAssembliesAreLoaded) and that the six perimeter-bearing consumers already carry their own exclusions; the file only declared a census of what the reflection helper cannot see. `ScanUniverseProbe` had no consumers outside this file (only prose references in BuildGraphCoverageRule.cs and ScanRule.cs). The reflection-scan boundary remains measured operationally by those consumers' own guards; no successor is needed because nothing graded a defect."
     }
   ]
 }

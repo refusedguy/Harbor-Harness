@@ -96,9 +96,8 @@
 // --------------------------------------------------
 // The claim covers `src/` and `apps/`: the trees whose code ships, and the ones
 // AGENTS.md's structure section enumerates. That is a predicate on the TREE (two
-// words), stated once, with a reader who can check it — the same shape as the
-// already-reviewed `ScanUniverseProbe.IsProductTree` on the reflection side of
-// this boundary. It is not a per-project exemption list, and it is not silent:
+// words), stated once, with a reader who can check it. It is not a per-project
+// exemption list, and it is not silent:
 // the failure message also prints the unbuilt projects OUTSIDE the perimeter, so
 // the boundary is something a reader sees rather than infers from an absence.
 //
@@ -187,12 +186,12 @@
 //
 // RELATION TO WHAT IS ALREADY HERE
 // --------------------------------
-// `ScanUniverseRule` measures the REFLECTION-scan universe (what
-// `LoadHarborAssemblies` can see). This file measures the BUILD universe (what
-// `dotnet build Harbor.slnx` compiles). Different helper, different file,
-// different side of the boundary; neither reads the other. The product-tree
-// predicate is deliberately the same ANSWER stated twice, because it is the
-// boundary itself and it should have one meaning.
+// This file measures the BUILD universe (what `dotnet build Harbor.slnx`
+// compiles). The reflection-scan universe (what `LoadHarborAssemblies` can see)
+// was once measured by a companion rule, removed under #1727 as a one-off
+// census with no defect signal; its consumers carry their own perimeter. The
+// product-tree predicate is deliberately stated here as a TREE predicate rather
+// than a list, because it is the boundary itself and it should have one meaning.
 // `RepoPaths` also mentions `Harbor.slnx` — but as a ROOT MARKER (`File.Exists`),
 // not as a project list; it globs `src/**/*.csproj` off disk for everything else.
 // This is the first thing in the tree to read the rows as rows, so the disk walk
@@ -231,8 +230,8 @@ internal static class BuildGraphProbe
     ///     answer a number about a tree that is not the subject.
     /// </summary>
     /// <remarks>
-    ///     Duplicates <c>ScanUniverseProbe.NeverWalked</c> on purpose — see the file
-    ///     header.
+    ///     Build output, VCS metadata and sibling checkouts are not the repository,
+    ///     so a walk that counted them would report a number about a different tree.
     /// </remarks>
     internal static readonly string[] NeverWalked = [".git", ".worktrees", "bin", "obj", "node_modules"];
 
