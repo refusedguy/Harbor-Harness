@@ -22,6 +22,11 @@ public class PrepaintTests
             _text = text;
             _x = x;
             _y = y;
+
+            // Each node carries its own content version. Two different nodes
+            // that swap indexed paths must not adopt each other's cache entry:
+            // the record holds absolute ops for different text.
+            Version = (ulong)(uint)text.GetHashCode(StringComparison.Ordinal);
         }
 
         public ulong Version { get; set; }
