@@ -1183,7 +1183,7 @@ def _lines_at(repo: str, rev: str, rel: str, cache: dict[tuple[str, str], list[s
 # `git blame` walks the history of ONE file and asks, for each line, which
 # commit last introduced it. Reconstructing that from the diffs is the same
 # question, asked in the other direction: apply every change, oldest first,
-# and the commit that applied a line is the commit that wrote it. Two
+# and the commit that applied a line is the commit that wrote it. Three
 # details decide whether the two agree:
 #
 #   THE HUNKS OF ONE COMMIT. They all speak about the file as it was BEFORE
@@ -1192,32 +1192,111 @@ def _lines_at(repo: str, rev: str, rel: str, cache: dict[tuple[str, str], list[s
 #   the line count the earlier ones changed. (Measured: 21 of 40 sampled
 #   files disagreed with `git blame` before this was fixed, 1 of 40 after.)
 #
+#   THE LINES OF A HUNK. A hunk that REPLACES a line prints the old one with
+#   a `-` and the new one with a `+`, and the new one is the one the file
+#   holds after the commit. The first version of this collector kept both in
+#   one list and took the first `new_count` entries of it, so a replaced line
+#   came back with the text it had BEFORE the commit. The file then did not
+#   reproduce HEAD, the file was declared untrustworthy, and EVERY citing
+#   file fell back to `git blame` — the reconstruction was correct for the two
+#   files whose history has no replacing hunk and wrong for the other 28.
+#   Measured on this tree at dev@564244b9: the reconstruction reproduced HEAD
+#   for 1 of 30 citing files, and `git blame` itself for 29 of them.
+#
 #   A MERGE. `git log -p` prints no diff for a merge, so the line array
 #   cannot be carried across it, and a file whose history crosses a merge
-#   that changed it would be attributed to the wrong commit. Such a file is
-#   answered by `git blame` itself, exactly as before: the fallback is not
-#   an approximation, it is the original code path.
+#   that changed it would be attributed to the wrong commit. A merge's diff
+#   against its FIRST parent is not the answer either: it re-states the
+#   branch's own changes, which the branch's commits already applied, so
+#   applying it puts the same lines in the file twice. Measured: with the
+#   merge diffs applied, the reconstruction reproduced HEAD for 16 of 30
+#   files; with them skipped, for 30 of 30.
 #
 # A file that is MODIFIED IN THE WORKING TREE is answered by `git blame` as
 # well: `git blame` attributes an uncommitted line to the null oid, and the
 # rule reads that as "no commit is attributed to this line", while the
 # reconstruction only knows the committed file.
+#
+# THE TRUST CRITERION — WHY THE FALLBACK IS A DECISION AND NOT A GUESS
+#
+# The reconstruction is trusted for a file only when it can PROVE that it
+# reproduced the file's history:
+#
+#   1. Every hunk was applied to the text it claims to apply to. The hunk
+#      header says which lines of the file as it was BEFORE the commit the
+#      hunk replaces, and the diff prints those lines with a `-`. If the
+#      file as the reconstruction holds it does not start with exactly those
+#      lines, the reconstruction is applying a diff to the wrong state, and
+#      the file is not trusted. This is the check that makes the other two
+#      mean what they say: without it, a merge that changed the file on both
+#      sides could leave the lines in the right order and attribute them to
+#      the wrong commit.
+#   2. The result reproduces the file at HEAD, line for line. A file that
+#      was deleted and re-created, a file whose diff is binary, a file whose
+#      history the paths-limited log cannot see — none of them reproduces
+#      HEAD, and none of them is trusted.
+#   3. The file did not ARRIVE under a new name. A renamed file's history
+#      lives under the old path, and a log limited to the citing paths does
+#      not show it: the renamed file reads as a file created in one commit,
+#      with every line attributed to that commit, and the CONTENT is right
+#      while every commit is wrong. The renames the log's commits introduced
+#      are asked for explicitly (one `git log --no-walk --diff-filter=R`
+#      over the commits the log named), and a file that arrived under a new
+#      name is not trusted.
+#
+# A file that fails any of the three is answered by `git blame` itself, and
+# the gate SAYS which files fell back and why. A file the reconstruction
+# cannot vouch for is not a file the gate pretends to have checked.
 
 BLAME_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 BLAME_DIFF_RE = re.compile(r"^diff --git a/(.*) b/(.*)$")
 
 
+class _Hunk:
+    """One hunk of one file's diff, with the lines it adds and the lines it removes.
+
+    The removed lines are not decoration: they are the PRE-IMAGE of the hunk,
+    the text the hunk claims to apply to, and the check that the
+    reconstruction is applying its diffs to the right state is a comparison of
+    them with what the reconstruction holds.
+    """
+
+    __slots__ = ("old_start", "old_count", "new_start", "new_count", "added", "removed")
+
+    def __init__(self, old_start: int, old_count: int, new_start: int, new_count: int):
+        self.old_start = old_start
+        self.old_count = old_count
+        self.new_start = new_start
+        self.new_count = new_count
+        self.added: list[str] = []
+        self.removed: list[str] = []
+
+
+class _Entry:
+    """One file's diff inside one commit."""
+
+    __slots__ = ("path", "hunks", "rename_from")
+
+    def __init__(self, path: str, hunks: list[_Hunk]):
+        self.path = path
+        self.hunks = hunks
+        self.rename_from: str | None = None
+
+
 class GitHistory:
-    """`git blame` and `git show`, answered for the whole tree in two processes."""
+    """`git blame` and `git show`, answered for the whole tree in a few processes."""
 
     def __init__(self, repo: str, files: list[str]):
         self.repo = repo
         self._blames: dict[str, dict[int, str]] = {}
         self._files_at: dict[tuple[str, str], list[str] | None] = {}
         self._reader: subprocess.Popen | None = None
-        self._risky: set[str] = set()
+        # The files the reconstruction could not vouch for, and why. A file in
+        # here is answered by `git blame` itself, and the gate prints the
+        # reason: a gate that silently checked less than it says it checked is
+        # the failure this whole file exists to end.
+        self._fallback: dict[str, str] = {}
         self._reconstructed: dict[str, dict[int, str]] = {}
-        self._reconstructed_content: dict[str, list[str]] = {}
         if files:
             self._scan(repo, files)
 
@@ -1231,18 +1310,19 @@ class GitHistory:
                 "--format=%x00%H %P",
                 "-p", "-U0",
                 "--topo-order",
-                # A merge prints no diff by default, and a file whose history
-                # crosses a merge is answered by `git blame` instead. Asking
-                # for the merge's diff against its FIRST parent is what tells
-                # us WHICH files those are: the files the merge brought in.
-                "--diff-merges=first-parent",
+                # A merge prints no diff, and the reconstruction skips a merge:
+                # the merge's own diff against its first parent RE-STATES the
+                # branch's changes, which the branch's commits already applied,
+                # so applying it puts the same lines into the file twice.
+                # Measured on this tree: with the merge diffs applied the
+                # reconstruction reproduced HEAD for 16 of 30 citing files,
+                # with them skipped for 30 of 30.
+                #
                 # The pathspec is the citing files. git pairs a rename only
                 # when both of its paths are inside the diff it is about to
                 # show, so a file that was renamed reads as an addition here,
                 # and the reconstruction then puts its lines in the wrong
-                # place. The content check below catches that (the
-                # reconstruction does not reproduce the file at HEAD), and
-                # such a file is answered by `git blame` itself.
+                # place. The rename query below catches that case by name.
                 "--", *files,
             ],
             cwd=repo, capture_output=True, text=True, env=md_gate.git_env(),
@@ -1258,7 +1338,7 @@ class GitHistory:
         sha: str | None = None
         parents: list[str] = []
         path: str | None = None
-        hunks: list[tuple] | None = None
+        hunks: list[_Hunk] | None = None
 
         for raw in proc.stdout.split("\n"):
             if raw.startswith("\x00"):
@@ -1275,13 +1355,13 @@ class GitHistory:
                 path = match.group(2) if match else None
                 hunks = []
                 if path is not None and sha is not None:
-                    commits[sha]["entries"].append([path, hunks, None])
+                    commits[sha]["entries"].append(_Entry(path, hunks))
                 continue
             if path is None or hunks is None:
                 continue
             if raw.startswith("rename from "):
                 if sha is not None:
-                    commits[sha]["entries"][-1][2] = raw[len("rename from "):]
+                    commits[sha]["entries"][-1].rename_from = raw[len("rename from "):]
                 continue
             if raw.startswith("rename to "):
                 continue
@@ -1289,82 +1369,153 @@ class GitHistory:
                 match = BLAME_HUNK_RE.match(raw)
                 if not match:
                     continue
-                hunks.append((
-                    int(match.group(1)),
-                    int(match.group(2)) if match.group(2) is not None else 1,
-                    int(match.group(3)),
-                    int(match.group(4)) if match.group(4) is not None else 1,
-                    [],
-                ))
+                hunks.append(
+                    _Hunk(
+                        int(match.group(1)),
+                        int(match.group(2)) if match.group(2) is not None else 1,
+                        int(match.group(3)),
+                        int(match.group(4)) if match.group(4) is not None else 1,
+                    )
+                )
                 continue
-            if hunks and raw[:1] in "+-" and not raw.startswith(("+++", "---")):
-                hunks[-1] = hunks[-1][:4] + (hunks[-1][4] + [raw[1:]],)
-                continue
+            if hunks:
+                # The `---`/`+++` file headers are printed BEFORE the first
+                # hunk, and `hunks` is empty until then, so they cannot be
+                # mistaken for a removed and an added line here.
+                if raw[:1] == "+":
+                    hunks[-1].added.append(raw[1:])
+                elif raw[:1] == "-":
+                    hunks[-1].removed.append(raw[1:])
 
-        # The files a merge brought in: their history crosses a merge, so
-        # their blame is asked of `git blame` itself.
-        for commit_sha in order:
+        # The reconstruction: the commits in the reverse of the log's order,
+        # so a parent is applied before its children.
+        arrays: dict[str, list[list[str]]] = {}
+        broken: dict[str, str] = {}
+        # The commit each path was introduced by — the oldest commit the log
+        # named for it. A rename INTO that path is introduced by that commit,
+        # which is why the rename query below asks about these commits only.
+        born: dict[str, str] = {}
+        # The paths whose file was emptied and filled again: a file that was
+        # deleted and re-created has two histories, and the log holds only the
+        # second one.
+        emptied: set[str] = set()
+
+        for commit_sha in reversed(order):
             record = commits[commit_sha]
-            if len(record["parents"]) < 2:
-                continue
+            if len(record["parents"]) > 1:
+                continue  # a merge: its diff is not a change of the file
             for entry in record["entries"]:
-                self._risky.add(entry[0])
+                path = entry.path
+                if path not in born:
+                    born[path] = commit_sha
+                if path in broken:
+                    continue
+                if entry.rename_from and entry.rename_from in arrays:
+                    arrays[path] = arrays.pop(entry.rename_from)
+                array = arrays.setdefault(path, [])
+                # The hunks of ONE commit all speak about the file as it was
+                # BEFORE that commit, so they are applied from the last to the
+                # first.
+                for hunk in sorted(entry.hunks, key=lambda h: h.old_start, reverse=True):
+                    if hunk.old_count != len(hunk.removed) or hunk.new_count != len(hunk.added):
+                        broken[path] = "the diff does not have the shape its header claims"
+                        arrays.pop(path, None)
+                        break
+                    if hunk.old_count == 0 and path in emptied:
+                        broken[path] = "the file was deleted and re-created"
+                        arrays.pop(path, None)
+                        break
+                    if hunk.old_count:
+                        pre = [
+                            line
+                            for _, line in array[hunk.old_start - 1: hunk.old_start - 1 + hunk.old_count]
+                        ]
+                        if pre != hunk.removed:
+                            broken[path] = "the diff does not apply to the file as it was"
+                            arrays.pop(path, None)
+                            break
+                        del array[hunk.old_start - 1: hunk.old_start - 1 + hunk.old_count]
+                        at = hunk.old_start - 1
+                    else:
+                        at = hunk.old_start
+                    array[at:at] = [
+                        [commit_sha, hunk.added[index]] for index in range(hunk.new_count)
+                    ]
+                    if not array and hunk.new_count == 0:
+                        emptied.add(path)
+
+        # The renames the log's commits introduced. A file that ARRIVED under a
+        # new name has its history under the old one, and a log limited to the
+        # citing paths does not show it: the file reads as one created in a
+        # single commit, with every line attributed to that commit. The
+        # content is right and every commit is wrong, which is the worst kind
+        # of wrong — so the renames are asked for by name.
+        #
+        # ONE query, over the commits that introduced the paths and no other:
+        # a rename INTO a path is introduced by the commit that introduced
+        # the path, and the pathspec-limited log cannot show it because the
+        # old path is outside the pathspec.
+        renamed_into = self._renamed_into(repo, sorted(set(born.values())))
+        for path in list(arrays):
+            olds = renamed_into.get(path)
+            if olds and any(old not in files for old in olds):
+                broken[path] = "the file was renamed; its history lives under another path"
+                arrays.pop(path, None)
 
         # A file the working tree changed: `git blame` attributes the changed
         # lines to the null oid, and the rule reads that as "no commit is
         # attributed to this line". The reconstruction only knows the
         # committed file, so those files are asked of `git blame` as well.
-        self._risky.update(self._modified_in_worktree(repo))
-
-        # The reconstruction: the commits in the reverse of the log's order,
-        # so a parent is applied before its children.
-        arrays: dict[str, list[tuple[str, str]]] = {}
-        for commit_sha in reversed(order):
-            record = commits[commit_sha]
-            if len(record["parents"]) > 1:
-                continue  # a merge: its diff is not a change of the file
-            for path, hunks, rename_from in record["entries"]:
-                if rename_from and rename_from in arrays:
-                    arrays[path] = arrays.pop(rename_from)
-                array = arrays.setdefault(path, [])
-                # The hunks of ONE commit all speak about the file as it was
-                # BEFORE that commit, so they are applied from the last to the
-                # first.
-                for hunk in sorted(hunks, reverse=True):
-                    old_start, old_count, new_start, new_count = hunk[0], hunk[1], hunk[2], hunk[3]
-                    added = hunk[4] if len(hunk) > 4 else []
-                    if old_count:
-                        del array[old_start - 1: old_start - 1 + old_count]
-                        at = old_start - 1
-                    else:
-                        at = old_start
-                    array[at:at] = [
-                        (commit_sha, added[index] if index < len(added) else "")
-                        for index in range(new_count)
-                    ]
-        for path, array in arrays.items():
-            self._reconstructed[path] = {i + 1: sha for i, (sha, _) in enumerate(array)}
-            self._reconstructed_content[path] = [content for _, content in array]
+        for path in self._modified_in_worktree(repo):
+            if path in arrays or path in broken:
+                broken[path] = "the working tree changed it"
+                arrays.pop(path, None)
 
         # The files whose reconstruction does not reproduce the file at HEAD.
-        # A merge that the reconstruction could not carry the file across
-        # leaves the lines in the wrong place, and a file whose lines are in
-        # the wrong place is a file whose blame is wrong. The check is a
-        # comparison with the committed file, so it is exact: a file that
-        # reproduces HEAD is a file the reconstruction read correctly.
-        self._risky.update(self._inconsistent(repo, list(self._reconstructed)))
-
-    def _inconsistent(self, repo: str, paths: list[str]) -> set[str]:
-        """The files whose reconstruction does not reproduce the file at HEAD."""
-        out: set[str] = set()
-        for path in paths:
-            content = self._reconstructed_content.get(path)
-            if content is None:
-                out.add(path)
-                continue
+        # A history the reconstruction could not carry leaves the lines in the
+        # wrong place, and a file whose lines are in the wrong place is a file
+        # whose blame is wrong. The check is a comparison with the committed
+        # file, so it is exact: a file that reproduces HEAD is a file the
+        # reconstruction read correctly.
+        for path in list(arrays):
+            content = [line for _, line in arrays[path]]
             head = self._blob_at_head(repo, path)
             if head is None or head != content:
-                out.add(path)
+                broken[path] = "the reconstruction does not reproduce the file at HEAD"
+                arrays.pop(path, None)
+
+        for path, array in arrays.items():
+            self._reconstructed[path] = {i + 1: sha for i, (sha, _) in enumerate(array)}
+        self._fallback = broken
+
+    def _renamed_into(self, repo: str, commit_shas: list[str]) -> dict[str, list[str]]:
+        """The paths the given commits renamed INTO, and the paths they came from.
+
+        One `git log --no-walk` over the commits: the pathspec-limited log
+        above cannot show a rename whose old path is outside the pathspec, so
+        the question is asked of git directly.
+        """
+        out: dict[str, list[str]] = {}
+        if not commit_shas:
+            return out
+        proc = subprocess.run(
+            [
+                "git", "log",
+                "--no-walk",
+                "--format=%x00%H",
+                "--name-status",
+                "--diff-filter=R",
+                "-M",
+                *commit_shas,
+            ],
+            cwd=repo, capture_output=True, text=True, env=md_gate.git_env(),
+        )
+        for raw in proc.stdout.split("\n"):
+            if not raw.startswith("R"):
+                continue
+            parts = raw.split("\t")
+            if len(parts) == 3:
+                out.setdefault(parts[2], []).append(parts[1])
         return out
 
     def _blob_at_head(self, repo: str, path: str) -> list[str] | None:
@@ -1407,7 +1558,7 @@ class GitHistory:
     def blame(self, rel: str) -> dict[int, str]:
         """`line -> sha` for one file, as `git blame` would answer it."""
         if rel not in self._blames:
-            if rel in self._risky or rel not in self._reconstructed:
+            if rel in self._fallback or rel not in self._reconstructed:
                 self._blames[rel] = self._blame_with_git(rel)
             else:
                 self._blames[rel] = self._reconstructed[rel]
@@ -1425,7 +1576,7 @@ class GitHistory:
             return
         fallback = [
             rel for rel in pending
-            if rel in self._risky or rel not in self._reconstructed
+            if rel in self._fallback or rel not in self._reconstructed
         ]
         answers: dict[str, dict[int, str]] = {}
         if fallback:
@@ -1435,6 +1586,10 @@ class GitHistory:
                     answers[rel] = answer
         for rel in pending:
             self._blames[rel] = answers.get(rel, self._reconstructed.get(rel, {}))
+
+    def fallback_reasons(self) -> dict[str, str]:
+        """The files the reconstruction could not vouch for, and why."""
+        return dict(self._fallback)
 
     def _blame_with_git(self, rel: str) -> dict[int, str]:
         """The original answer, from `git blame` itself."""
@@ -1526,8 +1681,15 @@ def repo_is_shallow(repo: str) -> bool:
 
 def check_cite_drift(
     repo: str, by_base: dict[str, list[str]]
-) -> tuple[int, dict[str, list[tuple[str, str, int]]]]:
-    """Return (citations seen, {citing file: [(code, message, line), ...]}).
+) -> tuple[int, dict[str, list[tuple[str, str, int]]], dict[str, str], int]:
+    """Return (citations seen, {citing file: [(code, message, line), ...]}, fallbacks, files).
+
+    The third value is the files the blame RECONSTRUCTION could not vouch for,
+    and the reason for each. A file in it was answered by `git blame` itself,
+    so the rule read the same history it always read — but the gate says so
+    out loud, because a gate that quietly checked less than it claims is the
+    failure this whole file exists to end. The fourth is how many citing files
+    there were, so the caller can say how many of them were reproduced.
 
     A DISJUNCTION, per citation site (#947, shaped as #937 settled it):
 
@@ -1597,10 +1759,11 @@ def check_cite_drift(
 
     # ONE pass over the history for the citing files, instead of one
     # `git blame` process per file (issue #2090).
-    history = GitHistory(repo, [rel for rel, _, _, cites in prepared if cites])
+    citing = [rel for rel, _, _, cites in prepared if cites]
+    history = GitHistory(repo, citing)
     # The fallback blames, in parallel: they are one process per file, and
     # they do not touch each other.
-    history.blame_many([rel for rel, _, _, cites in prepared if cites])
+    history.blame_many(citing)
     head_cache: dict[str, list[str]] = {}
 
     for rel, prose, records, citations in prepared:
@@ -1738,7 +1901,8 @@ def check_cite_drift(
                  f"the divergence is real, write a new one.", rwhere)
             )
     history.close()
-    return seen, problems
+    fallbacks = history.fallback_reasons()
+    return seen, problems, fallbacks, len(citing)
 
 
 def truncate(s: str, width: int = 58) -> str:
@@ -2493,6 +2657,13 @@ class Scan:
         # authors, and — for the drift rule — a different question.
         self.test_cites = 0
         self.test_cite_files = 0
+        # The citing files whose blame the reconstruction reproduced, and the
+        # ones it could not vouch for (with the reason). A file in the second
+        # group was answered by `git blame` itself; the gate says so, because
+        # a gate that quietly checked less than it claims is the failure this
+        # file exists to end.
+        self.test_cite_reconstructed = 0
+        self.test_cite_fallback: dict[str, str] = {}
         self.hits: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
 
     @property
@@ -2662,8 +2833,10 @@ def scan(repo: str, verbose: bool) -> Scan:
     # carry a `Status: normative` banner, so putting this behind that self-
     # selector would scope it to nothing — the same scoping accident #922's
     # design causes for every test file, which is the whole of this issue.
-    test_seen, test_problems = check_cite_drift(repo, by_base)
+    test_seen, test_problems, fallbacks, citing_files = check_cite_drift(repo, by_base)
     result.test_cites = test_seen
+    result.test_cite_fallback = fallbacks
+    result.test_cite_reconstructed = citing_files - len(fallbacks)
     result.test_cite_files = len(
         [r for r in md_gate.tracked_cs(repo) if r.startswith(TEST_CITATION_SCOPE)]
     )
@@ -3508,6 +3681,37 @@ def self_test() -> int:
         code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
     )
 
+    # #2130: plant the hunk that broke the reconstruction. The old collector
+    # kept a replacement's `-` and `+` lines in one list and took the first
+    # `new_count` entries, so the array ended up with the OLD text, failed the
+    # HEAD comparison, and every citing file with a replacing hunk was handed
+    # to `git blame`. Here the citing file's second commit REPLACES a line
+    # while the target moves: the drift must still be found, and the gate must
+    # say that it rebuilt the blame itself instead of asking git per file.
+    citing_replaced = citing.replace("public void Check() { }", "public void Check() { return; }")
+    root = md_gate.make_fixture(
+        "check-doc-cites.py",
+        {**live, "src/Demo/Target.cs": target_v1, "tests/Demo/Cites.cs": citing},
+    )
+    md_gate.commit_fixture(root, "fixture: baseline, with a line to replace")
+    with open(os.path.join(root, "src/Demo/Target.cs"), "w", encoding="utf-8") as fh:
+        fh.write(target_v2)
+    with open(os.path.join(root, "tests/Demo/Cites.cs"), "w", encoding="utf-8") as fh:
+        fh.write(citing_replaced)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=md_gate.git_env())
+    md_gate.commit_fixture(root, "fixture: target moves and the citing file replaces a line")
+    code, out = md_gate.run_gate(root, "check-doc-cites.py")
+    st.expect(
+        "#2130: a replacing hunk does not push the citing file back to a "
+        "per-file `git blame` — the reconstruction reproduces HEAD and the "
+        "drift is found from the rebuilt history",
+        code == 1
+        and "TEST-CITE-DRIFT" in out
+        and "reproduced the commit that wrote 1 of 1 citing file(s)" in out
+        and "0 of them needed a per-file `git blame` fallback" in out,
+        out.strip()[-700:],
+    )
+
     # -----------------------------------------------------------------------
     # THE DISJUNCTION, AND PROOF THAT IT DOES NOT DEGENERATE (#937's shape)
     #
@@ -3968,6 +4172,25 @@ def main() -> int:
         f"and anchored {result.test_cites} `file:line` citations in tests/**/*.cs "
         f"on the commit that wrote each one (#947: a number that still resolves "
         f"can still name the wrong line)"
+    )
+    # The honesty line. The blame of the citing files is REBUILT from the
+    # history, and a rebuilt blame is only worth anything if the gate can say
+    # which files it rebuilt and which it had to ask `git blame` about. A
+    # fallback is not a failure — the file was read, and read the same way it
+    # always was — but it is a file whose history the rebuild could not carry,
+    # and saying so is the difference between a gate that checks and a gate
+    # that claims to.
+    fallbacks = result.test_cite_fallback
+    detail = ""
+    if fallbacks:
+        detail = ": " + ", ".join(
+            f"{path} ({reason})" for path, reason in sorted(fallbacks.items())
+        )
+    print(
+        f"and reproduced the commit that wrote {result.test_cite_reconstructed} of "
+        f"{result.test_cite_reconstructed + len(fallbacks)} citing file(s) from the "
+        f"history itself; {len(fallbacks)} of them needed a per-file `git blame` "
+        f"fallback{detail}"
     )
     if result.guide_usings:
         print(
