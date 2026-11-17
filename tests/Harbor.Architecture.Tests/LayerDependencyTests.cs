@@ -410,6 +410,49 @@ public class LayerDependencyTests
         await Assert.That(missing).IsEmpty();
     }
 
+    /// <summary>
+    ///     Positive control for the forbidden-reference matcher itself (#1730).
+    ///     The layer rules above all call <c>FindForbiddenReferences</c> with a
+    ///     forbidden set they expect to find EMPTY. A matcher that stopped
+    ///     matching (an empty reference set, a broken <c>Contains</c>) would
+    ///     make every one of them green for the wrong reason, and the liveness
+    ///     check in EnforcerIntegrityTests would not see it - that check proves
+    ///     the NAMES are real, not that the matcher reports a hit.
+    ///     <para>
+    ///         This test plants an offender without adding a project reference:
+    ///         it takes a name the probed assembly really references and puts
+    ///         that name in the forbidden set. The matcher must report exactly
+    ///         that name. The name is derived from the assembly's own metadata,
+    ///         so the control stays narrow - it cannot fail on legitimate code
+    ///         or drift when a layer is refactored. If the matcher cannot report
+    ///         a dependency that is provably there, none of the layer rules
+    ///         above can be believed.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task PositiveControl_FindForbiddenReferences_ReportsARealReference()
+    {
+        var asm = typeof(AgentLoop).Assembly; // Harbor.Application
+        var refs = ArchitectureTestHelpers.GetReferencedAssemblyNames(asm);
+        await Assert.That(refs.Count)
+            .IsGreaterThan(0)
+            .Because("the probe assembly has no AssemblyRef at all - the matcher would be vacuous for every rule above");
+
+        // Plant the offender: a name that is really in this assembly's reference
+        // set. Harbor.Application legitimately binds Harbor.Abstractions; taking
+        // the first real Harbor reference keeps the control independent of which
+        // edge a future refactor drops, as long as any Harbor edge remains.
+        string referenced = refs.First(n => n.StartsWith("Harbor.", StringComparison.Ordinal));
+        var reported = ArchitectureTestHelpers.FindForbiddenReferences(asm, referenced);
+
+        await Assert.That(reported.Count)
+            .IsEqualTo(1)
+            .Because("a forbidden set holding a name the assembly really references must yield exactly one hit; a matcher that returns nothing cannot enforce any layer rule");
+        await Assert.That(reported[0])
+            .IsEqualTo(referenced)
+            .Because("the hit must be the planted name - a different hit means the matcher is reporting something other than what it was asked to find");
+    }
+
     /// <summary>Provider assemblies to test, sourced as method data for TUnit.</summary>
     public static IEnumerable<Assembly> ProviderAssemblies()
     {

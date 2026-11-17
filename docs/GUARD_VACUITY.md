@@ -182,6 +182,27 @@ proves it can fail when it declares a `ScanRule.Controls` table, a test whose
 name carries a control word, a prose control marker, or a discovery floor. The
 eight above are what is left over, and each one was read by hand.
 
+## Post-sweep addendum (2026-11-17)
+
+`LayerDependencyTests` has left the eight listed above. A follow-up to this sweep
+adds `PositiveControl_FindForbiddenReferences_ReportsARealReference`, which drives
+the same `ArchitectureTestHelpers.FindForbiddenReferences` helper the layer rules
+use. It takes a name from the probed assembly's own
+`GetReferencedAssemblyNames` set, puts that name in the forbidden set, and
+requires the matcher to report exactly that name. The plant is derived from real
+metadata, so it cannot fail on legitimate code and does not drift when a layer
+is refactored. A matcher that returned an empty set would now fail this test
+instead of making every layer rule green for the wrong reason.
+
+By the census rule this document states (a test whose name carries a control
+word), the split becomes 153 of 160 with a control and seven without. The other
+seven rows above are unchanged.
+
+The cheap follow-up the table names for the pair still stands for
+`NetArchLayerRules`: its NetArchTest counterpart has no planted offender yet, and
+`NotHaveDependencyOn` is satisfied by a name that matches nothing, so the DSL
+half stays unverified until it gets one.
+
 ## Related
 
 - #1725, the tier classification of the same 160 guards — which ones catch a
