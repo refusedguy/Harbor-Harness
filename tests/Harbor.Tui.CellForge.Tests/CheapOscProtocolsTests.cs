@@ -14,6 +14,7 @@ namespace Harbor.Tui.CellForge.Tests;
 public class CheapOscProtocolsTests
 {
     private const string Esc = "\u001B";
+    private const char EscChar = '\u001B';
 
     // ── OSC 7501 ───────────────────────────────────────────────────────────
 
@@ -306,8 +307,10 @@ public class CheapOscProtocolsTests
         };
         // Exercise an extended underline style in the same frame so the
         // SGR 4:3 bytes are covered by the zero-width contract too.
-        session.PaintBuffer.SetText(0, 0, "hello", new EngineCells.CellStyle(
-            attrs: EngineCells.StyleAttr.Underline | EngineCells.UnderlineStyle.Encode(EngineCells.UnderlineKind.Curly)));
+        // Painter-side buffer speaks the design-system vocabulary (#436).
+        session.PaintBuffer.SetText(0, 0, "hello", new CellStyle(
+            attrs: StyleAttr.Underline
+                | Harbor.Ui.Framework.Rendering.UnderlineStyle.Encode(Harbor.Ui.Framework.Rendering.UnderlineKind.Curly)));
 
         session.ProgramStatus.Set(ProgramStatusState.Working, "harbor");
         session.Progress.Set(ProgressState.Indeterminate);
@@ -334,7 +337,7 @@ public class CheapOscProtocolsTests
         var sb = new StringBuilder(frame.Length);
         for (int i = 0; i < frame.Length;)
         {
-            if (frame[i] != Esc)
+            if (frame[i] != EscChar)
             {
                 sb.Append(frame[i++]);
                 continue;
@@ -344,7 +347,7 @@ public class CheapOscProtocolsTests
             {
                 // Every protocol here uses the ESC \ string terminator.
                 int j = i + 2;
-                while (j + 1 < frame.Length && !(frame[j] == Esc && frame[j + 1] == '\\'))
+                while (j + 1 < frame.Length && !(frame[j] == EscChar && frame[j + 1] == '\\'))
                 {
                     j++;
                 }
