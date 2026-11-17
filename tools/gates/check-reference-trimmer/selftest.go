@@ -97,22 +97,40 @@ func selfTestRun() int {
 
 	// The same finding twice in the log is one finding: a project built
 	// twice, or a warning reprinted, must not become two candidates.
-	parsed, _, _ := parsedFindings(root, fixtureFindings)
+	parsed, _ := parsedFindings(root, fixtureFindings)
 	check("a duplicate log line is one finding", len(parsed) == 2,
 		fmt.Sprintf("the fixture holds two distinct findings and one duplicate line; parsed %d", len(parsed)))
 
-	// The projects another gate answers for are dropped, and the drop is
-	// counted rather than silent.
+	// The projects the sibling check-abstractions-contract gate answers for
+	// are no longer dropped: the scope is the whole solution. A finding in
+	// one of them is parsed like anybody else's and, with no baseline row to
+	// carry it, is red.
 	guardedRoot := fixtureRoot()
 	defer os.RemoveAll(guardedRoot)
-	writeFile(guardedRoot, filepath.Join("tools", "gates", "check-abstractions-contract", "main.go"),
-		"package checkabstractionscontract\n\nvar scope = []string{\n\t\"src/Harbor.One\",\n}\n")
 	guardedFindings := "/home/runner/work/Repo/Repo/src/Harbor.One/Harbor.One.csproj : " +
 		"warning RT0003: PackageReference Ghost.Package can be removed " +
 		"[/home/runner/work/Repo/Repo/src/Harbor.One/Harbor.One.csproj]\n"
-	parsed, _, excluded := parsedFindings(guardedRoot, guardedFindings)
-	check("another gate's scope is excluded", excluded == 1 && len(parsed) == 0,
-		fmt.Sprintf("excluded %d, parsed %d", excluded, len(parsed)))
+	parsed, _ = parsedFindings(guardedRoot, guardedFindings)
+	check("another gate's scope is in scope here too", len(parsed) == 1,
+		fmt.Sprintf("parsed %d", len(parsed)))
+
+	// A planted unused reference in a NEW project — one that has no baseline
+	// row and was not part of the tree when the baseline was written — is a
+	// new finding. This is the proof that widening the scope did not leave
+	// first-time projects unchecked.
+	newRoot := fixtureRoot()
+	defer os.RemoveAll(newRoot)
+	writeFile(newRoot, "src/Harbor.Newcomer/Harbor.Newcomer.csproj", "<Project />\n")
+	newcomerFindings := "/home/runner/work/Repo/Repo/src/Harbor.Newcomer/Harbor.Newcomer.csproj : " +
+		"warning RT0003: PackageReference Ghost.Package can be removed " +
+		"[/home/runner/work/Repo/Repo/src/Harbor.Newcomer/Harbor.Newcomer.csproj]\n"
+	writeFile(newRoot, "findings.log", newcomerFindings)
+	writeFile(newRoot, "coverage.txt", "src/Harbor.One\nsrc/Harbor.Two\nsrc/Harbor.Newcomer\n")
+	writeFile(newRoot, filepath.Join("tools", "reference-trimmer-baseline.txt"), "# fixture with no rows\n")
+	found, _ = scan(newRoot, filepath.Join(newRoot, "findings.log"),
+		filepath.Join(newRoot, "coverage.txt"),
+		filepath.Join(newRoot, "tools", "reference-trimmer-baseline.txt"), 3)
+	check("a planted unused reference in a new project is red", hasRule(found, "RT-NEW-FINDING"), "")
 
 	// 2. A finding the baseline does not carry.
 	writeFile(root, filepath.Join("tools", "reference-trimmer-baseline.txt"), "# fixture with no rows\n")
