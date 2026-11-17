@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.Application.Hooks;
 using Harbor.Application.Sessions;
 using Harbor.Application.Telemetry;
@@ -37,6 +38,11 @@ public sealed class CompactionBehavior(
     // #1612: the history-shaping seam — the turn pipeline depends on this
     // contract, never on the CompactionPolicy statics directly.
     private readonly ICompactionView _compactionView = compactionView ?? CompactionView.Instance;
+
+    // #2225: at most one background warm-up in flight for this behavior — the
+    // loop holds one instance for its whole life. The task is tracked, not
+    // abandoned, and TaskFireAndForget observes its fault (§FP-006).
+    private Task? _precomputeTask;
 
     /// <summary>
     ///     How many times ONE turn may compact-and-retry after a context
@@ -77,6 +83,14 @@ public sealed class CompactionBehavior(
         // truncation below.
         if (truncationFallback || !tokenTracker.ShouldCompact(turnMessages, model))
         {
+            // #2225: below the hard threshold there is still headroom to warm
+            // a summary in the background. No fallback: a run already on the
+            // destructive truncation path has no use for a prepared summary.
+            if (!truncationFallback)
+            {
+                StartPrecomputeIfNeeded(session.Session.Id, turnMessages, model, ct);
+            }
+
             return new CompactionOutcome(turnMessages, truncationFallback);
         }
 
@@ -163,6 +177,38 @@ public sealed class CompactionBehavior(
                 CompactionBehaviorLog.CompactionFailed(logger, error);
                 return PublishFailureAsync(session.Session.Id, error, turnMessages);
             }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Warm a compaction summary in the background while the window still
+    ///     has headroom (#2225, opencode <c>PRECOMPUTE_LEAD</c>). Only one
+    ///     warm-up runs at a time; the task is tracked and its fault observed
+    ///     through <see cref="TaskFireAndForget" /> (§FP-006), never abandoned.
+    ///     A compaction that does not opt in is a no-op.
+    /// </summary>
+    private void StartPrecomputeIfNeeded(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        ModelInfo model,
+        CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested || _precomputeTask is { IsCompleted: false })
+        {
+            return;
+        }
+
+        if (compaction is not CompactionService precomputer
+            || !precomputer.ShouldPrecompute(messages, model))
+        {
+            return;
+        }
+
+        Task<bool> task = precomputer.TryPrecomputeAsync(sessionId, messages, model, ct);
+        _precomputeTask = task;
+        TaskFireAndForget.Forget(
+            task,
+            ex => CompactionBehaviorLog.PrecompactionFailed(logger, ex, sessionId),
+            ct);
     }
 
     /// <summary>
@@ -607,5 +653,8 @@ internal static partial class CompactionBehaviorLog
 
     [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "Context overflow recovery failed for session {SessionId}: {Error}")]
     public static partial void OverflowRecoveryFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Background compaction precompute failed for session {SessionId}")]
+    public static partial void PrecompactionFailed(ILogger logger, Exception ex, string sessionId);
 
 }

@@ -255,6 +255,60 @@ public class CompactionServiceTests
         await Assert.That(result.Value.PrunedMessageCount).IsLessThanOrEqualTo(4);
     }
 
+    /// <summary>
+    ///     #2225: an overfull history is freed by ONE compaction. The 15%
+    ///     reserve plus the summary slice held back by the SHRINK_STEPS cut
+    ///     leave the compacted view below the threshold, so the reactive
+    ///     overflow path does not pay for a second summarization on the same
+    ///     provider refusal.
+    /// </summary>
+    [Test]
+    public async Task CompactAsync_Overflow_SummaryFreesWindowOnFirstAttempt()
+    {
+        const int window = 200_000;
+        const int maxOutput = 1_024; // smaller than the summary slice → step-down must engage
+        var tracker = new TokenTracker();
+        var model = new ModelInfo(
+            "test-model", "test", "Test Model", window, maxOutput,
+            false, false, true, Pricing.Unknown, "openai");
+        int reserve = tracker.EffectiveReserveTokens(model);
+        await Assert.That(reserve).IsEqualTo(30_000);
+
+        var svc = CreateService(
+            new SummaryLlmClient("compact summary"), tracker,
+            keepRecentTokens: 250_000, // deliberately larger than the history — clamping must decide the tail
+            tailTurns: 0);
+
+        var messages = new List<AgentMessage>();
+        for (int i = 0; i < 180; i++)
+        {
+            messages.Add(MessageFixtures.User(new string('x', 4_000) + $"-{i}"));
+        }
+
+        // The history overflows the usable window, so this is the shape the
+        // reactive recovery would compact after a refusal.
+        await Assert.That(tracker.ShouldCompact(messages, model)).IsTrue();
+
+        var result = await svc.CompactAsync("session-overflow", messages, model);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+
+        // The kept tail itself must respect the safe budget (window − reserve
+        // − summary slice). Without the step-down it would sit above it and the
+        // compacted view would re-overfill the window.
+        int kept = messages.Count - result.Value.PrunedMessageCount;
+        int keptTokens = tracker.EstimateTokens(messages.GetRange(result.Value.PrunedMessageCount, kept));
+        await Assert.That(keptTokens).IsLessThanOrEqualTo(window - reserve - 4_096)
+            .Because("the tail alone must fit the safe budget, or one summary cannot free the window");
+
+        // The materialized view the loop would send next fits below the
+        // threshold — the retry succeeds on the first attempt.
+        var raw = new List<AgentMessage>(messages) { result.Value.SummaryMessage };
+        IReadOnlyList<AgentMessage> view = CompactionPolicy.MaterializeCompactedView(raw);
+        await Assert.That(tracker.EstimateTokens(view)).IsLessThan(window - reserve)
+            .Because("one compaction must leave headroom below the compaction threshold");
+    }
+
     [Test]
     public async Task CompactAsync_SummaryMessage_ContainsSummaryText()
     {

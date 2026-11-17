@@ -240,6 +240,29 @@ public class TokenTrackerTests
         await Assert.That(tracker.ShouldCompact(history, Model(16_384))).IsFalse();
     }
 
+    /// <summary>
+    ///     #2225: the reserve grows to 15% of a large window, but never drops
+    ///     below the configured floor — small windows keep the historical
+    ///     16,384 threshold instead of shrinking it.
+    /// </summary>
+    [Test]
+    public async Task EffectiveReserveTokens_ScalesWithWindow_ButNeverBelowFloor()
+    {
+        var tracker = new TokenTracker();
+
+        // Small window: the 15% share (≈768) is below the 16,384 floor.
+        await Assert.That(tracker.EffectiveReserveTokens(Model(5_120))).IsEqualTo(16_384);
+
+        // Large window: 15% wins and dominates the floor.
+        await Assert.That(tracker.EffectiveReserveTokens(Model(200_000))).IsEqualTo(30_000);
+
+        // A configured lower floor still moves the verdict for a small window,
+        // but a large window applies the share over whichever floor was set.
+        var tight = new TokenTracker { ReserveTokens = 100 };
+        await Assert.That(tight.EffectiveReserveTokens(Model(5_120))).IsEqualTo(768);
+        await Assert.That(tight.EffectiveReserveTokens(Model(200_000))).IsEqualTo(30_000);
+    }
+
     /// <summary>#80: the shared threshold is init-only and must be positive.</summary>
     [Test]
     public async Task ReserveTokens_DefaultsAndValidates()

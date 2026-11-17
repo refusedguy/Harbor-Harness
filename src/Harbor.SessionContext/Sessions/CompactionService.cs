@@ -249,6 +249,48 @@ public sealed class CompactionService(
     }
 
     /// <summary>
+    ///     Tail-budget fractions tried in order by <see cref="FindCutPoint" />
+    ///     (#2225, opencode <c>SHRINK_STEPS</c>). When the first cut still leaves
+    ///     a view the window cannot take, the budget is walked down until the
+    ///     compacted history fits — so the reactive overflow path does not have
+    ///     to spend a second summarization to free the same window.
+    /// </summary>
+    private static readonly double[] ShrinkSteps = [1.0, 0.85, 0.7, 0.5, 0.35];
+
+    /// <summary>
+    ///     How close to the compaction threshold a history must be before a
+    ///     background summary is worth its cost (#2225): the newest 15% of the
+    ///     usable window. Well below that a warm-up would be thrown away by the
+    ///     next few messages, so it would only bill the provider for nothing.
+    /// </summary>
+    private const double PrecomputeTriggerShare = 0.85;
+
+    /// <summary>Minimum history a precompute will summarize; shorter ones are cheap to fold synchronously.</summary>
+    private const int PrecomputeMinMessages = 8;
+
+    /// <summary>
+    ///     Background-warmed summaries, one per session (#2225). Replaced on
+    ///     every successful warm-up and consumed (or dropped as stale) by the
+    ///     next <see cref="CompactAsync" /> for that session.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, PrecomputedSummary> _precomputed = new();
+
+    /// <summary>
+    ///     In-flight warm-ups, kept SEPARATE from <see cref="_activeCompactions" />:
+    ///     a warm-up never writes to the session log, so it must not block a
+    ///     foreground (or reactive overflow) compaction from taking THE lock.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _activePrecomputes = new();
+
+    /// <summary>A warmed summary and the exact history shape it was built from.</summary>
+    private sealed record PrecomputedSummary(int MessageCount, int EstimatedTokens, CompactionResult Result)
+    {
+        /// <summary>The cache is only reusable while the summarized history is unchanged.</summary>
+        public bool Matches(IReadOnlyList<AgentMessage> messages, ITokenTracker tracker) =>
+            MessageCount == messages.Count && EstimatedTokens == EstimateFrom(messages, 0, tracker);
+    }
+
+    /// <summary>
     ///     Target token count for the kept tail when compacting.
     ///     Must be &gt; 0 (mirrors <c>CompactionConfig.Validate</c>).
     /// </summary>
@@ -284,6 +326,94 @@ public sealed class CompactionService(
         return tokenTracker.ShouldCompact(messages, model);
     }
 
+    /// <summary>
+    ///     Whether a background summary is worth warming for this history
+    ///     (#2225, opencode <c>PRECOMPUTE_LEAD</c>). Pure and cheap.
+    /// </summary>
+    public bool ShouldPrecompute(IReadOnlyList<AgentMessage> messages, ModelInfo model)
+    {
+        // Only warm a summary in the lead band: below it the next few messages
+        // would invalidate the cache before it could ever be used, and at or
+        // above the threshold the preventive pass summarizes synchronously.
+        if (messages.Count < PrecomputeMinMessages || tokenTracker.ShouldCompact(messages, model))
+        {
+            return false;
+        }
+
+        int threshold = model.ContextWindow - ReserveTokensFor(model);
+        if (threshold <= 0)
+        {
+            return false;
+        }
+
+        int estimated = EstimateFrom(messages, 0, tokenTracker);
+        return estimated >= (int)(threshold * PrecomputeTriggerShare) && estimated < threshold;
+    }
+
+    /// <summary>
+    ///     Compute a summary for <paramref name="messages" /> and cache it for
+    ///     the next <see cref="CompactAsync" /> of the same session. Never
+    ///     throws: a failed warm-up is simply not cached.
+    /// </summary>
+    public async Task<bool> TryPrecomputeAsync(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        ModelInfo model,
+        CancellationToken ct = default)
+    {
+        // One warm summary per session is enough; a second one would only race
+        // the first for the same cache slot.
+        if (_precomputed.ContainsKey(sessionId) || !ShouldPrecompute(messages, model))
+        {
+            return false;
+        }
+
+        // Only one warm-up per session at a time. A separate guard from the
+        // foreground compaction lock: a warm-up writes nothing to the session
+        // log, and must not stop a reactive overflow compaction from running.
+        if (!_activePrecomputes.TryAdd(sessionId, 0))
+        {
+            return false;
+        }
+
+        try
+        {
+            int tailStart = FindCutPoint(messages, model, KeepRecentTokens, TailTurns);
+            if (tailStart == 0)
+            {
+                return false;
+            }
+
+            Result<CompactionResult> outcome = await ProviderId.TryCreate(model.ProviderId)
+                .Bind(providers.GetClient)
+                .Bind(client => BuildCompactionResultAsync(sessionId, messages, model, client, tailStart, ct))
+                .ConfigureAwait(false);
+
+            if (outcome.IsFailure)
+            {
+                return false;
+            }
+
+            _precomputed[sessionId] = new PrecomputedSummary(
+                messages.Count, EstimateFrom(messages, 0, tokenTracker), outcome.Value);
+            CompactionServiceLog.SummaryPrecomputed(logger, sessionId);
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            CompactionServiceLog.PrecomputeFailed(logger, ex, sessionId);
+            return false;
+        }
+        finally
+        {
+            _activePrecomputes.TryRemove(sessionId, out _);
+        }
+    }
+
     /// <inheritdoc />
     public async Task<Result<CompactionResult>> CompactAsync(
         string sessionId,
@@ -304,6 +434,16 @@ public sealed class CompactionService(
         {
             try
             {
+                // #2225: a background-warmed summary for this exact history
+                // frees the window without paying for another summarization
+                // under pressure. A stale entry is dropped and recomputed.
+                if (_precomputed.TryRemove(sessionId, out PrecomputedSummary? cached)
+                    && cached.Matches(messages, tokenTracker))
+                {
+                    CompactionServiceLog.PrecomputedSummaryReused(logger, sessionId);
+                    return Result.Success(cached.Result);
+                }
+
                 // 1. Find cut point (index-based; no List allocations)
                 int tailStart = FindCutPoint(messages, model, KeepRecentTokens, TailTurns);
 
@@ -317,7 +457,7 @@ public sealed class CompactionService(
                 // just re-raise each Error verbatim.
                 return await ProviderId.TryCreate(model.ProviderId)
                     .Bind(providers.GetClient)
-                    .Bind(client => CompactCoreAsync(sessionId, messages, model, client, tailStart, ct))
+                    .Bind(client => BuildCompactionResultAsync(sessionId, messages, model, client, tailStart, ct))
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -336,7 +476,7 @@ public sealed class CompactionService(
     }
 
     /// <summary>Secondary-model selection + summarization call + tail splice.</summary>
-    private async Task<Result<CompactionResult>> CompactCoreAsync(
+    private async Task<Result<CompactionResult>> BuildCompactionResultAsync(
         string sessionId,
         IReadOnlyList<AgentMessage> messages,
         ModelInfo model,
@@ -572,9 +712,57 @@ public sealed class CompactionService(
         int keepRecentTokens,
         int tailTurns)
     {
-        int tailStart = FindTailStartByBudget(messages, ClampTailBudget(model, keepRecentTokens));
+        int baseBudget = ClampTailBudget(model, keepRecentTokens);
+        // The compacted view is the summary the service prepends plus the kept
+        // tail. Both must fit BELOW the reserve the verdict holds under the
+        // window; reserving the summary's full output slice up front keeps the
+        // first compaction from re-overfilling the window it is meant to free.
+        int safeTail = model.ContextWindow - ReserveTokensFor(model) - SummaryMaxOutputTokens;
+
+        int tailStart = ComputeCut(messages, baseBudget, tailTurns);
+        if (safeTail > 0 && EstimateTail(messages, tailStart) > safeTail)
+        {
+            // opencode SHRINK_STEPS (#2225): the heuristic tail still looks too
+            // big for the window, so walk the budget down through the ladder
+            // until the view fits. A view that fits on the first attempt is the
+            // whole point — the reactive overflow retry bills a metered
+            // provider for the same refusal twice.
+            for (int i = 1; i < ShrinkSteps.Length; i++)
+            {
+                int budget = Math.Max(1, (int)(baseBudget * ShrinkSteps[i]));
+                tailStart = ComputeCut(messages, budget, tailTurns);
+                if (EstimateTail(messages, tailStart) <= safeTail)
+                {
+                    break;
+                }
+            }
+        }
+
+        return tailStart;
+    }
+
+    /// <summary>Budget cut, tail-turns floor and orphan skip in one place so the shrink ladder reuses them.</summary>
+    private int ComputeCut(IReadOnlyList<AgentMessage> messages, int budget, int tailTurns)
+    {
+        int tailStart = FindTailStartByBudget(messages, budget);
         tailStart = ApplyTailTurnsMinimum(messages, tailStart, tailTurns);
         return SkipOrphanToolResults(messages, tailStart);
+    }
+
+    /// <summary>Estimated tokens of the kept tail <c>messages[tailStart..]</c>.</summary>
+    private int EstimateTail(IReadOnlyList<AgentMessage> messages, int tailStart) =>
+        EstimateFrom(messages, tailStart, tokenTracker);
+
+    /// <summary>Sum of per-message estimates from <paramref name="start" /> on.</summary>
+    private static int EstimateFrom(IReadOnlyList<AgentMessage> messages, int start, ITokenTracker tracker)
+    {
+        int tokens = 0;
+        for (int i = start; i < messages.Count; i++)
+        {
+            tokens += tracker.EstimateMessage(messages[i]);
+        }
+
+        return tokens;
     }
 
     /// <summary>
@@ -593,7 +781,7 @@ public sealed class CompactionService(
     /// <returns>The tail budget to compact with.</returns>
     private int ClampTailBudget(ModelInfo model, int keepRecentTokens)
     {
-        int budget = model.ContextWindow - ReserveTokens - model.MaxOutputTokens;
+        int budget = model.ContextWindow - ReserveTokensFor(model) - model.MaxOutputTokens;
         if (budget <= 0)
         {
             // The window is smaller than the reserve — the tracker's own guard
@@ -607,10 +795,15 @@ public sealed class CompactionService(
 
     /// <summary>
     ///     The token reserve the tracker's own compaction verdict uses — the
-    ///     single source (#1106: two reserves drifted once already).
+    ///     single source (#1106: two reserves drifted once already). #2225: the
+    ///     reserve grows with the window, so it is derived from the model here
+    ///     exactly as <see cref="TokenTracker.EffectiveReserveTokens" /> derives
+    ///     it for the verdict. A non-<see cref="TokenTracker" /> tracker (a test
+    ///     double) gets the same derivation against the configured floor.
     /// </summary>
-    private int ReserveTokens =>
-        (tokenTracker as TokenTracker)?.ReserveTokens ?? CompactionPolicy.DefaultReserveTokens;
+    private int ReserveTokensFor(ModelInfo model) =>
+        (tokenTracker as TokenTracker)?.EffectiveReserveTokens(model)
+        ?? Math.Max(CompactionPolicy.DefaultReserveTokens, (int)(model.ContextWindow * TokenTracker.ContextReserveShare));
 
     /// <summary>
     ///     The cut point never opens the kept tail on an orphan tool result
@@ -714,7 +907,7 @@ public sealed class CompactionService(
         // Single reserve source: the tracker owns the threshold. CompactionService
         // kept its own (now deleted) copy that drifted from this one; the tracker's
         // is the only one that applies (#1106 divergent reserves).
-        int reserveTokens = ReserveTokens;
+        int reserveTokens = ReserveTokensFor(summaryModel);
         int budget = summaryModel.ContextWindow - SummaryMaxOutputTokens - reserveTokens;
         int start = tailStart - 1;
         if (budget <= 0 || start < 0)
@@ -884,5 +1077,14 @@ internal static partial class CompactionServiceLog
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "A compaction of session {SessionId} is already running; the second one is refused")]
     public static partial void CompactionAlreadyRunning(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Background compaction summary warmed for session {SessionId}")]
+    public static partial void SummaryPrecomputed(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "Reused the background compaction summary for session {SessionId}")]
+    public static partial void PrecomputedSummaryReused(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "Background compaction summary for session {SessionId} failed; the next compaction will summarize synchronously")]
+    public static partial void PrecomputeFailed(ILogger logger, Exception ex, string sessionId);
 
 }
