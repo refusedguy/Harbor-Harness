@@ -7,9 +7,9 @@
     32-file build orchestrator as build/_build/, rewritten once by
     `fallout-migrate --dry-run` (Fallout.Migrate 10.4.0) and hand-checked:
 
-        Nuke.Common 10.1.0    -> Fallout.Common 10.4.0
-        NukeBuild             -> FalloutBuild
-        using Nuke.*          -> using Fallout.*  (ProjectModel -> Fallout.Solutions)
+        NUKE.Common 10.1.0    -> Fallout.Common 10.4.0
+        NUKEBuild             -> FalloutBuild
+        using NUKE.*          -> using Fallout.*  (ProjectModel -> Fallout.Solutions)
 
     build/_build/ and build/_build.csproj are NOT touched by this pilot.
     Nothing in CI switches over to this project yet; the comparison is
