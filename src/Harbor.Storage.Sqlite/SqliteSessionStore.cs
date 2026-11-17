@@ -182,19 +182,7 @@ public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpoi
                 using var tx = conn.BeginTransaction();
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
-                cmd.CommandText = """
-                                  INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, created_at_ms, payload)
-                                  VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @createdMs, @payload)
-                                  """;
-                cmd.Parameters.AddWithValue("@id", message.Id);
-                cmd.Parameters.AddWithValue("@sid", sessionId);
-                cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@role", message.Role);
-                cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
-                cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
-                cmd.Parameters.Add(StampParam("@created", message.CreatedAt));
-                cmd.Parameters.Add(LongParam("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds()));
-                cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
+                InsertMessageRow(cmd, sessionId, message);
                 cmd.ExecuteNonQuery();
 
                 // Update session.updated_at
@@ -236,22 +224,9 @@ public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpoi
                 using var tx = conn.BeginTransaction();
                 for (int i = 0; i < messages.Count; i++)
                 {
-                    AgentMessage message = messages[i];
                     using var cmd = conn.CreateCommand();
                     cmd.Transaction = tx;
-                    cmd.CommandText = """
-                                      INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, created_at_ms, payload)
-                                      VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @createdMs, @payload)
-                                      """;
-                    cmd.Parameters.AddWithValue("@id", message.Id);
-                    cmd.Parameters.AddWithValue("@sid", sessionId);
-                    cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@role", message.Role);
-                    cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
-                    cmd.Parameters.Add(StampParam("@created", message.CreatedAt));
-                    cmd.Parameters.Add(LongParam("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds()));
-                    cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
+                    InsertMessageRow(cmd, sessionId, messages[i]);
                     cmd.ExecuteNonQuery();
                 }
 
@@ -273,6 +248,27 @@ public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpoi
         {
             semaphore.Release();
         }
+    }
+
+    /// <summary>
+    ///     One message INSERT, shared by the single append and the batch so the
+    ///     two paths cannot drift (#2226).
+    /// </summary>
+    private static void InsertMessageRow(SqliteCommand cmd, string sessionId, AgentMessage message)
+    {
+        cmd.CommandText = """
+                          INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, created_at_ms, payload)
+                          VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @createdMs, @payload)
+                          """;
+        cmd.Parameters.AddWithValue("@id", message.Id);
+        cmd.Parameters.AddWithValue("@sid", sessionId);
+        cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@role", message.Role);
+        cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
+        cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
+        cmd.Parameters.Add(StampParam("@created", message.CreatedAt));
+        cmd.Parameters.Add(LongParam("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds()));
+        cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
     }
 
     public async Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)

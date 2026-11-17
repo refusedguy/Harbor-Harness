@@ -429,19 +429,22 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     ///     old file or the full batch, never a prefix — which is what makes a
     ///     forked child's history all-or-nothing.
     /// </remarks>
-    public async Task<Result> AppendMessagesBatchAsync(
+    public Task<Result> AppendMessagesBatchAsync(
         string sessionId,
         IReadOnlyList<AgentMessage> messages,
         CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
-        if (resolved.IsFailure)
-        {
-            return resolved.ConvertFailure();
-        }
+        return SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId)
+            .Bind(sessionFile => AppendBatchToFileAsync(sessionId, sessionFile, messages, ct));
+    }
 
-        string sessionFile = resolved.Value;
+    private async Task<Result> AppendBatchToFileAsync(
+        string sessionId,
+        string sessionFile,
+        IReadOnlyList<AgentMessage> messages,
+        CancellationToken ct)
+    {
         if (!File.Exists(sessionFile))
         {
             _messageCache.TryRemove(sessionId, out _);
