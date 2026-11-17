@@ -19,34 +19,22 @@ public enum StyleAttr : ushort
     Reverse = 1 << 5,
     Hidden = 1 << 6,
     Strike = 1 << 7,
-    // Bits 8..10 are no longer reserved: they carry a 3-bit underline STYLE
-    // (UnderlineKind), meaningful only while the Underline bit above is set.
-    // Encoding stays inside the existing ushort Flags field, so Cell remains
-    // 16 bytes and the five-integer diff equality is unchanged (issue #2219).
+    // Bits 8..10 hold UnderlineKind (issue #2219); Cell stays 16 bytes.
 }
 
-/// <summary>Underline style encoded in bits 8..10 of <see cref="StyleAttr"/>.</summary>
 public enum UnderlineKind : byte
 {
-    Single = 0, // SGR 4 — the existing underlining behaviour
+    Single = 0, // SGR 4
     Double = 1, // SGR 21
     Curly = 2,  // SGR 4:3
     Dotted = 3, // SGR 4:4
     Dashed = 4, // SGR 4:5
 }
-
-/// <summary>Pack/unpack an <see cref="UnderlineKind"/> into the reserved bits of <see cref="StyleAttr"/>.</summary>
 public static class UnderlineStyle
 {
     public const StyleAttr Mask = (StyleAttr)(7 << 8);
-
     public static StyleAttr Encode(UnderlineKind kind) => (StyleAttr)((int)kind << 8);
-
-    public static UnderlineKind Decode(StyleAttr attrs) =>
-        (UnderlineKind)(((int)attrs & (int)Mask) >> 8);
-
-    /// <summary>Strips the style bits, leaving only the master Underline flag and the SGR byte.</summary>
-    public static StyleAttr WithoutStyle(StyleAttr attrs) => attrs & ~Mask;
+    public static UnderlineKind Decode(StyleAttr attrs) => (UnderlineKind)(((int)attrs & (int)Mask) >> 8);
 }
 
 /// <summary>
