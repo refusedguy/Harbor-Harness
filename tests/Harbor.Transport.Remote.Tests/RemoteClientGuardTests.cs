@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Transport.Remote;
 using TUnit.Assertions;
 
@@ -22,7 +23,7 @@ public class RemoteClientGuardTests
 
         var result = await client.SendAsync(Heartbeat(), CancellationToken.None);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -33,7 +34,7 @@ public class RemoteClientGuardTests
 
         var result = await client.SendAsync(Heartbeat(), CancellationToken.None);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
