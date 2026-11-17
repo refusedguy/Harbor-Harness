@@ -38,7 +38,11 @@ public sealed class GenericLayoutReconciliationTests
         await Assert.That(plan.RootId).IsEqualTo("a");
         await Assert.That(plan.NodeIds).IsEquivalentTo(new[] { "a", "b", "c", "d" });
         await Assert.That(plan.Splits.Select(s => s.NewPanelId)).IsEquivalentTo(new[] { "b", "c", "d" });
-        await Assert.That(plan.Splits.Select(s => s.Ratio)).IsEquivalentTo(new[] { 0.5f, 0.95f, 0.4f });
+        var ratios = plan.Splits.Select(s => s.Ratio).ToArray();
+        await Assert.That(ratios.Length).IsEqualTo(3);
+        await Assert.That(MathF.Abs(ratios[0] - 0.5f)).IsLessThan(1e-5f);
+        await Assert.That(MathF.Abs(ratios[1] - 0.95f)).IsLessThan(1e-5f);
+        await Assert.That(MathF.Abs(ratios[2] - 0.4f)).IsLessThan(1e-5f);
 
         var again = GenericLayoutPlan.Normalize(nodes, plan.ToSpecs());
         await Assert.That(again.RootId).IsEqualTo(plan.RootId);
