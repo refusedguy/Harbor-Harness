@@ -26,16 +26,29 @@ public interface IPipelineBehavior
 
 /// <summary>
 ///     Immutable ordered composition of behaviors around a terminal handler.
-///     The chain is built once per composition root; each invocation threads the
-///     request through every behavior in order, with the terminal handler last.
+///     The composition is built once per instance; each invocation applies it to
+///     the caller's terminal handler, threading the request through every
+///     behavior in order, with the terminal handler last.
 /// </summary>
 public sealed class AgentPipeline
 {
-    private readonly IPipelineBehavior[] _behaviors;
+    private readonly Func<PipelineNext, PipelineNext> _chain;
 
     public AgentPipeline(IEnumerable<IPipelineBehavior> behaviors)
     {
-        _behaviors = [.. behaviors];
+        // Fold the behaviors into one composition function at construction time.
+        // Applying the accumulated chain OUTSIDE each new wrapper leaves
+        // behavior[0] outermost, matching the registration order on HandleAsync.
+        // HandleAsync only applies this function to its per-run terminal handler.
+        Func<PipelineNext, PipelineNext> chain = static terminal => terminal;
+        foreach (IPipelineBehavior behavior in behaviors)
+        {
+            Func<PipelineNext, PipelineNext> wrap = next =>
+                (req, token) => behavior.HandleAsync(req, next, token);
+            Func<PipelineNext, PipelineNext> outer = chain;
+            chain = terminal => outer(wrap(terminal));
+        }
+        _chain = chain;
     }
 
     /// <summary>
@@ -43,16 +56,6 @@ public sealed class AgentPipeline
     /// </summary>
     public async Task<Result> HandleAsync(PromptRequest request, PipelineNext terminal, CancellationToken ct)
     {
-        PipelineNext chain = terminal;
-        // Compose right-to-left so behavior[0] runs outermost. Locals capture the
-        // current chain — the loop variable itself must not leak into closures.
-        for (int i = _behaviors.Length - 1; i >= 0; i--)
-        {
-            IPipelineBehavior behavior = _behaviors[i];
-            PipelineNext next = chain;
-            chain = (req, token) => behavior.HandleAsync(req, next, token);
-        }
-
-        return await chain(request, ct).ConfigureAwait(false);
+        return await _chain(terminal)(request, ct).ConfigureAwait(false);
     }
 }
