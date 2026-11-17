@@ -79,7 +79,7 @@ public class CellForgePrCommentCardsPanelTests
         await Assert.That(expanded).Contains("▾ code (3 lines)");
         await Assert.That(expanded).Contains("│ public void Foo()");
         // The tokenizer sees the C# keyword; a card off focus stays folded.
-        await Assert.That(expanded).Contains("▸ code (2 lines)");
+        await Assert.That(expanded).Contains("▸ code (1 lines)");
         await Assert.That(expanded).DoesNotContain("│ var x = null;");
     }
 

@@ -392,6 +392,10 @@ public class KeyGateFamilyRules
         new("CellForgeFileTreePanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeFileTreePanel.cs"),
         new("CellForgeDiagnosticsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeDiagnosticsPanel.cs"),
         new("CellForgeSubagentsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeSubagentsPanel.cs"),
+        // PR comment cards (#1488): j/k/space navigation with no text buffer;
+        // the Char gate is the buffer one (refuse Ctrl/Alt/Meta, admit Shift's
+        // J/K), the same family as the other navigable cell panels above.
+        new("CellForgePrCommentCardsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgePrCommentCardsPanel.cs"),
     ];
 
     /// <summary>
