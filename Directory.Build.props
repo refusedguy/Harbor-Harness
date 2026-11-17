@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
 
+  <!--
+    Changing this file rolls the CI build-output cache key (the key hashes
+    Directory.Build.props). That is deliberate here: the reference-trimmer
+    gate reads its findings from the SAME compile, and a restored obj/ tree
+    makes MSBuild skip all but the changed projects, so the gate sees a
+    partial finding set and flags every baseline row as stale. A full compile
+    is the only shape in which that gate measures what it claims to.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
