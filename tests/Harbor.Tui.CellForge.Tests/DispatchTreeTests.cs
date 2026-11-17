@@ -1,4 +1,4 @@
-using Harbor.Tui.CellForge.Input;
+using System.Text;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -11,18 +11,18 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class DispatchTreeTests
 {
-    private static KeyEvent Key(char c) => KeyEvent.Char(new Rune(c));
+    private static EngineInput.KeyEvent Key(char c) => EngineInput.KeyEvent.Char(new Rune(c));
 
-    private static (DispatchTree Tree, KeyViewNode Composer, KeyContext RootCtx, KeyContext ComposerCtx) TwoLevelTree()
+    private static (EngineInput.DispatchTree Tree, EngineInput.KeyViewNode Composer, EngineInput.KeyContext RootCtx, EngineInput.KeyContext ComposerCtx) TwoLevelTree()
     {
-        var tree = new DispatchTree();
-        var rootCtx = new KeyContext("root");
-        rootCtx.Bind(KeyGesture.ForChar('g'), "root-action");
+        var tree = new EngineInput.DispatchTree();
+        var rootCtx = new EngineInput.KeyContext("root");
+        rootCtx.Bind(EngineInput.KeyGesture.ForChar('g'), "root-action");
         tree.Root.AddContext(rootCtx);
 
-        KeyViewNode composer = tree.AddChild("panel").AddChild(new KeyViewNode("composer"));
-        var composerCtx = new KeyContext("composer");
-        composerCtx.Bind(KeyGesture.ForChar('g'), "composer-action");
+        EngineInput.KeyViewNode composer = tree.AddChild("panel").AddChild(new EngineInput.KeyViewNode("composer"));
+        var composerCtx = new EngineInput.KeyContext("composer");
+        composerCtx.Bind(EngineInput.KeyGesture.ForChar('g'), "composer-action");
         composer.AddContext(composerCtx);
         tree.SetFocus(composer);
         return (tree, composer, rootCtx, composerCtx);
@@ -31,21 +31,21 @@ public class DispatchTreeTests
     [Test]
     public async Task Resolve_DeepestContextOverridesShallower()
     {
-        (DispatchTree tree, _, _, _) = TwoLevelTree();
+        (EngineInput.DispatchTree tree, _, _, _) = TwoLevelTree();
 
-        DispatchResult result = tree.Dispatch(Key('g'));
+        EngineInput.DispatchResult result = tree.Dispatch(Key('g'));
 
-        await Assert.That(result.Verdict).IsEqualTo(KeyDispatchVerdict.Action);
+        await Assert.That(result.Verdict).IsEqualTo(EngineInput.KeyDispatchVerdict.Action);
         await Assert.That(result.ActionId).IsEqualTo("composer-action");
     }
 
     [Test]
     public async Task Unbind_DeepContext_RestoresShallowerBinding()
     {
-        (DispatchTree tree, _, _, KeyContext composerCtx) = TwoLevelTree();
+        (EngineInput.DispatchTree tree, _, _, EngineInput.KeyContext composerCtx) = TwoLevelTree();
 
-        await Assert.That(composerCtx.Unbind(KeyGesture.ForChar('g'))).IsTrue();
-        DispatchResult result = tree.Dispatch(Key('g'));
+        await Assert.That(composerCtx.Unbind(EngineInput.KeyGesture.ForChar('g'))).IsTrue();
+        EngineInput.DispatchResult result = tree.Dispatch(Key('g'));
 
         await Assert.That(result.ActionId).IsEqualTo("root-action");
     }
@@ -53,13 +53,13 @@ public class DispatchTreeTests
     [Test]
     public async Task Rebind_LastWinsInsideOneContext()
     {
-        var tree = new DispatchTree();
-        var rootCtx = new KeyContext("root");
-        rootCtx.Bind(KeyGesture.ForChar('g'), "first");
-        rootCtx.Bind(KeyGesture.ForChar('g'), "second");
+        var tree = new EngineInput.DispatchTree();
+        var rootCtx = new EngineInput.KeyContext("root");
+        rootCtx.Bind(EngineInput.KeyGesture.ForChar('g'), "first");
+        rootCtx.Bind(EngineInput.KeyGesture.ForChar('g'), "second");
         tree.Root.AddContext(rootCtx);
 
-        DispatchResult result = tree.Dispatch(Key('g'));
+        EngineInput.DispatchResult result = tree.Dispatch(Key('g'));
 
         await Assert.That(result.ActionId).IsEqualTo("second");
         await Assert.That(rootCtx.Count).IsEqualTo(1);
@@ -68,15 +68,15 @@ public class DispatchTreeTests
     [Test]
     public async Task Capture_WalksRootToFocus()
     {
-        (DispatchTree tree, KeyViewNode composer, _, _) = TwoLevelTree();
+        (EngineInput.DispatchTree tree, EngineInput.KeyViewNode composer, _, _) = TwoLevelTree();
         List<string> order = [];
         tree.Root.OnCapture((_, id) => { order.Add($"root:{id}"); return false; });
         tree.Root.Children[0].OnCapture((_, id) => { order.Add($"panel:{id}"); return false; });
         composer.OnCapture((_, id) => { order.Add($"composer:{id}"); return true; });
 
-        DispatchResult result = tree.Dispatch(Key('g'));
+        EngineInput.DispatchResult result = tree.Dispatch(Key('g'));
 
-        await Assert.That(result.Phase).IsEqualTo(KeyRoutingPhase.Capture);
+        await Assert.That(result.Phase).IsEqualTo(EngineInput.KeyRoutingPhase.Capture);
         await Assert.That(order.Count).IsEqualTo(3);
         await Assert.That(order[0]).IsEqualTo("root:composer-action");
         await Assert.That(order[1]).IsEqualTo("panel:composer-action");
@@ -86,40 +86,40 @@ public class DispatchTreeTests
     [Test]
     public async Task Capture_RootHandler_WinsGlobalActionBeforeFocus()
     {
-        var tree = new DispatchTree();
-        var rootCtx = new KeyContext("root");
-        var abort = KeyGesture.ForChar('c', KeyModifiers.Ctrl);
+        var tree = new EngineInput.DispatchTree();
+        var rootCtx = new EngineInput.KeyContext("root");
+        EngineInput.KeyGesture abort = EngineInput.KeyGesture.ForChar('c', EngineInput.KeyModifiers.Ctrl);
         rootCtx.Bind(abort, "abort");
         tree.Root.AddContext(rootCtx);
 
         int rootCapture = 0;
         int childBubble = 0;
         tree.Root.OnCapture((_, id) => { rootCapture++; return id == "abort"; });
-        KeyViewNode composer = tree.AddChild("panel").AddChild(new KeyViewNode("composer"));
+        EngineInput.KeyViewNode composer = tree.AddChild("panel").AddChild(new EngineInput.KeyViewNode("composer"));
         composer.OnBubble((_, _) => { childBubble++; return true; });
         tree.SetFocus(composer);
 
-        DispatchResult result = tree.Dispatch(KeyEvent.Char(new Rune('c'), KeyModifiers.Ctrl));
+        EngineInput.DispatchResult result = tree.Dispatch(EngineInput.KeyEvent.Char(new Rune('c'), EngineInput.KeyModifiers.Ctrl));
 
         await Assert.That(rootCapture).IsEqualTo(1);
         await Assert.That(childBubble).IsEqualTo(0);
-        await Assert.That(result.Verdict).IsEqualTo(KeyDispatchVerdict.Action);
+        await Assert.That(result.Verdict).IsEqualTo(EngineInput.KeyDispatchVerdict.Action);
         await Assert.That(result.ActionId).IsEqualTo("abort");
-        await Assert.That(result.Phase).IsEqualTo(KeyRoutingPhase.Capture);
+        await Assert.That(result.Phase).IsEqualTo(EngineInput.KeyRoutingPhase.Capture);
     }
 
     [Test]
     public async Task Bubble_StopsAtFirstHandler()
     {
-        (DispatchTree tree, KeyViewNode composer, _, _) = TwoLevelTree();
+        (EngineInput.DispatchTree tree, EngineInput.KeyViewNode composer, _, _) = TwoLevelTree();
         int child = 0;
         int root = 0;
         tree.Root.OnBubble((_, _) => { root++; return true; });
         composer.OnBubble((_, _) => { child++; return true; });
 
-        DispatchResult result = tree.Dispatch(Key('g'));
+        EngineInput.DispatchResult result = tree.Dispatch(Key('g'));
 
-        await Assert.That(result.Phase).IsEqualTo(KeyRoutingPhase.Bubble);
+        await Assert.That(result.Phase).IsEqualTo(EngineInput.KeyRoutingPhase.Bubble);
         await Assert.That(child).IsEqualTo(1);
         await Assert.That(root).IsEqualTo(0);
     }
@@ -127,10 +127,10 @@ public class DispatchTreeTests
     [Test]
     public async Task NoAction_ConsumesKey_WithoutCaptureOrBubble()
     {
-        var tree = new DispatchTree();
-        var modalCtx = new KeyContext("modal");
-        modalCtx.BindNoAction(KeyGesture.ForChar('g'));
-        KeyViewNode modal = tree.AddChild("modal");
+        var tree = new EngineInput.DispatchTree();
+        var modalCtx = new EngineInput.KeyContext("modal");
+        modalCtx.BindNoAction(EngineInput.KeyGesture.ForChar('g'));
+        EngineInput.KeyViewNode modal = tree.AddChild("modal");
         modal.AddContext(modalCtx);
         tree.SetFocus(modal);
 
@@ -139,9 +139,9 @@ public class DispatchTreeTests
         tree.Root.OnCapture((_, _) => { capture++; return true; });
         modal.OnBubble((_, _) => { bubble++; return true; });
 
-        DispatchResult result = tree.Dispatch(Key('g'));
+        EngineInput.DispatchResult result = tree.Dispatch(Key('g'));
 
-        await Assert.That(result.Verdict).IsEqualTo(KeyDispatchVerdict.NoAction);
+        await Assert.That(result.Verdict).IsEqualTo(EngineInput.KeyDispatchVerdict.NoAction);
         await Assert.That(capture).IsEqualTo(0);
         await Assert.That(bubble).IsEqualTo(0);
     }
@@ -149,20 +149,20 @@ public class DispatchTreeTests
     [Test]
     public async Task Dispatch_NoBinding_IsUnhandled()
     {
-        var tree = new DispatchTree();
+        var tree = new EngineInput.DispatchTree();
 
-        DispatchResult result = tree.Dispatch(Key('g'));
+        EngineInput.DispatchResult result = tree.Dispatch(Key('g'));
 
-        await Assert.That(result.Verdict).IsEqualTo(KeyDispatchVerdict.Unhandled);
+        await Assert.That(result.Verdict).IsEqualTo(EngineInput.KeyDispatchVerdict.Unhandled);
         await Assert.That(result.ActionId).IsNull();
-        await Assert.That(result.Phase).IsEqualTo(KeyRoutingPhase.None);
+        await Assert.That(result.Phase).IsEqualTo(EngineInput.KeyRoutingPhase.None);
     }
 
     [Test]
     public async Task SetFocus_ForeignNode_Throws()
     {
-        var tree = new DispatchTree();
-        var foreign = new KeyViewNode("foreign");
+        var tree = new EngineInput.DispatchTree();
+        var foreign = new EngineInput.KeyViewNode("foreign");
 
         await Assert.That(() => tree.SetFocus(foreign)).Throws<ArgumentException>();
     }

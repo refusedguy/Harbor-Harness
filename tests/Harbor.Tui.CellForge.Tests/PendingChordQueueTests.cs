@@ -83,6 +83,9 @@ public class PendingChordQueueTests
     [Test]
     public async Task LeaderRouter_UsesSharedTimeout()
     {
-        await Assert.That(LeaderKeyRouter.TimeoutMs).IsEqualTo(PendingChordQueue<string>.TimeoutMs);
+        int routerTimeout = LeaderKeyRouter.TimeoutMs;
+        int queueTimeout = PendingChordQueue<string>.TimeoutMs;
+
+        await Assert.That(routerTimeout).IsEqualTo(queueTimeout);
     }
 }
