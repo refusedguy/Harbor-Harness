@@ -252,33 +252,38 @@ public sealed class SessionArchiveReader
     }
 
     /// <summary>
-    ///     Read one record of the log.
+    ///     Read one record of the log. Both the discriminator and the typed
+    ///     record are read through the AOT-safe context. No per-line
+    ///     <c>JsonDocument.Parse</c> remains (#2224, PERF-005 tail).
     /// </summary>
     private static Result<SessionLogEntry> ReadRecord(string sessionId, string line, ZipArchive archive)
     {
         return Result.Try(
                 () =>
                 {
-                    using var document = JsonDocument.Parse(line);
-                    JsonElement element = document.RootElement;
-                    string type = element.TryGetProperty("type", out JsonElement typeElement)
-                        ? typeElement.GetString() ?? string.Empty
-                        : string.Empty;
+                    var typeLine = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.ArchiveRecordTypeLine)
+                        ?? throw new InvalidDataException("the archive record is empty.");
+                    string type = typeLine.Type ?? string.Empty;
 
                     switch (type)
                     {
                         case SessionArchiveRecordTypes.Message:
                         {
-                            var messageLine = element.Deserialize(JsonlCodecContext.Default.ArchiveMessageLine);
-                            if (messageLine is null)
-                            {
-                                throw new InvalidDataException("the message record is unreadable.");
-                            }
+                            var messageLine = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.ArchiveMessageLine)
+                                ?? throw new InvalidDataException("the message record is unreadable.");
+                            if (messageLine.Payload is not JsonElement payload)
+                                throw new InvalidDataException("the message record has no payload.");
 
-                            AgentMessage message = ReadMessage(sessionId, element);
+                            AgentMessage message = ReadMessage(
+                                sessionId,
+                                messageLine.Id,
+                                messageLine.ParentId,
+                                messageLine.Role,
+                                messageLine.CreatedAt,
+                                payload);
                             if (message is UserMessage user)
                             {
-                                message = user with { Attachments = ResolveAttachments(element, archive) };
+                                message = user with { Attachments = ResolveAttachments(payload, archive) };
                             }
 
                             return new SessionLogEntry
@@ -293,11 +298,8 @@ public sealed class SessionArchiveReader
 
                         case SessionArchiveRecordTypes.Rewind:
                         {
-                            var rewindLine = element.Deserialize(JsonlCodecContext.Default.ArchiveRewindLine);
-                            if (rewindLine is null)
-                            {
-                                throw new InvalidDataException("the rewind record is unreadable.");
-                            }
+                            var rewindLine = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.ArchiveRewindLine)
+                                ?? throw new InvalidDataException("the rewind record is unreadable.");
 
                             return new SessionLogEntry
                             {
@@ -323,9 +325,15 @@ public sealed class SessionArchiveReader
     ///     payload differs from the session file's only in its attachments,
     ///     so the session codec decodes the rest of it unchanged.
     /// </summary>
-    private static AgentMessage ReadMessage(string sessionId, JsonElement element)
+    private static AgentMessage ReadMessage(
+        string sessionId,
+        string id,
+        string? parentId,
+        string role,
+        DateTimeOffset createdAt,
+        JsonElement payload)
     {
-        var decoded = JsonlMessageCodec.DeserializeMessage(sessionId, element);
+        var decoded = JsonlMessageCodec.DeserializeMessage(sessionId, id, parentId, role, createdAt, payload);
         if (decoded.IsFailure)
         {
             throw new InvalidDataException(decoded.Error);
@@ -335,13 +343,13 @@ public sealed class SessionArchiveReader
     }
 
     /// <summary>
-    ///     Resolve the attachments a message record references, back into the
-    ///     bytes they stand for.
+    ///     Resolve the attachments a message payload references, back into the
+    ///     bytes they stand for. <paramref name="payload"/> is the message
+    ///     record's already-parsed payload element.
     /// </summary>
-    private static IReadOnlyList<ImageAttachment>? ResolveAttachments(JsonElement element, ZipArchive archive)
+    private static IReadOnlyList<ImageAttachment>? ResolveAttachments(JsonElement payload, ZipArchive archive)
     {
-        if (!element.TryGetProperty("payload", out JsonElement payload)
-            || !payload.TryGetProperty("attachments", out JsonElement array)
+        if (!payload.TryGetProperty("attachments", out JsonElement array)
             || array.ValueKind != JsonValueKind.Array
             || array.GetArrayLength() == 0)
         {
