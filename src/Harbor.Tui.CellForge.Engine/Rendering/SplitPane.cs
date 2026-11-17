@@ -392,7 +392,7 @@ public sealed class SplitPane : ContainerNode
     /// and to the fullscreen layer by its own id, so resizing or focus changes
     /// do not change a pane's element identity.
     /// </summary>
-    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    public override PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
     {
         ArgumentNullException.ThrowIfNull(context);
         for (int i = 0; i < _items.Count; i++)

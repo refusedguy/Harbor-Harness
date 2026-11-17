@@ -23,6 +23,9 @@ public sealed class ZStackNode : ContainerNode
     /// <summary>Child count (z-order is index order, lower first).</summary>
     public int Count => _children.Count;
 
+    /// <inheritdoc />
+    protected override IReadOnlyList<INode> ChildNodes => _children;
+
     /// <summary>Setup-time: pushes <paramref name="child"/> on top of the stack.</summary>
     public void Add(INode child)
     {
@@ -90,13 +93,6 @@ public sealed class ZStackNode : ContainerNode
         {
             _children[i].Arrange(_frames[i]);
         }
-    }
-
-    /// <summary>Forwards prepaint with stable indexed ids (z-order is index order).</summary>
-    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
-    {
-        PrepaintForward.Indexed(context, id, _children);
-        return PrepaintRecord.Empty;
     }
 
     /// <summary>Paints children bottom-to-top, each clipped to the stack ∩ clip.</summary>

@@ -7,7 +7,7 @@ namespace Harbor.Tui.CellForge.Tests;
 
 public class PrepaintTests
 {
-    private static Constraints Box => new(20, 4);
+    private static EngineCells.Constraints Box => new(20, 4);
 
     private static EngineCells.Rect Screen => new(0, 0, 20, 4);
 

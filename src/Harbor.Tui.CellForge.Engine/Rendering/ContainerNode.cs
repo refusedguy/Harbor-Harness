@@ -28,6 +28,24 @@ public abstract class ContainerNode : INode
 
     /// <inheritdoc />
     public abstract void Paint(ScreenBuffer buffer, Rect clip);
+
+    /// <summary>
+    /// Ordered children addressed by index. Overridden by containers whose
+    /// child ids are positional; named-id containers override
+    /// <see cref="Prepaint"/> instead.
+    /// </summary>
+    protected virtual IReadOnlyList<INode> ChildNodes => Array.Empty<INode>();
+
+    /// <summary>
+    /// Default prepaint: forward to <see cref="ChildNodes"/> with indexed ids.
+    /// Keeping this here means a positional container only declares its child
+    /// list, and the id rule lives in one place.
+    /// </summary>
+    public virtual PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    {
+        PrepaintForward.Indexed(context, id, ChildNodes);
+        return PrepaintRecord.Empty;
+    }
 }
 
 /// <summary>
@@ -73,6 +91,9 @@ public sealed class FlexSplitNode : ContainerNode
 
     /// <summary>Child count.</summary>
     public int Count => _children.Count;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<INode> ChildNodes => _children;
 
     /// <summary>Setup-time: appends <paramref name="child"/> with its track.</summary>
     public void Add(INode child, FlexTrack track)
@@ -215,18 +236,6 @@ public sealed class FlexSplitNode : ContainerNode
         {
             _children[i].Arrange(_frames[i]);
         }
-    }
-
-    /// <summary>
-    /// Forwards prepaint to children with stable indexed ids. Reordering the
-    /// children changes those ids, which is exactly what invalidates a cached
-    /// record; named children should use <see cref="ElementId.Child(string)"/>
-    /// in their own container instead.
-    /// </summary>
-    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
-    {
-        PrepaintForward.Indexed(context, id, _children);
-        return PrepaintRecord.Empty;
     }
 
     /// <summary>Paints children in order, each clipped to its frame ∩ clip.</summary>

@@ -243,7 +243,7 @@ public sealed class OverlayLayer : ContainerNode
     /// Forwards prepaint with the layer's stable id as the path step, so a
     /// z-reorder or a push order change does not invalidate a layer's record.
     /// </summary>
-    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    public override PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
     {
         ArgumentNullException.ThrowIfNull(context);
         for (int i = 0; i < _layers.Count; i++)
