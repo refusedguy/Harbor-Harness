@@ -48,13 +48,20 @@ public abstract record AppMsg
     /// <param name="Pressed">The original key, for any action that needs the character/modifiers.</param>
     public sealed record KeyInput(ChatAction Action, UiKey Pressed) : AppMsg;
 
-    /// <summary>The renderer reports the visible history height (for scroll clamping).</summary>
+    /// <summary>
+    ///     The renderer reports the visible history height (for scroll clamping).
+    ///     <paramref name="ViewportName"/> keys the scroll state: one name owns
+    ///     exactly one logical viewport (#2357), so two virtualized regions can
+    ///     report geometry without overwriting each other's hit range.
+    /// </summary>
     /// <param name="HistoryHeight">Number of history rows visible this frame.</param>
-    public sealed record Viewport(int HistoryHeight) : AppMsg;
+    /// <param name="ViewportName">Logical viewport this geometry belongs to.</param>
+    public sealed record Viewport(int HistoryHeight, string ViewportName = TerminalUiState.DefaultViewport) : AppMsg;
 
     /// <summary>The renderer reports the wrapped transcript height (for scroll %).</summary>
     /// <param name="TotalLines">Total wrapped history rows.</param>
-    public sealed record HistoryMeasured(int TotalLines) : AppMsg;
+    /// <param name="ViewportName">Logical viewport this geometry belongs to.</param>
+    public sealed record HistoryMeasured(int TotalLines, string ViewportName = TerminalUiState.DefaultViewport) : AppMsg;
 
     /// <summary>
     ///     Toggle a panel between <see cref="TuiPanelState.Hidden" /> and
@@ -88,21 +95,25 @@ public abstract record AppMsg
     public sealed record ResizePanel(string Id, int Delta) : AppMsg;
 
     /// <summary>
-    ///     Reset <see cref="TerminalUiState.Ui.ScrollOffset" /> to 0 (pin to live tail).
-    ///     Emitted by a renderer when it detects a new run just started so
-    ///     streaming output is always visible. <see cref="IAppReducerPlugin.After" />
+    ///     Reset one viewport's scroll offset to 0 (pin to live tail). Emitted
+    ///     by a renderer when it detects a new run just started so streaming
+    ///     output is always visible. <see cref="IAppReducerPlugin.After" />
     ///     gives the domain a chance to fold its own rising-edge bookkeeping on top.
     /// </summary>
-    public sealed record ScrollResetToTail : AppMsg;
+    /// <param name="ViewportName">Logical viewport to pin; one name = one handle (#2357).</param>
+    public sealed record ScrollResetToTail(string ViewportName = TerminalUiState.DefaultViewport) : AppMsg;
 
     /// <summary>
-    ///     Clamp <see cref="TerminalUiState.Ui.ScrollOffset" /> to
+    ///     Clamp one viewport's scroll offset to
     ///     <c>[0 .. <paramref name="MaxScroll" />]</c> after the renderer measured
     ///     the current maximum (which depends on the wrapped transcript height +
-    ///     pinned stream rows — both only known after layout).
+    ///     pinned stream rows — both only known after layout). The named viewport
+    ///     is the single owner of that range (#2357): a second region cannot
+    ///     overwrite this one's offset or thumb window.
     /// </summary>
     /// <param name="MaxScroll">Maximum legal scroll offset this frame.</param>
-    public sealed record ScrollClamp(int MaxScroll) : AppMsg;
+    /// <param name="ViewportName">Logical viewport the maximum belongs to.</param>
+    public sealed record ScrollClamp(int MaxScroll, string ViewportName = TerminalUiState.DefaultViewport) : AppMsg;
 
     /// <summary>
     ///     Host-side seeding of the registered panel ids + default states + default
