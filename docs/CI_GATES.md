@@ -428,6 +428,11 @@ it. The `tree` job of `docs.yml` is the job that runs
 `check-abstractions-contract`, `check-doc-facts`, `check-xml-doc-coverage`
 and `gen-seam-graph`; their own jobs are gone, and the table says so.
 
+**What it costs.** The runner's one command, measured from a green CI run,
+spends 3 s on the compiled gates and 17 s on the whole job (issue #2135). The
+number, its provenance and the split between compiled and python gates are in
+[docs/BENCHMARKS.md](BENCHMARKS.md) §10.3.
+
 Run it:
 
 ```bash
