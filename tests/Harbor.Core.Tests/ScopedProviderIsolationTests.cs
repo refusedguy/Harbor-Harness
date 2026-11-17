@@ -67,7 +67,7 @@ public class ScopedProviderIsolationTests
         AgentLoop loop = CreateLoop(providers, resolver);
         Result result = await loop.RunAsync(CreateSession(), AgentDefinition.CodeDefault("test-model", "test"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(scoped.StreamCallCount).IsEqualTo(1);
         await Assert.That(global.StreamCallCount).IsEqualTo(0);
     }
@@ -84,7 +84,7 @@ public class ScopedProviderIsolationTests
         AgentLoop loop = CreateLoop(providers, resolver);
         Result result = await loop.RunAsync(CreateSession(), AgentDefinition.CodeDefault("test-model", "test"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(global.StreamCallCount).IsEqualTo(1);
         await Assert.That(scoped.StreamCallCount).IsEqualTo(0);
     }
@@ -98,7 +98,7 @@ public class ScopedProviderIsolationTests
         AgentLoop loop = CreateLoop(providers, scopedProviders: null);
         Result result = await loop.RunAsync(CreateSession(), AgentDefinition.CodeDefault("test-model", "test"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(global.StreamCallCount).IsEqualTo(1);
     }
 
