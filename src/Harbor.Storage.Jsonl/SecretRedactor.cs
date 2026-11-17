@@ -332,8 +332,10 @@ internal sealed partial class SecretRedactor
             WriteScrubbed(args, writer);
         }
 
-        using var document = JsonDocument.Parse(buffer.WrittenMemory);
-        return document.RootElement.Clone();
+        // #2224: the scrubbed bytes go back through the AOT-safe source-generated
+        // JsonElement contract instead of a reflection-based JsonDocument.Parse.
+        // JsonElementConverter returns a standalone element, so no Clone() is needed.
+        return JsonSerializer.Deserialize(buffer.WrittenMemory, JsonlCodecContext.Default.JsonElement);
     }
 
     private void WriteScrubbed(JsonElement element, Utf8JsonWriter writer)
