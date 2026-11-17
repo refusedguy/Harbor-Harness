@@ -193,7 +193,8 @@ public sealed partial class WriteTool : ITool
                 created = !existed,
                 overwritten = existed,
                 fileVersion = FileVersion.Token(digest)
-            });
+            })
+        with { Effect = ToolResultEffect.FileChange };
     }
 
     private static bool GetBoolDefaultTrue(JsonElement args, string name)

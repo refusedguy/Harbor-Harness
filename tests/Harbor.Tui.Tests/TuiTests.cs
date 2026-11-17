@@ -412,7 +412,10 @@ public class DiffPreviewViewModelTests
     public async Task ToolExecutionEndEvent_AddsDiffForFileChanges()
     {
         var vm = new DiffPreviewViewModel();
-        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false);
+        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false)
+        {
+            Effect = ToolResultEffect.FileChange
+        };
         await vm.UpdateFromEventAsync(TestEvents.ToolExecutionEnd(result: result));
         await Assert.That(vm.Diffs.Count).IsEqualTo(1);
     }

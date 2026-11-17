@@ -226,3 +226,8 @@ static Harbor.Abstractions.Sessions.SessionOperationMarkers.FindUnmatchedStarts(
 static Harbor.Abstractions.Sessions.SessionOperationMarkers.HasIncompleteFork(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>! events) -> bool
 Harbor.Abstractions.Models.TokenCell
 static Harbor.Abstractions.Models.TokenCell.ToCompact(long tokens) -> string!
+Harbor.Abstractions.Models.ToolResultEffect
+Harbor.Abstractions.Models.ToolResultEffect.None = 0 -> Harbor.Abstractions.Models.ToolResultEffect
+Harbor.Abstractions.Models.ToolResultEffect.FileChange = 1 -> Harbor.Abstractions.Models.ToolResultEffect
+Harbor.Abstractions.Models.ToolResult.Effect.get -> Harbor.Abstractions.Models.ToolResultEffect
+Harbor.Abstractions.Models.ToolResult.Effect.init -> void
