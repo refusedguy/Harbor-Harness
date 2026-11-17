@@ -366,39 +366,19 @@ public sealed class MarkupOverlay
 
     private static void PaintAnnotation(ScreenBuffer buffer, Rect image, MarkupAnnotation item, bool selected)
     {
+        var painter = MarkupPainters.For(item.Kind);
         var style = selected
             ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold)
-            : new CellStyle(ChatPalette.Text);
-        switch (item.Kind)
-        {
-            case MarkupKind.Rectangle:
-                PaintRect(buffer, image, item.From, item.To, style);
-                break;
-            case MarkupKind.Arrow:
-                PaintArrow(buffer, image, item.From, item.To, style);
-                break;
-            default:
-                PaintText(buffer, image, item.From, item.Text, selected ? style : ChatPalette.ToolArgs);
-                break;
-        }
+            : painter.UnselectedStyle;
+        painter.PaintOverlay(buffer, image, item.From, item.To, item.Text, style);
     }
 
     private static void PaintDraft(ScreenBuffer buffer, Rect image, MarkupKind tool, MarkupDraft draft)
     {
-        switch (tool)
-        {
-            case MarkupKind.Rectangle:
-                PaintRect(buffer, image, draft.Anchor, draft.Current, ChatPalette.Dim);
-                break;
-            case MarkupKind.Arrow:
-                PaintArrow(buffer, image, draft.Anchor, draft.Current, ChatPalette.Dim);
-                break;
-            default:
-                break;
-        }
+        MarkupPainters.For(tool).PaintOverlay(buffer, image, draft.Anchor, draft.Current, string.Empty, ChatPalette.Dim);
     }
 
-    private static void PaintRect(ScreenBuffer buffer, Rect image, NormalizedPoint a, NormalizedPoint b, CellStyle style)
+    internal static void PaintRect(ScreenBuffer buffer, Rect image, NormalizedPoint a, NormalizedPoint b, CellStyle style)
     {
         var (x0, y0) = MarkupAnnotationModel.ProjectToCells(a, image);
         var (x1, y1) = MarkupAnnotationModel.ProjectToCells(b, image);
@@ -428,7 +408,7 @@ public sealed class MarkupOverlay
         Plot(buffer, image, right, bottom, corners[3], style);
     }
 
-    private static void PaintArrow(ScreenBuffer buffer, Rect image, NormalizedPoint a, NormalizedPoint b, CellStyle style)
+    internal static void PaintArrow(ScreenBuffer buffer, Rect image, NormalizedPoint a, NormalizedPoint b, CellStyle style)
     {
         var (x0, y0) = MarkupAnnotationModel.ProjectToCells(a, image);
         var (x1, y1) = MarkupAnnotationModel.ProjectToCells(b, image);
@@ -495,7 +475,7 @@ public sealed class MarkupOverlay
         return dy > 0 ? '↙' : '↖';
     }
 
-    private static void PaintText(ScreenBuffer buffer, Rect image, NormalizedPoint anchor, string text, CellStyle style)
+    internal static void PaintText(ScreenBuffer buffer, Rect image, NormalizedPoint anchor, string text, CellStyle style)
     {
         if (string.IsNullOrEmpty(text))
         {
