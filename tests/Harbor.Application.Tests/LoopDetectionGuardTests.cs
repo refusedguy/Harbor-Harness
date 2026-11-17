@@ -196,9 +196,9 @@ public class LoopDetectionGuardTests
 
     private static string Args(string path) => $$"""{"path":"{{path}}.txt"}""";
 
-    private static LlmEvent[] ToolTurns(IReadOnlyList<string> paths)
+    private static LlmEvent[][] ToolTurns(IReadOnlyList<string> paths)
     {
-        var turns = new LlmEvent[paths.Count + 1];
+        var turns = new LlmEvent[paths.Count + 1][];
         for (int i = 0; i < paths.Count; i++)
         {
             string id = $"call-{i + 1}";
