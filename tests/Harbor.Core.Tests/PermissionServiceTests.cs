@@ -363,8 +363,7 @@ public class PermissionServiceTests
         var (svc, _) = CreateService(
             AgentFixtures.AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
             CancelledAsker);
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = TestCancellation.Cancelled();
         var request = new PermissionRequest("bash", "*", JsonDocument.Parse("{}").RootElement, Array.Empty<string>());
 
         Exception? caught = null;
@@ -389,8 +388,7 @@ public class PermissionServiceTests
         var (svc, _) = CreateService(
             AgentFixtures.AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
             CancelledAsker);
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = TestCancellation.Cancelled();
 
         Exception? caught = null;
         try
