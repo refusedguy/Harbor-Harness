@@ -1,4 +1,13 @@
+// #1620 adapted slice: same body as the Chat leaf
+// (Harbor.Tui.CellForge/Chat/Widgets/FloatingTerminalSession.cs, now deleted)
+// except the key vocabulary. The engine is BCL-only and compiles without the
+// Chat project's global `KeyEvent`/`KeyCode` aliases (those pin the Rendering
+// vocabulary), so those two names are now spelled with an explicit using of
+// the engine's own input namespace. SendKey/FeedKey therefore take the engine
+// KeyEvent; the headless test drains VirtualInputSource keys into them without
+// the old engine→rendering conversion. Namespace is unchanged.
 using System.Text;
+using Harbor.Tui.CellForge.Input;
 
 namespace Harbor.Tui.CellForge.Widgets;
 

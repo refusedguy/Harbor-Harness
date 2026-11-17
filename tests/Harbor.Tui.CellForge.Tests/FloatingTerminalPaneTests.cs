@@ -9,7 +9,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// Issue #1491: floating terminal pane attach/detach over the existing overlay
 /// and input axes. Every case is headless — no PTY, no engine edits, no new seam.
 /// Keys are scripted through <see cref="VirtualInputSource"/> and drained into
-/// the controller with the same engine→rendering key conversion the REPL uses.
+/// the controller as engine keys. The session now lives in the engine and
+/// speaks its own <c>KeyEvent</c>, so no engine→rendering conversion is needed.
 /// </summary>
 public sealed class FloatingTerminalPaneTests
 {
@@ -23,15 +24,6 @@ public sealed class FloatingTerminalPaneTests
         return screen;
     }
 
-    /// <summary>Engine key → rendering key, mirroring ReplInputLoop.ToRenderingKey.</summary>
-    private static KeyEvent ToRenderingKey(in Harbor.Tui.CellForge.Input.KeyEvent key) => new(
-        (KeyCode)(int)key.Key,
-        key.Character,
-        (KeyModifiers)(int)key.Modifiers,
-        (KeyEventType)(int)key.EventType,
-        key.IsKittyEncoded,
-        key.Codepoint);
-
     /// <summary>Drains a scripted source into the controller, as the REPL cascade would.</summary>
     private static void DrainTo(VirtualInputSource source, FloatingTerminalController controller)
     {
@@ -39,7 +31,7 @@ public sealed class FloatingTerminalPaneTests
         {
             if (evt.Kind == EngineInput.InputEventKind.Key)
             {
-                controller.FeedKey(ToRenderingKey(evt.Key));
+                controller.FeedKey(evt.Key);
             }
         });
     }
@@ -91,7 +83,7 @@ public sealed class FloatingTerminalPaneTests
         // cascade hands them to the composer instead.
         var afterDetach = new VirtualInputSource();
         afterDetach.SendText("typed into composer");
-        await Assert.That(screen.FloatingTerminal.FeedKey(KeyEvent.Char(new Rune('x')))).IsFalse();
+        await Assert.That(screen.FloatingTerminal.FeedKey(EngineInput.KeyEvent.Char(new Rune('x')))).IsFalse();
         DrainTo(afterDetach, screen.FloatingTerminal);
         await Assert.That(session.CurrentInput).IsEqualTo("git status");
 

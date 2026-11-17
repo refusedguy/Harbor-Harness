@@ -287,6 +287,20 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         key.IsKittyEncoded,
         key.Codepoint);
 
+    /// <summary>
+    /// Renderer-to-engine key adapter for #1620's adapted floating-terminal
+    /// slice: that session now lives in the standalone engine and speaks the
+    /// engine key vocabulary. Exact field-for-field copy, inverse of
+    /// <see cref="ToRenderingKey"/>. Per-keystroke cost, never per-frame.
+    /// </summary>
+    private static Harbor.Tui.CellForge.Input.KeyEvent ToEngineKey(in KeyEvent key) => new(
+        (Harbor.Tui.CellForge.Input.KeyCode)(int)key.Key,
+        key.Character,
+        (Harbor.Tui.CellForge.Input.KeyModifiers)(int)key.Modifiers,
+        (Harbor.Tui.CellForge.Input.KeyEventType)(int)key.EventType,
+        key.IsKittyEncoded,
+        key.Codepoint);
+
     private async Task HandleKeyAsync(KeyEvent key, CancellationToken ct)
     {
         // Key routing can mutate gates, palette, vim state or the composer —
@@ -309,7 +323,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 return;
             }
 
-            host.FloatingTerminal.FeedKey(key);
+            host.FloatingTerminal.FeedKey(ToEngineKey(key));
             host._wake.Writer.TryWrite(null);
             return;
         }

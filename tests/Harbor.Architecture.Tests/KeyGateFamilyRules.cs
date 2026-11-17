@@ -290,7 +290,7 @@ public class KeyGateFamilyRules
         // session appends a typed rune to its live input line (Backspace edits,
         // Enter commits) — a buffer site, with Shift typing through the same
         // Char path as the composer. Detach/attach keeps the buffer alive.
-        new("FloatingTerminalSession", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/FloatingTerminalSession.cs"),
+        new("FloatingTerminalSession", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge.Engine/Widgets/FloatingTerminalSession.cs"),
         new("ReplInputLoop(slash)", KeyGateFamily.Buffer, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
         // GenericTextField (#1225, epic #1195): the neutral single-line input.
         // A rune reaches the buffer via Insert; AcceptsTypedChar admits Shift

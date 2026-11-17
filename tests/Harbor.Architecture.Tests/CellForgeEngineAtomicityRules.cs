@@ -936,6 +936,13 @@ public sealed class CellForgeEngineAtomicityRules
         // #1620 partial slice: pure-BCL PromptHistory (zero usings, namespace
         // unchanged) follows its Rendering peers into the engine verbatim.
         ("Rendering/PromptHistory.cs", "Chat/Rendering/PromptHistory.cs"),
+
+        // The verbatim set is exhausted: every remaining #1620 leaf binds a
+        // chat-owned vocabulary and needs an adaptation. FloatingTerminalSession
+        // is the next one: its KeyEvent/KeyCode names were pinned by the Chat
+        // project's global Rendering aliases, so the move retypes them to the
+        // engine's own input namespace. It is pinned in AdaptedLeafMoves below,
+        // not here: this table means "body byte-equal, zero new imports".
     ];
 
     /// <summary>
@@ -1021,6 +1028,18 @@ public sealed class CellForgeEngineAtomicityRules
     [
         ("Widgets/FuzzyMatcher.cs", "Chat/Widgets/FuzzyMatcher.cs"),
         ("Widgets/AutocompletePalette.cs", "Chat/Widgets/AutocompletePalette.cs"),
+
+        // #1620 adapted slice: the headless floating-terminal session keeps
+        // its body and namespace, but its `KeyEvent`/`KeyCode` names were
+        // resolved by the Chat project's global aliases to the Rendering
+        // vocabulary. The engine has no such aliases and cannot import
+        // Harbor.Ui.Framework.Rendering, so the moved file spells the two
+        // names through an explicit using of the engine's own input namespace
+        // (Harbor.Tui.CellForge.Input). SendKey/FeedKey now take the engine
+        // key type; the headless test drains VirtualInputSource keys straight
+        // in without the old engine→rendering conversion. Single import
+        // adaptation, no body logic change, namespace unchanged.
+        ("Widgets/FloatingTerminalSession.cs", "Chat/Widgets/FloatingTerminalSession.cs"),
     ];
 
     /// <summary>
@@ -1091,10 +1110,12 @@ public sealed class CellForgeEngineAtomicityRules
 
         await Assert.That(drift).IsEmpty()
             .Because(
-                "#1627 batch B moved the adapted engine leaves (guard retype, re-homed enum) behind the same "
-                + "one-home-no-shadow contract as #1620's verbatim rows: AdaptedLeafMoves grades the two "
-                + "whole-file leaves, and the re-home check grades AutocompleteMode's move out of "
-                + "AutocompleteTrigger.cs without retyping any chat caller. Drift: " + Offenders(drift));
+                "#1627 batch B moved the adapted engine leaves (guard retype, re-homed enum), and #1620's "
+                + "adapted slice adds FloatingTerminalSession (global-alias key vocabulary → explicit "
+                + "engine input using), behind the same one-home-no-shadow contract as the verbatim "
+                + "rows: AdaptedLeafMoves grades the whole-file leaves, and the re-home check grades "
+                + "AutocompleteMode's move out of AutocompleteTrigger.cs without retyping any chat "
+                + "caller. Drift: " + Offenders(drift));
     }
 
     // ── #1621 engine C1: the vocabulary's source of truth ───────────────────
