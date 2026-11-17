@@ -1048,10 +1048,20 @@ public sealed class CellForgeEngineAtomicityRules
         // file spells the name through an explicit using of the engine's own
         // verbatim port (Harbor.Tui.CellForge.Rendering.UnicodeWidth).
         // EditOutcome / EditOutcomeKind are declared in this file and move
-        // with it, so the chat callers (MarkdownEditOps, ComposerController)
-        // keep resolving them in the same namespace. Single alias adaptation,
+        // with it, so the remaining chat caller (ComposerController) and the
+        // slice-3 MarkdownEditOps (now engine-resident) keep resolving them in
+        // the same namespace. Single alias adaptation,
         // no body logic change, namespace unchanged.
         ("Rendering/PromptBuffer.cs", "Chat/Rendering/PromptBuffer.cs"),
+
+        // #1620 adapted slice 3: MarkdownEditOps' body is byte-equal to the Chat
+        // leaf it left, but its type dependencies (PromptBuffer, EditOutcome,
+        // EditOutcomeKind) were re-homed into the engine by the slice above, so
+        // this leaf now binds the engine copy in its own namespace instead of
+        // the Chat assembly's view of it. It carries no alias-bound vocabulary
+        // and needs no body retype — it simply follows its dependencies home.
+        // Namespace unchanged, no chat copy shadowing it.
+        ("Rendering/MarkdownEditOps.cs", "Chat/Rendering/MarkdownEditOps.cs"),
     ];
 
     /// <summary>
@@ -1124,8 +1134,10 @@ public sealed class CellForgeEngineAtomicityRules
             .Because(
                 "#1627 batch B moved the adapted engine leaves (guard retype, re-homed enum), and #1620's "
                 + "adapted slices add FloatingTerminalSession (global-alias key vocabulary → explicit "
-                + "engine input using) and PromptBuffer (global-alias UnicodeWidth → explicit engine "
-                + "port using), behind the same one-home-no-shadow contract as the verbatim rows: "
+                + "engine input using), PromptBuffer (global-alias UnicodeWidth → explicit engine port "
+                + "using) and MarkdownEditOps (byte-equal body, follows its re-homed PromptBuffer "
+                + "dependencies into the engine), behind the same one-home-no-shadow contract as the "
+                + "verbatim rows: "
                 + "AdaptedLeafMoves grades the whole-file leaves, and the re-home check grades "
                 + "AutocompleteMode's move out of AutocompleteTrigger.cs without retyping any chat "
                 + "caller. Drift: " + Offenders(drift));
