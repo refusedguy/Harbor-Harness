@@ -97,13 +97,6 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // the env-detected fallback at fire time.
         await host.Backend.WriteAsync(Utf8(TerminalQueries.Osc99NotifyProbe), ct).ConfigureAwait(false);
 
-        // #2218: focus reporting is armed only after the capability probes
-        // above. CSI ?1004h is a DEC private mode, so terminals that do not
-        // implement it ignore the request and never report focus. The session
-        // then keeps animating exactly as before. Focus reports arrive as typed
-        // Focus input events and park the heartbeat while unfocused.
-        await host.Backend.WriteAsync(Utf8(TerminalQueries.FocusTrackingEnable), ct).ConfigureAwait(false);
-
         await PrintWelcomeAsync().ConfigureAwait(false);
         host._replStore.Dispatch(new ChatAppMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, host.SessionModel.Agent));
         ArmThemeWatcher();
@@ -173,6 +166,13 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 host._wake.Writer.TryWrite(null);
                 return ValueTask.CompletedTask;
             });
+
+        // #2218: CSI ?1004h is armed after the capability probes and the bus
+        // subscription above. It is a DEC private mode, so terminals without
+        // the protocol ignore it and never report focus. The session then keeps
+        // animating as before. CSI I / CSI O arrive as typed Focus input events
+        // and park the heartbeat while the window is unfocused.
+        await host.Backend.WriteAsync(Utf8(TerminalQueries.FocusTrackingEnable), ct).ConfigureAwait(false);
 
         // One spinner heartbeat while the status bar animates; re-armed per frame.
         using var spinnerTimer = new Timer(
