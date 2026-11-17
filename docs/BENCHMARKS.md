@@ -4002,6 +4002,32 @@ on a quiet one. What was wrong with the old one was not its numbers but
 its tree line, which named a tree that was not the tree the numbers came
 from.
 
+#### After #2130: no per-file blame fallback
+
+The 37-process number above describes the gate before #2130. On the tree of
+PR #2261, which fixed it, the gate reports **30 of 30 citing
+files reconstructed from the history itself, 0 per-file `git blame`
+fallbacks**. The 29 blame processes are gone. One `git log --no-walk` query
+asks about renames the path-limited log cannot see, so the gate starts
+**8 git processes**: four `git ls-files`, one `git rev-parse`, one
+`git log -p`, one `git log --no-walk`, one `git diff`, and one
+`git cat-file --batch`. The count follows from the process list above, not
+from a shim run on this tree.
+
+The cause was in the collector, not in the idea. A hunk that replaces a line
+prints the old line with `-` and the new one with `+`. The collector kept both
+in one list and took the first `new_count` entries, so a replaced line came
+back with its old text, the reconstruction failed the HEAD comparison, and
+the file went to `git blame`. Applying a merge's first-parent diff on top of
+the branch commits made it worse, so those diffs are skipped. The collector
+now keeps the two sides of a hunk apart and checks the pre-image before it
+applies the hunk.
+
+**No wall-time number is claimed for this tree.** The tables above were
+measured on the trees they name, with the counting shim; the same
+measurement has not been taken on the #2130 tree. A wall time read from a CI
+job is not a gate-only measurement and is not a substitute for it.
+
 ## 10.2 The whole set, gate by gate
 
 **The set is the set CI runs.** `bench/gates/tools.tsv` holds one row per
