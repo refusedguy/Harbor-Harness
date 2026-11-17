@@ -48,6 +48,12 @@ public sealed class ImageViewerOverlay
     /// <summary>Zoom applied per <c>+</c>/<c>-</c> press (percentage points).</summary>
     public const int ZoomStep = 25;
 
+    /// <summary>
+    /// Graphics z-index for the modal image: the feed's inline pictures use
+    /// z=0, so the fullscreen viewer composites above them (issue #2222).
+    /// </summary>
+    public const int OverlayZIndex = 1;
+
     /// <summary>Rows the caption + hint chrome costs inside the box.</summary>
     private const int ChromeRows = 4;
 
@@ -275,13 +281,13 @@ public sealed class ImageViewerOverlay
             return false;
         }
 
-        byte[]? payload = block.EncodedPayload(sink, target.Width, target.Height);
+        byte[]? payload = block.EncodedPayload(sink, target.Width, target.Height, OverlayZIndex);
         if (payload is null)
         {
             return false;
         }
 
-        sink.Place(target, payload);
+        sink.Place(target, payload, OverlayZIndex);
         return true;
     }
 

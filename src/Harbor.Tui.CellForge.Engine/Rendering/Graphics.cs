@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Text;
 
 namespace Harbor.Tui.CellForge.Rendering;
@@ -115,6 +116,47 @@ public static class Graphics
 
         return Encoding.ASCII.GetBytes(sb.ToString());
     }
+
+    /// <summary>
+    /// Cell-sized kitty transfer with an explicit image identity and stacking
+    /// order (issue #2222): <c>i</c> lets the terminal address the placement
+    /// later (<see cref="KittyDeleteImage" />) and <c>z</c> is the graphics
+    /// z-index — larger values composite above smaller ones. Every chunk
+    /// repeats both keys, as kitty requires for a multi-part transmission.
+    /// Empty / non-PNG / degenerate input yields an empty result.
+    /// </summary>
+    public static byte[] KittyPngInline(ReadOnlySpan<byte> pngBytes, int cols, int rows, uint imageId, int zIndex)
+    {
+        if (pngBytes.IsEmpty || cols <= 0 || rows <= 0 || imageId == 0 || !PngSize(pngBytes).HasValue)
+        {
+            return [];
+        }
+
+        string b64 = Convert.ToBase64String(pngBytes);
+        string box = $"c={cols},r={rows},i={imageId},z={zIndex},";
+        var sb = new StringBuilder(b64.Length + ((b64.Length / KittyChunkChars) * (box.Length + 16)) + 32);
+        for (int offset = 0; offset < b64.Length; offset += KittyChunkChars)
+        {
+            int len = Math.Min(KittyChunkChars, b64.Length - offset);
+            sb.Append(EscChar).Append("_Gf=100,a=T,C=1,").Append(box);
+            sb.Append("m=");
+            sb.Append(offset + len < b64.Length ? '1' : '0');
+            sb.Append(';').Append(b64, offset, len);
+            sb.Append(EscChar).Append('\\');
+        }
+
+        return Encoding.ASCII.GetBytes(sb.ToString());
+    }
+
+    /// <summary>
+    /// Kitty delete-by-id: <c>a=d,d=I,i=&lt;id&gt;</c> removes every placement
+    /// of that image (issue #2222). A zero id is a no-op so callers can emit
+    /// unconditionally for a slot that never held an image.
+    /// </summary>
+    public static byte[] KittyDeleteImage(uint imageId) =>
+        imageId == 0
+            ? []
+            : Encoding.ASCII.GetBytes($"{EscChar}_Ga=d,d=I,i={imageId}{EscChar}\\");
 
     /// <summary>
     /// Encodes 24-bit RGB bytes as a complete Sixel sequence (DCS header,
@@ -263,5 +305,143 @@ public static class Graphics
         }
 
         return best;
+    }
+
+    /// <summary>
+    /// Minimal PNG → RGB24 decoder for the Sixel path (issue #2222): 8-bit,
+    /// non-interlaced, colour type 2 (RGB) or 6 (RGBA), all five scanline
+    /// filters. Anything else returns null and the caller keeps its text card.
+    /// CRC is not verified — this feeds a renderer, not a trust boundary.
+    /// </summary>
+    internal static byte[]? PngToRgb24(ReadOnlySpan<byte> png)
+    {
+        ReadOnlySpan<byte> signature = [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        if (png.Length < 33 || !png[..8].SequenceEqual(signature))
+        {
+            return null;
+        }
+
+        int width = 0;
+        int height = 0;
+        int bpp = 0;
+        var idat = new List<byte>();
+        int offset = 8;
+        while (offset + 12 <= png.Length)
+        {
+            int length = BinaryPrimitives.ReadInt32BigEndian(png[offset..]);
+            if (length < 0 || offset + 12L + length > png.Length)
+            {
+                return null;
+            }
+
+            ReadOnlySpan<byte> type = png.Slice(offset + 4, 4);
+            ReadOnlySpan<byte> data = png.Slice(offset + 8, length);
+            if (type.SequenceEqual("IHDR"u8))
+            {
+                if (length < 13)
+                {
+                    return null;
+                }
+
+                width = BinaryPrimitives.ReadInt32BigEndian(data);
+                height = BinaryPrimitives.ReadInt32BigEndian(data[4..]);
+                int depth = data[8];
+                int colour = data[9];
+                int interlace = data[12];
+                if (depth != 8 || interlace != 0 || (colour != 2 && colour != 6) || width <= 0 || height <= 0)
+                {
+                    return null;
+                }
+
+                bpp = colour == 2 ? 3 : 4;
+            }
+            else if (type.SequenceEqual("IDAT"u8))
+            {
+                idat.AddRange(data);
+            }
+            else if (type.SequenceEqual("IEND"u8))
+            {
+                break;
+            }
+
+            offset += 12 + length;
+        }
+
+        if (width <= 0 || height <= 0 || bpp == 0 || idat.Count == 0)
+        {
+            return null;
+        }
+
+        byte[] inflated;
+        try
+        {
+            using var input = new MemoryStream(idat.ToArray(), writable: false);
+            using var zlib = new ZLibStream(input, CompressionMode.Decompress);
+            using var output = new MemoryStream();
+            zlib.CopyTo(output);
+            inflated = output.ToArray();
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+
+        int stride = width * bpp;
+        if (inflated.Length < height * (stride + 1))
+        {
+            return null;
+        }
+
+        byte[] rgb = new byte[width * height * 3];
+        byte[] current = new byte[stride];
+        byte[] previous = new byte[stride];
+        for (int y = 0; y < height; y++)
+        {
+            int source = y * (stride + 1);
+            int filter = inflated[source];
+            if (filter is < 0 or > 4)
+            {
+                return null;
+            }
+
+            for (int x = 0; x < stride; x++)
+            {
+                byte value = inflated[source + 1 + x];
+                int left = x >= bpp ? current[x - bpp] : 0;
+                int above = previous[x];
+                int upperLeft = x >= bpp ? previous[x - bpp] : 0;
+                current[x] = filter switch
+                {
+                    0 => value,
+                    1 => (byte)(value + left),
+                    2 => (byte)(value + above),
+                    3 => (byte)(value + ((left + above) >> 1)),
+                    4 => (byte)(value + Paeth(left, above, upperLeft)),
+                    _ => 0,
+                };
+            }
+
+            int destination = y * width * 3;
+            for (int x = 0; x < width; x++)
+            {
+                rgb[destination] = current[x * bpp];
+                rgb[destination + 1] = current[(x * bpp) + 1];
+                rgb[destination + 2] = current[(x * bpp) + 2];
+                destination += 3;
+            }
+
+            (current, previous) = (previous, current);
+        }
+
+        return rgb;
+    }
+
+    private static int Paeth(int left, int above, int upperLeft)
+    {
+        int p = left + above - upperLeft;
+        int pa = Math.Abs(p - left);
+        int pb = Math.Abs(p - above);
+        int pc = Math.Abs(p - upperLeft);
+        return pa <= pb && pa <= pc ? left : pb <= pc ? above : upperLeft;
     }
 }

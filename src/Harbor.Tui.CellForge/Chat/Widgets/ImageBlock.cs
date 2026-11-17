@@ -108,6 +108,7 @@ public sealed class ImageBlock : IChatBlock
     private byte[]? _payload;
     private int _payloadCols = -1;
     private int _payloadRows = -1;
+    private int _payloadZ;
 
     /// <summary>
     /// The session's inline-image capability, sampled ONCE at construction.
@@ -346,24 +347,33 @@ public sealed class ImageBlock : IChatBlock
     /// array is released with the block — no image byte array is retained per
     /// frame anywhere in the pipeline.
     /// </summary>
-    internal byte[]? EncodedPayload(IInlineImageSink? sink, int cols, int rows)
+    internal byte[]? EncodedPayload(IInlineImageSink? sink, int cols, int rows) =>
+        EncodedPayload(sink, cols, rows, 0);
+
+    /// <summary>
+    /// Z-aware twin: the stacking value is part of the memo key (the kitty
+    /// envelope carries z=), so the fullscreen viewer can lift the same block
+    /// above the feed without reusing a z=0 payload.
+    /// </summary>
+    internal byte[]? EncodedPayload(IInlineImageSink? sink, int cols, int rows, int zIndex)
     {
         if (!CanRenderGraphic(sink))
         {
             return null;
         }
 
-        // Memo keyed on the cell box. A miss is memoized too (-1 never matches
-        // a real geometry), so a picture the protocol cannot carry costs ONE
-        // failed encode per size instead of one per frame.
-        if (_payloadCols == cols && _payloadRows == rows)
+        // Memo keyed on the cell box AND stacking order. A miss is memoized too
+        // (-1 never matches a real geometry), so a picture the protocol cannot
+        // carry costs ONE failed encode per size instead of one per frame.
+        if (_payloadCols == cols && _payloadRows == rows && _payloadZ == zIndex)
         {
             return _payload is { Length: > 0 } ? _payload : null;
         }
 
-        sink!.TryEncode(Name, MimeType, Data, cols, rows, out _payload);
+        sink!.TryEncode(Name, MimeType, Data, cols, rows, zIndex, out _payload);
         _payloadCols = cols;
         _payloadRows = rows;
+        _payloadZ = zIndex;
         return _payload is { Length: > 0 } ? _payload : null;
     }
 

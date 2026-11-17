@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Ui.Framework.Rendering;
@@ -9,6 +8,7 @@ using Harbor.Ui.Framework.Rendering;
 // InlineImageKind/InlineImageEncoder/AnsiWriter stay engine-typed: they have
 // no Rendering twins and never cross into Rendering-typed APIs.
 using UIR = Harbor.Ui.Framework.Rendering;
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -29,7 +29,16 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// the behaviour we want: the diff is the single source of truth for what the
 /// screen holds.</para>
 ///
-/// <para>Placement list is a preallocated ring with a hard cap
+/// <para><b>Identity, z-order and delete (issue #2222).</b> Each distinct image
+/// bytes gets a stable kitty image id, keyed by content hash (the Crush
+/// <c>HasTransmitted</c> pattern): the same payload never re-transmits, even
+/// when the block recreates its byte array. Placements carry a z-index — emit
+/// order is ascending z (higher paints last, i.e. on top) and the cells under
+/// a placement are marked <see cref="EngineCells.CellDiffOption.Skip" /> so
+/// the cell diff cannot overdraw it. When an id leaves the frame, an explicit
+/// delete-by-id sequence clears it, so no bitmap artifact survives.</para>
+///
+/// <para>Placement lists and caches are preallocated rings with a hard cap
 /// (<see cref="MaxPlacements" />) so a pathological frame cannot allocate; the
 /// cap drops the surplus rather than growing, keeping the steady-state frame
 /// allocation-free.</para>
@@ -42,6 +51,9 @@ public sealed class InlineImageLayer : IInlineImageSink
     /// <summary>Per-frame placement cap; the surplus is dropped, never queued.</summary>
     public const int MaxPlacements = 32;
 
+    private const ulong FnvOffsetBasis = 14695981039346656037UL;
+    private const ulong FnvPrime = 1099511628211UL;
+
     private readonly InlinePlacement[] _placements = new InlinePlacement[MaxPlacements];
     private int _count;
 
@@ -52,9 +64,22 @@ public sealed class InlineImageLayer : IInlineImageSink
     // megabytes of base64 at frame rate would be the single most expensive
     // thing this feature could do.
     private readonly UIR.Rect[] _lastRects = new UIR.Rect[MaxPlacements];
-    private readonly byte[]?[] _lastPayloads = new byte[]?[MaxPlacements];
+    private readonly ulong[] _lastHashes = new ulong[MaxPlacements];
+    private readonly uint[] _lastIds = new uint[MaxPlacements];
+    private readonly int[] _lastZ = new int[MaxPlacements];
     private UIR.Rect _lastFrame;
     private bool _hasLastFrame;
+
+    // Content-hash → image id (kitty). A given byte payload keeps its id for
+    // the whole session, which is what makes delete-by-id and transmission
+    // dedupe stable across frames and byte-array recreations.
+    private readonly ImageIdentity[] _identities = new ImageIdentity[MaxPlacements];
+    private uint _nextImageId = 1;
+
+    // Encoded payload hash → id/z, so Place (which only receives bytes) can
+    // recover the identity stamped into the envelope by TryEncode.
+    private readonly EncodedIdentity[] _encoded = new EncodedIdentity[MaxPlacements];
+    private int _encodedCursor;
 
     /// <summary>
     /// Probe result for this session — the one fallback switch. Set once at
@@ -93,16 +118,34 @@ public sealed class InlineImageLayer : IInlineImageSink
     /// Forgets what was last emitted, so the next <see cref="Emit" /> sends
     /// everything again. Call when the terminal's own state may no longer hold
     /// the bitmaps (a resize reflow, a hot buffer swap, alt-screen re-entry).
+    /// The id↔content map survives: re-transmission reuses the same ids.
     /// </summary>
     public void InvalidateEmitted()
     {
         _hasLastFrame = false;
-        Array.Clear(_lastPayloads);
+        Array.Clear(_lastHashes);
         Array.Clear(_lastRects);
+        Array.Clear(_lastIds);
+        Array.Clear(_lastZ);
     }
 
     /// <inheritdoc />
-    public bool TryEncode(string name, string mimeType, ReadOnlySpan<byte> data, int cols, int rows, out byte[]? payload)
+    public bool TryEncode(string name, string mimeType, ReadOnlySpan<byte> data, int cols, int rows, out byte[]? payload) =>
+        TryEncode(name, mimeType, data, cols, rows, 0, out payload);
+
+    /// <summary>
+    /// Z-aware twin of the interface method: <paramref name="zIndex" /> is
+    /// stamped into the kitty envelope (<c>z=</c>) and carried by the
+    /// placement, so emit order and skip application can honour stacking.
+    /// </summary>
+    public bool TryEncode(
+        string name,
+        string mimeType,
+        ReadOnlySpan<byte> data,
+        int cols,
+        int rows,
+        int zIndex,
+        out byte[]? payload)
     {
         payload = null;
         if (!Enabled || !InlineImageEncoder.Supports(Kind, mimeType))
@@ -110,7 +153,13 @@ public sealed class InlineImageLayer : IInlineImageSink
             return false;
         }
 
-        payload = InlineImageEncoder.Encode(Kind, name, data, cols, rows);
+        uint id = Kind == InlineImageKind.KittyApc ? IdentityFor(data, zIndex) : 0;
+        payload = InlineImageEncoder.Encode(Kind, name, data, cols, rows, id, zIndex);
+        if (id != 0 && payload is { Length: > 0 })
+        {
+            RememberEncoded(Hash(payload), id, zIndex);
+        }
+
         return payload is { Length: > 0 };
     }
 
@@ -118,7 +167,15 @@ public sealed class InlineImageLayer : IInlineImageSink
     public UIR.Rect ClipToFrame(UIR.Rect cellRect) => cellRect.Intersect(FrameBounds);
 
     /// <inheritdoc />
-    public void Place(UIR.Rect cellRect, ReadOnlyMemory<byte> payload)
+    public void Place(UIR.Rect cellRect, ReadOnlyMemory<byte> payload) => Place(cellRect, payload, 0);
+
+    /// <summary>
+    /// Z-aware twin of the interface method. A non-zero
+    /// <paramref name="zIndex" /> wins over the z recovered from the encoded
+    /// envelope, so a modal overlay can lift an already-encoded picture above
+    /// the feed without re-encoding it.
+    /// </summary>
+    public void Place(UIR.Rect cellRect, ReadOnlyMemory<byte> payload, int zIndex)
     {
         if (!Enabled || payload.IsEmpty)
         {
@@ -141,17 +198,61 @@ public sealed class InlineImageLayer : IInlineImageSink
             return;
         }
 
-        _placements[_count++] = new InlinePlacement(clipped, payload);
+        uint id = 0;
+        int z = zIndex;
+        if (Kind == InlineImageKind.KittyApc)
+        {
+            ulong payloadHash = Hash(payload.Span);
+            foreach (var encoded in _encoded)
+            {
+                if (encoded.Hash == payloadHash && encoded.Hash != 0)
+                {
+                    id = encoded.Id;
+                    if (z == 0)
+                    {
+                        z = encoded.Z;
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        _placements[_count++] = new InlinePlacement(clipped, payload, id, z);
     }
 
     /// <summary>
-    /// Emits the placements that CHANGED since the last frame, each preceded by
-    /// a cursor move to its origin. The payload is borrowed, never copied.
-    /// Call after the cell diff so the bitmap composites over the
-    /// (already-current) cells. Placements identical to the previous frame —
-    /// same rect, same cached payload instance — are skipped: the terminal
-    /// still holds that bitmap, and re-sending it would cost megabytes per
-    /// frame for a picture that has not moved.
+    /// Marks every cell under this frame's placements as
+    /// <see cref="EngineCells.CellDiffOption.Skip" /> so the cell diff cannot
+    /// draw over a bitmap (issue #2222 z-order). Called by the host between
+    /// copying the painted grid into BACK and diffing it — Skip mirrors
+    /// silently, so FRONT still matches BACK after the frame.
+    /// </summary>
+    public void ApplySkip(EngineCells.ScreenBuffer buffer)
+    {
+        Ensure.NotNull(buffer);
+        for (int i = 0; i < _count; i++)
+        {
+            var cells = _placements[i].Cells;
+            int right = Math.Min(cells.Right, buffer.Cols);
+            int bottom = Math.Min(cells.Bottom, buffer.Rows);
+            for (int y = Math.Max(0, cells.Y); y < bottom; y++)
+            {
+                for (int x = Math.Max(0, cells.X); x < right; x++)
+                {
+                    buffer.SetDiffOption(x, y, EngineCells.CellDiffOption.Skip);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Emits deletes for ids that disappeared, then the placements that
+    /// CHANGED since the last frame, each preceded by a cursor move to its
+    /// origin. The payload is borrowed, never copied. Placements are emitted
+    /// in ascending z order; an identical (rect, payload, id, z) tuple is
+    /// skipped — the terminal still holds that bitmap. Content hashing makes
+    /// the dedupe stable even when the block rebuilds its byte array.
     /// </summary>
     public void Emit(AnsiWriter writer)
     {
@@ -162,27 +263,51 @@ public sealed class InlineImageLayer : IInlineImageSink
         bool geometryChanged = !_hasLastFrame || _lastFrame != FrameBounds;
         int emitted = 0;
 
+        emitted += EmitDeletes(writer);
+
+        // Stable ascending-z emit order: lower stacking values are painted
+        // first so higher ones composite on top. stackalloc keeps this
+        // allocation-free on the frame hot path.
+        Span<int> order = stackalloc int[MaxPlacements];
         for (int i = 0; i < _count; i++)
         {
+            order[i] = i;
+        }
+
+        for (int i = 1; i < _count; i++)
+        {
+            int key = order[i];
+            int j = i - 1;
+            while (j >= 0 && _placements[order[j]].Z > _placements[key].Z)
+            {
+                order[j + 1] = order[j];
+                j--;
+            }
+
+            order[j + 1] = key;
+        }
+
+        for (int n = 0; n < _count; n++)
+        {
+            int i = order[n];
             var placement = _placements[i];
-            byte[]? payload = Backing(placement.Payload);
+            ulong hash = Hash(placement.Payload.Span);
 
             if (!geometryChanged
-                && i < _lastPayloads.Length
+                && _lastHashes[i] == hash
                 && _lastRects[i] == placement.Cells
-                && ReferenceEquals(_lastPayloads[i], payload))
+                && _lastIds[i] == placement.ImageId
+                && _lastZ[i] == placement.Z)
             {
                 continue;
             }
 
             writer.MoveTo(placement.Cells.X, placement.Cells.Y);
             writer.RawBytes(placement.Payload.Span);
-            if (i < _lastRects.Length)
-            {
-                _lastRects[i] = placement.Cells;
-                _lastPayloads[i] = payload;
-            }
-
+            _lastRects[i] = placement.Cells;
+            _lastHashes[i] = hash;
+            _lastIds[i] = placement.ImageId;
+            _lastZ[i] = placement.Z;
             emitted++;
         }
 
@@ -199,19 +324,108 @@ public sealed class InlineImageLayer : IInlineImageSink
         // Placements past the current count are gone from screen only when the
         // cells under them were rewritten — which the diff just did. Forget the
         // tail so a re-added block re-emits instead of being deduped away.
-        for (int i = _count; i < _lastPayloads.Length; i++)
+        for (int i = _count; i < MaxPlacements; i++)
         {
-            _lastPayloads[i] = null;
+            _lastHashes[i] = 0;
             _lastRects[i] = default;
+            _lastIds[i] = 0;
+            _lastZ[i] = 0;
         }
 
         _count = 0;
     }
 
-    /// <summary>The array behind a memory view, for reference-identity dedupe.</summary>
-    private static byte[]? Backing(ReadOnlyMemory<byte> memory) =>
-        MemoryMarshal.TryGetArray(memory, out ArraySegment<byte> segment) ? segment.Array : null;
+    /// <summary>
+    /// Kitty only: delete every id that was on screen last frame but is not
+    /// in this frame's placements. Emitted BEFORE the new placements so a
+    /// replacement image never flashes over its predecessor's stale bitmap.
+    /// </summary>
+    private int EmitDeletes(AnsiWriter writer)
+    {
+        if (Kind != InlineImageKind.KittyApc || !_hasLastFrame)
+        {
+            return 0;
+        }
 
-    /// <summary>One frame's image placement: a clipped cell rect + borrowed bytes.</summary>
-    internal readonly record struct InlinePlacement(UIR.Rect Cells, ReadOnlyMemory<byte> Payload);
+        int emitted = 0;
+        for (int i = 0; i < MaxPlacements; i++)
+        {
+            uint id = _lastIds[i];
+            if (id == 0 || StillVisible(id))
+            {
+                continue;
+            }
+
+            writer.RawBytes(Graphics.KittyDeleteImage(id));
+            _lastIds[i] = 0;
+            emitted++;
+        }
+
+        return emitted;
+    }
+
+    private bool StillVisible(uint id)
+    {
+        for (int i = 0; i < _count; i++)
+        {
+            if (_placements[i].ImageId == id)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>FNV-1a over the payload bytes — the Crush <c>HasTransmitted</c>
+    /// ingredient: same bytes ⇒ same hash ⇒ one transmission, one id.</summary>
+    private static ulong Hash(ReadOnlySpan<byte> bytes)
+    {
+        ulong hash = FnvOffsetBasis;
+        foreach (byte b in bytes)
+        {
+            hash = (hash ^ b) * FnvPrime;
+        }
+
+        return hash;
+    }
+
+    /// <summary>Stable identity for a source payload: reuse an existing id on
+    /// a hash hit, otherwise hand out the next one from the 1-based counter.</summary>
+    private uint IdentityFor(ReadOnlySpan<byte> data, int zIndex)
+    {
+        ulong hash = Hash(data);
+        foreach (var identity in _identities)
+        {
+            if (identity.Hash == hash && identity.Hash != 0)
+            {
+                return identity.Id;
+            }
+        }
+
+        uint id = _nextImageId++;
+        for (int i = 0; i < _identities.Length; i++)
+        {
+            if (_identities[i].Hash == 0)
+            {
+                _identities[i] = new ImageIdentity(hash, id, zIndex);
+                break;
+            }
+        }
+
+        return id;
+    }
+
+    private void RememberEncoded(ulong hash, uint id, int zIndex)
+    {
+        _encoded[_encodedCursor] = new EncodedIdentity(hash, id, zIndex);
+        _encodedCursor = (_encodedCursor + 1) % _encoded.Length;
+    }
+
+    /// <summary>One frame's image placement: a clipped cell rect, borrowed
+    /// bytes, and the identity/stacking metadata carried by the envelope.</summary>
+    internal readonly record struct InlinePlacement(UIR.Rect Cells, ReadOnlyMemory<byte> Payload, uint ImageId = 0, int Z = 0);
+
+    private readonly record struct ImageIdentity(ulong Hash, uint Id, int Z);
+    private readonly record struct EncodedIdentity(ulong Hash, uint Id, int Z);
 }

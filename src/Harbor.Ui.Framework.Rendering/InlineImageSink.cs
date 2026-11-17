@@ -47,6 +47,15 @@ public interface IInlineImageSink
     bool TryEncode(string name, string mimeType, ReadOnlySpan<byte> data, int cols, int rows, out byte[]? payload);
 
     /// <summary>
+    /// Z-aware twin of <see cref="TryEncode(string, string, ReadOnlySpan{byte}, int, int, out byte[])" />.
+    /// <paramref name="zIndex" /> orders this image against other graphics:
+    /// larger values composite above smaller ones. Sinks without stacking
+    /// support keep the classic z=0 behaviour through the default body.
+    /// </summary>
+    bool TryEncode(string name, string mimeType, ReadOnlySpan<byte> data, int cols, int rows, int zIndex, out byte[]? payload) =>
+        TryEncode(name, mimeType, data, cols, rows, out payload);
+
+    /// <summary>
     /// Clamps <paramref name="cellRect"/> to the current frame. Callers MUST
     /// run their destination box through this BEFORE
     /// <see cref="TryEncode" />: a payload encodes the box it is told to fill,
@@ -64,4 +73,11 @@ public interface IInlineImageSink
     /// retain it.
     /// </summary>
     void Place(Rect cellRect, ReadOnlyMemory<byte> payload);
+
+    /// <summary>
+    /// Z-aware twin of <see cref="Place(Rect, ReadOnlyMemory{byte})" />. The
+    /// same z must be used at encode time for protocols that stamp it into the
+    /// envelope; the default body keeps an unstacked sink at z=0.
+    /// </summary>
+    void Place(Rect cellRect, ReadOnlyMemory<byte> payload, int zIndex) => Place(cellRect, payload);
 }
