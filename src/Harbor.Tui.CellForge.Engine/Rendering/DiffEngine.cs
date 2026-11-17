@@ -24,8 +24,14 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// </summary>
 public sealed class DiffEngine
 {
-    /// <summary>Hints above this share of the screen fall back to full scan. Canonical 25%: duplicated from the portable encoder's threshold, not shared with it — the engine holds no reference to share it through, so a change here must be mirrored there by hand.</summary>
-    public const double HintAreaThreshold = 0.25;
+    /// <summary>
+    /// Hints above this share of the screen fall back to full scan. The value
+    /// has one home, <see cref="CellDamageContract.HintAreaThreshold"/>: this
+    /// member is an alias, not a hand-mirrored copy of the portable encoder's
+    /// number (#2220). The engine is a BCL-only leaf (#436), so the guard that
+    /// ties it to <c>CellDiffHints</c> lives in the test that reads both.
+    /// </summary>
+    public const double HintAreaThreshold = CellDamageContract.HintAreaThreshold;
 
     private ScreenBuffer _front;
     private readonly List<Rect> _hints = new(16);
@@ -87,6 +93,26 @@ public sealed class DiffEngine
         }
 
         hints.Add(clipped);
+    }
+
+    /// <summary>
+    /// Registers the region reported by any <see cref="IDamageRegion"/> — a
+    /// widget's <see cref="DirtyRect"/>, an overlay's exposed damage, or any
+    /// other invalidation source — as a frame hint. Coordinates are
+    /// source-local; <paramref name="originX"/>/<paramref name="originY"/>
+    /// translate them into screen space. A clean source is a no-op. This is the
+    /// single bridge from damage tracking to the diff's hint path (#2220).
+    /// </summary>
+    public void FrameHint(IDamageRegion damage, int originX = 0, int originY = 0)
+    {
+        ArgumentNullException.ThrowIfNull(damage);
+        if (damage.Dirty is not { } region || damage.DirtyArea <= 0)
+        {
+            return;
+        }
+
+        FrameHint(new Rect(
+            region.X + originX, region.Y + originY, region.Width, region.Height));
     }
 
     /// <summary>Drops accumulated hints (e.g. on resize).</summary>
@@ -203,8 +229,22 @@ public sealed class DiffEngine
         // full scan (top→bottom, left→right per row), so both paths serialize
         // the same changed cells into the same ANSI stream — the byte-identical
         // golden contract. List.Sort is allocation-free (introsort, no closure).
-        bool useHints = _hints.Count > 0
-            && HintArea() < (long)_front.Cols * _front.Rows * HintAreaThreshold;
+        bool hasHints = _hints.Count > 0;
+        bool useHints = hasHints
+            && CellDamageContract.ShouldUseHints(
+                HintArea(), (long)_front.Cols * _front.Rows);
+        if (hasHints)
+        {
+            if (useHints)
+            {
+                EngineStageCounters.CountHintHit();
+            }
+            else
+            {
+                EngineStageCounters.CountHintMiss();
+            }
+        }
+
         if (useHints && _hints.Count > 1)
         {
             _hints.Sort(static (a, b) => a.Y != b.Y

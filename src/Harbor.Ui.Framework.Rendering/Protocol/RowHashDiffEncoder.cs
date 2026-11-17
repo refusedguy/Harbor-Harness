@@ -1,6 +1,7 @@
 namespace Harbor.Ui.Framework.Rendering.Protocol;
 
 using System.Collections.Immutable;
+using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 
 /// <summary>
 ///     Portable cell-diff encoder over the shared <see cref="ScreenBuffer"/>
@@ -40,7 +41,25 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
 
         int cols = next.Cols;
         int rows = next.Rows;
+        // Keep the original null-state flow: the property pattern in the same
+        // expression tells the compiler hints is non-null in the second arm.
         bool useHints = hints is { Count: > 0 } && HintAreaWithinThreshold(hints, cols, rows);
+        bool hasHints = hints is { Count: > 0 };
+
+        // #2220: one decision, one tally. A no-hint frame makes no choice and
+        // increments neither counter; a miss means the caller's hints exceeded
+        // the canonical 25 % budget and this encode took the full-scan path.
+        if (hasHints)
+        {
+            if (useHints)
+            {
+                UiStageCounters.CountHintHit();
+            }
+            else
+            {
+                UiStageCounters.CountHintMiss();
+            }
+        }
 
         // Full scan when no usable hints; otherwise only the rows the hinted
         // damage rects touch (clamped to the frame).
