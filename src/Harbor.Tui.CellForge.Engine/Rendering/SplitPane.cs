@@ -50,7 +50,7 @@ public sealed class SplitPaneItem : IFocusTarget
     /// <summary>Lower bound on <see cref="Weight"/> enforced by resize.</summary>
     public int MinWeight => _minWeight;
 
-    /// <inheritdoc />
+    /// <summary>Whether this pane currently owns focus (set through focus routing).</summary>
     public bool IsFocused { get; private set; }
 
     /// <inheritdoc />
