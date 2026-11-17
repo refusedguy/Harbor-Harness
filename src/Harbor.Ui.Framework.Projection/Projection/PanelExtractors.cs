@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
@@ -23,6 +24,14 @@ namespace Harbor.Ui.Framework.Projection;
 /// </remarks>
 public static class PanelExtractors
 {
+    /// <summary>
+    ///     Display sentinel for a field the transcript did not carry. Kept at the
+    ///     projection boundary only: the extractors below report absence with
+    ///     <see cref="Maybe{T}" />, so a missing name/path can never be mistaken
+    ///     for a real value or drive control flow (#1101, §ROP).
+    /// </summary>
+    private const string Unknown = "<unknown>";
+
     /// <summary>Tool names tracked by <see cref="ExtractRecentChanges" />.</summary>
     private static readonly FrozenSet<string> TrackedTools = FrozenSet.ToFrozenSet(
         new string[] { WellKnownTools.Edit, WellKnownTools.Write, WellKnownTools.Read, WellKnownTools.Patch },
@@ -137,19 +146,29 @@ public static class PanelExtractors
             bool isError = text.StartsWith("✗", StringComparison.Ordinal);
             string diffBody = StripResultPrefix(text).Trim();
 
-            string toolName = "<unknown>";
-            string filePath = "<unknown>";
+            string toolName = Unknown;
+            string filePath = Unknown;
             int toolIndex = FindToolIndex(lines, i, line.ToolCallId);
             if (toolIndex >= 0)
             {
                 string toolText = lines[toolIndex].Text ?? string.Empty;
-                toolName = ExtractToolName(toolText);
-                if (!TrackedTools.Contains(toolName))
+                // Absence is a type here, not a sentinel string: a name the
+                // transcript did not carry is Maybe.None and can never be
+                // mistaken for a tracked tool. The sentinel is applied only
+                // when the row is built, for display (#1101, §ROP).
+                Maybe<string> extractedName = ExtractToolName(toolText);
+                if (!extractedName.HasValue)
                 {
                     continue;
                 }
 
-                filePath = ExtractPath(toolText);
+                if (!TrackedTools.Contains(extractedName.Value))
+                {
+                    continue;
+                }
+
+                toolName = extractedName.Value;
+                filePath = ExtractPath(toolText).GetValueOrDefault(Unknown);
             }
 
             result.Add(new PanelFileChange(toolName, filePath, diffBody, isError));
@@ -304,18 +323,27 @@ public static class PanelExtractors
         return -1;
     }
 
-    private static string ExtractToolName(string toolText)
+    /// <summary>
+    ///     The tool name written in a <c>→ {tool} …</c> line, or
+    ///     <see cref="Maybe{T}.None" /> when the line carries none. The regex
+    ///     requires at least one name character, so a match is never empty.
+    /// </summary>
+    private static Maybe<string> ExtractToolName(string toolText)
     {
         if (string.IsNullOrEmpty(toolText))
         {
-            return "<unknown>";
+            return Maybe<string>.None;
         }
 
         Match m = ToolNameRegex.Match(toolText);
-        return m.Success ? m.Groups["tool"].Value.Trim() : "<unknown>";
+        return m.Success ? Maybe.From(m.Groups["tool"].Value.Trim()) : Maybe<string>.None;
     }
 
-    private static string ExtractPath(string toolText)
+    /// <summary>
+    ///     The file path in a tool's args JSON (DOM probe, then regex fallback),
+    ///     or <see cref="Maybe{T}.None" /> when neither finds one.
+    /// </summary>
+    private static Maybe<string> ExtractPath(string toolText)
     {
         int brace = toolText.IndexOf('{');
         if (brace >= 0)
@@ -337,7 +365,7 @@ public static class PanelExtractors
                             string? s = value.GetString();
                             if (!string.IsNullOrWhiteSpace(s))
                             {
-                                return s.Trim();
+                                return Maybe.From(s.Trim());
                             }
                         }
                     }
@@ -350,7 +378,9 @@ public static class PanelExtractors
         }
 
         Match m = PathJsonRegex.Match(toolText);
-        return m.Success ? m.Groups["p"].Value.Trim() : "<unknown>";
+        return m.Success
+            ? Maybe.From(m.Groups["p"].Value.Trim())
+            : Maybe<string>.None;
     }
 
     private static string StripResultPrefix(string text)
