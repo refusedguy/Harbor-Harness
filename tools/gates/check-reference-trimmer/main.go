@@ -661,16 +661,20 @@ func scan(root string, findingsPath string, coveragePath string, baselinePath st
 	// projects whose sources changed. The analyzer emits RT0002 only for the
 	// projects it actually compiled, so that run answers with a STRICT SUBSET
 	// of the baseline: every finding it holds is carried, and rows are missing
-	// only because their projects were not recompiled. Reading that as "the
-	// tree no longer produces" is the defect #2129 reverted: run 44035722975
-	// rebuilt three projects, parsed three findings, and the gate named 48
-	// rows stale that the tree still carries. An answer holding at most HALF
-	// of the baseline rows, all of them carried, is that partial shape. It
-	// suppresses the stale finding for rows whose projects are still in the
-	// tree; a row about a project that is GONE is stale in any answer, a
-	// nearly complete answer still flags its missing row, and a new finding
-	// still fails below.
-	partial := len(parsed) > 0 && len(parsed)*2 <= len(rows)
+	// only because their projects were not recompiled. The extreme case is
+	// ZERO findings: a change to a .txt or a Go source recompiles no C# at
+	// all, so the analyzer emits nothing. Reading either as "the tree no
+	// longer produces" is the defect #2129 reverted: run 44035722975 parsed
+	// three findings and named 48 rows stale the tree still carries, and
+	// run 39736944740 parsed zero. An answer holding at most HALF of the
+	// baseline rows, all of the ones it holds carried, is that partial
+	// shape. It suppresses the stale finding for rows whose projects are
+	// still in the tree; a row about a project that is GONE is stale in any
+	// answer, a nearly complete answer still flags its missing row, and a
+	// new finding still fails below. An empty findings file is a separate
+	// RT-SCAN-BLIND failure above, so "no RT line" is never mistaken for
+	// "no answer at all".
+	partial := len(parsed)*2 <= len(rows)
 	if partial {
 		for _, item := range parsed {
 			if !carried[item.key()] {

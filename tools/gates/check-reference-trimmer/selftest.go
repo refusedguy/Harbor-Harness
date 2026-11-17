@@ -157,6 +157,16 @@ func selfTestRun() int {
 	check("a partial answer does not call a missing row stale",
 		!hasRule(found, "RT-STALE-BASELINE"), "")
 
+	// 3d. ZERO findings from a non-empty log: a change to a .txt or a Go
+	// source recompiles no C# at all, so the analyzer emits nothing. The
+	// rows are not stale. (An actually EMPTY log is RT-SCAN-BLIND, case 8.)
+	writeFile(root, "no-rt.log", "some warning from an unrelated analyzer\n")
+	found, _ = scan(root, filepath.Join(root, "no-rt.log"),
+		filepath.Join(root, "coverage.txt"),
+		filepath.Join(root, "tools", "reference-trimmer-baseline.txt"), 2)
+	check("no findings in a non-empty log is a partial answer",
+		!hasRule(found, "RT-STALE-BASELINE") && !hasRule(found, "RT-SCAN-BLIND"), "")
+
 	// 4. A baseline row without a reason.
 	writeFile(root, filepath.Join("tools", "reference-trimmer-baseline.txt"),
 		"RT0003 | src/Harbor.One/Harbor.One.csproj :: Ghost.Package | too short | @refusedguy\n")
