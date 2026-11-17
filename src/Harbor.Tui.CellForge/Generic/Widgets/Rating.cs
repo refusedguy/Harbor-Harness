@@ -45,9 +45,21 @@ public readonly record struct RatingState
 }
 
 /// <summary>One accepted keyboard edit: the value before and after the key.</summary>
-/// <param name="OldValue">Value before the key.</param>
-/// <param name="NewValue">Value after the key; differs from <paramref name="OldValue"/>.</param>
-public sealed record RatingChange(int OldValue, int NewValue) : EventArgs;
+public sealed class RatingChange : EventArgs
+{
+    /// <summary>Creates a change record.</summary>
+    public RatingChange(int oldValue, int newValue)
+    {
+        OldValue = oldValue;
+        NewValue = newValue;
+    }
+
+    /// <summary>Value before the key.</summary>
+    public int OldValue { get; }
+
+    /// <summary>Value after the key; differs from <see cref="OldValue"/>.</summary>
+    public int NewValue { get; }
+}
 
 /// <summary>
 /// Compact star-rating primitive with keyboard selection and a read-only mode.

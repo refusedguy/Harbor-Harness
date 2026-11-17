@@ -178,8 +178,10 @@ public class RatingGoldenTests
         await Assert.That(rating.HandleKey(KeyEvent.Char(new Rune('5')))).IsTrue();
 
         await Assert.That(seen.Count).IsEqualTo(2);
-        await Assert.That(seen[0]).IsEqualTo(new RatingChange(2, 3));
-        await Assert.That(seen[1]).IsEqualTo(new RatingChange(3, 5));
+        await Assert.That(seen[0].OldValue).IsEqualTo(2);
+        await Assert.That(seen[0].NewValue).IsEqualTo(3);
+        await Assert.That(seen[1].OldValue).IsEqualTo(3);
+        await Assert.That(seen[1].NewValue).IsEqualTo(5);
     }
 
     [Test]
