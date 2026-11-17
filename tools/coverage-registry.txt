@@ -93,6 +93,15 @@
 # covered it, and a file that stops being covered has to have a row added
 # in the same diff that dropped it.
 #
+# Re-measured on run 44081552514, on dev at d1889ddb, by the bounded #1753
+# audit after PR #2274: 1362 product files, 569 covered, 605 holes, 393 rows,
+# 4 findings — all NEVER-RAN files the tree grew since the last sync: the
+# graphics capability probe, a CellForge chat panel, a CellForge markup-paint
+# widget and the PR-comment-card state record. Their tests live in the `ui`
+# shard, which the lane excludes (#423), so the measurement sees the files and
+# runs none of their lines. The four rows below close those findings; the
+# rows now number 397 and the holes are 605.
+#
 apps/Harbor.App.Avalonia/ | NOT-MEASURED | The Avalonia desktop app has no unit test project: the headless Avalonia suite is excluded from the coverage lane because of the flakes in #423, so no file of it is measured. | @refusedguy
 apps/Harbor.App.Cli/ | NOT-MEASURED | The CLI has no unit test project of its own: the end-to-end suite that drives it is not part of the nightly coverage lane, so no file of it is measured. | @refusedguy
 src/Harbor.Abstractions.Contracts/Models/UsdCell.cs | NEVER-RAN | The record is a value carrier of the cell-diff protocol; no suite of the lane constructs one, so its constructor never runs. | @refusedguy
@@ -486,3 +495,7 @@ src/Harbor.Ui.Framework.ViewModels/ViewModels/StoreSubscriberViewModel.cs | NEVE
 src/Harbor.Ui.Framework.ViewModels/ViewModels/TokenUsageViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
 src/Harbor.Ui.Framework.ViewModels/ViewModels/ToolCallProjection.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
 src/Harbor.Ui.Framework.ViewModels/ViewModels/ToolCallViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Capabilities/GraphicsProbe.cs | NEVER-RAN | The CellForge tests that drive this file live in the ui shard, which the nightly coverage lane excludes for its Avalonia flakes (#423), so the measurement sees the file and runs none of its lines. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/CellForgePrCommentCardsPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/MarkupPainters.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/PrCommentCard.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
