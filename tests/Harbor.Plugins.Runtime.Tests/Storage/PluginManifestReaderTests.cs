@@ -210,6 +210,119 @@ public sealed class PluginManifestReaderTests
     }
 
     /// <summary>
+    ///     #2229: the three bundle fields are read as data, so a plugin can say
+    ///     what it brings without a second install step.
+    /// </summary>
+    [Test]
+    public async Task Reader_ReadsBundleDeclarations()
+    {
+        var result = PluginManifestReader.Parse(
+            """
+            {
+              "name": "web-search",
+              "skills": [
+                { "path": "skills/search.md", "name": "Search", "description": "Searches the web" }
+              ],
+              "hooks": [
+                { "path": "hooks/audit.cs", "event": "session.end" }
+              ],
+              "mcpServers": [
+                {
+                  "name": "filesystem",
+                  "command": "npx",
+                  "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+                  "env": { "LOG_LEVEL": "warn" }
+                }
+              ]
+            }
+            """,
+            "bundle.harbor-plugin.json");
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Skills!.Count).IsEqualTo(1);
+        await Assert.That(result.Value.Skills![0].Path).IsEqualTo("skills/search.md");
+        await Assert.That(result.Value.Skills![0].Name).IsEqualTo("Search");
+        await Assert.That(result.Value.Skills![0].Description).IsEqualTo("Searches the web");
+        await Assert.That(result.Value.Hooks!.Count).IsEqualTo(1);
+        await Assert.That(result.Value.Hooks![0].Path).IsEqualTo("hooks/audit.cs");
+        await Assert.That(result.Value.Hooks![0].Event).IsEqualTo("session.end");
+        await Assert.That(result.Value.McpServers!.Count).IsEqualTo(1);
+        await Assert.That(result.Value.McpServers![0].Name).IsEqualTo("filesystem");
+        await Assert.That(result.Value.McpServers![0].Command).IsEqualTo("npx");
+        await Assert.That(result.Value.McpServers![0].Args.Count).IsEqualTo(2);
+        await Assert.That(result.Value.McpServers![0].Args[1]).IsEqualTo("@modelcontextprotocol/server-filesystem");
+        await Assert.That(result.Value.McpServers![0].Environment["LOG_LEVEL"]).IsEqualTo("warn");
+    }
+
+    /// <summary>
+    ///     A field left out stays unsaid, and an empty list says "brings none".
+    ///     Neither is a reason to refuse the plugin.
+    /// </summary>
+    [Test]
+    public async Task Reader_EmptyBundleDeclarations_AreValid()
+    {
+        var result = PluginManifestReader.Parse(
+            """{ "skills": [], "hooks": [] }""",
+            "empty-bundle.harbor-plugin.json");
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Skills!.Count).IsEqualTo(0);
+        await Assert.That(result.Value.Hooks!.Count).IsEqualTo(0);
+        await Assert.That(result.Value.McpServers).IsNull();
+    }
+
+    /// <summary>
+    ///     A skill without a path cannot be installed. It is refused with the
+    ///     index of the bad entry, not silently dropped from the list.
+    /// </summary>
+    [Test]
+    public async Task Reader_SkillWithoutPath_RefusesTheManifest()
+    {
+        await AssertRefused(
+            """{ "skills": [ { "name": "nameless" } ] }""",
+            "skills[0].path");
+    }
+
+    /// <summary>
+    ///     A hook file that is given as a bare string is not the declared shape:
+    ///     accepting it would leave the manifest ambiguous with a newer format.
+    /// </summary>
+    [Test]
+    public async Task Reader_HookEntryThatIsNotAnObject_RefusesTheManifest()
+    {
+        await AssertRefused(
+            """{ "hooks": [ "hooks/audit.cs" ] }""",
+            "hooks[0]");
+    }
+
+    /// <summary>
+    ///     An MCP server without a command cannot be started, so the declaration
+    ///     is refused rather than read as "no servers".
+    /// </summary>
+    [Test]
+    public async Task Reader_McpServerWithoutCommand_RefusesTheManifest()
+    {
+        await AssertRefused(
+            """{ "mcpServers": [ { "name": "filesystem" } ] }""",
+            "mcpServers[0].command");
+    }
+
+    /// <summary>
+    ///     A malformed argument list or environment value is refused with the
+    ///     field at fault, not guessed at.
+    /// </summary>
+    [Test]
+    public async Task Reader_MalformedMcpServerDetails_RefuseTheManifest()
+    {
+        await AssertRefused(
+            """{ "mcpServers": [ { "name": "s", "command": "c", "args": [1] } ] }""",
+            "mcpServers[0].args");
+        await AssertRefused(
+            """{ "mcpServers": [ { "name": "s", "command": "c", "env": { "PORT": 8080 } } ] }""",
+            "mcpServers[0].env.PORT");
+    }
+
+    /// <summary>
     ///     A manifest the host cannot read is refused, and the reason names the
     ///     thing that was wrong.
     /// </summary>

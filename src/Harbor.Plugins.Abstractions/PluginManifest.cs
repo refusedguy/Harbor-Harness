@@ -61,6 +61,14 @@
 //                  it has, their types, their defaults and their ranges
 //                  (#1734). Optional; when absent the plugin has no settings
 //                  of its own.
+//   skills         skills the plugin brings with it, each with a path relative
+//                  to the plugin source (#2229). A plugin can declare a skill
+//                  without asking the user to install it by hand.
+//   hooks          hook files the plugin brings, each with a path and an
+//                  optional event (#2229).
+//   mcpServers     MCP servers the plugin declares it needs, each with a name
+//                  and a command (#2229). A declaration is data; the host owns
+//                  the decision to start the server.
 
 using Harbor.Abstractions.Plugins;
 
@@ -155,6 +163,29 @@ public sealed record PluginManifest
     ///     </para>
     /// </remarks>
     public PluginConfigSchema? Config { get; init; }
+
+    /// <summary>
+    ///     Skills the plugin declares it brings, or <c>null</c> when the
+    ///     manifest makes no such declaration (#2229).
+    /// </summary>
+    /// <remarks>
+    ///     An empty list is a declaration: the plugin says it brings no skills.
+    ///     The paths are relative to the plugin's source file.
+    /// </remarks>
+    public IReadOnlyList<PluginSkillDeclaration>? Skills { get; init; }
+
+    /// <summary>
+    ///     Hook files the plugin declares it brings, or <c>null</c> when the
+    ///     manifest makes no such declaration (#2229).
+    /// </summary>
+    public IReadOnlyList<PluginHookDeclaration>? Hooks { get; init; }
+
+    /// <summary>
+    ///     MCP servers the plugin declares it needs, or <c>null</c> when the
+    ///     manifest makes no such declaration (#2229). The host decides whether
+    ///     and when to start a declared server; the manifest only describes it.
+    /// </summary>
+    public IReadOnlyList<PluginMcpServerDeclaration>? McpServers { get; init; }
 
     /// <summary>
     ///     The SHA-256 of the manifest file's raw bytes, as lowercase hex.
