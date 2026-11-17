@@ -22,6 +22,14 @@ public sealed class InlineAgentStreamBridge : IDisposable
     private readonly ComposerController _composer;
     private StreamBlock? _stream;
 
+    /// <summary>
+    ///     #2358: the bus handle is owned by this bridge through the same
+    ///     <see cref="EventSubscription"/> primitive the alt-screen bridge uses.
+    ///     It lives exactly as long as the bridge and is released on Dispose,
+    ///     so tearing down the inline view cannot leave a live handler behind.
+    /// </summary>
+    private readonly EventSubscription _subscription;
+
     public InlineAgentStreamBridge(
         IEventBus bus,
         AnsiWriter writer,
@@ -32,7 +40,8 @@ public sealed class InlineAgentStreamBridge : IDisposable
         _writer = writer;
         _session = session;
         _composer = composer;
-        Subscription = bus.Subscribe(HandleEvent);
+        _subscription = new EventSubscription(bus, HandleEvent);
+        Subscription = _subscription.Subscription;
     }
 
     private readonly AnsiWriter _writer;
@@ -225,5 +234,5 @@ public sealed class InlineAgentStreamBridge : IDisposable
         _session.WriteFinalizedBlock(text, Width, new EngineCells.CellStyle(attrs: (EngineCells.StyleAttr)attrs));
     }
 
-    public void Dispose() => Subscription.Dispose();
+    public void Dispose() => _subscription.Dispose();
 }
