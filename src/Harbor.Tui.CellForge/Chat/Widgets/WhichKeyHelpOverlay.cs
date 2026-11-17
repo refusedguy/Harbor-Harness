@@ -1,5 +1,9 @@
 using CSharpFunctionalExtensions;
 using Harbor.Ui.Framework.Panels;
+// Alias, not a namespace import: the engine Input namespace and the Rendering
+// Input namespace both declare IsCommandModifier(ConsoleModifiers), and this
+// file's legacy HandleKey calls it on ConsoleKeyInfo.Modifiers (#833).
+using KeyLegendInput = Harbor.Tui.CellForge.Input;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -57,6 +61,11 @@ public sealed class WhichKeyHelpOverlay
     // byte-identical until the host supplies them.
     private readonly List<LeaderEntry> _leader = new();
     private char? _pendingChord;
+
+    // #2325: the hotkey rows and the dismiss hint can come from the bindings
+    // registry instead of HelpKeymap's curated strings. Null keeps the legacy
+    // rendering byte-identical for hosts that have not supplied a legend.
+    private Maybe<KeyLegendInput.KeyLegend> _legend;
 
     /// <summary>
     ///     The single authority on "did the host show this overlay?". The layer's
@@ -143,6 +152,19 @@ public sealed class WhichKeyHelpOverlay
 
     /// <summary>Grouped leader rows mirrored from the host (empty until <see cref="SetLeaderBindings"/>).</summary>
     public IReadOnlyList<LeaderEntry> LeaderBindings => _leader;
+
+    /// <summary>
+    /// Supplies the registry-derived legend (#2325): its rows replace the
+    /// hardcoded <see cref="HelpKeymap"/> hotkey table and its <c>Hint</c>
+    /// replaces the "Press ? to close." footer.
+    /// Null restores the legacy rendering. The overlay only renders the data —
+    /// the '?' key is still gated here by <see cref="HandleKey"/>, the site
+    /// declared in KeyGateFamilyRules (#833), so no new gate site is added.
+    /// </summary>
+    public void SetLegend(KeyLegendInput.KeyLegend? legend) => _legend = Maybe.From(legend);
+
+    /// <summary>The registry-derived legend in use; None on the legacy path (#592).</summary>
+    public Maybe<KeyLegendInput.KeyLegend> Legend => _legend;
 
     /// <summary>
     /// Stages the in-flight chord for the pending preview (the router is
@@ -315,13 +337,25 @@ public sealed class WhichKeyHelpOverlay
 
     internal List<string> BuildLines(int innerWidth)
     {
-        var lines = new List<string>(HelpKeymap.Rows.Count + 8);
+        var lines = new List<string>((_legend.HasValue ? _legend.Value.Rows.Count : HelpKeymap.Rows.Count) + 8);
         lines.Add("Which-key — hotkeys");
         lines.Add(new string('─', Math.Clamp(innerWidth == int.MaxValue ? 48 : innerWidth, 8, 48)));
         lines.Add("Hotkeys");
-        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        if (_legend.HasValue)
         {
-            lines.Add($"  {hotkey.Key,-12} {hotkey.Description}");
+            // #2325: rows come from the bindings registry, so a rebind or a
+            // hidden binding changes this table without editing this file.
+            foreach (KeyLegendInput.KeyLegendRow row in _legend.Value.Rows)
+            {
+                lines.Add($"  {row.Key,-12} {row.Description}");
+            }
+        }
+        else
+        {
+            foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+            {
+                lines.Add($"  {hotkey.Key,-12} {hotkey.Description}");
+            }
         }
 
         // Read through Context, not the backing field: the render path and the public
@@ -372,8 +406,20 @@ public sealed class WhichKeyHelpOverlay
             lines.Add($"  pending ctrl+x {_pendingChord.Value} …");
         }
 
-        lines.Add(string.Empty);
-        lines.Add("Press ? to close.");
+        if (_legend.HasNoValue)
+        {
+            // Legacy path: unchanged so goldens and no-legend hosts stay exact.
+            lines.Add(string.Empty);
+            lines.Add("Press ? to close.");
+        }
+        else if (_legend.Value.Hint.Length > 0)
+        {
+            // Registry-derived footer. The key AND the label come from the
+            // help binding; an unbound help action prints no footer at all
+            // rather than inventing one here.
+            lines.Add(string.Empty);
+            lines.Add(_legend.Value.Hint);
+        }
 
         if (innerWidth != int.MaxValue)
         {
