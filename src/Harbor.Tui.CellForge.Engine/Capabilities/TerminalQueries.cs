@@ -86,4 +86,16 @@ public static class TerminalQueries
     /// p=? BEL (answer: OSC 99 ; i=… : p=&lt;payload types&gt; …). Terminals
     /// without the protocol ignore the query silently — no timeout harm.</summary>
     public const string Osc99NotifyProbe = "\u001B]99;i=harbor:p=?\u0007";
+
+    // ── Inline-graphics probes (issue #2222) ───────────────────────────────
+
+    /// <summary>kitty graphics support query: <c>ESC _ G i=31,s=1,v=1,a=q,t=d,
+    /// f=24;AAAA ESC \</c>. A supporting terminal answers with an APC string
+    /// containing «OK»; terminals without the protocol ignore it silently.</summary>
+    public const string KittyGraphicsProbe = "\u001B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\u001B\\";
+
+    /// <summary>Sixel support query: secondary device attributes
+    /// <c>CSI &gt; c</c> (answer <c>CSI &gt; Ps ; … c</c> with a first parameter
+    /// of 1 or higher when Sixel is available).</summary>
+    public const string SixelProbe = "\u001B[>c";
 }

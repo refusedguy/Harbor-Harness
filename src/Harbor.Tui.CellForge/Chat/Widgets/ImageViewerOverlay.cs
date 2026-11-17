@@ -151,6 +151,14 @@ public sealed class ImageViewerOverlay
         }
     }
 
+    /// <summary>
+    /// Graphics z-index for the modal image (issue #2222): the feed's inline
+    /// pictures use z=0, so the fullscreen viewer composites above them.
+    /// Declared here, after the normative line citations in the test suite,
+    /// so it cannot shift a cited line number.
+    /// </summary>
+    public const int OverlayZIndex = 1;
+
     private void SetZoom(int zoom) => _zoom = Math.Clamp(zoom, MinZoom, MaxZoom);
 
     /// <summary>
@@ -275,13 +283,13 @@ public sealed class ImageViewerOverlay
             return false;
         }
 
-        byte[]? payload = block.EncodedPayload(sink, target.Width, target.Height);
+        byte[]? payload = block.EncodedPayload(sink, target.Width, target.Height, OverlayZIndex);
         if (payload is null)
         {
             return false;
         }
 
-        sink.Place(target, payload);
+        sink.Place(target, payload, OverlayZIndex);
         return true;
     }
 
