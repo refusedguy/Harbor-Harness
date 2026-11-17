@@ -304,11 +304,10 @@ internal static class ToolsCatalog
             // #2227: every tool a configured server advertises on tools/list becomes
             // a real ITool before Freeze(), with the safety profile the adapter
             // declares and an exact permission grant on every registered agent.
-            // This is a composition step, not a new plugin axis: the sync bridge
-            // matches this class's synchronous build contract (cf. ConfigurationModule).
+            // The composition root is synchronous (cf. ConfigurationModule's eager
+            // loads); the wait happens before any UI synchronization context exists.
             int discovered = McpToolDiscovery.RegisterAsync(
-                mcpRegistry, registry, agentRegistry, ctx.LoggerFactory, ctx.Logger)
-                .GetAwaiter().GetResult();
+                mcpRegistry, registry, agentRegistry, ctx.LoggerFactory, ctx.Logger).Result;
             if (discovered > 0)
                 ToolsCatalogLog.McpToolsRegistered(ctx.Logger, discovered);
         }
