@@ -164,17 +164,6 @@ public class PluginHostJsonRpcTests
     }
 
     [Test]
-    public async Task ToolsList_InvalidCursor_ReturnsInvalidParams()
-    {
-        var server = CreateServer(CreateLoadHost());
-        using var doc = await CallAsync(
-            server,
-            """{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"cursor":"not-a-number"}}""");
-        await Assert.That(doc.RootElement.GetProperty("error").GetProperty("code").GetInt32())
-            .IsEqualTo(-32602);
-    }
-
-    [Test]
     public async Task ToolsList_AdvertisesOutputSchema()
     {
         var loadHost = CreateLoadHost();
@@ -268,25 +257,17 @@ public class PluginHostJsonRpcTests
             .IsEqualTo("echo:hi");
     }
 
+    // #1808 (partial): the three invalid-params shapes share one body. Keeping
+    // the wire shape as data preserves every case and removes the copied
+    // assertion block the duplicate-test-body gate reports.
     [Test]
-    public async Task ToolsCall_UnknownTool_ReturnsInvalidParams()
+    [Arguments("""{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"cursor":"not-a-number"}}""")]
+    [Arguments("""{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"nope"}}""")]
+    [Arguments("""{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{}}""")]
+    public async Task InvalidRequests_ReturnInvalidParams(string request)
     {
         var server = CreateServer(CreateLoadHost());
-        using var doc = await CallAsync(
-            server,
-            """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"nope"}}""");
-
-        await Assert.That(doc.RootElement.GetProperty("error").GetProperty("code").GetInt32())
-            .IsEqualTo(-32602);
-    }
-
-    [Test]
-    public async Task ToolsCall_MissingName_ReturnsInvalidParams()
-    {
-        var server = CreateServer(CreateLoadHost());
-        using var doc = await CallAsync(
-            server,
-            """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{}}""");
+        using var doc = await CallAsync(server, request);
 
         await Assert.That(doc.RootElement.GetProperty("error").GetProperty("code").GetInt32())
             .IsEqualTo(-32602);
