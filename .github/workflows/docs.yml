@@ -750,28 +750,24 @@ jobs:
       - name: Contract-domain census fails on a moved snapshot
         run: tools/bin/harbor-gates-linux-x64 contract-domains --self-test
 
-      - name: Compiled-tree gate fails on a cached project that was skipped
-        run: tools/bin/harbor-gates-linux-x64 check-compiled-tree --self-test
       # #2191. The ruleset gate's failure path: a ruleset that requires a
       # status-check name no workflow job publishes. Every pull request into
       # that branch is blocked with no job able to satisfy the rule, and
       # nothing in CI says why. The self-test plants exactly that rule.
+      - name: Compiled-tree gate fails on a cached project that was skipped
+        run: tools/bin/harbor-gates-linux-x64 check-compiled-tree --self-test
+
       - name: Ruleset gate fails on a check with no job
         run: tools/bin/harbor-gates-linux-x64 check-ruleset-checks --self-test
 
-  # #2191. A branch-protection ruleset can require a status check whose name
-  # no workflow job publishes, and GitHub never says so: the rule simply
-  # waits for a check that never arrives, so EVERY pull request into the
-  # branch is blocked forever and nothing in the tree explains it. It
-  # happened with #2159: two jobs were removed while the ruleset still
-  # required their names, and the rule had to be repaired through the API
-  # after the merge. This gate reads the rulesets and the workflow files and
-  # fails when a required context has no job able to publish it. It lives in
-  # the documentation lane, which starts on every pull request.
-  #
-  # The floors are the number of ruleset files and of required-check entries
-  # the tree holds (2 and 16): a scan that matched fewer cannot say the tree
-  # is clean.
+      # #2205. The gate that keeps THIS step list generated from its
+      # source has to be able to fail: its self-test plants a desync in
+      # the list and asserts the gate names it, then asserts the clean
+      # tree passes. Without it a checker edited until it matches
+      # anything would be green without checking anything.
+      - name: Self-test-list gate fails on a desynced step list
+        run: python3 tools/ci-selftests.py --self-test
+      # END GENERATED SELFTEST STEPS
   rulesetchecks:
     name: ruleset checks
     runs-on: ubuntu-latest
@@ -783,14 +779,35 @@ jobs:
       - name: Every required status check has a workflow job
         run: tools/bin/harbor-gates-linux-x64 check-ruleset-checks --min-rulesets 2 --min-checks 16
 
-      # #2205. The gate that keeps THIS step list generated from its
-      # source has to be able to fail: its self-test plants a desync in
-      # the list and asserts the gate names it, then asserts the clean
-      # tree passes. Without it a checker edited until it matches
-      # anything would be green without checking anything.
-      - name: Self-test-list gate fails on a desynced step list
-        run: python3 tools/ci-selftests.py --self-test
-      # END GENERATED SELFTEST STEPS
+  # The tree gates, in ONE command.
+  #
+  # Every gate of this repository that needs nothing but the tree — no
+  # build, no SDK, no network — is one subcommand of the compiled binary,
+  # and this job runs all of them: `harbor-gates all` starts the ones that
+  # are compiled, in parallel, and prints ONE table (gate, exit code, time,
+  # first line of the output). The list of the tree gates is in
+  # tools/gates/all/gates.go, and it is checked against the workflows, so a
+  # gate that needs what the build produces cannot be in it.
+  #
+  # The gates of the list that are still PYTHON are not run by this job:
+  # the binary must not need python. They keep a job of their own below,
+  # and the local runner (tools/check-local.sh) runs them with the same
+  # list and the same flags.
+  #
+  # The per-gate jobs of the COMPILED tree gates are gone (the `contract`,
+  # `facts`, `xmldoc` and `seamgraph` jobs), and the table in
+  # docs/CI_GATES.md says so: for every gate of the list this job runs, the
+  # table names THIS job and the floors the runner passes it. The policy
+  # checker (tools/check-gate-policy.py) reads the list of the runner and
+  # knows that a workflow which calls `harbor-gates all` runs the gates of
+  # that list, so the record of which job owns which gate survives the
+  # consolidation — and the floors survive it too, because the list carries
+  # them and the checker fails when the runner passes a gate FEWER floors
+  # than its own job passed.
+  #
+  # This job is also the one command a developer can run on their own
+  # machine: tools/check-local.sh runs it and the gates that are still
+  # python.
   tree:
     name: tree gates
     runs-on: ubuntu-latest
@@ -1720,7 +1737,7 @@ jobs:
       # is not the one it polices, for the same reason as the two above: a
       # check inside docs.yml disappears when docs.yml is broken.
       - name: The self-test step list still matches its source
-        run: python3 tools/ci-selftests.py --min-steps 47
+        run: python3 tools/ci-selftests.py --min-steps 48
       # #2205. The arm64/x64 report twins in ci.yml now come from one
       # composite action. This gate holds the two properties that made the
       # old pair dangerous: each report has ONE caller keeping both literal
