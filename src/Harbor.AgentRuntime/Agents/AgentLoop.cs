@@ -74,6 +74,9 @@ public sealed class AgentLoop : IAgentLoop
     private readonly TimeProvider _clock;
     private readonly TimeSpan? _runTimeout;
     private readonly UserHookGates _hookGates;
+    // #2212: whether a windowed loop ends the run. Default false -> advisory
+    // only, no new event and no change to any shipped scenario.
+    private readonly bool _hardStopOnLoop;
 
     /// <summary>
     ///     The goal round driver (#1761). It reserves a goal's next round at
@@ -160,7 +163,11 @@ public sealed class AgentLoop : IAgentLoop
         // store that has no goal axis) keeps the run free of goals: the
         // round driver is then inert and the loop behaves exactly as it
         // did before the goal existed.
-        ISessionStore? sessionStore = null)
+        ISessionStore? sessionStore = null,
+        // #2212: opt-in hard stop for windowed loop detection. Off by default:
+        // hosts that do not pass it keep the advisory RepeatToolGuard and the
+        // exact pre-#2212 run behaviour. Forwarded to the turn runner.
+        bool hardStopOnLoop = false)
     {
         _providers = providers;
         _tools = tools;
@@ -180,6 +187,7 @@ public sealed class AgentLoop : IAgentLoop
         _tracer = tracer ?? NullTracer.Instance;
         _clock = timeProvider ?? TimeProvider.System;
         _runTimeout = runTimeout;
+        _hardStopOnLoop = hardStopOnLoop;
         _hookGates = new UserHookGates(hookRunner, logger);
         // ROP-C П.5: the dispatcher is injected via DI when composed by the host,
         // while tests and benchmarks fall back to a locally built one. That
@@ -218,7 +226,7 @@ public sealed class AgentLoop : IAgentLoop
             providers, tools, _promptBuilder, messageConverter, eventBus, logger,
             _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
             _compactionBehavior, _steering, _backgroundDrain, view,
-            updateFlushPolicy, _clock, skillRegistry, scopedProviders);
+            updateFlushPolicy, _clock, skillRegistry, scopedProviders, _hardStopOnLoop);
         // #1761: the goal axis is a SEPARATE seam from the session store
         // itself — only a durable backend implements it — so the driver is
         // built from the store's goal view, and from nothing at all when the
@@ -357,6 +365,14 @@ public sealed class AgentLoop : IAgentLoop
             RepeatToolGuard? repeatGuard = agent.RepeatToolThreshold > 0
                 ? new RepeatToolGuard(agent.RepeatToolThreshold)
                 : null;
+            // #2212: the windowed loop guard. One instance per RUN for the same
+            // reason as the repeat guard and the budget ledger: its window is
+            // this run's call sequence, never another session's. Null when the
+            // host did not opt into hard stops, so the default path pays no
+            // hashing and publishes no new event.
+            LoopDetectionGuard? loopGuard = _hardStopOnLoop
+                ? new LoopDetectionGuard()
+                : null;
             while (!ct.IsCancellationRequested)
             {
                 // #1024: boundary enforcement for the wall-clock budget. This
@@ -376,7 +392,7 @@ public sealed class AgentLoop : IAgentLoop
                 // [G4]: the whole turn (compaction → prompt → stream → tools →
                 // drains → turn-end event → end-of-run decision) runs inside TurnRunner.
                 TurnStepResult step = await _turnRunner.RunTurnAsync(
-                    session, agent, client, model, turn, truncationFallback, ct, runBudget, repeatGuard).ConfigureAwait(false);
+                    session, agent, client, model, turn, truncationFallback, ct, runBudget, repeatGuard, loopGuard).ConfigureAwait(false);
                 truncationFallback = step.TruncationFallback;
                 if (step.RunFailure is { } runFailure)
                 {
