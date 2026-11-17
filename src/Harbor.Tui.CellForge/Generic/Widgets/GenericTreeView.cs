@@ -468,7 +468,16 @@ public sealed class GenericTreeView
     private bool ToggleAtCursor()
     {
         var node = _visible[CursorIndex].Node;
-        return node.HasChildren && Toggle(node);
+        if (!node.HasChildren)
+        {
+            return false;
+        }
+
+        // Consume the key on both edges of the toggle. Toggle returns the new
+        // expansion state, which is false on collapse, but collapse is still a
+        // handled Enter/Space — the host must not see it as a fall-through.
+        _ = Toggle(node);
+        return true;
     }
 
     private bool ExpandOrDescend()
