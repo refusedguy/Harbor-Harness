@@ -99,7 +99,7 @@ public sealed class GenericNumberInput
     }
 
     /// <summary>Applies one step. Returns false when the value cannot move.</summary>
-    public bool Step(NumberStepAction action)
+    public bool ApplyStep(NumberStepAction action)
     {
         string? next = StepValue(Text, action, Step, Min, Max);
         if (next is null)
@@ -112,10 +112,10 @@ public sealed class GenericNumberInput
     }
 
     /// <summary>Increments by <see cref="Step"/>; false when already at the maximum.</summary>
-    public bool Increment() => Step(NumberStepAction.Increment);
+    public bool Increment() => ApplyStep(NumberStepAction.Increment);
 
     /// <summary>Decrements by <see cref="Step"/>; false when already at the minimum.</summary>
-    public bool Decrement() => Step(NumberStepAction.Decrement);
+    public bool Decrement() => ApplyStep(NumberStepAction.Decrement);
 
     /// <summary>True when a step in <paramref name="action"/> would move the value.</summary>
     public bool CanStep(NumberStepAction action) => StepValue(Text, action, Step, Min, Max) is not null;
