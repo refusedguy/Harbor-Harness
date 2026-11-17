@@ -24,9 +24,10 @@
 // SAME run — so the runner's speed cancels and the budget is a constant in a
 // machine-independent currency.
 //
-// [NotInParallel] — the allocation counter is read inside a synchronous window,
-// and the encoder's scratch buffer is per-thread, so the measurement must not
-// share a thread with another measurement.
+// [NotInParallel] — bare, not keyed: the stopwatch leg measures wall-clock
+// elapsed, and the older JsonlLineEncodeCostGates in this assembly is bare for
+// the same reason. A keyed exclusion would let this gate's 32 KiB windows run
+// alongside it and move its numbers.
 
 using System.Diagnostics;
 using System.Text.Json;
@@ -40,7 +41,7 @@ namespace Harbor.Storage.Jsonl.Tests;
 ///     The JSONL line encoder's cost per record, and the proof that the record
 ///     on disk did not change while the cost did.
 /// </summary>
-[NotInParallel("jsonl-line-encode")]
+[NotInParallel]
 public sealed class JsonlLineEncodeAllocGates
 {
     /// <summary>

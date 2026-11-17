@@ -24,9 +24,11 @@
 // of one unit of the fixed calibration probe measured on the SAME runner in the
 // SAME run — so the runner's speed cancels.
 //
-// [NotInParallel] — the allocation counter is read inside a synchronous window,
-// so only the time leg needs the exclusivity; both legs live in one test, so
-// one attribute covers them.
+// [NotInParallel] — bare, not keyed: the stopwatch leg measures wall-clock
+// elapsed, and a keyed exclusion only holds back classes that share the key.
+// This assembly's other perf gates (ProjectHistoryScalingGates,
+// StorePathScalingGates) are bare for the same reason; a keyed gate of ours
+// ran alongside them and slowed their time leg past budget (#2201).
 
 using System.Diagnostics;
 using Harbor.Ui.Framework.State;
@@ -38,7 +40,7 @@ namespace Harbor.Ui.Framework.Tests;
 ///     The streaming-text flush's cost per delta, and the proof that the
 ///     flushed text did not change while the cost did.
 /// </summary>
-[NotInParallel("streaming-flush-cost")]
+[NotInParallel]
 public sealed class StreamingFlushAllocGates
 {
     /// <summary>
@@ -177,8 +179,8 @@ public sealed class StreamingFlushAllocGates
     public async Task Materialize_KeepsTheChunksInInsertionOrder()
     {
         ChunkedBuffer pending = ChunkedBuffer.Empty
-            .Append("second")
-            .Append("first");
+            .Append("first")
+            .Append("second");
 
         await Assert.That(pending.Materialize()).IsEqualTo("firstsecond");
     }
