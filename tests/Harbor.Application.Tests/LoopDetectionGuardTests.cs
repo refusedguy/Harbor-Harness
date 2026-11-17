@@ -202,15 +202,15 @@ public class LoopDetectionGuardTests
         for (int i = 0; i < paths.Count; i++)
         {
             string id = $"call-{i + 1}";
-            turns[i] =
-            [
+            turns[i] = new LlmEvent[]
+            {
                 TestEvents.ToolCallStart(id: id, toolName: "peek"),
                 TestEvents.ToolCallDelta(id: id, argsDelta: Args(paths[i])),
                 TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
-            ];
+            };
         }
 
-        turns[paths.Count] = [TestEvents.TextDelta(delta: "done"), TestEvents.StepFinish()];
+        turns[paths.Count] = new LlmEvent[] { TestEvents.TextDelta(delta: "done"), TestEvents.StepFinish() };
         return turns;
     }
 
