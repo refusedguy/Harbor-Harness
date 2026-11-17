@@ -40,6 +40,7 @@ public sealed class LoopDetectionGuard
     private readonly Queue<string> _window;
     private readonly Dictionary<string, int> _counts;
 
+    /// <summary>Create a guard with the given window and repeat threshold.</summary>
     /// <param name="windowSize">How many recent calls to consider.</param>
     /// <param name="maxRepeats">The repeat count that trips detection.</param>
     public LoopDetectionGuard(
