@@ -164,7 +164,12 @@ public sealed class SessionForkService
         var copies = new AgentMessage[count];
         for (int i = 0; i < count; i++)
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return above, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             copies[i] = msgsRes.Value[i].CloneForSession(child.Id);
+            #pragma warning restore CFE0001
         }
 
         Result appended = await store.AppendMessagesBatchAsync(child.Id, copies, ct).ConfigureAwait(false);
