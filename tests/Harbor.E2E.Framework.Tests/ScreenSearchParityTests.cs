@@ -83,47 +83,28 @@ public class ScreenSearchParityTests
         "e"
     ];
 
-    /// <summary>
-    ///     The tear-tolerant matcher answers exactly as the old one did.
-    /// </summary>
+    // #1808 (partial): the tear-tolerant and exact parity proofs had the same
+    // body and differed only in the matcher pair they call. The pair is data
+    // now: both cases still execute, and the copied comparison block exists
+    // once, which is what removes the duplicate-test-body finding.
     [Test]
-    public async Task ContainsIgnoringWhitespace_AnswersWhatTheOldSearchAnswered()
+    [Arguments("tear-tolerant")]
+    [Arguments("exact")]
+    public async Task Searches_AnswerWhatTheOldSearchAnswered(string matcher)
     {
+        bool tolerant = matcher == "tear-tolerant";
         var failures = new List<string>();
 
         foreach (string haystack in Haystacks)
         {
             foreach (string needle in Needles)
             {
-                bool expected = ScreenSearchOracle.ContainsIgnoringWhitespace(haystack, needle);
-                bool actual = ScreenSearch.ContainsIgnoringWhitespace(haystack.AsSpan(), needle.AsSpan());
-
-                if (expected != actual)
-                {
-                    failures.Add(
-                        $"haystack [{Escape(haystack)}], needle '{needle}': "
-                        + $"old said {expected}, new said {actual}");
-                }
-            }
-        }
-
-        await Assert.That(failures).IsEmpty().Because(string.Join("; ", failures));
-    }
-
-    /// <summary>
-    ///     The exact matcher answers exactly as the old one did.
-    /// </summary>
-    [Test]
-    public async Task ContainsOrdinal_AnswersWhatTheOldSearchAnswered()
-    {
-        var failures = new List<string>();
-
-        foreach (string haystack in Haystacks)
-        {
-            foreach (string needle in Needles)
-            {
-                bool expected = ScreenSearchOracle.ContainsOrdinal(haystack, needle);
-                bool actual = ScreenSearch.ContainsOrdinal(haystack.AsSpan(), needle.AsSpan());
+                bool expected = tolerant
+                    ? ScreenSearchOracle.ContainsIgnoringWhitespace(haystack, needle)
+                    : ScreenSearchOracle.ContainsOrdinal(haystack, needle);
+                bool actual = tolerant
+                    ? ScreenSearch.ContainsIgnoringWhitespace(haystack.AsSpan(), needle.AsSpan())
+                    : ScreenSearch.ContainsOrdinal(haystack.AsSpan(), needle.AsSpan());
 
                 if (expected != actual)
                 {
