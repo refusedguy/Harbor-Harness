@@ -369,7 +369,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             {
                 host._themeReloadLine = null;
                 host.Bridge.AppendSystemLine(themeLine);
-                host._broadDamageNextFrame = true; // live theme swap re-projects every style
+                host._replStore.DamageAll(); // live theme swap re-projects every style
                 themeChanged = true;
             }
 
@@ -379,13 +379,13 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             {
                 await host.Backend.WriteAsync(Utf8(notifySeq), ct).ConfigureAwait(false);
                 host.Bridge.AppendSystemLine("⏱ ход идёт дольше 30 с — уведомление отправлено");
-                host._broadDamageNextFrame = true;
+                host._replStore.DamageAll();
                 notified = true;
             }
 
             if (host.Pipeline.RefreshUsageIfDirty())
             {
-                host._broadDamageNextFrame = true; // status + sidebar both re-render
+                host._replStore.DamageAll(); // status + sidebar both re-render
                 usageChanged = true;
             }
 

@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Ui.Framework.Rendering;
 namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     Declarative UI-driven side-effect. Renderers never call <c>IAgent</c>
@@ -97,6 +98,32 @@ public sealed class UiStore
 
     /// <summary>The current immutable snapshot. Cheap to read; never mutate.</summary>
     public UiState State => _state;
+
+    // ── Addressable damage (issue #2354) ───────────────────────────────────
+    // Damage rides beside the state, not inside it: a view marks what a
+    // transition touched, the frame thread drains it through DirtyRect into
+    // narrow diff hints. The ledger has its own gate, so Dispatch stays the
+    // lock-free hot path it always was.
+
+    private readonly UiDamageLedger _damage = new();
+
+    /// <summary>Per-frame damage marks (view ids and rects) awaiting resolution.</summary>
+    public UiDamageLedger DamageLedger => _damage;
+
+    /// <summary>Marks one view subgraph dirty for the next frame.</summary>
+    public void Damage(string id) => _damage.Damage(id);
+
+    /// <summary>Marks several view subgraphs dirty for the next frame.</summary>
+    public void Damage(params string[] ids) => _damage.Damage(ids);
+
+    /// <summary>Marks a screen rect dirty for the next frame.</summary>
+    public void Damage(in Rect rect) => _damage.Damage(rect);
+
+    /// <summary>Forces the next frame to a full scan (broad/untrackable damage).</summary>
+    public void DamageAll() => _damage.DamageAll();
+
+    /// <summary>Narrows a pending broad mark to one view subgraph.</summary>
+    public void NarrowDamageTo(string id) => _damage.NarrowTo(id);
 
     /// <summary>
     ///     Raised after every successful <see cref="Dispatch" />.

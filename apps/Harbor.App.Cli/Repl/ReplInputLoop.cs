@@ -96,7 +96,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
     {
         // Any user input can mutate composer, palette, scroll or selection —
         // the next frame takes the conservative full-scan path.
-        host._broadDamageNextFrame = true;
+        host._replStore.DamageAll();
         switch (evt.Kind)
         {
             case InputEventKind.Key:
@@ -305,7 +305,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
     {
         // Key routing can mutate gates, palette, vim state or the composer —
         // the next frame takes the conservative full-scan path.
-        host._broadDamageNextFrame = true;
+        host._replStore.DamageAll();
 
         // Floating terminal pane (issue #1491): while attached it owns input —
         // a full barrier like the image/markup modals. The detach chord is
@@ -389,7 +389,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                     block.FullPath, block.Name, block.PixelWidth, block.PixelHeight,
                     host._replStore.State.Ui.ScrollOffset));
                 host.Screen.SyncMarkup(host._replStore.State.Chat.Markup);
-                host._broadDamageNextFrame = true;
+                host._replStore.DamageAll();
                 host._wake.Writer.TryWrite(null);
                 return;
             }
@@ -493,7 +493,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             && host.Bridge.TryOpenImageViewer(key) is { } imageBlock)
         {
             host.Images.Show(imageBlock, host.ScreenSession.Images);
-            host._broadDamageNextFrame = true;
+            host._replStore.DamageAll();
             host._wake.Writer.TryWrite(null);
             return;
         }
@@ -595,6 +595,10 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 break;
 
             case ComposerAction.Edited:
+                // #2354: a plain composer edit touches only the composer row.
+                // Narrow the conservative input-time broad mark to that one
+                // subgraph so the frame diffs a single row, not the screen.
+                host._replStore.NarrowDamageTo(ChatScreen.ComposerId);
                 break;
 
             case ComposerAction.Ignored when key.Key == KeyCode.PageUp:
