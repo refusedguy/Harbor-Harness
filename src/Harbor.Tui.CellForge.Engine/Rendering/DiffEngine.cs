@@ -36,6 +36,10 @@ public sealed class DiffEngine
     private ScreenBuffer _front;
     private readonly List<Rect> _hints = new(16);
 
+    // #2353: scratch grid for FlushScene. Lazily allocated so engines that
+    // never see a Scene keep the classic path byte-for-byte and allocation-free.
+    private ScreenBuffer? _sceneScratch;
+
     public DiffEngine(int cols, int rows) => _front = new ScreenBuffer(cols, rows);
 
     public DiffEngine(ScreenBuffer front) => _front = front;
@@ -212,6 +216,37 @@ public sealed class DiffEngine
         }
 
         _hints.Clear();
+    }
+
+    /// <summary>
+    /// Replays a display list (<see cref="Scene"/>) onto a reusable scratch
+    /// grid, then ships it through the exact same delta path as
+    /// <see cref="Flush"/>. The scratch is blanked first, so a Scene is a
+    /// complete frame description: cached subtrees contribute their recorded
+    /// ranges via <see cref="Scene.Replay"/> instead of repainting. Geometry
+    /// follows FRONT; the scratch allocates on first use only.
+    /// </summary>
+    public void FlushScene(
+        Scene scene,
+        AnsiWriter writer,
+        HyperlinkTable? links = null,
+        UnderlineColorTable? underlineColors = null)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(writer);
+
+        var scratch = _sceneScratch ??= new ScreenBuffer(_front.Cols, _front.Rows);
+        if (scratch.Cols != _front.Cols || scratch.Rows != _front.Rows)
+        {
+            scratch.Resize(_front.Cols, _front.Rows);
+        }
+        else
+        {
+            scratch.BlankAll();
+        }
+
+        scene.ReplayTo(scratch);
+        Flush(scratch, writer, links, underlineColors);
     }
 
     /// <summary>
