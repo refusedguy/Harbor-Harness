@@ -225,12 +225,7 @@ public sealed class FlexSplitNode : ContainerNode
     /// </summary>
     public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        for (int i = 0; i < _children.Count; i++)
-        {
-            _ = _children[i].Prepaint(context, id.Child(i));
-        }
-
+        PrepaintForward.Indexed(context, id, _children);
         return PrepaintRecord.Empty;
     }
 

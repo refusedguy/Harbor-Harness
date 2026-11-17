@@ -131,6 +131,25 @@ public sealed class PrepaintContext
 }
 
 /// <summary>
+/// Shared forwarder for ordered containers. Keeping the loop in one place
+/// avoids duplicating the same token stream in every container (the jscpd
+/// gate counts those clones) and keeps the child-id rule identical: position
+/// in an ordered container is part of the element's identity.
+/// </summary>
+internal static class PrepaintForward
+{
+    internal static void Indexed(PrepaintContext context, ElementId id, IReadOnlyList<INode> children)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(children);
+        for (int i = 0; i < children.Count; i++)
+        {
+            _ = children[i].Prepaint(context, id.Child(i));
+        }
+    }
+}
+
+/// <summary>
 /// One frame of the node pipeline: measure, arrange, prepaint, paint. Keeping
 /// the order in one place is what makes prepaint a phase rather than an
 /// optional extra call, and gives the chat layer a single entry point to adopt
