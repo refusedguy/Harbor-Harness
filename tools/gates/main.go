@@ -60,6 +60,7 @@ import (
 	checknotestsdk "harbor.local/gates/check-no-test-sdk"
 	checkpublicapiresign "harbor.local/gates/check-public-api-resign"
 	checkreferencetrimmer "harbor.local/gates/check-reference-trimmer"
+	checkrulesetchecks "harbor.local/gates/check-ruleset-checks"
 	shardbalance "harbor.local/gates/check-shard-balance"
 	testdup "harbor.local/gates/check-test-dup"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
@@ -198,6 +199,11 @@ var registry = []registered{
 		name:    "check-reference-trimmer",
 		summary: "does any project in the tree reference a package the compiler never uses",
 		run:     checkreferencetrimmer.Run,
+	},
+	{
+		name:    "check-ruleset-checks",
+		summary: "every required status check in a ruleset has a workflow job able to publish it",
+		run:     checkrulesetchecks.Run,
 	},
 	{
 		name:    "check-shard-balance",
