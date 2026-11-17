@@ -296,6 +296,10 @@ public class KeyGateFamilyRules
         // A rune reaches the buffer via Insert; AcceptsTypedChar admits Shift
         // (capitals) and refuses Ctrl/Alt/Meta chords — the buffer gate.
         new("GenericTextField", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/GenericTextField.cs"),
+        // CopyMode (#2322): the v/V copy primitive. It holds no text buffer,
+        // but V is a bound shifted rune, so its gate is the buffer one —
+        // refuse Ctrl/Alt/Meta and admit Shift, exactly like DiffViewerOverlay's G.
+        new("CopyMode", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/CopyMode.cs"),
         // ListPromptEngine (#1215, epic #1195): the Spectre List-prompt port
         // behind the palette/file-picker query lists. Char keys extend the
         // search text through AcceptsTypedChar (admits Shift, refuses
