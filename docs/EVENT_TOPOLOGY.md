@@ -61,7 +61,7 @@ subscribers (all in-process, each owns its IDisposable — see §6)
   InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
   CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:177
   TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:238
-  CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18 + InlineAgentStreamBridge.cs:35
+  CellForge bridges (one owned handle) ...... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:26
   Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
   DemoCellForgeScreen (demo scene) .......... apps/Harbor.App.Cli/Demo/DemoCellForgeScreen.cs:278
   TurnChangeOracle (turn summary) ........... src/Harbor.Application/Observability/TurnChangeOracle.cs:133,134,135,136

@@ -10,13 +10,13 @@ using Harbor.TestKit;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-///     Issue #2358 — subscription lifetime belongs to the owner. Every renderer
+///     Issue #2358: subscription lifetime belongs to the owner. Every renderer
 ///     bus subscription is held through <see cref="EventSubscription"/> in a
 ///     field of its bridge and is released when that bridge is disposed, so a
 ///     torn-down screen cannot leave a live handler receiving events.
 ///     <para>
 ///         The behavioural tests below publish on a real <see cref="FakeEventBus"/>
-///         and assert the handler stops observing events after Dispose — that is
+///         and assert the handler stops observing events after Dispose. That is
 ///         the leak/removal proof, not a proxy such as a disposed flag. The two
 ///         source guards pin the shape that makes the property hold: no
 ///         fire-and-forget async in the stream bridges, and no second ownership

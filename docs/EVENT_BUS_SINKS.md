@@ -93,8 +93,8 @@ recorded, because they answer #44's topology question.
 | `src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106,107` | mandatory | tool-error and agent-error records must exist for `/diagnostics` |
 | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129` | mandatory | remote/daemon clients and reconnect replay (own 1000-envelope ring) |
 | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104` | mandatory | in-process client stream |
-| `src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18` | mandatory | CellForge renderer |
-| `src/Harbor.Tui.CellForge/Chat/Streaming/InlineAgentStreamBridge.cs:35` | mandatory | inline agent stream renderer |
+| `src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:26` | mandatory | CellForge renderer (alt-screen bridge). #2358: one owned handle, disposed with its bridge |
+| `src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:26` | mandatory | inline agent stream renderer. Same owned primitive, disposed with its bridge |
 | `apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474` | mandatory | REPL renderer, live for the session |
 | `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:177` | mandatory | CellForge REPL event pump (`_events` channel → render loop) |
 | `apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61` | mandatory | Avalonia UI state router |
