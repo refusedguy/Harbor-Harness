@@ -396,6 +396,10 @@ public class KeyGateFamilyRules
         // the Char gate is the buffer one (refuse Ctrl/Alt/Meta, admit Shift's
         // J/K), the same family as the other navigable cell panels above.
         new("CellForgePrCommentCardsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgePrCommentCardsPanel.cs"),
+        // #1483: p/r/d/s commands plus an inline rename buffer and local filter;
+        // the Char gate is the buffer one (refuse Ctrl/Alt, admit Shift), same
+        // family as the other keyed cell panels above.
+        new("CellForgeSessionSidebarPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeSessionSidebarPanel.cs"),
     ];
 
     /// <summary>
