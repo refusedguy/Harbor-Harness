@@ -32,6 +32,14 @@ internal sealed record TurnStepResult(
     bool Quiescent = false);
 
 /// <summary>
+///     The tool results of one turn plus the windowed loop the execution
+///     observed, if any (#2212). The loop is a separate fact: it is detected
+///     during execution but acted on only after the turn has closed, so the
+///     transcript stays paired before the run ends.
+/// </summary>
+internal sealed record ToolExecutionOutcome(ToolResultMessage Results, LoopDetection? Loop);
+
+/// <summary>
 ///     Per-turn execution extracted from <see cref="AgentLoop" /> ([G4]):
 ///     provider/model resolution, prompt + request assembly, retried LLM
 ///     streaming, tool execution, compaction hook, background/steering drains,
@@ -82,8 +90,14 @@ internal sealed class TurnRunner(
     // direct-construction caller keeps compiling unchanged; null keeps the
     // process-wide provider registry, which is what the product resolved
     // before scopes existed.
-    IScopedProviderResolver? scopedProviders = null)
+    IScopedProviderResolver? scopedProviders = null,
+    // #2212: hard-stop windowed loop detection. Off by default: the shipped
+    // advisory RepeatToolGuard keeps its behaviour and no new event is
+    // published until a host opts in. The loop owns the guard per run.
+    bool hardStopOnLoop = false)
 {
+    private readonly bool _hardStopOnLoop = hardStopOnLoop;
+
     // #1735: the registry the model-facing catalog comes from. Null keeps the
     // pre-registry behaviour (every discovered skill is offered), which is
     // what a directly-constructed runner gets.
@@ -229,7 +243,10 @@ internal sealed class TurnRunner(
         // #1756: the repeat guard. Per-run state (the loop owns one instance
         // per run), handed down so the turn can count the calls it executed.
         // Null keeps the guard-free path.
-        RepeatToolGuard? repeatGuard = null)
+        RepeatToolGuard? repeatGuard = null,
+        // #2212: the windowed loop guard. Per-run state, handed down exactly
+        // like the repeat guard above. Null keeps the pre-#2212 path.
+        LoopDetectionGuard? loopGuard = null)
     {
         TurnRunnerLog.TurnStart(logger, turn, agent.Name.Value, agent.Model);
         // #1103: the turn boundary is a fact, not work — it rides None so a
@@ -563,8 +580,9 @@ internal sealed class TurnRunner(
         bool runEndsAfterExecution = stopReason is StopReason.Stop or StopReason.Length;
 
         // 8. Execute tool calls (+ synthesize error results for malformed ones)
-        var toolResults = await ExecuteTurnToolCallsAsync(
-            toolCalls, malformedCalls, session, partial, agent, ct, repeatGuard).ConfigureAwait(false);
+        ToolExecutionOutcome execution = await ExecuteTurnToolCallsAsync(
+            toolCalls, malformedCalls, session, partial, agent, ct, repeatGuard, loopGuard).ConfigureAwait(false);
+        ToolResultMessage toolResults = execution.Results;
 
         // Persist the tool results so the next turn can feed them back
         // to the model (OpenAI requires a `tool` role message after a
@@ -587,6 +605,20 @@ internal sealed class TurnRunner(
         TurnRunnerLog.TurnEndWithResults(logger, turn);
         await eventBus.PublishAsync(
             new TurnEndEvent(partial, new[] { toolResults }, session.Session.Id), ct).ConfigureAwait(false);
+
+        // #2212: HARD STOP for a windowed loop, but only when the host opted in.
+        // The turn is already closed and persisted (paired transcript, turn-end
+        // event), so ending here leaves no unanswered call behind. The reason
+        // rides the existing event bus as AgentErrorEvent — every TUI already
+        // renders that event, so no new union member or projector case is
+        // needed. Published with None: a stop is a terminal fact, not a cancel.
+        if (_hardStopOnLoop && execution.Loop is { } loop)
+        {
+            TurnRunnerLog.LoopDetected(logger, loop.ToolName, loop.Repeats, loop.WindowSize);
+            await eventBus.PublishAsync(
+                new AgentErrorEvent(loop.Reason), CancellationToken.None).ConfigureAwait(false);
+            return new TurnStepResult(truncationFallback, EndRun: true);
+        }
 
         // 9. Boundary steering drain — kept for runs that reach max
         // steps or a terminal stop reason right after execution; on
@@ -966,16 +998,18 @@ internal sealed class TurnRunner(
     ///     of a silent success. This method adds no second marking; it counts
     ///     them for the log so the boundary is visible at runtime too.
     /// </remarks>
-    private async Task<ToolResultMessage> ExecuteTurnToolCallsAsync(
+    private async Task<ToolExecutionOutcome> ExecuteTurnToolCallsAsync(
         List<ToolCallPart> toolCalls,
         List<MalformedToolCall> malformedCalls,
         ISessionContext session,
         AssistantMessage partial,
         AgentDefinition agent,
         CancellationToken ct,
-        RepeatToolGuard? repeatGuard)
+        RepeatToolGuard? repeatGuard,
+        LoopDetectionGuard? loopGuard)
     {
         var results = new List<ToolResultEntry>(toolCalls.Count + malformedCalls.Count);
+        LoopDetection? loop = null;
 
         // #1756: the repeat guard sees the history BEFORE the calls are
         // counted. A user message that joined the history ends the chain:
@@ -991,6 +1025,24 @@ internal sealed class TurnRunner(
                     ? TimeSpan.FromSeconds(seconds)
                     : null).ConfigureAwait(false);
             results.AddRange(executed.Results);
+
+            // #2212: windowed loop detection, BEFORE the advisory reminder is
+            // prepended below. The reminder's text changes with the chain count,
+            // and the signature must key on the tool's own output — otherwise
+            // a repeated call would look different every time it was nudged.
+            if (loopGuard is not null)
+            {
+                for (int i = 0; i < toolCalls.Count && i < results.Count; i++)
+                {
+                    Maybe<LoopDetection> detection = loopGuard.Observe(
+                        toolCalls[i].ToolName, toolCalls[i].Args, results[i].Output);
+                    if (detection.HasValue)
+                    {
+                        loop = detection.Value;
+                        break;
+                    }
+                }
+            }
 
             // #1756: count the calls in the order the MODEL wrote them — the
             // dispatcher's own order is not the model's when the batch runs in
@@ -1057,11 +1109,13 @@ internal sealed class TurnRunner(
             TurnRunnerLog.TurnCarriedAbandoned(logger, abandoned);
         }
 
-        return new ToolResultMessage(
-            Guid.NewGuid().ToString("N"),
-            session.Session.Id,
-            DateTimeOffset.UtcNow,
-            results);
+        return new ToolExecutionOutcome(
+            new ToolResultMessage(
+                Guid.NewGuid().ToString("N"),
+                session.Session.Id,
+                DateTimeOffset.UtcNow,
+                results),
+            loop);
     }
 
     /// <summary>
@@ -1319,5 +1373,11 @@ internal static partial class TurnRunnerLog
     // takes the next free id.
     [LoggerMessage(EventId = 19, Level = LogLevel.Error, Message = "Durability checkpoint failed for session {SessionId}; the model request was not dispatched: {Error}")]
     public static partial void DurabilityCheckpointFailed(ILogger logger, string sessionId, string error);
+
+    // #2212: 19 is taken by the durability checkpoint; the loop stop takes the
+    // next free id rather than reusing one (two messages sharing an id in one
+    // class is one event stream wearing two names).
+    [LoggerMessage(EventId = 20, Level = LogLevel.Warning, Message = "Loop detected: tool {ToolName} repeated {Repeats} times within the last {WindowSize} calls; ending the run")]
+    public static partial void LoopDetected(ILogger logger, string toolName, int repeats, int windowSize);
 
 }

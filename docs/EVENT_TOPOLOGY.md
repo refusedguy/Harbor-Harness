@@ -33,11 +33,11 @@ snapshot of subscribers in the publisher's own call stack**.
 
 ```
 producers (await PublishAsync directly)
-  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:305,389,442,456,471,482
+  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:313,405,458,472,487,498
   ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,915,1035
   CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:199,235,528
   SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:214
-  TurnRunner .................... src/Harbor.AgentRuntime/Agents/TurnRunner.cs:239,336,433,440,445,459,504,533,588,668,789,846,882,1148
+  TurnRunner .................... src/Harbor.AgentRuntime/Agents/TurnRunner.cs:256,353,450,457,462,476,521,550,606,618,700,821,878,914,1202
   ToolRetryPolicy ............... src/Harbor.AgentRuntime/Agents/ToolRetryPolicy.cs:131,215,262,287,307,329
   UpdateCoalescer ............... src/Harbor.AgentRuntime/Agents/UpdateCoalescer.cs:238
   DefaultSessionContext ......... src/Harbor.AgentRuntime/Agents/DefaultSessionContext.cs:253
@@ -377,11 +377,11 @@ is the subscriber's business, and the live branches are:
    `CancelOnTurnStartBus`, `ThrowingUpdateBus`, `FakeEventBus`,
    `RecordingEventBus`, `BenchEventBus`); `contrib/` has **zero** call sites,
    which is also why an interface change there would have gone unverified, CI
-   does not compile it. Of the 392 sites, 361 are awaited, 26 hand the `Task`
+   does not compile it. Of the 393 sites, 362 are awaited, 26 hand the `Task`
    to a caller that awaits it (25 of them in `tests/`, and one product site,
-   `src/Harbor.AgentRuntime/Agents/TurnRunner.cs:882`, an expression-bodied
+   `src/Harbor.AgentRuntime/Agents/TurnRunner.cs:914`, an expression-bodied
    helper whose callers all await), and 5 are sync-waited in the benchmarks. All
-   39 product sites await exactly once, so the `Task`→`ValueTask` single-await
+   40 product sites await exactly once, so the `Task`→`ValueTask` single-await
    hazard would not have broken anything today, and would still be a hazard,
    silently, at the seam 39 call sites would be re-pointed at.
 
