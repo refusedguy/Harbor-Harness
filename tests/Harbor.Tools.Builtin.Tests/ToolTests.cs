@@ -301,6 +301,19 @@ public class GrepToolTests
             Directory.Delete(tempDir, true);
         }
     }
+
+    [Test]
+    public async Task GrepTool_UsesPooledBuilder_RelativeGate()
+    {
+        // #1097 (relative gate, one site): GrepTool.cs must build its result
+        // text from StringBuilderPool, zero `new StringBuilder` in this file.
+        // Scoped to this file on purpose: other cold-path builders remain
+        // separate #1097 slices rather than one absolute tree ban.
+        string path = RepoPaths.FindFile(Path.Combine("src", "Harbor.Tools.Builtin", "Tools", "Grep", "GrepTool.cs"));
+        string source = await File.ReadAllTextAsync(path);
+        await Assert.That(source.Contains("StringBuilderPool.Rent")).IsTrue();
+        await Assert.That(source.Contains("new StringBuilder")).IsFalse();
+    }
 }
 
 public class BashToolTests
