@@ -353,8 +353,12 @@ public class BaseTuiRendererBuiltinViewTests
         var renderer = new TestTuiRenderer();
         await renderer.InitializeAsync();
 
-        // Feed a tool end event that adds a diff.
-        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false);
+        // Feed a tool end event that declares a file change, so the diff
+        // preview records it (#1100: the flag, not the output text, decides).
+        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false)
+        {
+            Effect = ToolResultEffect.FileChange
+        };
         await renderer.RenderAsync(TestEvents.ToolExecutionEnd(result: result));
 
         var ctx = (CaptureRenderContext)renderer.Context;
