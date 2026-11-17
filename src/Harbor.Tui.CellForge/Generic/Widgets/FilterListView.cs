@@ -37,11 +37,7 @@ public static class FilterListView
         int rows = Math.Min(listRect.Height, list.Count);
         int textWidth = Math.Max(0, listRect.Width - 2); // reserve "> " for the marker
         int queryLen = list.Query.Length;
-        Span<int> matches = Span<int>.Empty;
-        if (queryLen > 0)
-        {
-            matches = stackalloc int[queryLen];
-        }
+        Span<int> matches = stackalloc int[queryLen];
 
         for (int r = 0; r < rows; r++)
         {
