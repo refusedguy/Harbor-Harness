@@ -133,6 +133,16 @@ internal static class CsiDecoder
                 }
                 parser.IgnoredSequenceCount++;
                 return;
+            case (byte)'I' when parameters.IsEmpty:
+                // Focus gained: CSI I (DEC private mode ?1004, issue #2218).
+                parser.Enqueue(InputEvent.FromFocus(FocusEvent.Gained));
+                return;
+            case (byte)'O' when parameters.IsEmpty:
+                // Focus lost: CSI O (DEC private mode ?1004, issue #2218).
+                // Not the SS3 introducer: that path is ESC O, handled in
+                // EscapeSequenceParser.EscapeReceived before CSI parsing.
+                parser.Enqueue(InputEvent.FromFocus(FocusEvent.Lost));
+                return;
             default:
                 parser.IgnoredSequenceCount++;
                 return;
