@@ -315,6 +315,10 @@ public class KeyGateFamilyRules
         new("VimComposerMode(fall-through)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs"),
         new("ApprovalGateView", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/ApprovalGateView.cs"),
         new("TreeView", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/TreeView.cs"),
+        // GenericTreeView (#2326): the host-agnostic tree+preview primitive.
+        // It routes j/k/h/l and Enter/Space with a command gate (no buffer,
+        // Shift refused), so it is a command site like the chat tree above.
+        new("GenericTreeView", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/GenericTreeView.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
