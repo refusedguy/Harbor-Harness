@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Mascot;
@@ -43,6 +44,14 @@ public sealed class ChatScreenBridge : IDisposable
     private readonly ChatTimelinePanel _panel;
     private readonly StatusViewModel _status;
     private readonly StreamCoalescer _streams;
+
+    /// <summary>
+    ///     #1494: one reusable LlmEvent dispatcher. A fresh visitor per delta
+    ///     would put an allocation on the streaming hot path, so the instance is
+    ///     owned by the bridge and shared by every MessageUpdateEvent.
+    /// </summary>
+    private readonly LlmEventVisitor _llmEvents;
+
     private readonly ToolCardTracker _cards;
     private readonly ContextSegmentSync _context;
     private readonly EventSubscription _subscription;
@@ -97,6 +106,7 @@ public sealed class ChatScreenBridge : IDisposable
         _panel = panel ?? throw new ArgumentNullException(nameof(panel));
         _status = status ?? throw new ArgumentNullException(nameof(status));
         _streams = new StreamCoalescer(panel, status);
+        _llmEvents = new BridgeLlmEventVisitor(this);
         _cards = new ToolCardTracker(panel);
         _context = new ContextSegmentSync(status);
         _gates = new ApprovalGateRouter(panel, status) { Coordinator = coordinator };
@@ -171,31 +181,9 @@ public sealed class ChatScreenBridge : IDisposable
                     break;
                 }
 
-                switch (update.LlmEvent)
-                {
-                    case TextDeltaEvent delta:
-                        _streams.Incoming(delta.Delta);
-                        break;
-                    case ThinkingStartEvent _:
-                        _streams.StartThinkingStream();
-                        break;
-                    case ThinkingDeltaEvent delta:
-                        _streams.IncomingThinking(delta.Delta);
-                        break;
-                    case ThinkingEndEvent _:
-                        _streams.FinishThinkingStream();
-                        break;
-                    case ToolCallStartEvent callStart:
-                        _cards.EnsureCard(callStart.Id, callStart.ToolName, argsSummary: null);
-                        break;
-                    case StepFinishEvent sf when sf.Usage is not null:
-                        _streams.AddStepUsage(sf.Usage.InputTokens, sf.Usage.OutputTokens);
-                        // #623: prompt tokens of the request just sent = the
-                        // context window's real occupancy.
-                        _context.NoteRequestSize(sf.Usage.InputTokens);
-                        break;
-                }
-
+                // #1494: the LlmEvent arms live in BridgeLlmEventVisitor,
+                // shared with the history view model through LlmEventVisitor.
+                _llmEvents.Accept(update.LlmEvent);
                 break;
 
             case ToolExecutionStartEvent execStart:
@@ -394,6 +382,53 @@ public sealed class ChatScreenBridge : IDisposable
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Live-stream half of the #1494 dispatcher. Only the arms that paint
+    ///     something do work; the rest are declared empty so a new LlmEvent
+    ///     cannot be silently adopted by this walker.
+    /// </summary>
+    private sealed class BridgeLlmEventVisitor(ChatScreenBridge bridge) : LlmEventVisitor
+    {
+        public override void Visit(TextStartEvent e) { }
+
+        public override void Visit(TextDeltaEvent e) => bridge._streams.Incoming(e.Delta);
+
+        public override void Visit(TextEndEvent e) { }
+
+        public override void Visit(ThinkingStartEvent e) => bridge._streams.StartThinkingStream();
+
+        public override void Visit(ThinkingDeltaEvent e) => bridge._streams.IncomingThinking(e.Delta);
+
+        public override void Visit(ThinkingEndEvent e) => bridge._streams.FinishThinkingStream();
+
+        public override void Visit(ToolCallStartEvent e) =>
+            bridge._cards.EnsureCard(e.Id, e.ToolName, argsSummary: null);
+
+        public override void Visit(ToolCallDeltaEvent e) { }
+
+        public override void Visit(ToolCallEndEvent e) { }
+
+        public override void Visit(StepStartEvent e) { }
+
+        public override void Visit(StepFinishEvent e)
+        {
+            var usage = e.Usage;
+            if (usage is null)
+            {
+                return;
+            }
+
+            bridge._streams.AddStepUsage(usage.InputTokens, usage.OutputTokens);
+            // #623: prompt tokens of the request just sent = the context
+            // window's real occupancy.
+            bridge._context.NoteRequestSize(usage.InputTokens);
+        }
+
+        public override void Visit(FinishEvent e) { }
+
+        public override void Visit(ErrorEvent e) { }
     }
 
     /// <summary>[UX5] #265: true for traffic from a non-parent session while a
