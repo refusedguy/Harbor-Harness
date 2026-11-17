@@ -10,8 +10,13 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class ParserDropDiagnosticsTests
 {
+    // #1808 (partial): the malformed and ignored sink proofs had the same body
+    // and differed only in the sequence fed and the two expected counts. Both
+    // cases are rows now, so the copied comparison block exists once.
     [Test]
-    public async Task DropSink_ReceivesMalformedSequence()
+    [Arguments("\u001B[ 5A", 1, 0)]     // parameter byte after an intermediate — malformed per ECMA-48
+    [Arguments("\u001B[?1049h", 0, 1)] // unrequested private-mode report — ignored silently
+    public async Task DropSink_ReceivesDropWithBothCounts(string sequence, int malformed, int ignored)
     {
         var drops = new List<ParserDrop>();
         var parser = new EscapeSequenceParser(new ParserOptions
@@ -19,31 +24,13 @@ public class ParserDropDiagnosticsTests
             OnDrop = drop => drops.Add(drop),
         });
 
-        // Parameter byte after an intermediate — malformed per ECMA-48.
-        _ = T.Feed(parser, "\u001B[ 5A");
+        _ = T.Feed(parser, sequence);
 
-        await Assert.That(parser.MalformedSequenceCount).IsEqualTo(1);
+        await Assert.That(parser.MalformedSequenceCount).IsEqualTo(malformed);
+        await Assert.That(parser.IgnoredSequenceCount).IsEqualTo(ignored);
         await Assert.That(drops.Count).IsEqualTo(1);
-        await Assert.That(drops[0].MalformedCount).IsEqualTo(1);
-        await Assert.That(drops[0].IgnoredCount).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task DropSink_ReceivesIgnoredSequence()
-    {
-        var drops = new List<ParserDrop>();
-        var parser = new EscapeSequenceParser(new ParserOptions
-        {
-            OnDrop = drop => drops.Add(drop),
-        });
-
-        // Unrequested private-mode report — ignored silently.
-        _ = T.Feed(parser, "\u001B[?1049h");
-
-        await Assert.That(parser.IgnoredSequenceCount).IsEqualTo(1);
-        await Assert.That(drops.Count).IsEqualTo(1);
-        await Assert.That(drops[0].MalformedCount).IsEqualTo(0);
-        await Assert.That(drops[0].IgnoredCount).IsEqualTo(1);
+        await Assert.That(drops[0].MalformedCount).IsEqualTo(malformed);
+        await Assert.That(drops[0].IgnoredCount).IsEqualTo(ignored);
     }
 
     [Test]
