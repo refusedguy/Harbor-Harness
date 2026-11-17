@@ -243,9 +243,9 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (4 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (6 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. Three tools are run by a workflow; the other one is `md_gate.py`,
+tree. Five tools are run by a workflow; the other one is `md_gate.py`,
 which is loaded by other tools rather than run. All of them are listed, because a tool
 that is not listed is a tool nobody
 reviews. The table records, for each one, the question
