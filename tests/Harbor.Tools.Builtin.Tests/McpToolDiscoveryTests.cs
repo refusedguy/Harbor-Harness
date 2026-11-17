@@ -74,8 +74,9 @@ public class McpToolDiscoveryTests
         mcp.Handler = (_, method, args) =>
         {
             mcp.LastMethod = method;
-            mcp.RequestArgs.Add(args.GetRawText());
-            bool firstPage = !args.TryGetProperty("cursor", out _);
+            string raw = args.GetRawText();
+            mcp.RequestArgs.Add(raw);
+            bool firstPage = raw == "{}";
             return Result.Success(firstPage
                 ? """{"result":{"tools":[{"name":"one"},{"name":"two"}],"nextCursor":"2"}}"""
                 : """{"result":{"tools":[{"name":"three"}]}}""");
