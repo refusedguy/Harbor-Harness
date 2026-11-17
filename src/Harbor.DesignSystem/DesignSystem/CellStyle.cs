@@ -24,11 +24,11 @@ public enum StyleAttr : ushort
 /// <summary>Underline style encoded in bits 8..10 of <see cref="StyleAttr"/>.</summary>
 public enum UnderlineKind : byte
 {
-    Single = 0,
-    Double = 1,
-    Curly = 2,
-    Dotted = 3,
-    Dashed = 4,
+    Single = 0, // SGR 4 — the existing underlining behaviour
+    Double = 1, // SGR 21
+    Curly = 2,  // SGR 4:3
+    Dotted = 3, // SGR 4:4
+    Dashed = 4, // SGR 4:5
 }
 
 /// <summary>Pack/unpack an <see cref="UnderlineKind"/> into the reserved bits of <see cref="StyleAttr"/>.</summary>

@@ -43,16 +43,19 @@ public class CheapOscProtocolsTests
         var off = new ProgramStatusEmitter { Enabled = false };
         off.Set(ProgramStatusState.Working);
         off.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEmpty();
 
         var on = new ProgramStatusEmitter { Enabled = true };
         on.Set(ProgramStatusState.Blocked, "harbor");
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEqualTo($"{Esc}]7501;state=blocked:app=harbor{Esc}\\");
 
         // A second emit without a new state sends nothing (dirty-on-Set).
         backend.Reset();
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEmpty();
     }
 
@@ -80,16 +83,19 @@ public class CheapOscProtocolsTests
         var off = new ProgressEmitter { Enabled = false };
         off.Set(ProgressState.Indeterminate);
         off.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEmpty();
 
         var on = new ProgressEmitter { Enabled = true };
         on.Set(ProgressState.Indeterminate);
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEqualTo($"{Esc}]9;4;3{Esc}\\");
 
         backend.Reset();
         on.Clear();
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEqualTo($"{Esc}]9;4;0{Esc}\\");
     }
 
@@ -120,16 +126,19 @@ public class CheapOscProtocolsTests
         var off = new WorkingDirectoryEmitter { Enabled = false };
         off.Set("/tmp/x");
         off.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEmpty();
 
         var on = new WorkingDirectoryEmitter { Enabled = true };
         on.Set("/tmp/x");
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEqualTo($"{Esc}]7;file:///tmp/x{Esc}\\");
 
         backend.Reset();
         on.Set("/tmp/x"); // same path → no re-emit
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEmpty();
     }
 
@@ -153,20 +162,24 @@ public class CheapOscProtocolsTests
         var off = new CursorShapeEmitter { Enabled = false };
         off.Set(DecscusrCursorShape.Shape.SteadyBlock);
         off.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEmpty();
 
         var on = new CursorShapeEmitter { Enabled = true };
         on.Set(DecscusrCursorShape.Shape.SteadyBlock);
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEqualTo($"{Esc}[2q");
 
         backend.Reset();
         on.Set(DecscusrCursorShape.Shape.SteadyBlock);
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEmpty();
 
         on.Set(DecscusrCursorShape.Shape.SteadyBar);
         on.Emit(writer);
+        writer.FlushSync();
         await Assert.That(backend.Text).IsEqualTo($"{Esc}[6q");
     }
 
