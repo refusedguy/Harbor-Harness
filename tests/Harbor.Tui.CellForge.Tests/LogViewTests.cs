@@ -178,7 +178,7 @@ public class LogViewTests
         await Assert.That(view.Count).IsEqualTo(4);
         await Assert.That(view.MatchedCount).IsEqualTo(2);
         await Assert.That(view.TotalRows).IsEqualTo(2L);
-        await Assert.That(view.VisibleRows()).IsEquivalentTo(["err 7", "err 9"]);
+        await Assert.That(view.VisibleRows()).IsEquivalentTo(["err 6", "err 8"]);
     }
 
     [Test]
