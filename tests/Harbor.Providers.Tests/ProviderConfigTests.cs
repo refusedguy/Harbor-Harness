@@ -433,6 +433,55 @@ public class DynamicModelCatalogTests
         }
     }
 
+    /// <summary>
+    ///     Regression: a /models entry without context_length must not be given
+    ///     a fabricated 4096 window. That fake value looked authoritative to
+    ///     TokenTracker, whose guard (window &lt;= reserve) silently disabled
+    ///     compaction for the whole session. The unknown sentinel is 0, which
+    ///     the tracker reports at Warning and refuses to compact.
+    /// </summary>
+    [Test]
+    public async Task GetModelsAsync_MissingContextLength_UsesUnknownWindowSentinel()
+    {
+        string json = """
+                      {
+                        "data": [
+                          { "id": "contextless", "name": "Contextless Model" }
+                        ]
+                      }
+                      """;
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+        var http = new HttpClient(handler);
+        string cacheDir = NewCacheDir();
+        try
+        {
+            var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
+            var config = new ProviderConfig
+            {
+                Id = "test-provider",
+                DisplayName = "Test",
+                BaseUrl = "https://api.example.com",
+                ModelsUrl = "https://api.example.com/v1/models",
+                ModelsPath = "data"
+            };
+
+            var result = await catalog.GetModelsAsync(config);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Count).IsEqualTo(1);
+            await Assert.That(result.Value[0].Id).IsEqualTo("contextless");
+            // 0 = "window not reported", never a fabricated 4096.
+            await Assert.That(result.Value[0].ContextWindow).IsEqualTo(0);
+        }
+        finally
+        {
+            if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+        }
+    }
+
     [Test]
     public async Task GetModelsAsync_ParsesModelsArray_WhenNoDataField()
     {
