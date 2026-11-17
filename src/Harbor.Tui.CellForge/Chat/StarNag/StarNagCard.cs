@@ -25,6 +25,7 @@ public sealed record StarNagState
     /// <summary>The empty, never-shown state.</summary>
     public static readonly StarNagState Empty = new(0, false, 0);
 
+    /// <summary>Creates a persisted counter snapshot.</summary>
     /// <param name="launches">How many launches have been observed.</param>
     /// <param name="dismissed">True once the user chose "do not show again".</param>
     /// <param name="lastShownAt">The launch number the card was last shown on.</param>
@@ -77,6 +78,7 @@ public sealed class StarNagCard
     private readonly Action<StarNagState> _save;
     private StarNagState _state;
 
+    /// <summary>Creates a card with the given cadence, state and persistence callback.</summary>
     /// <param name="interval">Minimum launches between two shows. Values below 1 fall back to <see cref="DefaultInterval"/>.</param>
     /// <param name="state">Starting state. Null starts from <see cref="StarNagState.Empty"/>.</param>
     /// <param name="save">Persistence callback. Null makes the card in-memory only (tests).</param>
