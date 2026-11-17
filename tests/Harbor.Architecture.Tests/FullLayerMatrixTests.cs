@@ -177,6 +177,9 @@ public class FullLayerMatrixTests
         "Harbor.Tui.CellForge.Prompts",
         // Application
         "Harbor.Application", "Harbor.ChangeTracking",
+        // #1626: first leaf of the Intelligence assembly — the read-only git
+        // probes moved verbatim out of Harbor.Application/Git.
+        "Harbor.Intelligence",
         // #1614: first-run wizard + setup-checklist detection, one-way leaf
         // over Harbor.Application's configuration family (0 reverse edges).
         "Harbor.Onboarding",
@@ -590,7 +593,18 @@ public class FullLayerMatrixTests
         // IConfigStore and moved with the rest of Configuration/. Nothing in
         // the residue names a Harbor.Permissions type, so the edge is gone
         // rather than merely unused.
+        // #1626: the Git cohort left for Harbor.Intelligence, and with it the
+        // only use of Harbor.Extensions (StringBuilderPool) in this residue.
+        // The Application row is back to a single Harbor.Abstractions edge.
         ["Harbor.Application"] = new(Layer.Application,
+            ["Harbor.Abstractions"]),
+        // #1626: Harbor.Intelligence — first leaf of the Intelligence assembly,
+        // the verbatim extraction of Harbor.Application/Git (read-only git
+        // probes). It binds the git vocabulary from Abstractions and the pooled
+        // builders from Extensions; never Application, Infrastructure or
+        // Presentation. Namespace stays Harbor.Application.Git so consumers
+        // keep their usings (same convention as #1623/#1613/#1625).
+        ["Harbor.Intelligence"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
         // #1613: Harbor.Hooks — Application-layer sibling like Harbor.Registries:
         // the hook runner binds ToolResult (Domain) + BCL + Logging only; edge is Contracts (Hooks resolves no facade-level type).
@@ -763,6 +777,8 @@ public class FullLayerMatrixTests
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
             "Harbor.Application", "Harbor.Onboarding", "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime", "Harbor.SessionContext", "Harbor.Registries",
+            // #1626: TuiModule registers IGitQuery -> ProcessGitQuery from the first Intelligence leaf.
+            "Harbor.Intelligence",
             // #1625: the configuration family — ConfigurationModule registers the
             // config stores and the #1615 PermissionConfigStoreAdapter.
             "Harbor.PolicyConfig",

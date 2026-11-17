@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <!-- #1626: WorktreePorcelainParserTests bind the Git leaf that moved into the first Intelligence assembly. -->
+    <ProjectReference Include="../../src/Harbor.Intelligence/Harbor.Intelligence.csproj"/>
     <!-- #1625: binds the moved configuration types (HarborConfig, the config sections) directly. -->
     <ProjectReference Include="../../src/Harbor.PolicyConfig/Harbor.PolicyConfig.csproj"/>
     <!-- #1624: binds the moved session-context types directly. -->

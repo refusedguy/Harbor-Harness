@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Intelligence</PackageId>
+    <Description>Harbor intelligence assembly — directory probes (git worktree/porcelain parsing, process-backed git query). The first leaf of the #1626 Intelligence cohort; Skills, Diagnostics, Filesystem, Attachments, ProviderHealthCheck and Telemetry follow in later slices.</Description>
+    <PackageTags>harbor;ai;intelligence;git;filesystem</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #1626: first leaf of the Intelligence assembly (ADR-018, variant A), the
+    Git probes moved verbatim out of Harbor.Application/Git. Application-layer
+    sibling like Harbor.Registries / Harbor.Hooks: it binds the git vocabulary
+    from Harbor.Abstractions (IGitQuery, GitWorktreeInfo) and the pooled
+    builders from Harbor.Extensions, plus BCL/Logging only — never on
+    Harbor.Application, Infrastructure or Presentation.
+
+    Namespace stays Harbor.Application.Git (verbatim slice move, the same
+    convention as the AgentLoop / Hooks / PolicyConfig extractions #1623,
+    #1613, #1625): consumers keep their `using Harbor.Application.Git;`, only
+    ProjectReferences change. See docs/ARCHITECTURE_LAYERS.md §2.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

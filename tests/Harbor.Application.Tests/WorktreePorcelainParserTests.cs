@@ -127,4 +127,22 @@ public class WorktreePorcelainParserTests
         await Assert.That(infos[0].Path).IsEqualTo("/repo");
         await Assert.That(infos[0].Branch).IsEqualTo("main");
     }
+
+    /// <summary>
+    ///     A listing whose last line has no trailing newline still flushes its
+    ///     final record. The parse loop iterates to <c>output.Length</c> and
+    ///     flushes once more after it, so the last worktree is not lost when the
+    ///     child's final write ends without <c>\n</c>. This exercises the parser
+    ///     now living in the first Harbor.Intelligence leaf (#1626).
+    /// </summary>
+    [Test]
+    public async Task Parse_NoTrailingNewline_FlushesFinalRecord()
+    {
+        var infos = WorktreePorcelainParser.Parse(
+            "worktree /repo\nHEAD abc123\nbranch refs/heads/main");
+
+        await Assert.That(infos.Count).IsEqualTo(1);
+        await Assert.That(infos[0].Path).IsEqualTo("/repo");
+        await Assert.That(infos[0].Branch).IsEqualTo("main");
+    }
 }

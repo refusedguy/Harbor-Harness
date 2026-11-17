@@ -67,6 +67,8 @@
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
     <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1626: TuiModule registers IGitQuery -> ProcessGitQuery; the Git probes left Harbor.Application for the first Intelligence leaf. -->
+    <ProjectReference Include="..\Harbor.Intelligence\Harbor.Intelligence.csproj"/>
     <!-- #1625: the configuration family (HarborConfig, IConfigStore, AuthStore,
          ProviderPresets) left Harbor.Application for Harbor.PolicyConfig;
          ConfigurationModule registers the config stores and

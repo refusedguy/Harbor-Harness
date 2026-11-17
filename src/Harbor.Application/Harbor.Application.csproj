@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Application</PackageId>
-    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter). The configuration family (HarborConfig, JsonConfigStore, AuthStore, ProviderPresets) is the sibling Harbor.PolicyConfig assembly (#1625); the Permissions subdomain is Harbor.Permissions (#1615); OnboardingWizard + SetupChecklistDetector moved to Harbor.Onboarding (#1614).</Description>
+    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter). The configuration family (HarborConfig, JsonConfigStore, AuthStore, ProviderPresets) is the sibling Harbor.PolicyConfig assembly (#1625); the Permissions subdomain is Harbor.Permissions (#1615); OnboardingWizard + SetupChecklistDetector moved to Harbor.Onboarding (#1614); the read-only git probes moved to Harbor.Intelligence (#1626, first Intelligence leaf).</Description>
     <PackageTags>harbor;ai;agent;application;use-cases</PackageTags>
   </PropertyGroup>
 
@@ -20,6 +20,14 @@
     Infrastructure (Providers.*, Storage.*, Tools.Builtin), never on
     Presentation (Tui.*), never on sibling Application projects
     (Plugins.Runtime, Scripting).
+
+    #1626: the Git cohort (Git/ProcessGitQuery.cs, Git/WorktreePorcelainParser.cs)
+    left for Harbor.Intelligence, the first leaf of the Intelligence assembly.
+    Those two files were the only reason this project bound Harbor.Extensions
+    (StringBuilderPool), so that ProjectReference is gone with them and the
+    Application matrix row is back to a single Harbor.Abstractions edge. The
+    remaining cohort (Skills, Diagnostics, Filesystem, Attachments,
+    ProviderHealthCheck, Telemetry) still lives here and moves in later slices.
 
     #1615: the permissions subdomain was extracted verbatim from
     Permissions/ and the whole-config IConfigStore surface was cut at the
@@ -42,7 +50,6 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
