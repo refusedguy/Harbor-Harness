@@ -71,7 +71,7 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost, IReversiblePluginLoad
     ///     <c>notifications/tools/list_changed</c> (#2228). The server debounces the
     ///     signal, so a burst of plugin loads collapses into one notification.
     /// </summary>
-    public event Action? ToolsChanged;
+    public event EventHandler? ToolsChanged;
 
     /// <summary>
     ///     Whether the MCP client has completed the handshake with this host (#1733).
@@ -94,7 +94,7 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost, IReversiblePluginLoad
         if (!_tools.TryAdd(tool.Name.Value, tool))
             return Result.Failure($"Tool '{tool.Name.Value}' is already registered; skipping duplicate.");
 
-        ToolsChanged?.Invoke();
+        ToolsChanged?.Invoke(this, EventArgs.Empty);
         return Result.Success();
     }
 
@@ -171,7 +171,7 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost, IReversiblePluginLoad
         if (!_tools.TryRemove(name.Value, out _))
             return Result.Failure($"Tool '{name.Value}' is not registered.");
 
-        ToolsChanged?.Invoke();
+        ToolsChanged?.Invoke(this, EventArgs.Empty);
         return Result.Success();
     }
 

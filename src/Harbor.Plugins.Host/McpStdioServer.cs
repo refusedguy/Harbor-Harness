@@ -60,7 +60,7 @@ internal sealed class McpStdioServer
     private readonly McpToolListChangeNotifier _listChangeNotifier;
     private readonly int _maxToolsPerPage;
     private readonly int _maxPageBytes;
-    private readonly Action _toolsChangedHandler;
+    private readonly EventHandler _toolsChangedHandler;
 
     // #2228: client capabilities harvested from the initialize request. Both
     // default to false so a client that never handshakes keeps the old wire
@@ -106,7 +106,7 @@ internal sealed class McpStdioServer
         // #2228: fold every catalog mutation into the debounced notifier. The
         // handler is kept so the subscription can be released if the server is
         // ever torn down independently of the load host.
-        _toolsChangedHandler = _listChangeNotifier.SignalChange;
+        _toolsChangedHandler = (_, _) => _listChangeNotifier.SignalChange();
         _loadHost.ToolsChanged += _toolsChangedHandler;
     }
 
