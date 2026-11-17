@@ -26,15 +26,18 @@ from the tree, not from a hand-kept list.
 
 | | count | what it is |
 |---|---:|---|
-| `.cs` files in the tree | 190 | |
-| top-level classes | 249 | |
-| classes with at least one `[Test]` | 172 | |
-| **rules (guards about the repository)** | **160** | the population of this audit |
+| `.cs` files in the tree | 189 | |
+| top-level classes | 247 | |
+| classes with at least one `[Test]` | 171 | |
+| **rules (guards about the repository)** | **159** | the population of this audit |
 | instrument self-tests | 14 | the guard machinery proving it can fail, not a rule about the product |
 | engine / probe | 2 | `ScanRule` (the shared runner) and the #861 probe file |
-| helper classes without tests | 77 | probes, fixtures, records, planted controls |
-| `[Test]` attributes | 1121 | |
-| lines in the tree | 110,834 | |
+| helper classes without tests | 76 | probes, fixtures, records, planted controls |
+| `[Test]` attributes | 1116 | |
+| lines in the tree | 110,064 | |
+
+One tier-C guard was removed after the audit (#1727, see [Post-audit removal](#post-audit-removal-1727)):
+the counts above are the 2026-10-22 snapshot minus that one file.
 
 ### The "110" of the issue
 
@@ -44,10 +47,12 @@ ends in `Rule` or `Rules`:
 ```
 commit d96b66ec (2026-10-20)  ->  110 classes named *Rule / *Rules
 this tree (2026-10-22)         ->  129 classes named *Rule / *Rules
-this tree, the real population  ->  160 rules (172 test-bearing classes, minus 14 self-tests)
+after #1727                    ->  128 classes named *Rule / *Rules
+this tree, the real population  ->  159 rules (171 test-bearing classes, minus 14 self-tests)
 ```
 
-Two corrections turn that into the real number. **19** `*Rule`-named classes were added since,
+Two corrections turn that into the real number. **18** `*Rule`-named classes were added since (19
+minus the one removed by #1727),
 and — the bigger half — **32 guards do not follow the suffix convention at all**:
 `FullLayerMatrixTests`, `ResultFailureConversionTests`, `MaybeAbsenceTests`,
 `TokenTrackingRatchet`, `FatInterfaceShapeRatchet`, `EnforcerIntegrityTests` and the other
@@ -55,10 +60,10 @@ and — the bigger half — **32 guards do not follow the suffix convention at a
 engine). So:
 
 ```
-129 classes named *Rule / *Rules
+128 classes named *Rule / *Rules
  -  1  the shared engine (ScanRule)
  + 32  guards that do not follow the naming convention
- = 160 guards
+ = 159 guards
 ```
 
 A name-shape count and a rule count are different numbers. The audit uses the second one.
@@ -85,18 +90,18 @@ Cost is how often the rule needs a **manual repair** after an innocent change:
 |---:|---|---:|
 | 0 | never: the rule re-derives everything it grades. | 51 |
 | 1 | rarely: one manual edit of the rule or of one ledger row per relevant change. | 86 |
-| 2 | often: the rule carries a written-down number, a name list or a path table that every relevant change moves. | 23 |
+| 2 | often: the rule carries a written-down number, a name list or a path table that every relevant change moves. | 22 |
 
 The distribution is the headline of the second half of this audit: **more than half of the
 rules carry a ledger, a pinned number or a text anchor**, and that is what makes an innocent
 change expensive.
 
-| tier | rules | share of the 160 |
+| tier | rules | share of the 159 |
 |---|---:|---:|
-| A | 50 | 31.2% |
-| B | 100 | 62.5% |
-| C | 10 | 6.2% |
-| **total** | **160** | |
+| A | 50 | 31.4% |
+| B | 100 | 62.9% |
+| C | 9 | 5.7% |
+| **total** | **159** | |
 
 ## The rules, one by one
 
@@ -264,7 +269,7 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `UiFrameworkNullabilityRules` | `UiFrameworkNullabilityRules.cs` | Source-scans the nine Ui.Framework assemblies for `null!` and grades each site. | ProjectionCache declared six members non-nullable and initialised them with null!, so the compiler was asked to accept a value nobody assigned. | The nine assembly paths are named; a rename of an assembly needs an edit. | 1 |
 | `VendoredHtmlSurfaceRules` | `VendoredHtmlSurfaceRules.cs` | Compares the two vendored CollapseWhitespace implementations against each other by re-typing both and comparing over an exhaustive alphabet. | #878: the two vendored helpers disagree on 758 of the whitespace cases, so a behaviour that looked like one thing was two. | The rule grades the VENDORED tree, which is not built by CI: a change there is not caught by the compiler, which is the point. | 1 |
 
-### Tier C — does not catch a defect (10 rules)
+### Tier C — does not catch a defect (9 rules)
 
 | rule | file | checks | defect signal | refactoring signal | cost |
 |---|---|---|---|---|---:|
@@ -275,7 +280,6 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `OverlayKeyPlaneCensusRule` | `OverlayKeyPlaneCensusRule.cs` | Counts the IOverlayLayer implementations under src/ and apps/ and measures their reachability. | Nothing by its own header: it is 'a MEASUREMENT + ratchet'. | The count is a measurement of the tree's shape. A new overlay layer moves it, and the rule fires on the count rather than on a defect. | 2 |
 | `ProjectKeyedScanRule` | `ProjectKeyedScanRule.cs` | Walks src/ for directories with .cs files and no .csproj, and reports which project compiles each file. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the second form of 'a measurement that cannot see its subject'. | The measurement is of the tree's shape. Every directory that is created without a csproj moves the answer. | 2 |
 | `ReadmeCoverageTests` | `ReadmeCoverageTests.cs` | Walks the src/ csproj directories and requires a README.md in each; for a packable project it requires the named sections to be present. | #430: the coverage lived as prose in a document and had already drifted twice (32/51, 45/54, then 48/54 actually measured). | Adding a project needs a README: a chore, not a bug. This is the measured 'style' class: the firing means 'the tree grew', not 'the code is wrong'. | 2 |
-| `ScanUniverseRule` | `ScanUniverseRule.cs` | Walks the trees, loads the assemblies and compares the non-product members and the blind projects with two written-down baselines. | Nothing by its own header: it is 'a MEASUREMENT, not a fix'. | Both baselines are written-down literals. Every test project that is added moves the count, and the rule fires on the count: runs 39117642149, 393657… | 2 |
 | `ScanVisibilityRule` | `ScanVisibilityRule.cs` | Walks each tree through the shared helper and reports the trees that come back empty. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the first form of 'a measurement that cannot see its subject'. | The invisible-tree set is a written-down list; adding a tree changes the answer. | 2 |
 | `SharedSourceLinkRules` | `SharedSourceLinkRules.cs` | Walks the src/ folders that hold shared source, computes which project links each file, and compares the link inventory with a written-down count (22… | #456: a shared-source folder grew a file that no project linked, so the file was in the tree and in no build. | The count is a written-down literal. Commit 38516394743 (perf/1102-requestbuild-args) and 38854377103 (nightshift/1563-utf8jsonreader-helpers) both f… | 2 |
 
@@ -319,11 +323,11 @@ This is the preparation for #1724, and the JSON names the shape per rule
 | shape | what it means | rules |
 |---|---|---:|
 | `roslyn-analyzer` | the rule grades source **text** today; a Roslyn analyzer over the product tree decides the same question by **type**. This is the #1729 pilot shape | 73 |
-| `derived-value` | the instrument is bound to form: it compares a live measurement with a written-down number or list. The repair is to **derive** the value, so the check survives the change | 4 |
+| `derived-value` | the instrument is bound to form: it compares a live measurement with a written-down number or list. The repair is to **derive** the value, so the check survives the change | 3 |
 | `il-probe` | the rule **already** decides by symbol (reflection over the loaded assembly, Mono.Cecil over the IL, or a Roslyn analyzer over the syntax tree). No conversion is needed -- this is the shape the others should move to | 43 |
 
-**120 rules** are in the semantic family — 77 to convert, 43 already there — and the estimate for
-the code that comes off the tree is **17 840 lines**, which is **16.1%** of the 110 834 lines in
+**119 rules** are in the semantic family — 76 to convert, 43 already there — and the estimate for
+the code that comes off the tree is **17 800 lines**, which is **16.1%** of the 110 064 lines in
 the architecture tree. The estimate is a projection: it is the mechanism (the file walk, the
 comment stripper, the regex matcher, the baseline subtraction, the planted controls) that a
 symbol-level question does not need, and the prose that states the rule stays. It is not
@@ -381,23 +385,41 @@ The census is a computation over the tree, not a list anyone maintains:
 
 ```bash
 # the population: one entry per class with at least one [Test]
-grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1121 test attributes
+grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1116 test attributes
 
 # the files and the lines of the tree
-ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 190 files
-cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 110834 lines
+ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 189 files
+cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 110064 lines
 
 # the classes, and the ones that carry a [Test]. A [Test] method belongs to
 # the type that encloses it, so the last declaration before it is its class.
 awk 'match($0, /^(public|internal|private|protected)[A-Za-z ]*(class|record|struct|interface|enum) [A-Za-z_][A-Za-z0-9_]*/) { n = split(substr($0, RSTART, RLENGTH), a, " "); if (a[n-1] == "class") c[a[n]] = 1; cur = a[n] } /^[ \t]*\[Test/ { if (cur != "") t[cur] = 1 } END { nc = 0; for (k in c) nc++; nt = 0; for (k in t) if (k in c) nt++; print "top-level classes:", nc; print "classes with a [Test]:", nt }' \
     tests/Harbor.Architecture.Tests/*.cs
-# top-level classes: 249
-# classes with a [Test]: 172
+# top-level classes: 247
+# classes with a [Test]: 171
 
 # the tiers
 python3 -c "import json;d=json.load(open('tests/Harbor.Architecture.Tests/rule-tiers.json'));print(d['tier_counts'])"
-# {'A': 50, 'B': 100, 'C': 10}
+# {'A': 50, 'B': 100, 'C': 9}
 ```
+
+## Post-audit removal (#1727)
+
+`ScanUniverseRule` was removed on 2026-11-17 under #1727. It was a pure **one-off measurement**:
+its own header said "a MEASUREMENT, not a fix", and both of its verdicts compared a live tree walk
+with a written-down baseline (`Harbor.Architecture.Tests` in the inventory; `apps=2 | contrib=15 |
+samples=5 | tests=39 | tools=1` for the blind projects). All five measured firings (runs
+39117642149, 39365793623, 39380697456, 39416159291) were `class=noise`, and commits `6ba00729`
+and `40df718b` had to edit the rule in the same commit as the test-tree change. The firing's fix
+was an edit to the guard, which is this audit's definition of a rule bound to form.
+
+**No invariant was lost.** The header itself records that the product side is already complete
+(`LayerDependencyTests.AllExpectedHarborAssembliesAreLoaded`) and that the six perimeter-bearing
+consumers of `LoadHarborAssemblies()` already carry their own exclusions. What the file pinned was
+a census of what that helper cannot see, not a defect signal. `ScanUniverseProbe` had no consumers
+outside this file: the two remaining references in `BuildGraphCoverageRule.cs` and `ScanRule.cs`
+are prose comparisons, not calls. No successor is needed, because nothing graded a defect. Removal
+is recorded in the `removals` array of `rule-tiers.json`.
 
 ## Related
 

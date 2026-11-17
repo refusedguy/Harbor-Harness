@@ -32,9 +32,10 @@
 //   * Prose rationale: the ~40 lines of patterns + reasons per rule are
 //     incompressible in principle (see #1086 ceiling note) and stay in the
 //     rule file. This engine removes mechanism, never argument.
-//   * INFRA/META rules (ScanUniverseRule, BuildGraphCoverageRule,
-//     EnforcerIntegrityTests, FullLayerMatrixTests): they measure the
-//     partition/build universe and must not reuse the walk they measure.
+//   * INFRA/META rules (BuildGraphCoverageRule, EnforcerIntegrityTests,
+//     FullLayerMatrixTests): they measure the partition/build universe and must
+//     not reuse the walk they measure. A former member of this group,
+//     ScanUniverseRule, was removed under #1727 as a one-off measurement.
 //   * contrib/-rooted walks (ContribBoundaryNameRule): SourceScan prunes
 //     contrib/ by construction, so a Trees-based scope cannot see it.
 //   * IL-level (Assembly.GetReferencedAssemblies) and csproj-flavored rules:
