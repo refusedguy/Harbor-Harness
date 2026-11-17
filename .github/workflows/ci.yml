@@ -243,7 +243,7 @@ jobs:
               # file, so an edit to the workflow must run it — and an edit to
               # the gate must run the job that executes it. Same #618
               # argument, one line over.
-              - 'tools/check-arch-suite-once.py'
+              - 'tools/gates/check-arch-suite-once/**'
               # The control for the TUnit analyzer gate (#1836) runs INSIDE
               # the build job, and it is compiled now. Same #618 argument: an
               # edit to its sources must run the job that executes it, or the
@@ -270,7 +270,7 @@ jobs:
               # the tool, or the registry that says what a firing MEANT,
               # must run the job that executes them, or the edit lands
               # unvalidated.
-              - 'tools/guard-triage.py'
+              - 'tools/gates/guard-triage/**'
               - 'tools/guard-triage-classes.json'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
@@ -1891,9 +1891,9 @@ jobs:
       # here has one: a checker edited until it matches nothing is
       # indistinguishable from a checker that found nothing.
       - name: The architecture-once gate still fails on a planted duplicate
-        run: python3 tools/check-arch-suite-once.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --self-test
       - name: The architecture suite runs once on every lane (#1920, #2114)
-        run: python3 tools/check-arch-suite-once.py --min-shards 4
+        run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --min-shards 4
 
       # ── The unused-reference gate, fed by THIS build (#1853, #2108) ────────
       #
@@ -3045,14 +3045,38 @@ jobs:
         if: always() && matrix.shard == 'core'
         shell: bash
         run: |
-          python3 tools/guard-triage.py \
-            --trx "TestResults/${{ matrix.shard }}/*.trx" \
-            --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
-            --project Harbor.Architecture.Tests \
-            --repo-root . \
-            --min-guard-files 100 \
-            --out "guard-firings-${{ matrix.shard }}.json" \
-            --summary "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          # The compiled gate binary is PER-ARCHITECTURE, and the test
+          # shards run on arm64. The python original was architecture-
+          # agnostic; the binary is not, and an x64 binary on an arm runner
+          # is "Exec format error". The repository ships one binary per
+          # platform (tools/bin/harbor-gates-linux-{x64,arm64}), and the
+          # gates-binary workflow rebuilds both.
+          #
+          # The command is written out twice because the gate policy
+          # checker reads the LITERAL command out of the workflow, and a
+          # command behind a shell variable is a command it cannot see.
+          # The table in docs/CI_GATES.md names the x64 one, for the same
+          # reason: the checker reads the literal out of the workflow.
+          if [ "$(uname -m)" = "x86_64" ]; then
+            tools/bin/harbor-gates-linux-x64 guard-triage \
+              --trx "TestResults/${{ matrix.shard }}/*.trx" \
+              --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+              --project Harbor.Architecture.Tests \
+              --repo-root . \
+              --min-guard-files 100 \
+              --out "guard-firings-${{ matrix.shard }}.json" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          else
+            tools/bin/harbor-gates-linux-arm64 guard-triage \
+              --trx "TestResults/${{ matrix.shard }}/*.trx" \
+              --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+              --project Harbor.Architecture.Tests \
+              --repo-root . \
+              --min-guard-files 100 \
+              --out "guard-firings-${{ matrix.shard }}.json" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          fi
 
       # The tool's own failure path runs in `docs.yml`'s selftest job, with
       # the other python tools: a rule edited until it matches nothing is
