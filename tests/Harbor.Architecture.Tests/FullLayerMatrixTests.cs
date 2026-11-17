@@ -179,9 +179,10 @@ public class FullLayerMatrixTests
         "Harbor.Application", "Harbor.ChangeTracking",
         // #1626: the Intelligence assembly — read-only git probes (first leaf,
         // moved out of Harbor.Application/Git), the provider health-check
-        // (second leaf, moved out of Harbor.Application/Providers) and the
+        // (second leaf, moved out of Harbor.Application/Providers), the
         // default file-tree policy (third leaf, moved out of
-        // Harbor.Application/Filesystem), all verbatim.
+        // Harbor.Application/Filesystem) and the skill-freshness seeder (fourth
+        // leaf, moved out of Harbor.Application/Skills), all verbatim.
         "Harbor.Intelligence",
         // #1614: first-run wizard + setup-checklist detection, one-way leaf
         // over Harbor.Application's configuration family (0 reverse edges).
@@ -606,10 +607,12 @@ public class FullLayerMatrixTests
         // probes). Second leaf: Harbor.Application/Providers/ProviderHealthCheck
         // (the IProviderHealthCheck adapter). Third leaf:
         // Harbor.Application/Filesystem/DefaultFileTreePolicy (the IFileTreePolicy
-        // adapter). All bind the contract vocabulary from Abstractions; the git
-        // probes also use the pooled builders from Extensions. Never Application,
-        // Infrastructure or Presentation. Namespaces stay Harbor.Application.Git /
-        // Harbor.Application.Providers / Harbor.Application.Filesystem so consumers
+        // adapter). Fourth leaf: Harbor.Application/Skills/SkillFreshnessSeeder
+        // (the BCL-only skill-lock snapshot seeder). All bind the contract
+        // vocabulary from Abstractions; the git probes also use the pooled builders
+        // from Extensions. Never Application, Infrastructure or Presentation.
+        // Namespaces stay Harbor.Application.Git / Harbor.Application.Providers /
+        // Harbor.Application.Filesystem / Harbor.Application.Skills so consumers
         // keep their usings (same convention as #1623/#1613/#1625).
         ["Harbor.Intelligence"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
@@ -786,7 +789,8 @@ public class FullLayerMatrixTests
             "Harbor.Application", "Harbor.Onboarding", "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime", "Harbor.SessionContext", "Harbor.Registries",
             // #1626: TuiModule registers IGitQuery -> ProcessGitQuery and CoreModule
             // registers IProviderHealthCheck -> ProviderHealthCheck; the Avalonia
-            // composition root registers IFileTreePolicy -> DefaultFileTreePolicy.
+            // composition root registers IFileTreePolicy -> DefaultFileTreePolicy;
+            // the CLI Repl binds SkillFreshnessSeeder (namespace preserved).
             "Harbor.Intelligence",
             // #1625: the configuration family — ConfigurationModule registers the
             // config stores and the #1615 PermissionConfigStoreAdapter.

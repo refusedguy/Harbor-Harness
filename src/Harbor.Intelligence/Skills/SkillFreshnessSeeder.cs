@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace Harbor.Application.Skills;
 
@@ -193,9 +194,10 @@ public static class SkillFreshnessSeeder
                     return null;
                 }
 
-                // Issue #1580: same helper as WorkspaceContextSource — same
-                // in-assembly parse, discovery shapes stay mirrored.
-                if (FrontMatter.GetFrontMatterField(text, "name") is { } name)
+                // Issue #1580: same parse as WorkspaceContextService — the
+                // BCL-only mirror below keeps this leaf free of a
+                // Harbor.Application edge (which the architecture forbids).
+                if (GetFrontMatterField(text, "name") is { } name)
                 {
                     return name;
                 }
@@ -211,6 +213,24 @@ public static class SkillFreshnessSeeder
         }
 
         return null;
+    }
+
+    /// <summary>
+    ///     Front-matter field read, mirrored from <c>Harbor.Application.FrontMatter</c>
+    ///     (issue #1580): same trim/prefix policy, but this leaf is BCL-only and
+    ///     cannot take a <c>Harbor.Application</c> reference. The two copies must
+    ///     stay in sync when the prefix syntax changes.
+    /// </summary>
+    private static string? GetFrontMatterField(string line, string fieldName)
+    {
+        string trimmed = line.TrimStart();
+        if (!trimmed.StartsWith(fieldName + ":", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string value = trimmed[(fieldName.Length + 1)..].Trim();
+        return value.Length == 0 ? null : value;
     }
 
     /// <summary>Lowercase sha256 hex of the file bytes, or null when unreadable (surfaces as a missing pill).</summary>
