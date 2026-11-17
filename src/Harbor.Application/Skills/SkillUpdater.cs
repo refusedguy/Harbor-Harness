@@ -82,7 +82,7 @@ public static class SkillUpdater
     ///     from the git work tree that owns the skills root. Project root
     ///     (<c>.harbor/skills</c>) wins over the global one
     ///     (<c>~/.harbor/skills</c>), mirroring
-    ///     <see cref="SkillFreshnessSeeder" />'s shadowing rule.
+    ///     <c>SkillFreshnessSeeder</c>'s shadowing rule (now in Harbor.Intelligence).
     /// </summary>
     /// <param name="names">Requested skill names; empty means "everything in the source".</param>
     /// <param name="projectSkillsRoot">Project skills root, or null when absent.</param>
