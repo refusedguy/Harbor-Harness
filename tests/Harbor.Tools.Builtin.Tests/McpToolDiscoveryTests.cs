@@ -65,6 +65,62 @@ public class McpToolDiscoveryTests
     }
 
     [Test]
+    public async Task RegisterAsync_FollowsNextCursor_SoALaterPageIsNotSilentlyDropped()
+    {
+        // #2228: tools/list is paginated. A single un-cursored call would see
+        // page one only, and every tool after it would be absent from the prompt
+        // and from the dispatcher.
+        var mcp = new FakeMcpRegistry(["big"]);
+        mcp.Handler = (_, method, args) =>
+        {
+            mcp.LastMethod = method;
+            mcp.RequestArgs.Add(args.GetRawText());
+            bool firstPage = !args.TryGetProperty("cursor", out _);
+            return Result.Success(firstPage
+                ? """{"result":{"tools":[{"name":"one"},{"name":"two"}],"nextCursor":"2"}}"""
+                : """{"result":{"tools":[{"name":"three"}]}}""");
+        };
+        var tools = new ToolRegistry();
+        var agents = new AgentRegistry();
+        agents.Register(AgentDefinition.CodeDefault("model", "provider"));
+
+        int added = await McpToolDiscovery.RegisterAsync(
+            mcp, tools, agents, NullLoggerFactory.Instance, NullLogger.Instance);
+
+        await Assert.That(added).IsEqualTo(3);
+        var names = tools.GetAllTools().Select(t => t.Name.Value).ToArray();
+        await Assert.That(names).Contains("mcp_big_one");
+        await Assert.That(names).Contains("mcp_big_two");
+        await Assert.That(names).Contains("mcp_big_three");
+
+        // The second request must carry the cursor the server named.
+        await Assert.That(mcp.RequestArgs.Count).IsEqualTo(2);
+        await Assert.That(mcp.RequestArgs[0]).IsEqualTo("{}");
+        await Assert.That(mcp.RequestArgs[1]).IsEqualTo("""{"cursor":"2"}""");
+    }
+
+    [Test]
+    public async Task RegisterAsync_RepeatedCursor_TerminatesInsteadOfLooping()
+    {
+        var mcp = new FakeMcpRegistry(["loop"]);
+        mcp.Handler = (_, _, args) =>
+        {
+            mcp.RequestArgs.Add(args.GetRawText());
+            return Result.Success("""{"result":{"tools":[{"name":"only"}],"nextCursor":"same"}}""");
+        };
+        var tools = new ToolRegistry();
+        var agents = new AgentRegistry();
+        agents.Register(AgentDefinition.CodeDefault("model", "provider"));
+
+        int added = await McpToolDiscovery.RegisterAsync(
+            mcp, tools, agents, NullLoggerFactory.Instance, NullLogger.Instance);
+
+        await Assert.That(added).IsEqualTo(1);
+        // First page, then one follow-up that names the cursor already seen.
+        await Assert.That(mcp.RequestArgs.Count).IsEqualTo(2);
+    }
+
+    [Test]
     public async Task RegisterAsync_ServerThatCannotList_ContributesNoTools()
     {
         var mcp = new FakeMcpRegistry(["gone"]) { Handler = (_, _, _) => Result.Failure<string>("server is gone") };
@@ -130,6 +186,7 @@ public class McpToolDiscoveryTests
 
         internal string? LastMethod { get; set; }
         internal string? LastArgsJson { get; set; }
+        internal List<string> RequestArgs { get; } = new();
 
         public Result Register(string name, string stdioCommand) => Result.Success();
         public Result Unregister(string name) => Result.Success();
