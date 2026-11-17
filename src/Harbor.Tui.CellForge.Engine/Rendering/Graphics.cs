@@ -101,20 +101,7 @@ public static class Graphics
             return [];
         }
 
-        string b64 = Convert.ToBase64String(pngBytes);
-        string box = $"c={cols},r={rows},";
-        var sb = new StringBuilder(b64.Length + ((b64.Length / KittyChunkChars) * (box.Length + 16)) + 32);
-        for (int offset = 0; offset < b64.Length; offset += KittyChunkChars)
-        {
-            int len = Math.Min(KittyChunkChars, b64.Length - offset);
-            sb.Append(EscChar).Append("_Gf=100,a=T,C=1,").Append(box);
-            sb.Append("m=");
-            sb.Append(offset + len < b64.Length ? '1' : '0');
-            sb.Append(';').Append(b64, offset, len);
-            sb.Append(EscChar).Append('\\');
-        }
-
-        return Encoding.ASCII.GetBytes(sb.ToString());
+        return BuildKittyPng(pngBytes, $"c={cols},r={rows},");
     }
 
     /// <summary>
@@ -132,8 +119,14 @@ public static class Graphics
             return [];
         }
 
+        return BuildKittyPng(pngBytes, $"c={cols},r={rows},i={imageId},z={zIndex},");
+    }
+
+    /// <summary>Shared chunked-transfer builder: every chunk repeats the
+    /// placement keys so a multi-part kitty transmission stays atomic.</summary>
+    private static byte[] BuildKittyPng(ReadOnlySpan<byte> pngBytes, string box)
+    {
         string b64 = Convert.ToBase64String(pngBytes);
-        string box = $"c={cols},r={rows},i={imageId},z={zIndex},";
         var sb = new StringBuilder(b64.Length + ((b64.Length / KittyChunkChars) * (box.Length + 16)) + 32);
         for (int offset = 0; offset < b64.Length; offset += KittyChunkChars)
         {

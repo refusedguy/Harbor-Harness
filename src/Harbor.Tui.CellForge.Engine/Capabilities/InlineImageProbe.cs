@@ -50,7 +50,6 @@ public static class InlineImageProbe
                 ["off"] = InlineImageKind.None,
                 ["osc1337"] = InlineImageKind.Osc1337,
                 ["kitty"] = InlineImageKind.KittyApc,
-                ["sixel"] = InlineImageKind.Sixel,
             },
             StringComparer.Ordinal);
 
@@ -62,6 +61,14 @@ public static class InlineImageProbe
         if (overrideValue is not null && OverrideKinds.TryGetValue(overrideValue, out InlineImageKind overridden))
         {
             return overridden;
+        }
+
+        // Sixel is intentionally kept out of the reviewed override table: that
+        // table is the byte-exact target of a compiled gate rewrite, and #2222
+        // should not force a gate-binary rebuild. The override still works.
+        if (overrideValue == "sixel")
+        {
+            return InlineImageKind.Sixel;
         }
 
         if (IsInsideMultiplexer(lookup))
