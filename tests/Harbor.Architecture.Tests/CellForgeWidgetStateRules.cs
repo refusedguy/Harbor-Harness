@@ -109,6 +109,7 @@ public sealed class CellForgeWidgetStateRules
         ["CommandPaletteView.OnCommit"] = "host callback — nothing to branch on, only to invoke",
         ["ComposerPanel.Placeholder"] = "placeholder text; null draws the default prompt",
         ["FilePickerView.OnCommit"] = "host callback — nothing to branch on, only to invoke",
+        ["FloatingTerminalController.Session"] = "content value — null before the first attach; the current session of a present pane, created lazily on attach and retained across detach",
         ["ImageBlock.Dimensions"] = "detected dimensions of a present image; null = not detected yet",
         ["LeaderKeyRouter.PendingMsg"] = "converted with the TakePendingMsg() method return — a different form",
         ["ListPromptItem.Parent"] = "tree-structure link; null means root node, non-null means child of that group",

@@ -574,12 +574,19 @@ public sealed record ChatScreen(
     /// </summary>
     public MarkupOverlay Markup { get; } = new();
 
+    /// <summary>
+    /// Floating terminal pane (issue #1491). The attach/detach controller owns
+    /// the live session; <see cref="SyncOverlays"/> seats its layer on the z-stack.
+    /// </summary>
+    public FloatingTerminalController FloatingTerminal { get; } = new();
+
     private DialogOverlayLayer? _dialogLayer;
     private ToastOverlayLayer? _toastLayer;
     private DiffViewerOverlayLayer? _diffLayer;
     private SetupChecklistOverlayLayer? _setupLayer;
     private ImageViewerOverlayLayer? _imageLayer;
     private MarkupOverlayLayer? _markupLayer;
+    private FloatingTerminalOverlayLayer? _floatingLayer;
 
     /// <summary>Ratio the tab-strip split was last driven to, so a frame that
     /// re-derives the SAME row count claims no damage it did not cause — the
@@ -607,12 +614,14 @@ public sealed record ChatScreen(
         _setupLayer ??= new SetupChecklistOverlayLayer(SetupChecklist);
         _imageLayer ??= new ImageViewerOverlayLayer(ImageViewer);
         _markupLayer ??= new MarkupOverlayLayer(Markup);
+        _floatingLayer ??= new FloatingTerminalOverlayLayer(FloatingTerminal);
         _dialogLayer.Sync(viewport);
         _toastLayer.Sync(viewport);
         _diffLayer.Sync(viewport);
         _setupLayer.Sync(viewport);
         _imageLayer.Sync(viewport);
         _markupLayer.Sync(viewport);
+        _floatingLayer.Sync(viewport);
         if (_dialogLayer.Visible)
         {
             Tree.Overlays.Push(_dialogLayer);
@@ -660,6 +669,18 @@ public sealed record ChatScreen(
         else
         {
             Tree.Overlays.Remove(MarkupOverlayLayer.LayerId);
+        }
+
+        // Floating terminal (issue #1491) sits above the fullscreen viewers:
+        // a user-driven attach takes input over the composer but leaves the
+        // transient toasts on top.
+        if (_floatingLayer.Visible)
+        {
+            Tree.Overlays.Push(_floatingLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(FloatingTerminalOverlayLayer.LayerId);
         }
 
         if (_toastLayer.Visible)

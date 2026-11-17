@@ -247,6 +247,7 @@ public sealed class OverlayKeyPlaneCensusRule
     [
         "DialogOverlayLayer",
         "DiffViewerOverlayLayer",
+        "FloatingTerminalOverlayLayer",
         "ImageViewerOverlayLayer",
         "MarkupOverlayLayer",
         "SetupChecklistOverlayLayer",
@@ -257,6 +258,7 @@ public sealed class OverlayKeyPlaneCensusRule
     internal static readonly string[] RegisteredButCannotReadKeys =
     [
         "DialogOverlayLayer",
+        "FloatingTerminalOverlayLayer",
         "MarkupOverlayLayer",
         "ToastOverlayLayer",
     ];
@@ -407,7 +409,7 @@ public sealed class OverlayKeyPlaneCensusRule
             .Select(static r => r.Name).ToArray();
 
         await Assert.That(registered).IsEquivalentTo(RegisteredLayers).Because(
-            "these six are pushed onto the stack by SyncOverlays. A seventh appearing means a "
+            "these seven are pushed onto the stack by SyncOverlays. An eighth appearing means a "
             + "new overlay was seated, which changes what 'wiring RouteKey' would cost; one "
             + "disappearing means it was removed and this table is stale. Measured: "
             + Describe(registered));

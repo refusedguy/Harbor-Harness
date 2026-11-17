@@ -92,6 +92,10 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
             () => { host._timeline.ScrollToEnd(Math.Max(1, host._timelineViewportH)); host._wake.Writer.TryWrite(null); });
         host._leader.Bind('p', () => { OpenCommandPalette(); host._wake.Writer.TryWrite(null); });
         host._leader.Bind('v', () => { ToggleVimMode(); host._wake.Writer.TryWrite(null); });
+        // Floating terminal pane (issue #1491): Ctrl+X t attaches the pane; the
+        // same chord detaches through the dedicated router while it is focused.
+        host._leader.Bind('t', () => { host.FloatingTerminal.Attach(); host._wake.Writer.TryWrite(null); });
+        host._terminalLeader.Bind('t', () => { host.FloatingTerminal.Detach(); host._wake.Writer.TryWrite(null); });
         host._leader.Bind('h', () => host._leaderSlash = "help");
         host._leader.Bind('s', () => host._leaderSlash = "sessions");
         host._leader.Bind('m', () => host._leaderSlash = "model");
