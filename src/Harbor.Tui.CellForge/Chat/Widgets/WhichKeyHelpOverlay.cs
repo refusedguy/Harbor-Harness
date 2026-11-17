@@ -65,7 +65,7 @@ public sealed class WhichKeyHelpOverlay
     // #2325: the hotkey rows and the dismiss hint can come from the bindings
     // registry instead of HelpKeymap's curated strings. Null keeps the legacy
     // rendering byte-identical for hosts that have not supplied a legend.
-    private KeyLegendInput.KeyLegend? _legend;
+    private Maybe<KeyLegendInput.KeyLegend> _legend;
 
     /// <summary>
     ///     The single authority on "did the host show this overlay?". The layer's
@@ -161,10 +161,10 @@ public sealed class WhichKeyHelpOverlay
     /// the '?' key is still gated here by <see cref="HandleKey"/>, the site
     /// declared in KeyGateFamilyRules (#833), so no new gate site is added.
     /// </summary>
-    public void SetLegend(KeyLegendInput.KeyLegend? legend) => _legend = legend;
+    public void SetLegend(KeyLegendInput.KeyLegend? legend) => _legend = Maybe.From(legend);
 
-    /// <summary>The registry-derived legend in use, null on the legacy path.</summary>
-    public KeyLegendInput.KeyLegend? Legend => _legend;
+    /// <summary>The registry-derived legend in use; None on the legacy path (#592).</summary>
+    public Maybe<KeyLegendInput.KeyLegend> Legend => _legend;
 
     /// <summary>
     /// Stages the in-flight chord for the pending preview (the router is
@@ -337,15 +337,15 @@ public sealed class WhichKeyHelpOverlay
 
     internal List<string> BuildLines(int innerWidth)
     {
-        var lines = new List<string>((_legend?.Rows.Count ?? HelpKeymap.Rows.Count) + 8);
+        var lines = new List<string>((_legend.HasValue ? _legend.Value.Rows.Count : HelpKeymap.Rows.Count) + 8);
         lines.Add("Which-key — hotkeys");
         lines.Add(new string('─', Math.Clamp(innerWidth == int.MaxValue ? 48 : innerWidth, 8, 48)));
         lines.Add("Hotkeys");
-        if (_legend is { } legend)
+        if (_legend.HasValue)
         {
             // #2325: rows come from the bindings registry, so a rebind or a
             // hidden binding changes this table without editing this file.
-            foreach (KeyLegendInput.KeyLegendRow row in legend.Rows)
+            foreach (KeyLegendInput.KeyLegendRow row in _legend.Value.Rows)
             {
                 lines.Add($"  {row.Key,-12} {row.Description}");
             }
@@ -406,19 +406,19 @@ public sealed class WhichKeyHelpOverlay
             lines.Add($"  pending ctrl+x {_pendingChord.Value} …");
         }
 
-        if (_legend is null)
+        if (_legend.HasNoValue)
         {
             // Legacy path: unchanged so goldens and no-legend hosts stay exact.
             lines.Add(string.Empty);
             lines.Add("Press ? to close.");
         }
-        else if (_legend.Hint.Length > 0)
+        else if (_legend.Value.Hint.Length > 0)
         {
             // Registry-derived footer. The key AND the label come from the
             // help binding; an unbound help action prints no footer at all
             // rather than inventing one here.
             lines.Add(string.Empty);
-            lines.Add(_legend.Hint);
+            lines.Add(_legend.Value.Hint);
         }
 
         if (innerWidth != int.MaxValue)

@@ -121,7 +121,7 @@ public sealed class KeyLegendTests
         overlay.Paint(buffer, new Rect(0, 0, 80, 32));
 
         string art = TestRender.Art(buffer);
-        await Assert.That(overlay.Legend).IsNotNull();
+        await Assert.That(overlay.Legend.HasValue).IsTrue();
         await Assert.That(art).Contains("Hotkeys");
         await Assert.That(art).Contains("open jump palette");
         await Assert.That(art).Contains("toggle this help panel");
@@ -137,7 +137,7 @@ public sealed class KeyLegendTests
     public async Task SetLegend_Null_RestoresLegacyRendering()
     {
         var map = Registry();
-        map.Bind(Bind("help", "?", "help", "toggle this help panel"));
+        map.Bind(Bind("help", "?", "help", "registry-only legend label"));
         var overlay = new WhichKeyHelpOverlay();
         overlay.SetLegend(new EngineInput.KeyLegend(map));
         overlay.SetLegend(null);
@@ -147,10 +147,12 @@ public sealed class KeyLegendTests
         overlay.Paint(buffer, new Rect(0, 0, 80, 32));
 
         string art = TestRender.Art(buffer);
-        await Assert.That(overlay.Legend).IsNull();
+        await Assert.That(overlay.Legend.HasNoValue).IsTrue();
         await Assert.That(art).Contains("Alt+1..9");
-        await Assert.That(art).Contains("Press ? to close.");
-        await Assert.That(art).DoesNotContain("toggle this help panel");
+        await Assert.That(art).Contains("Press ? to close.")
+            .Because("the legacy footer is back after the legend is cleared");
+        await Assert.That(art).DoesNotContain("registry-only legend label")
+            .Because("that label exists only in the registry, not in HelpKeymap");
     }
 
     [Test]
