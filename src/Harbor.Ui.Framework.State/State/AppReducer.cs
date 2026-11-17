@@ -131,20 +131,14 @@ public static class AppReducer
         AppMsg.Quit => new ReduceResult(state with { Ui = state.Ui with { ShouldQuit = true } }, new TuiEffect.None()),
         AppMsg.Reset => new ReduceResult(new UiState(), new TuiEffect.None()),
         AppMsg.KeyInput k => UpdateKey(state, k, busy),
-        AppMsg.Viewport v => ReduceResult.NoOp(state with { Ui = state.Ui with { ViewportLines = v.HistoryHeight } }),
-        AppMsg.HistoryMeasured t => ReduceResult.NoOp(state with { Ui = state.Ui with { TotalLines = t.TotalLines } }),
+        AppMsg.Viewport v => ReduceResult.NoOp(state with { Ui = state.Ui.SetViewportLines(v.ViewportName, v.HistoryHeight) }),
+        AppMsg.HistoryMeasured t => ReduceResult.NoOp(state with { Ui = state.Ui.SetTotalLines(t.ViewportName, t.TotalLines) }),
         AppMsg.TogglePanel tp => ReduceResult.NoOp(TogglePanel(state, tp.Id)),
         AppMsg.FocusPanel fp => ReduceResult.NoOp(FocusPanel(state, fp.Id)),
         AppMsg.CyclePanelFocus => ReduceResult.NoOp(CycleFocus(state)),
         AppMsg.ResizePanel rp => ReduceResult.NoOp(ResizePanel(state, rp.Id, rp.Delta)),
-        AppMsg.ScrollResetToTail => ReduceResult.NoOp(state with { Ui = state.Ui with { ScrollOffset = 0 } }),
-        AppMsg.ScrollClamp sc => ReduceResult.NoOp(state with
-        {
-            Ui = state.Ui with
-            {
-                ScrollOffset = Math.Clamp(state.Ui.ScrollOffset, 0, Math.Max(0, sc.MaxScroll))
-            }
-        }),
+        AppMsg.ScrollResetToTail st => ReduceResult.NoOp(state with { Ui = state.Ui.ResetScrollToTail(st.ViewportName) }),
+        AppMsg.ScrollClamp sc => ReduceResult.NoOp(state with { Ui = state.Ui.ClampScroll(sc.ViewportName, sc.MaxScroll) }),
         AppMsg.SeedPanels sp => ReduceResult.NoOp(state with
         {
             Ui = state.Ui with

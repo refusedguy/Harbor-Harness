@@ -47,8 +47,13 @@ public sealed partial class VirtualizedChatTimeline
     /// <summary>End key → store pin to the live tail (offset = 0).</summary>
     public static AppMsg ScrollBottomMsg() => new AppMsg.KeyInput(ChatAction.ScrollBottom, new UiKey(UiKeyCode.End));
 
-    /// <summary>Pin to the live tail (offset = 0); the reducer also sets WasRunning.</summary>
-    public static AppMsg ResetToTailMsg() => new AppMsg.ScrollResetToTail();
+    /// <summary>
+    ///     Pin to the live tail (offset = 0); the reducer also sets WasRunning.
+    ///     The viewport name is the handle (#2357): a named region pins only
+    ///     its own offset, never another viewport's.
+    /// </summary>
+    public static AppMsg ResetToTailMsg(string viewportName = TerminalUiState.DefaultViewport)
+        => new AppMsg.ScrollResetToTail(viewportName);
 
     /// <summary>
     /// Maps a mouse-wheel tick to the store scroll message. Positive
@@ -101,10 +106,20 @@ public sealed partial class VirtualizedChatTimeline
     /// re-pinning, so a growing streaming tail cannot yank an unpinned view.
     /// </summary>
     public LayoutOutcome ApplyStoreState(UiState state, int width, int viewportH)
+        => ApplyStoreState(state, width, viewportH, TerminalUiState.DefaultViewport);
+
+    /// <summary>
+    ///     Named-viewport form of <see cref="ApplyStoreState(UiState, int, int)"/>
+    ///     (#2357). Reads the handle for <paramref name="viewportName"/> instead
+    ///     of the default one, so two virtualized regions mirror their own store
+    ///     offset and never pull each other off the tail.
+    /// </summary>
+    public LayoutOutcome ApplyStoreState(UiState state, int width, int viewportH, string viewportName)
     {
         Ensure.NotNull(state);
-        int viewH = viewportH > 0 ? viewportH : Math.Max(0, state.Ui.ViewportLines);
-        FollowTail = state.Ui.ScrollOffset <= 0;
+        var scroll = state.Ui.ScrollOf(viewportName);
+        int viewH = viewportH > 0 ? viewportH : Math.Max(0, scroll.Viewport);
+        FollowTail = scroll.Offset <= 0;
         if (!FollowTail)
         {
             // Pre-layout snap on the (possibly stale) range keeps the measure
@@ -123,7 +138,7 @@ public sealed partial class VirtualizedChatTimeline
             // of truth; clamping (never re-pinning) keeps a growing
             // streaming tail from yanking an unpinned view.
             long max = _cache.MaxScrollFor(viewH);
-            SnapScroll(Math.Clamp(max - (long)state.Ui.ScrollOffset, 0, max));
+            SnapScroll(Math.Clamp(max - (long)scroll.Offset, 0, max));
         }
 
         return outcome;
@@ -139,11 +154,16 @@ public sealed partial class VirtualizedChatTimeline
     /// host must always dispatch the trailing <c>ScrollClamp</c> (a shrunken
     /// viewport otherwise leaves a stale out-of-range offset).
     /// </summary>
-    public AppMsg[] MeasureMsgs(int viewportH)
+    public AppMsg[] MeasureMsgs(int viewportH, string viewportName = TerminalUiState.DefaultViewport)
     {
         int viewH = Math.Max(0, viewportH);
         int total = (int)Math.Min(TotalHeight, int.MaxValue);
         int max = (int)Math.Min(_cache.MaxScrollFor(viewH), int.MaxValue);
-        return new AppMsg[] { new AppMsg.Viewport(viewH), new AppMsg.HistoryMeasured(total), new AppMsg.ScrollClamp(max) };
+        return new AppMsg[]
+        {
+            new AppMsg.Viewport(viewH, viewportName),
+            new AppMsg.HistoryMeasured(total, viewportName),
+            new AppMsg.ScrollClamp(max, viewportName)
+        };
     }
 }

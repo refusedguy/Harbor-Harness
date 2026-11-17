@@ -17,16 +17,59 @@ public sealed record TerminalUiState
     public FocusMode Focus { get; init; } = FocusMode.Input;
 
     /// <summary>
-    ///     History scroll-back offset (0 = pinned to newest line, grows toward the
-    ///     top). Clamped to <c>TotalLines - ViewportLines</c> by the reducer.
+    ///     Logical viewport addressed by scroll geometry messages that do not
+    ///     name one explicitly (#2357). The chat timeline owns this viewport;
+    ///     a second virtualized region passes its own name instead.
     /// </summary>
-    public int ScrollOffset { get; init; }
+    public const string DefaultViewport = "chat";
 
-    /// <summary>Number of history rows currently visible (reported by the renderer).</summary>
-    public int ViewportLines { get; init; }
+    private ImmutableDictionary<string, (int Offset, int Viewport, int Total)> _viewportScrolls
+        = ImmutableDictionary<string, (int Offset, int Viewport, int Total)>.Empty;
 
-    /// <summary>Total number of wrapped history rows (reported by the renderer).</summary>
-    public int TotalLines { get; init; }
+    /// <summary>
+    ///     Scroll state keyed by logical viewport name (#2357): one entry owns
+    ///     the offset and measured geometry of exactly one viewport, so two
+    ///     virtualized regions neither share an offset nor overwrite each
+    ///     other's scrollbar thumb (hit) range. The <see cref="DefaultViewport"/>
+    ///     entry backs the scalar readers below, which keeps every existing
+    ///     host and test source-compatible without a second state type.
+    /// </summary>
+    public ImmutableDictionary<string, (int Offset, int Viewport, int Total)> ViewportScrolls
+    {
+        get => _viewportScrolls;
+        init => _viewportScrolls = value;
+    }
+
+    /// <summary>
+    ///     History scroll-back offset of <see cref="DefaultViewport"/> (0 =
+    ///     pinned to newest line, grows toward the top). Clamped to
+    ///     <c>TotalLines - ViewportLines</c> by the reducer.
+    /// </summary>
+    public int ScrollOffset
+    {
+        get => ScrollOf(DefaultViewport).Offset;
+        init => _viewportScrolls = _viewportScrolls.SetItem(
+            DefaultViewport,
+            (value, ScrollOf(DefaultViewport).Viewport, ScrollOf(DefaultViewport).Total));
+    }
+
+    /// <summary>Number of history rows currently visible on <see cref="DefaultViewport"/>.</summary>
+    public int ViewportLines
+    {
+        get => ScrollOf(DefaultViewport).Viewport;
+        init => _viewportScrolls = _viewportScrolls.SetItem(
+            DefaultViewport,
+            (ScrollOf(DefaultViewport).Offset, value, ScrollOf(DefaultViewport).Total));
+    }
+
+    /// <summary>Total number of wrapped history rows on <see cref="DefaultViewport"/>.</summary>
+    public int TotalLines
+    {
+        get => ScrollOf(DefaultViewport).Total;
+        init => _viewportScrolls = _viewportScrolls.SetItem(
+            DefaultViewport,
+            (ScrollOf(DefaultViewport).Offset, ScrollOf(DefaultViewport).Viewport, value));
+    }
 
     /// <summary>How far the history is scrolled, as a percentage (0 = bottom/live, 100 = top).</summary>
     public int ScrollPercent
@@ -179,11 +222,70 @@ public sealed record TerminalUiState
     /// <summary>Return a snapshot with the keyboard focus replaced.</summary>
     public TerminalUiState SetFocus(FocusMode focus) => this with { Focus = focus };
 
-    /// <summary>Return a snapshot with the history scroll offset clamped to valid range.</summary>
-    public TerminalUiState SetScroll(int offset)
+    /// <summary>Resolve a viewport name; null/empty addresses the default viewport.</summary>
+    private static string ViewportKey(string? viewportName)
+        => string.IsNullOrEmpty(viewportName) ? DefaultViewport : viewportName;
+
+    /// <summary>
+    ///     The complete scroll triple for <paramref name="viewportName"/>. A
+    ///     missing key is the honest "nothing measured yet" state: all zeros.
+    /// </summary>
+    public (int Offset, int Viewport, int Total) ScrollOf(string? viewportName)
+        => _viewportScrolls.TryGetValue(ViewportKey(viewportName), out var s) ? s : (0, 0, 0);
+
+    /// <summary>Set the visible-row count of one viewport, touching no other viewport.</summary>
+    public TerminalUiState SetViewportLines(string? viewportName, int lines)
     {
-        int max = Math.Max(0, TotalLines - ViewportLines);
-        int clamped = Math.Clamp(offset, 0, max);
-        return clamped == ScrollOffset ? this : this with { ScrollOffset = clamped };
+        var s = ScrollOf(viewportName);
+        return this with
+        {
+            ViewportScrolls = _viewportScrolls.SetItem(ViewportKey(viewportName), (s.Offset, lines, s.Total))
+        };
     }
+
+    /// <summary>Set the measured total of one viewport, touching no other viewport.</summary>
+    public TerminalUiState SetTotalLines(string? viewportName, int total)
+    {
+        var s = ScrollOf(viewportName);
+        return this with
+        {
+            ViewportScrolls = _viewportScrolls.SetItem(ViewportKey(viewportName), (s.Offset, s.Viewport, total))
+        };
+    }
+
+    /// <summary>Pin one viewport to its live tail, touching no other viewport.</summary>
+    public TerminalUiState ResetScrollToTail(string? viewportName)
+    {
+        var s = ScrollOf(viewportName);
+        return this with
+        {
+            ViewportScrolls = _viewportScrolls.SetItem(ViewportKey(viewportName), (0, s.Viewport, s.Total))
+        };
+    }
+
+    /// <summary>Clamp one viewport's offset to a host-measured maximum.</summary>
+    public TerminalUiState ClampScroll(string? viewportName, int maxScroll)
+    {
+        var s = ScrollOf(viewportName);
+        int clamped = Math.Clamp(s.Offset, 0, Math.Max(0, maxScroll));
+        return this with
+        {
+            ViewportScrolls = _viewportScrolls.SetItem(ViewportKey(viewportName), (clamped, s.Viewport, s.Total))
+        };
+    }
+
+    /// <summary>Return a snapshot with one viewport's offset clamped to its own measured range.</summary>
+    public TerminalUiState SetScroll(string? viewportName, int offset)
+    {
+        var s = ScrollOf(viewportName);
+        int max = Math.Max(0, s.Total - s.Viewport);
+        int clamped = Math.Clamp(offset, 0, max);
+        return clamped == s.Offset ? this : this with
+        {
+            ViewportScrolls = _viewportScrolls.SetItem(ViewportKey(viewportName), (clamped, s.Viewport, s.Total))
+        };
+    }
+
+    /// <summary>Return a snapshot with the default viewport's offset clamped to valid range.</summary>
+    public TerminalUiState SetScroll(int offset) => SetScroll(DefaultViewport, offset);
 }
