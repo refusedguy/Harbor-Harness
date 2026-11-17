@@ -152,6 +152,16 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             ReplLifecycleLog.SetupOverlayFailed(host.Log, ex);
         }
 
+        // Issue #1490: gentle star reminder on top of the existing toast seat.
+        // IsEnabled() keeps plain/CI/headless/demo processes silent, and the
+        // file-backed store remembers both the launch count and "never".
+        // A failure here is a missed reminder, never a broken startup.
+        if (Harbor.Tui.CellForge.StarNag.StarNagCard.IsEnabled())
+        {
+            var starNag = StarNagFileStore.CreateCard();
+            _ = starNag.TryShow(host.Screen.Toasts);
+        }
+
         // #170: the heartbeat must outlive Idle while a mascot reaction/latch
         // still owes motion — the bridge polls both directors every frame.
         host.Bridge.TrackMascot(host.Screen.Mascot, host.Screen.Status);
@@ -306,6 +316,21 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 if (agentEvt is ToolExecutionEndEvent)
                 {
                     host.ScreenSession.Progress.Clear();
+                    // #1120: yield a frame now, while the just-completed card
+                    // is still inside the follow-tail viewport. This drain
+                    // applies every queued event before a single paint; under a
+                    // rapid follow-up flood that coalesces turn-1's success card
+                    // (the only one before the flood) into a frame where it has
+                    // already scrolled off the virtualized feed, so its success
+                    // bytes never reach the wire even though the tool ran (the
+                    // probe on disk proves it). One completion per frame keeps
+                    // every result visible when it is painted. Remaining events
+                    // stay queued for the next iteration. Their wake tokens may
+                    // already have been consumed by DrainWake() this iteration,
+                    // so re-arm the level-triggered wake before yielding.
+                    eventsChanged = true;
+                    host._wake.Writer.TryWrite(null);
+                    break;
                 }
 
                 if (agentEvt is AgentEndEvent)

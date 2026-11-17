@@ -8,7 +8,9 @@ verbatim out of `Harbor.Application` with their namespaces preserved:
 - **Git probes** (`Harbor.Application.Git`): a process-backed `IGitQuery` and
   the pure parser for `git worktree list --porcelain` (first leaf, #2273).
 - **Provider health check** (`Harbor.Application.Providers`): the concrete
-  `ProviderHealthCheck` adapter for `IProviderHealthCheck` (second leaf).
+  `ProviderHealthCheck` adapter for `IProviderHealthCheck` (second leaf, #2283).
+- **Default file-tree policy** (`Harbor.Application.Filesystem`): the pure
+  `DefaultFileTreePolicy` adapter for `IFileTreePolicy` (third leaf).
 
 Application-layer sibling of `Harbor.Registries` and `Harbor.Hooks`, extractable
 and packable on its own.
@@ -20,7 +22,8 @@ Application. The layer matrix row is
 
 ## Public API
 
-Consumers bind `Harbor.Application.Git` and `Harbor.Application.Providers` types.
+Consumers bind `Harbor.Application.Git`, `Harbor.Application.Providers` and
+`Harbor.Application.Filesystem` types.
 The namespaces survive the extraction (verbatim slice move), so existing usings
 keep compiling:
 
@@ -41,10 +44,20 @@ public sealed class ProviderHealthCheck : IProviderHealthCheck
     public Task<Result<ProviderHealth>> CheckAsync(ProviderId providerId, CancellationToken cancellationToken = default);
     public static string Classify(string rawError);
 }
+
+public sealed class DefaultFileTreePolicy : IFileTreePolicy
+{
+    public const string DefaultIcon = "file";
+    public const string CodeIcon = "file-code";
+    public const string FolderIcon = "folder";
+
+    public bool IsIgnoredDirectory(string name);
+    public string IconFor(string fileName);
+}
 ```
 
-`IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo` and `IProviderHealthCheck`
-are declared in `Harbor.Abstractions` and stay there.
+`IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo`, `IProviderHealthCheck` and
+`IFileTreePolicy` are declared in `Harbor.Abstractions` and stay there.
 
 ## Wiring
 
@@ -52,12 +65,14 @@ The composition roots register the implementation against the port:
 
 ```csharp
 services.AddSingleton<IGitQuery, ProcessGitQuery>();
+services.AddSingleton<IFileTreePolicy, DefaultFileTreePolicy>();
 ```
 
-That lives in `src/Harbor.Hosting/Modules/TuiModule.cs` and
+The git registration lives in `src/Harbor.Hosting/Modules/TuiModule.cs` and
 `apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs`. `ProviderHealthCheck`
-is registered in `src/Harbor.Hosting/Modules/CoreModule.cs`. All hold a direct
-`ProjectReference` to this assembly.
+is registered in `src/Harbor.Hosting/Modules/CoreModule.cs`, and
+`DefaultFileTreePolicy` in the Avalonia `ServiceRegistration.cs`. Every
+registering composition root holds a direct `ProjectReference` to this assembly.
 
 ## Usage
 
@@ -77,7 +92,7 @@ life of the process (#884).
 ## Dependencies
 
 - `Harbor.Abstractions` — `IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo`,
-  `IProviderHealthCheck`, `IProviderRegistry`, `ProviderHealth`.
+  `IProviderHealthCheck`, `IProviderRegistry`, `ProviderHealth`, `IFileTreePolicy`.
 - `Harbor.Extensions` — `StringBuilderPool` for the per-spawn stdout buffer.
 - `Microsoft.Extensions.Logging.Abstractions` — `ILogger<T>` and
   `[LoggerMessage]` delegates.
@@ -86,9 +101,9 @@ life of the process (#884).
 
 ## Known limitations
 
-- This is a partial slice of #1626. Skills, Diagnostics, Filesystem,
-  Attachments and Telemetry still live in `Harbor.Application` and move into
-  this assembly in later slices.
+- This is a partial slice of #1626. Skills, Diagnostics, Attachments and
+  Telemetry still live in `Harbor.Application` and move into this assembly in
+  later slices.
 - `GetStatus` and `ListWorktrees` are synchronous: the port is sync and one
   caller paints a UI badge on the render thread.
 - A hung git is killed at 3 seconds and reported as "no workspace", not as an

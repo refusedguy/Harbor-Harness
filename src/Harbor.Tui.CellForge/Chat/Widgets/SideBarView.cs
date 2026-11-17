@@ -655,7 +655,7 @@ public static class SideBarView
             return len;
         }
 
-        /// <summary>Span twin of <see cref="FormatTokens" /> — same figures, no string.</summary>
+        /// <summary>Span twin of <see cref="TokenCell.ToCompact" /> — same figures, no string; it cannot delegate because the sidebar paints every frame.</summary>
         private static int FormatTokensTo(long tokens, Span<char> into)
         {
             if (into.Length == 0)
@@ -871,13 +871,12 @@ public static class SideBarView
         return count;
     }
 
-    /// <summary>Compact token figure: 999 → «999», 12 345 → «12.3k», 1 234 567 → «1.2M».</summary>
-    public static string FormatTokens(long tokens) => tokens switch
-    {
-        < 1_000 => tokens.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        < 1_000_000 => (tokens / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "k",
-        _ => (tokens / 1_000_000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "M",
-    };
+    /// <summary>
+    ///     Compact token figure: 999 → «999», 12 345 → «12.3k», 1 234 567 → «1.2M».
+    ///     #788: the shape lives in <see cref="TokenCell" /> now; this is the
+    ///     public spelling the message header calls, with unchanged output.
+    /// </summary>
+    public static string FormatTokens(long tokens) => TokenCell.ToCompact(tokens);
 
     private static Rect ClampTo(ScreenBuffer buffer, Rect rect)
     {

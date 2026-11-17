@@ -125,9 +125,10 @@ The second `DialogOverlay` instance does not rescue this. `ChatScreen.Dialog` (`
 constructed in product (`CellForgeModule.cs:79` builds `ChatScreen`), and it is seated on the
 overlay stack — but no product code calls any `.Show*` on it, so `Visible` is permanently
 false, and `DialogOverlayLayer` takes the `IOverlayLayer.OnKey` default (`=> false`), so it
-never receives a key either. This matches what #812's `OverlayKeyPlaneCensusRule` already
-recorded as "REGISTERED BUT PARKED" — the finding here is the **other** instance, and the fact
-that the `.Show*` sites themselves are dead.
+never receives a key either. This matches what #812's `OverlayKeyPlaneCensusRule` recorded as
+"REGISTERED BUT PARKED" before that measurement was retired under #1727; the same finding is now
+held by `PanelKeyRouteReachabilityRule`'s ledger. The finding here is the **other** instance, and
+the fact that the `.Show*` sites themselves are dead.
 
 ## 4. No behavioural bug: the Alert row is a correct answer, not a defect
 

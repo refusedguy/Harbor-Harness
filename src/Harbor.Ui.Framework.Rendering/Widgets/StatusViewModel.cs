@@ -199,12 +199,13 @@ public sealed class StatusViewModel
         return BarCache[Math.Clamp(filled, 0, CtxCells)];
     }
 
-    internal static string FormatCount(long v) => v switch
-    {
-        >= 1_000_000 => (v / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M",
-        >= 1_000 => (v / 1_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "k",
-        _ => v.ToString(CultureInfo.InvariantCulture),
-    };
+    /// <summary>
+    ///     The status widget's token figure. #788: the "0.# + k/M" shape now
+    ///     lives in <see cref="TokenCell" />, which the message header calls
+    ///     too. This wrapper stays because the two cell-composition lines
+    ///     above name it; its output is byte-identical to before.
+    /// </summary>
+    internal static string FormatCount(long v) => TokenCell.ToCompact(v);
 }
 
 /// <summary>Blits fitted segments into a buffer row: accent colors, single-space gaps.</summary>

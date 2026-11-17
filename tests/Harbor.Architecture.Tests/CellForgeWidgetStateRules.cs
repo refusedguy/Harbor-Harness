@@ -66,6 +66,11 @@ public sealed class CellForgeWidgetStateRules
         // area after the move-out; the tree follows the file so the widget
         // surface stays governed where it moved to.
         "src/Harbor.Tui.CellForge/Chat/Mascot",
+        // #1620 adapted slice: FloatingTerminalSession (with its nullable
+        // FloatingTerminalController.Session) moved to the engine Widgets
+        // folder; the tree follows the file so the classification table keeps
+        // governing the same widget surface.
+        "src/Harbor.Tui.CellForge.Engine/Widgets",
     ];
 
     /// <summary>

@@ -8,6 +8,7 @@
     </Folder>
 
     <Folder Name="/samples/plugins/">
+        <Project Path="samples/plugins/Harbor.Plugin.Echo/Harbor.Plugin.Echo.csproj"/>
         <Project Path="samples/plugins/Harbor.Plugin.FileTree/Harbor.Plugin.FileTree.csproj"/>
         <Project Path="samples/plugins/Harbor.Plugin.GitTools/Harbor.Plugin.GitTools.csproj"/>
         <Project Path="samples/plugins/Harbor.Plugin.TodoWrite/Harbor.Plugin.TodoWrite.csproj"/>

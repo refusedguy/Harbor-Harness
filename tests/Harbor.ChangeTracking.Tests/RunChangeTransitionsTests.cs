@@ -80,4 +80,45 @@ public class RunChangeTransitionsTests
         await Assert.That(fromReleased.IsFailure).IsTrue();
         await Assert.That(fromReleased.Error.Contains("terminal")).IsTrue();
     }
+
+    // #1484: the verdict, reason and terminal flag now live on per-state
+    // objects. A new state is one new class plus one table registration —
+    // no existing state class is edited. A synthetic enum value stands in
+    // for a future lifecycle state; RunState itself is part of the shared
+    // vocabulary in Harbor.Application.Sessions and is out of scope here.
+    private const RunState ProbeState = (RunState)9001;
+
+    private sealed class ProbeRunState : IRunState
+    {
+        public RunState Value => ProbeState;
+
+        public IReadOnlyCollection<RunState> LegalTargets => [RunState.Reported];
+
+        public bool IsTerminal => false;
+
+        public string RefusalReason(RunState to) => $"the probe refuses {to}";
+    }
+
+    [Test]
+    public async Task ProbeState_AddsANewStateWithoutEditingExistingOnes()
+    {
+        RunTransitionTable table = RunTransitionTable.CreateDefault();
+        RunTransitionTable withProbe = new([.. table.States, new ProbeRunState()]);
+
+        Result<RunState> legal = withProbe.TryTransition(ProbeState, RunState.Reported);
+        await Assert.That(legal.IsSuccess).IsTrue();
+        await Assert.That(legal.Value).IsEqualTo(RunState.Reported);
+
+        // The probe's own reason text is used, and the shared static facade
+        // still answers for the built-in states — the probe is additive.
+        Result<RunState> refused = withProbe.TryTransition(ProbeState, RunState.Rejected);
+        await Assert.That(refused.IsFailure).IsTrue();
+        await Assert.That(refused.Error.Contains("the probe refuses Rejected")).IsTrue();
+
+        await Assert.That(withProbe.IsTerminal(ProbeState)).IsFalse();
+        await Assert.That(RunChangeTransitions.IsTerminal(RunState.Accepted)).IsTrue();
+        Result<RunState> untouched =
+            RunChangeTransitions.TryTransition(RunState.Reported, RunState.Rejected);
+        await Assert.That(untouched.IsSuccess).IsTrue();
+    }
 }

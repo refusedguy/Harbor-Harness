@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -21,106 +21,66 @@ namespace Harbor.Providers.Anthropic;
 ///     - tool_result as content block in user message
 ///     - system as separate field (not message)
 /// </summary>
-public sealed class AnthropicLlmClient : ILlmClient
+public sealed class AnthropicLlmClient : ProviderLlmClientBase, ILlmClient
 {
     private const string DefaultBaseUrl = "https://api.anthropic.com/v1";
-
-    private readonly IAuthResolver _auth;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation and conditional logic on the hot path.
     private readonly string _baseUrl;
     private readonly AnthropicConfig _config;
 
-    private readonly HttpClient _http;
-    private readonly ILogger<AnthropicLlmClient> _logger;
-
     public AnthropicLlmClient(
         HttpClient http,
         AnthropicConfig config,
         IAuthResolver auth,
         ILogger<AnthropicLlmClient> logger)
+        : base(http, auth, logger, ProviderId.Create("anthropic"))
     {
-        _http = http;
         _config = config;
-        _auth = auth;
-        _logger = logger;
-        _baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
+        _baseUrl = string.IsNullOrEmpty(config.BaseUrl) ? DefaultBaseUrl : config.BaseUrl.TrimEnd('/');
     }
 
-    public ProviderId ProviderId { get; } = ProviderId.Create("anthropic");
+    // --- Template Method variation points (#1499) ---------------------------
 
-    public async IAsyncEnumerable<LlmEvent> StreamAsync(
-        LlmRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
+    internal override Channel<LlmEvent> CreateChannel() =>
+        Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
         });
 
-        var writer = channel.Writer;
+    protected override string ApiErrorLabel => "Anthropic API";
 
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
-                if (apiKeyResult.IsFailure)
-                {
-                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
+    // Native clients historically scheduled the pump with the caller token.
+    protected override bool SchedulePumpWithToken => true;
 
-                var httpRequest = AnthropicRequestBuilder.BuildRequest(
-                    request, _baseUrl, apiKeyResult.Value, _config.ApiVersion, _config.BetaFeatures);
+    internal override HttpRequestMessage BuildRequest(LlmRequest request, string apiKey) =>
+        AnthropicRequestBuilder.BuildRequest(
+            request, _baseUrl, apiKey, _config.ApiVersion, _config.BetaFeatures);
 
-                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter (#203).
-                var chunkState = new ChunkStreamState();
+    internal override Task WriteEventsAsync(
+        string data,
+        ChannelWriter<LlmEvent> writer,
+        ChunkStreamState chunkState,
+        LlmRequest request,
+        Activity? activity,
+        CancellationToken token) =>
+        AnthropicEventMapper.WriteAnthropicEventsAsync(data, writer, chunkState, Logger, token);
 
-                // Shared pump (ROP-A ПР.1): exactly one FinishEvent on graceful
-                // end-of-stream; parsers never emit FinishEvent themselves.
-                await SsePump.RunSseAsync(
-                    writer, _http, httpRequest,
-                    (data, token) => AnthropicEventMapper.WriteAnthropicEventsAsync(data, writer, chunkState, _logger, token),
-                    "Anthropic API", _logger, cancellationToken,
-                    onComplete: () =>
-                    {
-                        // #203: stream-health summary (only when noteworthy).
-                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
-                        {
-                            AnthropicLlmClientLog.StreamCompleted(
-                                _logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls);
-                        }
-                    }).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                // Expected on cancel
-            }
-            catch (Exception ex)
-            {
-                // #203 E5: fire-and-forget pump task must log inside the
-                // lambda — the ErrorEvent alone is invisible in traces.
-                AnthropicLlmClientLog.StreamTaskFailed(_logger, ex, ex.Message);
-                await writer.WriteAsync(new ErrorEvent(
-                    $"Stream failed: {ex.Message}", ex.ToString(),
-                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                writer.TryComplete();
-            }
-        }, cancellationToken);
-
-        await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-        {
-            yield return evt;
-        }
+    internal override void OnStreamComplete(ChunkStreamState chunkState, Activity? activity)
+    {
+        // #203: stream-health summary (only when noteworthy).
+        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
+            AnthropicLlmClientLog.StreamCompleted(Logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls);
     }
 
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+    protected override void OnFailed(Exception ex, Activity? activity) =>
+        // #203 E5: fire-and-forget pump task must log inside the lambda —
+        // the ErrorEvent alone is invisible in traces.
+        AnthropicLlmClientLog.StreamTaskFailed(Logger, ex, ex.Message);
+
+    public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
     {
         // Anthropic doesn't have a /models endpoint — return hardcoded catalog
         var models = AnthropicModels.All;

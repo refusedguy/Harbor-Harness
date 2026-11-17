@@ -149,6 +149,15 @@ public abstract record AppMsg
     /// <param name="Directory">The new directory (full path, or empty for CWD).</param>
     public sealed record SetPanelDirectory(string Id, string Directory) : AppMsg;
 
+    /// <summary>
+    ///     Replace the loaded PR review comments for a panel (#1488). The cards
+    ///     panel draws this array verbatim; no fetch happens in the reducer or
+    ///     in the panel. An empty array is the honest "no comments" state.
+    /// </summary>
+    /// <param name="Id">The panel id (e.g. <c>"pr-comment-cards"</c>).</param>
+    /// <param name="Cards">Immutable comment snapshot, in display order.</param>
+    public sealed record SetPrComments(string Id, ImmutableArray<PrCommentCard> Cards) : AppMsg;
+
     // ── file tree (#667) ────────────────────────────────────────────────────
     //
     // Four messages, and the split is the point: the reducer OWNS the listing
@@ -208,4 +217,14 @@ public abstract record AppMsg
     /// </summary>
     /// <param name="Id">The panel id owning the listing.</param>
     public sealed record InvalidateFileTree(string Id) : AppMsg;
+
+    /// <summary>
+    ///     Toggle the in-place expansion of one directory node (#1487). Carries
+    ///     only the full path: the children themselves are already in the
+    ///     snapshot's <see cref="FileTreeEntry.ChildEntries" />, so this message
+    ///     is pure selection state and never asks for I/O.
+    /// </summary>
+    /// <param name="Id">The panel id owning the tree.</param>
+    /// <param name="Path">The full path of the directory node being toggled.</param>
+    public sealed record ToggleFileTreeExpansion(string Id, string Path) : AppMsg;
 }

@@ -1,6 +1,15 @@
+// #1620 adapted slice: same body as the Chat leaf
+// (Harbor.Tui.CellForge/Chat/Rendering/PromptBuffer.cs, now deleted) except the
+// one alias-bound vocabulary name. The Chat project's GlobalUsings.cs pins
+// `UnicodeWidth` to Harbor.Ui.Framework.Rendering.UnicodeWidth; the engine is
+// BCL-only and cannot import Harbor.Ui.Framework.*, so the name now spells
+// through an explicit using of the engine's own verbatim port. EditOutcome and
+// EditOutcomeKind are declared in this file and move with it, so
+// MarkdownEditOps / ComposerController keep resolving them in the same
+// namespace. Body and namespace are otherwise unchanged.
 using System.Buffers;
 using System.Text;
-using Harbor.Ui.Framework.Rendering;
+using UnicodeWidth = Harbor.Tui.CellForge.Rendering.UnicodeWidth;
 
 namespace Harbor.Tui.CellForge.Rendering;
 

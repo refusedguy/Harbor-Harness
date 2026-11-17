@@ -1,3 +1,4 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Abstractions.Permissions;
 using Harbor.Terminal.Abstractions.ViewModels;
 
@@ -85,7 +86,7 @@ public static class TranscriptGrouping
         ChatEntry entry,
         TranscriptVerbosity verbosity = DefaultVerbosity)
     {
-        ArgumentNullException.ThrowIfNull(entry);
+        Ensure.NotNull(entry);
 
         if (IsQuestionTool(entry))
         {
@@ -131,7 +132,7 @@ public static class TranscriptGrouping
         IReadOnlyList<ChatEntry> entries,
         TranscriptVerbosity verbosity = DefaultVerbosity)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
 
         IReadOnlyList<GroupNode<ChatEntry, TranscriptGroupKind>> nodes =
             GroupTree.GroupEntries(entries, e => EntryPath(e, verbosity));
@@ -168,8 +169,8 @@ public static class TranscriptGrouping
         TranscriptVerbosity verbosity = DefaultVerbosity,
         int index = -1)
     {
-        ArgumentNullException.ThrowIfNull(rows);
-        ArgumentNullException.ThrowIfNull(entry);
+        Ensure.NotNull(rows);
+        Ensure.NotNull(entry);
         if (index < 0)
         {
             index = rows.Count;
@@ -215,7 +216,7 @@ public static class TranscriptGrouping
     /// <summary>Marks the group before <paramref name="index"/> completed (opencode <c>completePrevious</c>).</summary>
     public static void CompletePrevious(IList<TranscriptRow> rows, int index = -1)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        Ensure.NotNull(rows);
         if (index < 0)
         {
             index = rows.Count;
@@ -234,7 +235,7 @@ public static class TranscriptGrouping
     /// </summary>
     public static List<string> GroupRefs(TranscriptRow.Group group, bool includePending = false)
     {
-        ArgumentNullException.ThrowIfNull(group);
+        Ensure.NotNull(group);
 
         HashSet<string> pending = includePending
             ? new HashSet<string>(StringComparer.Ordinal)
@@ -254,8 +255,8 @@ public static class TranscriptGrouping
     /// </summary>
     public static void PartitionPending(IList<TranscriptRow> rows, ISet<string> pending)
     {
-        ArgumentNullException.ThrowIfNull(rows);
-        ArgumentNullException.ThrowIfNull(pending);
+        Ensure.NotNull(rows);
+        Ensure.NotNull(pending);
 
         for (int i = 0; i < rows.Count; i++)
         {
@@ -275,8 +276,8 @@ public static class TranscriptGrouping
     /// <summary>True when the group subtree already carries this tool call (opencode <c>hasPart</c>).</summary>
     public static bool HasToolCall(IList<TranscriptRow> rows, string toolCallId)
     {
-        ArgumentNullException.ThrowIfNull(rows);
-        ArgumentNullException.ThrowIfNull(toolCallId);
+        Ensure.NotNull(rows);
+        Ensure.NotNull(toolCallId);
 
         foreach (TranscriptRow row in rows)
         {
@@ -306,7 +307,7 @@ public static class TranscriptGrouping
     /// </summary>
     public static TranscriptActivitySummary SummarizeActivity(TranscriptRow.Group group)
     {
-        ArgumentNullException.ThrowIfNull(group);
+        Ensure.NotNull(group);
 
         var pending = new HashSet<string>(group.PendingToolCallIds, StringComparer.Ordinal);
         int commands = 0, edits = 0, thoughts = 0, reads = 0, tools = 0, instructions = 0;

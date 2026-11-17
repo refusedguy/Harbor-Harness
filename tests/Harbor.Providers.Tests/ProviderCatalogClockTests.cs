@@ -80,8 +80,8 @@ public class ProviderCatalogClockTests : IDisposable
         clock.Advance(TimeSpan.FromHours(23));
         var second = await catalog.GetModelsAsync(Config());
 
-        await Assert.That(first.IsSuccess).IsTrue();
-        await Assert.That(second.IsSuccess).IsTrue();
+        await Assert.That(first).IsSuccessful();
+        await Assert.That(second).IsSuccessful();
         await Assert.That(second.Value[0].Id).IsEqualTo("m1");
         await Assert.That(handler.Calls).IsEqualTo(1)
             .Because("a catalogue inside its window is served from the cache file — no second round-trip");
@@ -105,7 +105,7 @@ public class ProviderCatalogClockTests : IDisposable
         clock.Advance(TimeSpan.FromHours(25));
         var after = await catalog.GetModelsAsync(Config());
 
-        await Assert.That(after.IsSuccess).IsTrue();
+        await Assert.That(after).IsSuccessful();
         await Assert.That(handler.Calls).IsEqualTo(2)
             .Because("past the window the catalogue is refetched — the cache must not serve a stale catalogue");
     }
@@ -157,7 +157,7 @@ public class ProviderCatalogClockTests : IDisposable
         clock.Advance(TimeSpan.FromHours(25));
         var after = await catalog.GetModelsAsync(Config());
 
-        await Assert.That(after.IsSuccess).IsTrue();
+        await Assert.That(after).IsSuccessful();
         await Assert.That(after.Value[0].Id).IsEqualTo("m1");
         await Assert.That(handler.Calls).IsEqualTo(2)
             .Because("the stale file is served only after the fetch has failed — not before");

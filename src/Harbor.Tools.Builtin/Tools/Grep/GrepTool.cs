@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.RegularExpressions;
 using AutoCtor;
+using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -228,11 +229,14 @@ public sealed partial class GrepTool : ITool
             ? $"Found {results.Count}+ matches (showing {results.Count}):"
             : $"Found {results.Count} matches:";
 
-        // Join without LINQ
-        var sb = new StringBuilder(results.Count * 64);
-        sb.AppendLine(header);
+        // Join without LINQ. #1097 (per-call builder): FormatResults runs on
+        // every grep invocation, so rent instead of allocating a fresh builder.
+        // Synchronous composition on a cold path; ToString() materialises the
+        // result before the pooled builder is returned on dispose.
+        using var sb = StringBuilderPool.Rent(results.Count * 64);
+        sb.Builder.AppendLine(header);
         foreach (string t in results)
-            sb.AppendLine(t);
+            sb.Builder.AppendLine(t);
 
         return ToolResult.Success(
             sb.ToString().TrimEnd(),

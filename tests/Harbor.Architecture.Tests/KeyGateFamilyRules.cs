@@ -290,7 +290,7 @@ public class KeyGateFamilyRules
         // session appends a typed rune to its live input line (Backspace edits,
         // Enter commits) — a buffer site, with Shift typing through the same
         // Char path as the composer. Detach/attach keeps the buffer alive.
-        new("FloatingTerminalSession", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/FloatingTerminalSession.cs"),
+        new("FloatingTerminalSession", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge.Engine/Widgets/FloatingTerminalSession.cs"),
         new("ReplInputLoop(slash)", KeyGateFamily.Buffer, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
         // GenericTextField (#1225, epic #1195): the neutral single-line input.
         // A rune reaches the buffer via Insert; AcceptsTypedChar admits Shift
@@ -392,6 +392,14 @@ public class KeyGateFamilyRules
         new("CellForgeFileTreePanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeFileTreePanel.cs"),
         new("CellForgeDiagnosticsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeDiagnosticsPanel.cs"),
         new("CellForgeSubagentsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeSubagentsPanel.cs"),
+        // PR comment cards (#1488): j/k/space navigation with no text buffer;
+        // the Char gate is the buffer one (refuse Ctrl/Alt/Meta, admit Shift's
+        // J/K), the same family as the other navigable cell panels above.
+        new("CellForgePrCommentCardsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgePrCommentCardsPanel.cs"),
+        // #1483: p/r/d/s commands plus an inline rename buffer and local filter;
+        // the Char gate is the buffer one (refuse Ctrl/Alt, admit Shift), same
+        // family as the other keyed cell panels above.
+        new("CellForgeSessionSidebarPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeSessionSidebarPanel.cs"),
     ];
 
     /// <summary>

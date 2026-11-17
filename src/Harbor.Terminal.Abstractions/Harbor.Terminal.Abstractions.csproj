@@ -67,4 +67,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
+  <!--
+    #1100: the allocation gate for BuildToolResultPreview lives in
+    Harbor.Tui.Tests, which already references this project. Grant it access
+    to the internal helper so the gate measures the exact production method
+    (the same pattern Harbor.Ui.Framework.State uses for Harbor.Tui.Tests).
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.Tests"/>
+  </ItemGroup>
+
 </Project>

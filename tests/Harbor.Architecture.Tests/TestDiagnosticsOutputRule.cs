@@ -140,12 +140,75 @@ public sealed class TestDiagnosticsOutputRule
         @"Console\s*\.\s*(Out\s*\.\s*)?Write(Line|Error)?\s*\(",
         RegexOptions.Compiled);
 
+    /// <summary>The one banned shape's sub-id, shared by the rule data and the controls.</summary>
+    private const string ConsoleWriteSubId = "CONSOLE-WRITE-CALL";
+
+    // MECHANISM (#1086, step 2, conveyor slice)
+    // -----------------------------------------
+    // The ban is a ScanRule: the call shape as one Forbidden row carrying the
+    // existing Regex object verbatim, and the planted caller/prose pair as
+    // controls. Matching and the control verdict are ScanRunner's; this file
+    // keeps the issue prose, the scope list and the test names.
+    //
+    // SCOPE IS EXPLICIT, NOT A TREE WALK. SourceScan.IsBuildOutput rejects any
+    // path containing "/tests/", so EnumerateCsFiles("tests") returns ZERO by
+    // construction (ScanVisibilityRule measures and pins that trap). The rule
+    // is therefore graded through EvaluateOver over ReadSources of the named
+    // files, and the "every file was read" check below is kept in this file:
+    // ScanRunner.CheckDiscovery walks Trees and cannot see this scope. The
+    // same explicit-list check is what makes a renamed file a red test rather
+    // than a silently un-guarded one.
+    private static readonly ScanRule ConsoleWriteRule = new()
+    {
+        Id = "TestDiagnosticsOutput",
+        Trees = ["tests"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                ConsoleWriteSubId,
+                ConsoleWriteCall,
+                "route the diagnostic through TestContext.Output: it names the test whose report the "
+                + "line belongs to, so a failing test says WHY it failed. Console.WriteLine is ambient "
+                + "and is attributed to the writing thread's context, or lost to a replaced Console.Out. "
+                + "See issue #1856."),
+        ],
+        Controls =
+        [
+            // The positive control: a real console write must be reported.
+            new ScanControl("Planted/ConsoleWrite.cs", """
+                public void Report(string message)
+                {
+                    Console.WriteLine(message);
+                }
+                """, ConsoleWriteSubId),
+            // The same call through Console.Out, the other half of the shape.
+            new ScanControl("Planted/ConsoleOutWrite.cs", """
+                public void Report(string message)
+                {
+                    Console.Out.Write(message);
+                }
+                """, ConsoleWriteSubId),
+            // The negative control: prose that NAMES the API is not a call.
+            new ScanControl("NearMiss/ProseOnly.cs", """
+                /// <summary>
+                ///     The measured operation is a raw <c>Console.Write</c> per row.
+                /// </summary>
+                public void Report(string message)
+                {
+                }
+                """, null),
+            // The replacement API must stay silent: a rule that flagged it
+            // would forbid the fix.
+            new ScanControl("NearMiss/TestContextOutput.cs", """
+                public void Report(string message) => TestContext.Output.WriteLine(message);
+                """, null),
+        ],
+    };
+
     [Test]
     public async Task Converted_Diagnostic_Files_Print_Nothing_To_The_Console()
     {
-        var violations = new List<string>();
         var missing = new List<string>();
-        var scanned = 0;
 
         if (RepoPaths.RepoRoot is not { } root)
         {
@@ -162,17 +225,11 @@ public sealed class TestDiagnosticsOutputRule
             {
                 // A renamed or deleted file would silently un-guard itself.
                 missing.Add(relative);
-                continue;
             }
-
-            string code = SourceScan.StripComments(File.ReadAllText(path));
-            foreach (Match match in ConsoleWriteCall.Matches(code))
-            {
-                violations.Add($"{relative}: {match.Value}");
-            }
-
-            scanned++;
         }
+
+        var sources = ScanRunner.ReadSources(ConvertedDiagnosticFiles);
+        List<string> violations = ScanRunner.EvaluateOver(sources, ConsoleWriteRule);
 
         await Assert.That(missing).IsEmpty()
             .Because(
@@ -180,11 +237,11 @@ public sealed class TestDiagnosticsOutputRule
                 + "means the rule is guarding nothing for it — a renamed file would otherwise silently "
                 + "un-guard itself, and a guard that un-guards itself is not a guard. Missing: "
                 + (missing.Count == 0 ? "(none)" : string.Join("\n", missing)));
-        await Assert.That(scanned).IsEqualTo(ConvertedDiagnosticFiles.Length)
+        await Assert.That(sources.Count).IsEqualTo(ConvertedDiagnosticFiles.Length)
             .Because(
                 "the rule has to READ every file in its scope for the absence of console writes to mean "
                 + "anything. A scope that silently shrank would turn this gate into a pass on nothing. "
-                + $"Read {scanned} of {ConvertedDiagnosticFiles.Length}.");
+                + $"Read {sources.Count} of {ConvertedDiagnosticFiles.Length}.");
         await Assert.That(violations).IsEmpty()
             .Because(
                 "a diagnostic printed with Console.WriteLine is attributed to whichever context the "
@@ -224,5 +281,23 @@ public sealed class TestDiagnosticsOutputRule
                 "negative control: prose that NAMES the console API is not a call, and a rule that "
                 + "flagged documentation would be a permanently red false positive — which is how a "
                 + "guard gets deleted");
+    }
+
+    /// <summary>
+    ///     The planted controls drive the REAL rule through ScanRunner: the two
+    ///     call shapes are reported under their sub-id, the prose mention and
+    ///     the TestContext.Output replacement stay silent. A rule that stopped
+    ///     grading through the engine would go green while enforcing nothing.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealRule()
+    {
+        List<string> failures = ScanRunner.CheckControls(ConsoleWriteRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the four planted controls must agree with the matcher cases above through the "
+                + "ScanRule's own verdict — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
     }
 }

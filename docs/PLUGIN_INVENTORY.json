@@ -112,6 +112,20 @@
       "failureReason": null
     },
     {
+      "name": "echo",
+      "version": "1.0.0",
+      "source": "samples/plugins/Harbor.Plugin.Echo/EchoPlugin.cs",
+      "phase": "declared",
+      "axes": [
+        "IToolPlugin"
+      ],
+      "dependencies": [],
+      "unsatisfiedDependencies": [],
+      "manifest": false,
+      "registrations": [],
+      "failureReason": null
+    },
+    {
       "name": "filetree",
       "version": "1.0.0",
       "source": "samples/plugins/Harbor.Plugin.FileTree/FileTreePlugin.cs",

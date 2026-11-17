@@ -117,6 +117,26 @@ Three reasons, and only three, put a check in `tools/` at all:
 If none of the three holds, the check is a C# tool or a Roslyn analyzer, and
 it belongs in the build, not in `tools/`.
 
+## The docs single batch lane
+
+All docs checks run in one workflow, `.github/workflows/docs.yml`. Commit
+`87626512` removed the `paths:` filter on `pull_request`, so every pull
+request starts this workflow and all six of its required status checks are
+reported there: checker self-test, internal links, markdown lint, normative
+citations, tree gates, and test project coverage. A docs change is checked
+on its own pull request; it does not need a product slot to reach a gate.
+
+The gates are batched, not split by product. The `tree` job runs every tree
+gate in one command, `harbor-gates all`, and prints one table. The three
+docs-specific gates (`check-md-links`, `md-lint`, and `check-doc-cites`)
+scan the whole markdown tree in their own jobs. No workflow outside
+`docs.yml` runs a markdown check. The full `docfx build` lives in
+`docs-site.yml` behind a narrow trigger on the site inputs; that split is
+by capability (SDK-free static checks versus an SDK build), not by product.
+
+This note records the design for epic #1068. No gate, floor, or threshold
+was changed here.
+
 ## What is not done in python
 
 Anything that needs a type, a symbol, or a resolved semantic model. A text

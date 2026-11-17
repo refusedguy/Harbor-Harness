@@ -241,3 +241,30 @@ The repair for the remaining four is a declaration per guard in
 witness), filled in by the guard's author and checked in review. A gate that
 greps rule files for control-shaped words would be a tier-B rule: it turns every
 innocent rename into a red build, which is worse than four unguarded rules.
+
+## Third addendum (2026-11-17): `ResultTryAdoptionTests` gets a positive control
+
+One more guard in the "neither" column now has a control. `ResultTryAdoptionTests`
+gates the hand-rolled `catch(Exception) -> Result.Failure` shape by scanning
+`src/` source text and expecting zero hits. Its `ScanFile` used to read each file
+and run the matcher inline, so the only way to prove the matcher could fire was
+to break a real source file. The matcher is now split into a text-driven
+`ScanText`, with `ScanFile` as a thin file-reading wrapper, and a new
+`PositiveControl_ScanText_ReportsPlantedHandRolledTryCatch` test drives that same
+scanner with synthetic source. It plants a hand-rolled catch, requires exactly
+one hit at that catch, and requires two narrowed catches (by type and by
+exception filter) to stay invisible. A matcher that returned nothing would now
+fail the control instead of making the gate green for the wrong reason.
+
+The plant cannot drift with production code: it lives in the test, and it mirrors
+the two honest shapes the gate already chose to exempt for behavioural reasons.
+No rule-tier or threshold file was touched.
+
+By the census rule this document states (a test whose name carries a control
+word), the guard leaves the "neither" column. The second-pass addendum above put
+the split at 156 of 160 with a control and 4 without. With this slice it is
+**157 of 160 with a control or floor, 3 without**: `NetArchLayerRules`,
+`FullLayerMatrixTests` and `ReadmeCoverageTests`. The 153 to 154 figure quoted in
+the #1724 slice request is the earlier first-pass baseline, recorded before the
+second pass credited three more guards; the arithmetic here follows the most
+recent dated census in this file.
