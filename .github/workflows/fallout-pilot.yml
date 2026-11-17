@@ -76,12 +76,24 @@ jobs:
           dotnet build build/_build.csproj -c Release --nologo -v:minimal
           dotnet build build/_build.fallout/_build.fallout.csproj -c Release --nologo -v:minimal
 
+      - name: Locate the two built assemblies
+        run: |
+          set -euo pipefail
+          NUKE_DLL="$(find "$GITHUB_WORKSPACE/build/bin" -name '_build.dll' -path '*/Release/*' -print -quit)"
+          FALLOUT_DLL="$(find "$GITHUB_WORKSPACE/build/_build.fallout/bin" -name '_build.fallout.dll' -path '*/Release/*' -print -quit)"
+          test -n "$NUKE_DLL"
+          test -n "$FALLOUT_DLL"
+          echo "NUKE_DLL=$NUKE_DLL" >> "$GITHUB_ENV"
+          echo "FALLOUT_DLL=$FALLOUT_DLL" >> "$GITHUB_ENV"
+          echo "NUKE_DLL=$NUKE_DLL"
+          echo "FALLOUT_DLL=$FALLOUT_DLL"
+
       - name: argv parity — Pack --dry-run --format json
         run: |
           set -euo pipefail
-          dotnet build/bin/Release/net10.0/_build.dll \
+          dotnet "$NUKE_DLL" \
             Pack --dry-run --format json > "$RUNNER_TEMP/nuke.pack.json" 2> "$RUNNER_TEMP/nuke.pack.err"
-          dotnet build/_build.fallout/bin/Release/net10.0/_build.fallout.dll \
+          dotnet "$FALLOUT_DLL" \
             Pack --dry-run --format json > "$RUNNER_TEMP/fallout.pack.json" 2> "$RUNNER_TEMP/fallout.pack.err"
           python3 - "$RUNNER_TEMP/nuke.pack.json" "$RUNNER_TEMP/fallout.pack.json" <<'PY'
           import json, sys
@@ -113,9 +125,9 @@ jobs:
       - name: Catalog parity — list --format json
         run: |
           set -euo pipefail
-          dotnet build/bin/Release/net10.0/_build.dll \
+          dotnet "$NUKE_DLL" \
             list --format json > "$RUNNER_TEMP/nuke.list.json" 2> "$RUNNER_TEMP/nuke.list.err"
-          dotnet build/_build.fallout/bin/Release/net10.0/_build.fallout.dll \
+          dotnet "$FALLOUT_DLL" \
             list --format json > "$RUNNER_TEMP/fallout.list.json" 2> "$RUNNER_TEMP/fallout.list.err"
           python3 - "$RUNNER_TEMP/nuke.list.json" "$RUNNER_TEMP/fallout.list.json" <<'PY'
           import json, sys
@@ -146,13 +158,13 @@ jobs:
           set -euo pipefail
           dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true --nologo -v:minimal
           # --skip Clean keeps the compiled tree; each Pack only packs --no-build.
-          dotnet build/bin/Release/net10.0/_build.dll \
+          dotnet "$NUKE_DLL" \
             Pack --format json --skip Clean > "$RUNNER_TEMP/nuke.pack.real.json" 2> "$RUNNER_TEMP/nuke.pack.real.err"
           echo "NUKE Pack exit code: 0"
           rm -rf "$RUNNER_TEMP/nuke-packages"
           cp -r artifacts/packages "$RUNNER_TEMP/nuke-packages"
           rm -rf artifacts/packages
-          dotnet build/_build.fallout/bin/Release/net10.0/_build.fallout.dll \
+          dotnet "$FALLOUT_DLL" \
             Pack --format json --skip Clean > "$RUNNER_TEMP/fallout.pack.real.json" 2> "$RUNNER_TEMP/fallout.pack.real.err"
           echo "Fallout Pack exit code: 0"
           rm -rf "$RUNNER_TEMP/fallout-packages"

@@ -5,11 +5,11 @@
 
     A SECOND build project, living next to the NUKE one. It is the same
     32-file build orchestrator as build/_build/, rewritten once by
-    `fallout-migrate --dry-run` (Fallout.Migrate 10.4.0) and hand-checked:
+    `fallout-migrate in dry-run mode` (Fallout.Migrate 10.4.0) and hand-checked:
 
-        NUKE.Common 10.1.0    -> Fallout.Common 10.4.0
-        NUKEBuild             -> FalloutBuild
-        using NUKE.*          -> using Fallout.*  (ProjectModel -> Fallout.Solutions)
+        NUKE.Common 10.1.0    => Fallout.Common 10.4.0
+        NUKEBuild             => FalloutBuild
+        using NUKE.*          => using Fallout.*  (ProjectModel => Fallout.Solutions)
 
     build/_build/ and build/_build.csproj are NOT touched by this pilot.
     Nothing in CI switches over to this project yet; the comparison is
@@ -38,12 +38,12 @@
       10.x listed on nuget.org that still exposes the shaded
       `Fallout.Common.ProjectModel` / `Fallout.Solutions` pair this code
       uses. The migration tool itself resolves 10.5.0 by default (it has
-      no --version flag); we override that with the ADR pin.
+      no version flag); we override that with the ADR pin.
 
       fallout-migrate does NOT rewrite the transitive pins, and its real
       run drops the System.Security.Cryptography.Xml pin outright. We keep
       the pin here: Fallout.Tooling asks for 10.0.10, which is inside the
-      11 advisory ranges 10.0.13 closes. NuGet.Packaging moves 6.12.5 ->
+      11 advisory ranges 10.0.13 closes. NuGet.Packaging moves 6.12.5 =>
       6.14.3 because Fallout.Tooling 10.4.0 requires 6.14.3; leaving the
       NUKE-era pin would be NU1605 (restore error) with CPM off.
       Microsoft.Build* stay at 18.0.2, matching Fallout.ProjectModel.
