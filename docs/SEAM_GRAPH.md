@@ -119,8 +119,8 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | `IDispatcherAdapter` | [`src/Harbor.Ui.Framework.Services/Services/IDispatcherAdapter.cs`](../src/Harbor.Ui.Framework.Services/Services/IDispatcherAdapter.cs) | `AvaloniaDispatcherAdapter` / `TestDispatcherAdapter` | 18 | `AvaloniaDispatcherAdapter` | 0 |
 | `IPanelRegistry` | [`src/Harbor.Ui.Framework.State/Panels/IPanelRegistry.cs`](../src/Harbor.Ui.Framework.State/Panels/IPanelRegistry.cs) | `PanelRegistryPluginAdapter`, `PanelRegistry` | 17 | a factory | 12 |
 | `IRendererPipeline` | [`src/Harbor.Hosting/Rendering/IRendererPipeline.cs`](../src/Harbor.Hosting/Rendering/IRendererPipeline.cs) | `RendererPipeline` | 18 | a factory | 1 |
+| `IAuthResolver` | [`src/Harbor.Abstractions/Providers/IAuthResolver.cs`](../src/Harbor.Abstractions/Providers/IAuthResolver.cs) | `CommonConfigAuthResolver`, `ConfigAuthResolver`, `EnvVarAuthResolver` / `StubAuthResolver (Harbor.App.Avalonia.Tests)`, `StubAuthResolver (Harbor.Hosting.Tests)`, `FixedKeyResolver` (+4 more) | 15 | a factory | 4 |
 | `ICommonConfigStore` | [`src/Harbor.Desktop.Abstractions/Configuration/ICommonConfigStore.cs`](../src/Harbor.Desktop.Abstractions/Configuration/ICommonConfigStore.cs) | `JsonCommonConfigStore` / `StubCommonConfigStore`, `TokenWatchingConfigStore`, `RecordingCommonStore` (+2 more) | 17 | a factory, a factory | 4 |
-| `IAuthResolver` | [`src/Harbor.Abstractions/Providers/IAuthResolver.cs`](../src/Harbor.Abstractions/Providers/IAuthResolver.cs) | `CommonConfigAuthResolver`, `ConfigAuthResolver`, `EnvVarAuthResolver` / `StubAuthResolver (Harbor.App.Avalonia.Tests)`, `StubAuthResolver (Harbor.Hosting.Tests)`, `FixedKeyResolver` (+4 more) | 14 | a factory | 5 |
 | `ICollapsibleChatBlock` | [`src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`](../src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs) | `AssistantMarkdownBlock`, `ReadGroupBlock`, `TableBlock`, `StreamingThinkingBlock`, `ThinkingBlock` (+4 more) | 7 | none | 21 |
 | `IRequestHandler` | [`src/Harbor.Ipc.Server/Protocol/IRequestHandler.cs`](../src/Harbor.Ipc.Server/Protocol/IRequestHandler.cs) | `StartAgentRequestHandler`, `AbortAgentRequestHandler`, `SendPromptRequestHandler`, `CreateSessionRequestHandler`, `ListSessionsRequestHandler` (+9 more) | 2 | none | 14 |
 | `ISessionManager` | [`src/Harbor.Ui.Framework.Sessions/Sessions/ISessionManager.cs`](../src/Harbor.Ui.Framework.Sessions/Sessions/ISessionManager.cs) | `SessionManager` / `FakeSessionManager (Harbor.App.Avalonia.Tests)`, `NoSessionsManager`, `StubSessionManager` (+1 more) | 15 | a factory | 0 |
@@ -195,8 +195,8 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `OpenAiCompatibleLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs`](../src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs):179
   - `OpenAiCompatibleLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs`](../src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs):212
   - `OllamaLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):127
-  - `AnthropicLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):147
-  - `OpenAILlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):168
+  - `AnthropicLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):177
+  - `OpenAILlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):186
   - `InstrumentedLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs`](../src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs):26
 
 ### `IPluginHost`
