@@ -14,7 +14,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// tracking is a separate step (issue #2354), so a caller bumps the key when
 /// state the node reads changes.
 /// </summary>
-public abstract class PrepaintNode : LeafNode
+public abstract class PrepaintNode : LeafNode, INode
 {
     private PrepaintRecord _record;
     private Scene? _scene;
@@ -30,6 +30,12 @@ public abstract class PrepaintNode : LeafNode
 
     /// <summary>The record produced by the last prepaint pass.</summary>
     public PrepaintRecord CurrentRecord => _record;
+
+    // The interface slot has a default body. Explicit implementation is what
+    // makes a call through INode (the NodeFrame path) reach this class's
+    // preparation instead of that default; the public overload below is the
+    // same operation for callers holding the concrete node.
+    PrepaintRecord INode.Prepaint(PrepaintContext context, ElementId id) => Prepaint(context, id);
 
     /// <summary>
     /// Prepaints this node: reuses a matching record, otherwise calls

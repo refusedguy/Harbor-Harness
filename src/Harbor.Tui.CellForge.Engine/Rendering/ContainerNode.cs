@@ -29,6 +29,10 @@ public abstract class ContainerNode : INode
     /// <inheritdoc />
     public abstract void Paint(ScreenBuffer buffer, Rect clip);
 
+    // Explicit slot implementation: a call through INode otherwise resolves to
+    // the interface's default body instead of this virtual method.
+    PrepaintRecord INode.Prepaint(PrepaintContext context, ElementId id) => Prepaint(context, id);
+
     /// <summary>
     /// Ordered children addressed by index. Overridden by containers whose
     /// child ids are positional; named-id containers override

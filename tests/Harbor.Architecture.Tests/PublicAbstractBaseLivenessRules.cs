@@ -625,6 +625,15 @@ public sealed class PublicAbstractBaseLivenessRules
             + "becomes unnecessary the moment a widget derives from it, and it should be "
             + "deleted when the seam itself is retired.",
             "https://github.com/refusedguy/Harbor-Harness/issues/1835"),
+        new(
+            "Harbor.Tui.CellForge.Rendering.PrepaintNode",
+            "The prepaint-phase reference leaf introduced by #2361: it owns the cache "
+            + "key (version plus arranged bounds), commits the record and seals Paint so "
+            + "a node can only replay prepared ops. No shipped node derives from it yet — "
+            + "the product's nodes are still containers — so its only implementor today is "
+            + "the test double. The row stays while the prepaint contract has no product "
+            + "leaf and should be deleted when one is added.",
+            "https://github.com/refusedguy/Harbor-Harness/issues/2361"),
     ];
 
     /// <summary>
