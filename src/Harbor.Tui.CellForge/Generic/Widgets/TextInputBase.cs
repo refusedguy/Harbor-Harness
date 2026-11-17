@@ -17,7 +17,7 @@ public abstract class TextInputBase : ITextInput
     }
 
     /// <summary>Affix layout and button hit rectangles, shared by both widgets.</summary>
-    protected TextInputChrome Chrome { get; } = new();
+    internal TextInputChrome Chrome { get; } = new();
 
     /// <inheritdoc />
     public TextInputState State { get; }

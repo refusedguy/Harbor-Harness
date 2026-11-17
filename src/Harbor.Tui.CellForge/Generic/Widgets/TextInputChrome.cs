@@ -25,14 +25,10 @@ internal sealed class TextInputChrome
     public void PaintPrefix(ScreenBuffer buffer, Rect row)
     {
         var textStyle = new CellStyle(ChatPalette.Muted);
-        var buttonStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         int x = row.X;
         if (Affixes.PrefixButton is { } button)
         {
-            string label = "[" + button.Label + "]";
-            buffer.SetText(x, row.Y, label.AsSpan(), buttonStyle);
-            _buttons.Add((button.Id, new Rect(x, row.Y, Cells(label), 1)));
-            x += Cells(label);
+            x += PaintButton(buffer, row, x, button);
         }
 
         if (Affixes.Prefix.Length > 0)
@@ -45,7 +41,6 @@ internal sealed class TextInputChrome
     public void PaintSuffix(ScreenBuffer buffer, Rect row)
     {
         var textStyle = new CellStyle(ChatPalette.Muted);
-        var buttonStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         int x = row.X + row.Width - SuffixCells;
         if (Affixes.Suffix.Length > 0)
         {
@@ -55,9 +50,7 @@ internal sealed class TextInputChrome
 
         if (Affixes.SuffixButton is { } button)
         {
-            string label = "[" + button.Label + "]";
-            buffer.SetText(x, row.Y, label.AsSpan(), buttonStyle);
-            _buttons.Add((button.Id, new Rect(x, row.Y, Cells(label), 1)));
+            PaintButton(buffer, row, x, button);
         }
     }
 
@@ -74,6 +67,16 @@ internal sealed class TextInputChrome
         }
 
         return null;
+    }
+
+    private int PaintButton(ScreenBuffer buffer, Rect row, int x, TextInputButton button)
+    {
+        var buttonStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
+        string label = "[" + button.Label + "]";
+        int width = Cells(label);
+        buffer.SetText(x, row.Y, label.AsSpan(), buttonStyle);
+        _buttons.Add((button.Id, new Rect(x, row.Y, width, 1)));
+        return width;
     }
 
     private static int Cells(string s) => s.Length == 0 ? 0 : UnicodeWidth.Width(s.AsSpan());
