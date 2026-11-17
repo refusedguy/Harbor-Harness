@@ -454,6 +454,47 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
+    ///     Positive control for the NetArchTest dependency matcher itself (#1730).
+    ///     Every rule above calls <c>NotHaveDependencyOn(name)</c> with a forbidden
+    ///     set it expects to find EMPTY. NetArchTest is satisfied by a name that
+    ///     matches nothing, so a matcher that stopped resolving real dependencies
+    ///     would make every one of these rules green for the wrong reason. This
+    ///     test plants an offender without adding a project reference: it takes a
+    ///     name the probed assembly really references (from its own metadata) and
+    ///     puts that name in the forbidden set through the same builder the rules
+    ///     use. The matcher MUST report a violation. The name is derived from the
+    ///     assembly's own metadata, so the control stays narrow - it cannot fail on
+    ///     legitimate code or drift when a layer is refactored (as long as the
+    ///     assembly still references at least one other Harbor assembly). If the
+    ///     matcher cannot report a dependency that is provably there, none of the
+    ///     layer rules above can be believed.
+    /// </summary>
+    [Test]
+    public async Task PositiveControl_NetArchDependencyMatcher_ReportsARealReference()
+    {
+        var asm = typeof(AgentLoop).Assembly; // Harbor.Application
+        var refs = ArchitectureTestHelpers.GetReferencedAssemblyNames(asm);
+        await Assert.That(refs.Count)
+            .IsGreaterThan(0)
+            .Because("the probe assembly has no AssemblyRef at all - the matcher would be vacuous for every rule above");
+
+        // Plant the offender: a name that is really in this assembly's reference
+        // set, fed through the same NotHaveDependencyOn builder the layer rules
+        // use. Accept the first Harbor reference the DSL actually reports as a
+        // dependency, so the control cannot go flaky when a refactor removes one
+        // specific edge. A matcher that reports nothing for every real reference
+        // leaves planted null and this test fails, which is the whole point.
+        string? planted = refs
+            .Where(n => n.StartsWith("Harbor.", StringComparison.Ordinal))
+            .FirstOrDefault(n => !BuildNoDependencyResult(Types.InAssembly(asm), n).IsSuccessful);
+
+        await Assert.That(planted).IsNotNull()
+            .Because("no referenced Harbor assembly was reported as a real dependency by the DSL; "
+                     + "a matcher that cannot find a reference that is provably there cannot enforce "
+                     + "any of the layer rules above, which all expect an empty forbidden set");
+    }
+
+    /// <summary>
     ///     Sanity check: NetArchTest sees at least one type in each Harbor
     ///     assembly under test. If a ProjectReference is accidentally removed
     ///     from this test project, the corresponding InAssembly(...) call
