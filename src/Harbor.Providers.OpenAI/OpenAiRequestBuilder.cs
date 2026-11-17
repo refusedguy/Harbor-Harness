@@ -53,14 +53,6 @@ internal static class OpenAiRequestBuilder
     /// </summary>
     private const int InitialPayloadCapacity = 1024;
 
-    public static bool IsReasoningModel(string modelId)
-    {
-        return modelId.StartsWith("o1", StringComparison.OrdinalIgnoreCase) ||
-               modelId.StartsWith("o3", StringComparison.OrdinalIgnoreCase) ||
-               modelId.StartsWith("o4", StringComparison.OrdinalIgnoreCase) ||
-               modelId.Contains("gpt-5", StringComparison.OrdinalIgnoreCase);
-    }
-
     public static HttpRequestMessage BuildChatCompletionsRequest(LlmRequest request, string baseUrl, ILogger logger)
     {
         string url = string.Concat(baseUrl, "/chat/completions");
@@ -98,7 +90,7 @@ internal static class OpenAiRequestBuilder
 
     private static byte[] WriteChatCompletions(LlmRequest request, ILogger logger)
     {
-        bool isReasoning = IsReasoningModel(request.Model);
+        bool isReasoning = ReasoningModelStrategies.IsReasoningModel(request.Model);
 
         var buffer = new ArrayBufferWriter<byte>(InitialPayloadCapacity);
         using (var writer = new Utf8JsonWriter(buffer))
