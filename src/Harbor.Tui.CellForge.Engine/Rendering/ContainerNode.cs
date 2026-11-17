@@ -93,6 +93,21 @@ public sealed class FlexSplitNode : ContainerNode
     public void Add(INode child, Measurement measure, bool expand) =>
         Add(child, WidgetMeasure.ToTrack(measure, expand));
 
+    /// <summary>
+    /// Setup-time: seats a <see cref="MeasuredLeaf"/> as an <see cref="FlexTrack.Auto"/>
+    /// track whose floor/cap come from its min/max-content proposal (#2360).
+    /// The leaf stays the single source of its intrinsic size and the existing
+    /// <see cref="FlexLayout"/> solver stays the single owner of distribution —
+    /// no parallel measure pass. On arrange, the leaf's definite
+    /// <see cref="MeasuredLeaf.Measure"/> still supplies the intrinsic value
+    /// the two-pass solver clamps into that floor/cap.
+    /// </summary>
+    public void AddMeasured(MeasuredLeaf leaf)
+    {
+        ArgumentNullException.ThrowIfNull(leaf);
+        Add(leaf, leaf.ToTrack(Direction));
+    }
+
     /// <summary>Setup-time: removes <paramref name="child"/> and its track/frame.</summary>
     public bool Remove(INode child)
     {

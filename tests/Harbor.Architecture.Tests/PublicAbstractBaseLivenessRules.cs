@@ -78,7 +78,9 @@
 // extension point — `docs/PATTERNS.md` §5 asks for exactly that shape (an
 // extension point plus a visible list of them). Such a type has no implementor
 // here, and the rule has to be able to say so without being switched off. The
-// three rows below are that mechanism, and each says what would remove it.
+// two rows below are that mechanism, and each says what would remove it
+// (#2360 retired the LeafNode row when MeasuredLeaf became its product
+// implementor).
 //
 // WHAT IS NOT RULED, AND WHY
 // --------------------------
@@ -622,15 +624,6 @@ public sealed class PublicAbstractBaseLivenessRules
             + "so the row stays only while the seam has no product implementor. It "
             + "becomes unnecessary the moment a widget derives from it, and it should be "
             + "deleted when the seam itself is retired.",
-            "https://github.com/refusedguy/Harbor-Harness/issues/1835"),
-        new(
-            "Harbor.Tui.CellForge.Rendering.LeafNode",
-            "The childless half of the engine's layout tree: the default Arrange and "
-            + "the paint-area guard, so a leaf node implements Measure and Paint only. "
-            + "The product's own nodes are containers (ContainerNode and its three "
-            + "descendants); the leaf's only implementor is the FixedNode test stub. The "
-            + "row stays while no shipped node is a leaf, and becomes unnecessary the "
-            + "moment one is.",
             "https://github.com/refusedguy/Harbor-Harness/issues/1835"),
     ];
 
