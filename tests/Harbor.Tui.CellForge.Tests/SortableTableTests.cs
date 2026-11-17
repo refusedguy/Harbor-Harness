@@ -135,8 +135,9 @@ public class SortableTableTests
         string top = Art(table, 12, 6, offset: 0);
         string scrolled = Art(table, 12, 6, offset: 6);
 
-        string topHeader = top.Split('\n')[0];
-        string scrolledHeader = scrolled.Split('\n')[0];
+        // GenericTable frame: top rule at row 0, sticky header at row 1.
+        string topHeader = top.Split('\n')[1];
+        string scrolledHeader = scrolled.Split('\n')[1];
         await Assert.That(topHeader).IsEqualTo(scrolledHeader);
         await Assert.That(topHeader).Contains("id");
         // body content differs, so the two frames are not just identical
@@ -248,7 +249,8 @@ public class SortableTableTests
         table.SetRowsFromLines(["INFO|first\r\nsecond"]);
 
         await Assert.That(table.Rows.Count).IsEqualTo(1);
-        await Assert.That(table.Rows[0][1].Text).IsEqualTo("first second");
+        // SingleLine substitutes each CR and LF with a space: "first" + "  " + "second".
+        await Assert.That(table.Rows[0][1].Text).IsEqualTo("first  second");
     }
 
     [Test]
