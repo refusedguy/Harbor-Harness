@@ -59,7 +59,7 @@ subscribers (all in-process, each owns its IDisposable — see §6)
   DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106,107
   EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
   InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
-  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:167
+  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:177
   TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:238
   CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18 + InlineAgentStreamBridge.cs:35
   Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
@@ -132,7 +132,7 @@ the list is now complete because there is nothing left off it.
 | Per-client outbound queue, bounded 4096, `SingleReader = true` | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:446-451` | replay-before-live per client; writer never silently drops |
 | RPC client frame queue, bounded 4096, `DropOldest` | `src/Harbor.Ipc.Client/Protocol/MessagePackRpcClient.cs:36-41` | wire frames arriving from the server; not a bus subscriber |
 | In-process client queue, bounded 1024, `DropOldest` | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:97-102` | latest-events-visible TUI semantics |
-| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:92`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:169`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:284` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
+| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:92`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:179`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:294` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
 | Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-18` (held by `DefaultAgent.cs:34`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:179` | agent steering messages, unrelated to the bus |
 | Provider LLM stream channels | `src/Harbor.Providers.*/…LlmClient.cs` | raw LLM deltas before they become `MessageUpdateEvent`s |
 
@@ -148,7 +148,7 @@ is the subscriber's business, and the live branches are:
   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:351`), which reduces it
   through `ChatAppReducer` (`src/Harbor.Ui.Framework.State/State/UiStore.cs:175-183`).
   The CellForge REPL takes the same route via its `_events` pump
-  (`ReplLifecycle.cs:284-288`).
+  (`ReplLifecycle.cs:294-298`).
 - **Avalonia desktop** — `UiEventRouter` resolves the session-scoped store and
   dispatches there (`apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61-80`).
 - **The flat-`AppState` branch no longer exists.** This document used to carry a
@@ -302,7 +302,7 @@ is the subscriber's business, and the live branches are:
   `InMemoryEventBus.cs:1164-1178`).
 - Holders responsible for disposal: `EventBroadcaster.DisposeAsync`,
   `InProcessHarborClient`, the CellForge REPL pump (`using var busPump`,
-  `ReplLifecycle.cs:166-172`), CellForge bridges
+  `ReplLifecycle.cs:176-182`), CellForge bridges
   (`Subscription` property, `ChatScreenBridge.cs:108,110`),
   `DiagnosticsAggregator`, and the REPL runners / `DemoCommand`
   (process-lifetime, never disposed — acceptable, bus is process-lifetime too).

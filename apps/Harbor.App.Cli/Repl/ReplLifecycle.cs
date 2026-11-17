@@ -152,6 +152,16 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             ReplLifecycleLog.SetupOverlayFailed(host.Log, ex);
         }
 
+        // Issue #1490: gentle star reminder on top of the existing toast seat.
+        // IsEnabled() keeps plain/CI/headless/demo processes silent, and the
+        // file-backed store remembers both the launch count and "never".
+        // A failure here is a missed reminder, never a broken startup.
+        if (Harbor.Tui.CellForge.StarNag.StarNagCard.IsEnabled())
+        {
+            var starNag = StarNagFileStore.CreateCard();
+            _ = starNag.TryShow(host.Screen.Toasts);
+        }
+
         // #170: the heartbeat must outlive Idle while a mascot reaction/latch
         // still owes motion — the bridge polls both directors every frame.
         host.Bridge.TrackMascot(host.Screen.Mascot, host.Screen.Status);
