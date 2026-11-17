@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tools;
 
 namespace Harbor.Ui.Framework.State;
@@ -81,8 +82,10 @@ public sealed record ToolCallSnapshot(
 
         // Qualified: this record declares its own DiffPreview property, which would
         // otherwise shadow the static helper of the same name (CS0120).
-        var (isDiffTool, filePath, preview, fullDiff)
-            = State.DiffPreview.ExtractDiff(toolName, argsJson);
+        // The payload is one Maybe, so the flag and the three diff fields cannot
+        // disagree: a card flagged as a diff always carries the full payload,
+        // and a non-diff call carries none (#1101).
+        Maybe<DiffPayload> diff = State.DiffPreview.ExtractDiff(toolName, argsJson);
 
         return new ToolCallSnapshot(
             id,
@@ -91,9 +94,9 @@ public sealed record ToolCallSnapshot(
             string.IsNullOrEmpty(argsJson) || argsJson == "{}" ? string.Empty : argsJson,
             ToolCallState.Running,
             string.Empty,
-            isDiffTool,
-            filePath,
-            preview,
-            fullDiff);
+            diff.HasValue,
+            diff.HasValue ? diff.Value.FilePath : null,
+            diff.HasValue ? diff.Value.Preview : null,
+            diff.HasValue ? diff.Value.FullDiff : null);
     }
 }

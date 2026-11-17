@@ -1,9 +1,24 @@
 using System.Text;
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
 
 namespace Harbor.Ui.Framework.State;
+
+/// <summary>
+///     The diff payload of a file-touching tool call: the file, a short inline
+///     preview and the full diff behind the expand path.
+/// </summary>
+/// <remarks>
+///     Absence is not three nulls. <see cref="DiffPreview.ExtractDiff" /> returns
+///     <c>Maybe&lt;DiffPayload&gt;</c>, so a caller cannot publish a card that is
+///     flagged as a diff while carrying no diff (#1101).
+/// </remarks>
+/// <param name="FilePath">The diffed file.</param>
+/// <param name="Preview">The short inline preview.</param>
+/// <param name="FullDiff">The full diff behind the expand path.</param>
+public readonly record struct DiffPayload(string FilePath, string Preview, string FullDiff);
 
 /// <summary>
 ///     Builds the diff payload for a file-touching tool call: the file path, a
@@ -63,16 +78,16 @@ public static class DiffPreview
     /// <summary>
     ///     Extracts a diff payload for a file-touching tool call. Anything else —
     ///     a different tool, missing arguments, malformed JSON — degrades to
-    ///     "not a diff call" with null payloads rather than throwing.
+    ///     <see cref="Maybe{T}.None" /> rather than throwing, so the card still
+    ///     renders without a diff.
     /// </summary>
     /// <param name="toolName">The tool's stable name.</param>
     /// <param name="argsJson">The raw arguments the call was made with.</param>
-    public static (bool IsDiffTool, string? FilePath, string? Preview, string? FullDiff) ExtractDiff(
-        string toolName, string argsJson)
+    public static Maybe<DiffPayload> ExtractDiff(string toolName, string argsJson)
     {
         if (toolName != WellKnownTools.Edit && toolName != WellKnownTools.Write && toolName != WellKnownTools.Patch)
         {
-            return (false, null, null, null);
+            return Maybe<DiffPayload>.None;
         }
 
         // One parse feeds every branch: the file path plus whichever payload
@@ -93,7 +108,7 @@ public static class DiffPreview
             JsonElement root = JsonSerializer.Deserialize(argsJson, DiffPreviewJsonContext.Default.JsonElement);
             if (root.ValueKind != JsonValueKind.Object)
             {
-                return (false, null, null, null);
+                return Maybe<DiffPayload>.None;
             }
 
             filePath = FindFilePath(root);
@@ -105,7 +120,7 @@ public static class DiffPreview
         catch (JsonException)
         {
             // Malformed arguments — not a diff call. The card still renders.
-            return (false, null, null, null);
+            return Maybe<DiffPayload>.None;
         }
 
         if (toolName == WellKnownTools.Edit)
@@ -119,36 +134,34 @@ public static class DiffPreview
                     && DiffPlexPilot.TryComputePreview(oldString, newString, MaxFullDiffLines, out string? pilotFull)
                     && pilotPreview is not null && pilotFull is not null)
                 {
-                    return (true, filePath, pilotPreview, pilotFull);
+                    return Maybe.From(new DiffPayload(filePath, pilotPreview, pilotFull));
                 }
 
-                return (
-                    true,
+                return Maybe.From(new DiffPayload(
                     filePath,
                     GenerateContextDiff(oldString, newString, MaxPreviewLines),
-                    GenerateContextDiff(oldString, newString, MaxFullDiffLines));
+                    GenerateContextDiff(oldString, newString, MaxFullDiffLines)));
             }
         }
         else if (toolName == WellKnownTools.Write)
         {
             if (!string.IsNullOrEmpty(content))
             {
-                return (
-                    true,
+                return Maybe.From(new DiffPayload(
                     filePath,
                     GenerateContentDiff(content, MaxPreviewLines),
-                    GenerateContentDiff(content, MaxFullDiffLines));
+                    GenerateContentDiff(content, MaxFullDiffLines)));
             }
         }
         else // patch
         {
             if (!string.IsNullOrEmpty(patch))
             {
-                return (true, filePath, TruncateLines(patch, MaxPreviewLines), patch);
+                return Maybe.From(new DiffPayload(filePath, TruncateLines(patch, MaxPreviewLines), patch));
             }
         }
 
-        return (false, null, null, null);
+        return Maybe<DiffPayload>.None;
     }
 
     /// <summary>
