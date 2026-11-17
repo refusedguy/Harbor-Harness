@@ -85,6 +85,19 @@ public class ResultMaybeSignatureTests
     [Test]
     public async Task Assert_NoResultOfNullableValueTypeUnderSrc()
     {
+        // Positive control (#1730). Before trusting an empty scan result, drive
+        // the matcher with a planted offender and the two honest shapes it must
+        // NOT report. The discovery floor below proves the walk saw files; this
+        // proves the pattern itself can still fire after an innocent-looking
+        // regex edit. A matcher that stopped matching now turns red here instead
+        // of making every src/ file green for the wrong reason.
+        await Assert.That(NullableResultValue.IsMatch("Result<string?> Lookup()")).IsTrue()
+            .Because("the matcher must report the banned shape it exists to catch");
+        await Assert.That(NullableResultValue.IsMatch("Result<Maybe<string>> Lookup()")).IsFalse()
+            .Because("Result<Maybe<T>> is the honest replacement, not the smell");
+        await Assert.That(NullableResultValue.IsMatch("Result<string> Lookup()")).IsFalse()
+            .Because("a non-nullable payload is legitimate under Result<T>");
+
         var violations = new List<string>();
         int scanned = 0;
 
