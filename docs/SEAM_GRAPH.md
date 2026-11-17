@@ -96,7 +96,7 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | `ISessionStore` | [`src/Harbor.Abstractions/Sessions/ISessionStore.cs`](../src/Harbor.Abstractions/Sessions/ISessionStore.cs) | `JsonlSessionStore`, `MemorySessionStore`, `SqliteSessionStore`, `DeferredSessionStore` / `StoreDouble`, `TestSessionStore`, `ControllableStore` (+16 more) | 86 | a factory | 11 |
 | `IProviderRegistry` | [`src/Harbor.Abstractions/Providers/IProviderRegistry.cs`](../src/Harbor.Abstractions/Providers/IProviderRegistry.cs) | `ProviderRegistry (Harbor.Registries)`, `InstrumentedProviderRegistry` / `EmptyProviderRegistry`, `PricedModelRegistry`, `FakeRegistry (Harbor.App.Avalonia.Tests)` (+9 more) | 63 | a factory | 6 |
 | `IEventBus` | [`src/Harbor.Abstractions/Events/IEventBus.cs`](../src/Harbor.Abstractions/Events/IEventBus.cs) | `NullEventBus`, `InMemoryEventBus` / `CancelHonoringBus`, `CancelOnTurnStartBus`, `ThrowingUpdateBus` (+3 more) | 62 | none | 3 |
-| `ILlmClient` | [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs) | `RecordedSessionLlmClient`, `RetryLlmClientDecorator`, `AnthropicLlmClient`, `OllamaLlmClient`, `OpenAILlmClient` (+2 more) / `FakeClient (Harbor.App.Avalonia.Tests)`, `HangingLlmClient (Harbor.Application.Tests)`, `TokenCapturingLlmClient` (+12 more) | 53 | none | 7 |
+| `ILlmClient` | [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs) | `RecordedSessionLlmClient`, `RetryLlmClientDecorator`, `OllamaLlmClient`, `InstrumentedLlmClient` / `FakeClient (Harbor.App.Avalonia.Tests)`, `HangingLlmClient (Harbor.Application.Tests)`, `TokenCapturingLlmClient` (+12 more) | 56 | none | 3 |
 | `IAgentRegistry` | [`src/Harbor.Abstractions/Agents/AgentDefinition.cs`](../src/Harbor.Abstractions/Agents/AgentDefinition.cs) | `AgentRegistry` / `FakeAgentRegistry (Harbor.App.Avalonia.Tests)`, `FixedRegistry`, `FixedOrderAgentRegistry` (+3 more) | 52 | a factory | 4 |
 | `IAgent` | [`src/Harbor.Abstractions/Agents/IAgent.cs`](../src/Harbor.Abstractions/Agents/IAgent.cs) | `DefaultAgent`, `TracingAgentProxy` / `FakeAgent (Harbor.App.Avalonia.Tests)`, `FakeAgent (Harbor.App.Cli.Tests)`, `ScriptedAgent` (+5 more) | 45 | a factory | 1 |
 | `IToolRegistry` | [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abstractions/Tools/IToolRegistry.cs) | `CompositeToolRegistry`, `ToolRegistry`, `InstrumentedToolRegistry` / `CountingRegistry`, `StableToolRegistry`, `BenchToolRegistry` (+2 more) | 41 | a factory | 5 |
@@ -115,11 +115,11 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | `IToastService` | [`src/Harbor.Ui.Framework.Services/Services/IToastService.cs`](../src/Harbor.Ui.Framework.Services/Services/IToastService.cs) | `ToastService` / `FakeToastService`, `StubToastService`, `SilentToastService` | 21 | a factory | 0 |
 | `IMcpRegistry` | [`src/Harbor.Abstractions/Tools/IMcpRegistry.cs`](../src/Harbor.Abstractions/Tools/IMcpRegistry.cs) | `InMemoryMcpRegistry`, `McpRegistry` / `FakeMcpRegistry`, `ScriptedMcpRegistry` | 18 | a factory | 3 |
 | `IProviderHealthCheck` | [`src/Harbor.Abstractions/Providers/IProviderHealthCheck.cs`](../src/Harbor.Abstractions/Providers/IProviderHealthCheck.cs) | `ProviderHealthCheck` / `FakeHealthCheck`, `StubHealthCheck` | 19 | none | 0 |
+| `IAuthResolver` | [`src/Harbor.Abstractions/Providers/IAuthResolver.cs`](../src/Harbor.Abstractions/Providers/IAuthResolver.cs) | `CommonConfigAuthResolver`, `ConfigAuthResolver`, `EnvVarAuthResolver` / `StubAuthResolver (Harbor.App.Avalonia.Tests)`, `StubAuthResolver (Harbor.Hosting.Tests)`, `FixedKeyResolver` (+4 more) | 16 | a factory | 4 |
 | `IChatBlock` | [`src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`](../src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs) | `ColumnsBlock`, `ImageBlock`, `StreamingMarkdownBlock`, `ApprovalGateView`, `ICollapsibleChatBlock` (+5 more) / `WidthBlock`, `FixedBlock`, `StoreBlock` (+3 more) | 9 | none | 20 |
 | `IDispatcherAdapter` | [`src/Harbor.Ui.Framework.Services/Services/IDispatcherAdapter.cs`](../src/Harbor.Ui.Framework.Services/Services/IDispatcherAdapter.cs) | `AvaloniaDispatcherAdapter` / `TestDispatcherAdapter` | 18 | `AvaloniaDispatcherAdapter` | 0 |
 | `IPanelRegistry` | [`src/Harbor.Ui.Framework.State/Panels/IPanelRegistry.cs`](../src/Harbor.Ui.Framework.State/Panels/IPanelRegistry.cs) | `PanelRegistryPluginAdapter`, `PanelRegistry` | 17 | a factory | 12 |
 | `IRendererPipeline` | [`src/Harbor.Hosting/Rendering/IRendererPipeline.cs`](../src/Harbor.Hosting/Rendering/IRendererPipeline.cs) | `RendererPipeline` | 18 | a factory | 1 |
-| `IAuthResolver` | [`src/Harbor.Abstractions/Providers/IAuthResolver.cs`](../src/Harbor.Abstractions/Providers/IAuthResolver.cs) | `CommonConfigAuthResolver`, `ConfigAuthResolver`, `EnvVarAuthResolver` / `StubAuthResolver (Harbor.App.Avalonia.Tests)`, `StubAuthResolver (Harbor.Hosting.Tests)`, `FixedKeyResolver` (+4 more) | 15 | a factory | 4 |
 | `ICommonConfigStore` | [`src/Harbor.Desktop.Abstractions/Configuration/ICommonConfigStore.cs`](../src/Harbor.Desktop.Abstractions/Configuration/ICommonConfigStore.cs) | `JsonCommonConfigStore` / `StubCommonConfigStore`, `TokenWatchingConfigStore`, `RecordingCommonStore` (+2 more) | 17 | a factory, a factory | 4 |
 | `ICollapsibleChatBlock` | [`src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`](../src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs) | `AssistantMarkdownBlock`, `ReadGroupBlock`, `TableBlock`, `StreamingThinkingBlock`, `ThinkingBlock` (+4 more) | 7 | none | 21 |
 | `IRequestHandler` | [`src/Harbor.Ipc.Server/Protocol/IRequestHandler.cs`](../src/Harbor.Ipc.Server/Protocol/IRequestHandler.cs) | `StartAgentRequestHandler`, `AbortAgentRequestHandler`, `SendPromptRequestHandler`, `CreateSessionRequestHandler`, `ListSessionsRequestHandler` (+9 more) | 2 | none | 14 |
@@ -164,13 +164,10 @@ Declared in [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abs
 
 Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs).
 
-- **In-tree implementations** (7):
+- **In-tree implementations** (4):
   - `RecordedSessionLlmClient`, [`src/Harbor.AgentRuntime/Agents/RecordedSessionLlmClient.cs`](../src/Harbor.AgentRuntime/Agents/RecordedSessionLlmClient.cs)
   - `RetryLlmClientDecorator`, [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs)
-  - `AnthropicLlmClient`, [`src/Harbor.Providers.Anthropic/AnthropicLlmClient.cs`](../src/Harbor.Providers.Anthropic/AnthropicLlmClient.cs)
   - `OllamaLlmClient`, [`src/Harbor.Providers.Ollama/OllamaLlmClient.cs`](../src/Harbor.Providers.Ollama/OllamaLlmClient.cs)
-  - `OpenAILlmClient`, [`src/Harbor.Providers.OpenAI/OpenAILlmClient.cs`](../src/Harbor.Providers.OpenAI/OpenAILlmClient.cs)
-  - `OpenAiCompatibleLlmClient`, [`src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs`](../src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs)
   - `InstrumentedLlmClient`, [`src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs`](../src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs)
 - **Out-of-tree implementations** (15):
   - `FakeClient (Harbor.App.Avalonia.Tests)`, [`tests/Harbor.App.Avalonia.Tests/OnboardingViewModelLiveModelsTests.cs`](../tests/Harbor.App.Avalonia.Tests/OnboardingViewModelLiveModelsTests.cs)
@@ -188,15 +185,11 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `RateLimitedLlmClient`, [`tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs`](../tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs)
   - `ScriptedLlmClient (Harbor.TestKit)`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
   - `ThrowingLlmClient`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
-- **Named by** 53 file(s) in 23 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia.Tests, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Benchmarks, Harbor.Config.Tests, Harbor.Core.Tests, Harbor.Hosting
+- **Named by** 56 file(s) in 26 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia.Tests, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Benchmarks, Harbor.Config.Tests, Harbor.Core.Tests, Harbor.Hosting
 - **Registered in the container**: **no DI registration**
-- **Bypassed**: 7 direct construction(s) of the concrete type, 0 signature(s) naming the concrete type where the interface was the contract:
+- **Bypassed**: 3 direct construction(s) of the concrete type, 0 signature(s) naming the concrete type where the interface was the contract:
   - `RetryLlmClientDecorator` instead of `ILlmClient`, construction at [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs):265
-  - `OpenAiCompatibleLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs`](../src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs):179
-  - `OpenAiCompatibleLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs`](../src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs):212
   - `OllamaLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):127
-  - `AnthropicLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):177
-  - `OpenAILlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):186
   - `InstrumentedLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs`](../src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs):26
 
 ### `IPluginHost`

@@ -208,9 +208,11 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(22)
+        await Assert.That(links.Length).IsEqualTo(25)
             .Because(
-                "22 `<Compile Include>` link items: SsePump and Utf8JsonReaderExtensions into four "
+                "25 `<Compile Include>` link items: the #1499 ProviderLlmClientBase.cs into the "
+                + "three native providers (Anthropic, OpenAI, OpenAiCompatible), SsePump and "
+                + "Utf8JsonReaderExtensions into four "
                 + "providers, OpenAiWire, OpenAiImageContent and ProviderArguments into OpenAI + "
                 + "OpenAiCompatible, and four files out of Harbor.Storage.Shared into the Jsonl and "
                 + "Sqlite stores plus one more into Memory. "

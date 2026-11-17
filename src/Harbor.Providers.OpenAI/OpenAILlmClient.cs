@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -21,113 +21,79 @@ namespace Harbor.Providers.OpenAI;
 ///     - reasoning_content streaming
 ///     - tool_choice with specific function
 /// </summary>
-public sealed class OpenAILlmClient : ILlmClient
+public sealed class OpenAILlmClient : ProviderLlmClientBase, ILlmClient
 {
     private const string DefaultBaseUrl = "https://api.openai.com/v1";
-
-    private readonly IAuthResolver _auth;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation on the hot path.
     private readonly string _baseUrl;
     private readonly OpenAIConfig _config;
 
-    private readonly HttpClient _http;
-    private readonly ILogger<OpenAILlmClient> _logger;
-
     public OpenAILlmClient(
         HttpClient http,
         OpenAIConfig config,
         IAuthResolver auth,
         ILogger<OpenAILlmClient> logger)
+        : base(http, auth, logger, ProviderId.Create("openai"))
     {
-        _http = http;
         _config = config;
-        _auth = auth;
-        _logger = logger;
-        _baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
+        _baseUrl = string.IsNullOrEmpty(config.BaseUrl) ? DefaultBaseUrl : config.BaseUrl.TrimEnd('/');
     }
 
-    public ProviderId ProviderId { get; } = ProviderId.Create("openai");
+    // --- Template Method variation points (#1499) ---------------------------
 
-    public async IAsyncEnumerable<LlmEvent> StreamAsync(
-        LlmRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
+    internal override Channel<LlmEvent> CreateChannel() =>
+        Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
         });
 
-        var writer = channel.Writer;
+    protected override string ApiErrorLabel => "OpenAI API";
 
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
-                if (apiKeyResult.IsFailure)
-                {
-                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
+    // Native clients historically scheduled the pump with the caller token.
+    protected override bool SchedulePumpWithToken => true;
 
-                // Choose API: Responses API for reasoning models, Chat Completions for others.
-                // Reasoning-model detection is a registered Strategy (#1498), not a
-                // string-prefix test in this client.
-                bool useResponsesApi = ReasoningModelStrategies.IsReasoningModel(request.Model) || _config.ForceResponsesApi;
-                var httpRequest = useResponsesApi
-                    ? OpenAiRequestBuilder.BuildResponsesRequest(request, _baseUrl, _logger)
-                    : OpenAiRequestBuilder.BuildChatCompletionsRequest(request, _baseUrl, _logger);
-                OpenAiRequestBuilder.AddBearerAuth(httpRequest, apiKeyResult.Value);
-
-                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter.
-                var chunkState = new ChunkStreamState();
-
-                // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
-                // live in SsePump; it emits exactly one FinishEvent on graceful
-                // end-of-stream ([DONE] or EOF) and none on error/cancel.
-                await SsePump.RunSseAsync(
-                    writer, _http, httpRequest,
-                    (data, token) => useResponsesApi
-                        ? OpenAiResponsesMapper.WriteResponsesEventsAsync(data, writer, chunkState, _logger, token)
-                        : WriteChatChunkEventsAsync(data, writer, chunkState, token),
-                    "OpenAI API", _logger, cancellationToken,
-                    onComplete: () =>
-                    {
-                        // #203: stream-health summary (only when noteworthy).
-                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
-                        {
-                            OpenAILlmClientLog.StreamCompleted(
-                                _logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
-                        }
-                    }).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                // Expected on cancel
-            }
-            catch (Exception ex)
-            {
-                // #203 E5: fire-and-forget pump task must log inside the
-                // lambda — the ErrorEvent alone is invisible in traces.
-                OpenAILlmClientLog.StreamTaskFailed(_logger, ex, ex.Message);
-                await writer.WriteAsync(new ErrorEvent(
-                    $"Stream failed: {ex.Message}", ex.ToString(),
-                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                writer.TryComplete();
-            }
-        }, cancellationToken);
-
-        await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-        {
-            yield return evt;
-        }
+    internal override HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
+    {
+        // Choose API: Responses API for reasoning models, Chat Completions for others.
+        // Reasoning-model detection is a registered Strategy (#1498), not a
+        // string-prefix test in this client.
+        bool useResponsesApi = ReasoningModelStrategies.IsReasoningModel(request.Model) || _config.ForceResponsesApi;
+        var httpRequest = useResponsesApi
+            ? OpenAiRequestBuilder.BuildResponsesRequest(request, _baseUrl, Logger)
+            : OpenAiRequestBuilder.BuildChatCompletionsRequest(request, _baseUrl, Logger);
+        OpenAiRequestBuilder.AddBearerAuth(httpRequest, apiKey);
+        return httpRequest;
     }
+
+    internal override Task WriteEventsAsync(
+        string data,
+        ChannelWriter<LlmEvent> writer,
+        ChunkStreamState chunkState,
+        LlmRequest request,
+        Activity? activity,
+        CancellationToken token)
+    {
+        bool useResponsesApi = ReasoningModelStrategies.IsReasoningModel(request.Model) || _config.ForceResponsesApi;
+        return useResponsesApi
+            ? OpenAiResponsesMapper.WriteResponsesEventsAsync(data, writer, chunkState, Logger, token)
+            : WriteChatChunkEventsAsync(data, writer, chunkState, token);
+    }
+
+    internal override void OnStreamComplete(ChunkStreamState chunkState, Activity? activity)
+    {
+        // #203: stream-health summary (only when noteworthy).
+        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
+            OpenAILlmClientLog.StreamCompleted(
+                Logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
+    }
+
+    protected override void OnFailed(Exception ex, Activity? activity) =>
+        // #203 E5: fire-and-forget pump task must log inside the lambda —
+        // the ErrorEvent alone is invisible in traces.
+        OpenAILlmClientLog.StreamTaskFailed(Logger, ex, ex.Message);
 
     public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
     {
@@ -144,7 +110,7 @@ public sealed class OpenAILlmClient : ILlmClient
     /// </summary>
     private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, ChunkStreamState chunkState, CancellationToken ct)
     {
-        foreach (var evt in OpenAiWire.TryParseChatChunkLine(data, chunkState, _logger))
+        foreach (var evt in OpenAiWire.TryParseChatChunkLine(data, chunkState, Logger))
         {
             await writer.WriteAsync(evt, ct).ConfigureAwait(false);
         }
