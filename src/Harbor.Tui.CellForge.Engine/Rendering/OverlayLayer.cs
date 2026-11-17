@@ -239,6 +239,27 @@ public sealed class OverlayLayer : ContainerNode
         }
     }
 
+    /// <summary>
+    /// Forwards prepaint with the layer's stable id as the path step, so a
+    /// z-reorder or a push order change does not invalidate a layer's record.
+    /// </summary>
+    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            if (!layer.Visible)
+            {
+                continue;
+            }
+
+            _ = layer.Content.Prepaint(context, id.Child(layer.Id));
+        }
+
+        return PrepaintRecord.Empty;
+    }
+
     /// <summary>Paints visible entries bottom-to-top, occluded fragments clipped away.</summary>
     public override void Paint(ScreenBuffer buffer, Rect clip)
     {

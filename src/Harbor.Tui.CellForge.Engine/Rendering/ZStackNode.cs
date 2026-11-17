@@ -92,6 +92,18 @@ public sealed class ZStackNode : ContainerNode
         }
     }
 
+    /// <summary>Forwards prepaint with stable indexed ids (z-order is index order).</summary>
+    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        for (int i = 0; i < _children.Count; i++)
+        {
+            _ = _children[i].Prepaint(context, id.Child(i));
+        }
+
+        return PrepaintRecord.Empty;
+    }
+
     /// <summary>Paints children bottom-to-top, each clipped to the stack ∩ clip.</summary>
     public override void Paint(ScreenBuffer buffer, Rect clip)
     {

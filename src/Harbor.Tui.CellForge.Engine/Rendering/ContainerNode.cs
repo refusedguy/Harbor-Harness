@@ -217,6 +217,23 @@ public sealed class FlexSplitNode : ContainerNode
         }
     }
 
+    /// <summary>
+    /// Forwards prepaint to children with stable indexed ids. Reordering the
+    /// children changes those ids, which is exactly what invalidates a cached
+    /// record; named children should use <see cref="ElementId.Child(string)"/>
+    /// in their own container instead.
+    /// </summary>
+    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        for (int i = 0; i < _children.Count; i++)
+        {
+            _ = _children[i].Prepaint(context, id.Child(i));
+        }
+
+        return PrepaintRecord.Empty;
+    }
+
     /// <summary>Paints children in order, each clipped to its frame ∩ clip.</summary>
     public override void Paint(ScreenBuffer buffer, Rect clip)
     {

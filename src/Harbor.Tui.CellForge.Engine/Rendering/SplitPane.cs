@@ -388,6 +388,23 @@ public sealed class SplitPane : ContainerNode
     }
 
     /// <summary>
+    /// Forwards prepaint to panes by their stable <see cref="SplitPaneItem.Id"/>
+    /// and to the fullscreen layer by its own id, so resizing or focus changes
+    /// do not change a pane's element identity.
+    /// </summary>
+    public PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        for (int i = 0; i < _items.Count; i++)
+        {
+            _ = _items[i].Content.Prepaint(context, id.Child(_items[i].Id));
+        }
+
+        _ = _fullscreen.Prepaint(context, id.Child(FullscreenLayerId));
+        return PrepaintRecord.Empty;
+    }
+
+    /// <summary>
     /// Water-fills the main axis: every pane gets its floor first, then the
     /// remainder is split by weight with a largest-remainder pass for the cells
     /// integer division leaves behind. Total is conserved; no allocation on the
