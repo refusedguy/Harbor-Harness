@@ -6,10 +6,10 @@ using Harbor.Abstractions.Models;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref=\"DefaultUiProjector.Project\" /> — the
-///     projection of <see cref=\"UiState\" /> into <see cref=\"UiScreenModel\" />.
-///     Measures the cost of building <see cref=\"UiRenderedLine\" /> arrays,
-///     resolving <see cref=\"StyledSpan\" /> lists, and computing the state
+///     Benchmarks <see cref="DefaultUiProjector.Project" /> — the
+///     projection of <see cref="UiState" /> into <see cref="UiScreenModel" />.
+///     Measures the cost of building <see cref="UiRenderedLine" /> arrays,
+///     resolving <see cref="StyledSpan" /> lists, and computing the state
 ///     revision string.
 /// </summary>
 /// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
