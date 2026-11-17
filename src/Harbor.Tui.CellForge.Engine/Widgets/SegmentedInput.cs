@@ -388,7 +388,6 @@ public sealed class SegmentedInput
             UiKeyKind.Home => MoveHome(state),
             UiKeyKind.End => MoveEnd(state),
             UiKeyKind.Backspace => Backspace(state),
-            UiKeyKind.Delete => Delete(state),
             UiKeyKind.Tab => MoveNext(state),
             _ => state,
         };
