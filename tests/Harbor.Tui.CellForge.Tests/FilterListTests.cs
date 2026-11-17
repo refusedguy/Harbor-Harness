@@ -83,11 +83,17 @@ public class FilterListTests
         list.SetQuery("cs"); // matches "clear session" at positions 0 and 6
         int row = IndexOf(list, "clear session");
 
-        Span<int> indices = stackalloc int[2];
-        int count = list.WriteMatchIndices(row, indices);
+        int count, first, second;
+        {
+            Span<int> indices = stackalloc int[2];
+            count = list.WriteMatchIndices(row, indices);
+            first = indices[0];
+            second = indices[1];
+        }
+
         await Assert.That(count).IsEqualTo(2);
-        await Assert.That(indices[0]).IsEqualTo(0);
-        await Assert.That(indices[1]).IsEqualTo(6);
+        await Assert.That(first).IsEqualTo(0);
+        await Assert.That(second).IsEqualTo(6);
     }
 
     [Test]
@@ -202,15 +208,20 @@ public class FilterListTests
         await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'>');
 
         // Matched characters carry the underline flag; non-matched ones do not.
+        // Read everything out of the Span before an await (ref structs cannot
+        // live across an await boundary).
         string text = list.TextOfResult(0);
-        Span<int> matches = stackalloc int[list.Query.Length];
-        int count = list.WriteMatchIndices(0, matches);
+        int count, matched, plain;
+        {
+            Span<int> matches = stackalloc int[list.Query.Length];
+            count = list.WriteMatchIndices(0, matches);
+            matched = matches[0];
+            plain = FindPlain(text, matches, count);
+        }
+
         await Assert.That(count).IsGreaterThan(0);
-        int matched = matches[0];
         await Assert.That(buffer.Get(2 + matched, 0).Rune).IsEqualTo((int)text[matched]);
         await Assert.That(buffer.Get(2 + matched, 0).Style.Attrs.HasFlag(StyleAttr.Underline)).IsTrue();
-
-        int plain = FindPlain(text, matches, count);
         await Assert.That(buffer.Get(2 + plain, 0).Style.Attrs.HasFlag(StyleAttr.Underline)).IsFalse();
 
         // Preview pane shows the first line of the selected item's preview.
