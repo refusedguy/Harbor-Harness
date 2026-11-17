@@ -23,6 +23,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tools.Builtin.Tests"/>
+    <!-- #2227: the composition root calls the internal discovery helper; no
+         public extension axis or tool contract is added for it. -->
+    <InternalsVisibleTo Include="Harbor.Hosting"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -36,6 +36,37 @@ internal static class McpJsonRpc
         return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
     }
 
+    /// <summary>
+    /// Build <c>tools/list</c> params. A null cursor asks for the first page; a
+    /// cursor asks for the page the server named in its previous
+    /// <c>nextCursor</c> (#2228 pagination).
+    /// </summary>
+    public static JsonElement BuildToolsListParams(string? cursor)
+    {
+        if (cursor is null)
+        {
+            // Same convention as the empty-element fast path: no cursor member.
+            var firstPage = new ArrayBufferWriter<byte>(2);
+            using (var writer = new Utf8JsonWriter(firstPage))
+            {
+                writer.WriteStartObject();
+                writer.WriteEndObject();
+            }
+
+            return JsonSerializer.Deserialize(firstPage.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
+        }
+
+        var buffer = new ArrayBufferWriter<byte>(64);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("cursor", cursor);
+            writer.WriteEndObject();
+        }
+
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
+    }
+
     /// <summary>Build <c>tools/call</c> params. Missing arguments become <c>{}</c>.</summary>
     public static JsonElement BuildToolCallParams(string toolName, JsonElement arguments)
     {

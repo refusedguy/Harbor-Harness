@@ -123,12 +123,13 @@ Accepted
 Model Context Protocol servers provide portable tool ecosystems, but running them in-process would couple the AOT-bound core to third-party runtimes and complicate crashes/timeouts.
 
 ## Decision
-Model Context Protocol servers are consumed out-of-process over stdio JSON-RPC: `Harbor.Tools.Builtin/Tools/Mcp/` provides `McpRegistry`, `McpProcessClient`, `McpToolAdapter`, argv parser, source-generated serialization context (AOT-safe), and `mcp.json` config loading. One synthetic tool named `mcp` exposes discovered server tools to the LLM instead of spawning a separate runtime in-proc; server instructions are aggregated into the system prompt via `IMcpRegistry.GetInstructions`. Sample servers under `samples/mcp/`.
+Model Context Protocol servers are consumed out-of-process over stdio JSON-RPC: `Harbor.Tools.Builtin/Tools/Mcp/` provides `McpRegistry`, `McpProcessClient`, `McpToolAdapter`, argv parser, source-generated serialization context (AOT-safe), and `mcp.json` config loading. The generic `mcp` tool remains for arbitrary JSON-RPC methods. Since #2227 each server's `tools/list` answer is also registered as real `ITool` adapters before the tool registry is frozen, with an exact permission grant on each agent; server instructions are aggregated into the system prompt via `IMcpRegistry.GetInstructions`. Discovery follows `nextCursor` until the server exhausts its catalog (#2228), so a paginated answer registers every page rather than silently dropping all tools after the first. Sample servers under `samples/mcp/`.
 
 ## Consequences
-- Crashing/slow MCP servers cannot take down the agent loop.
+- Crashing/slow MCP servers cannot take down the agent loop. A failed call returns `Result.Failure`; the next call respawns the process and the adapter stays registered.
 - AOT constraints satisfied without reflection-based serialization.
-- Single-tool surface keeps prompt/tool-catalog size bounded regardless of server count.
+- Server tools are ordinary `ITool` instances in `ToolRegistry`, so the prompt and dispatcher treat them like builtins. Prompt size grows with the tools the configured servers advertise.
+- Pagination bounds discovery the same way it bounds the server: a fixed page cap plus a repeated-cursor check, so a hostile or broken server cannot stall composition in an endless cursor chain.
 
 # ADR-007: Single ProviderPresets catalog for both wizards (PROD-UI-0)
 

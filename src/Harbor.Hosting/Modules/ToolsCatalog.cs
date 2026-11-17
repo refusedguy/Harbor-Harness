@@ -300,6 +300,16 @@ internal static class ToolsCatalog
             tb.AddTool(lf => new McpToolTool(mcpRegistry, lf.CreateLogger<McpToolTool>()));
             tb.AddTool(lf => new McpResourceTool(mcpRegistry, lf.CreateLogger<McpResourceTool>()));
             tb.AddTool(lf => new McpPromptTool(mcpRegistry, lf.CreateLogger<McpPromptTool>()));
+
+            // #2227: every tool a configured server advertises on tools/list becomes
+            // a real ITool before Freeze(), with the safety profile the adapter
+            // declares and an exact permission grant on every registered agent.
+            // The composition root is synchronous (cf. ConfigurationModule's eager
+            // loads); the wait happens before any UI synchronization context exists.
+            int discovered = McpToolDiscovery.RegisterAsync(
+                mcpRegistry, registry, agentRegistry, ctx.LoggerFactory, ctx.Logger).Result;
+            if (discovered > 0)
+                ToolsCatalogLog.McpToolsRegistered(ctx.Logger, discovered);
         }
 
         registry.Freeze();
@@ -325,4 +335,7 @@ internal static partial class ToolsCatalogLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Registered {Count} tools")]
     public static partial void ToolsRegistered(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Registered {Count} MCP tools discovered via tools/list")]
+    public static partial void McpToolsRegistered(ILogger logger, int count);
 }

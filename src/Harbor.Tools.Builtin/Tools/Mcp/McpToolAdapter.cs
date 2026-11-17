@@ -21,7 +21,35 @@ public sealed partial class McpToolAdapter : ITool
         _logger = logger;
     }
 
-    public ToolName Name => ToolName.Create($"mcp_{_server}_{_toolName}");
+    /// <summary>
+    ///     The name is derived from the SERVER and the remote tool name, not from a
+    ///     process instance. A crashed server is respawned by
+    ///     <c>McpRegistry.ServerEntry.GetProcess</c> on the next call, so the adapter
+    ///     survives a restart without being re-registered (#2227).
+    /// </summary>
+    public ToolName Name => BuildName(_server, _toolName);
+
+    /// <summary>
+    ///     Build the stable tool name for one server/tool pair. Discovery and the
+    ///     adapter call this same helper, so the permission rule granted at
+    ///     registration names exactly the tool the dispatcher resolves.
+    /// </summary>
+    internal static ToolName BuildName(string server, string remoteName)
+        => ToolName.Create($"mcp_{Sanitize(server)}_{Sanitize(remoteName)}");
+
+    private static string Sanitize(string value)
+    {
+        // ToolName accepts ^[a-z][a-z0-9_]*$. Server names and MCP tool names are
+        // free-form, so an unknown character becomes '_' rather than throwing at
+        // discovery time. The "mcp_" prefix keeps the first character a letter.
+        char[] chars = new char[value.Length];
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = char.ToLowerInvariant(value[i]);
+            chars[i] = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' ? c : '_';
+        }
+        return new string(chars);
+    }
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
