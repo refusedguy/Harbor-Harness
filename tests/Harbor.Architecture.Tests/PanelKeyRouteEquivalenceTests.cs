@@ -144,13 +144,14 @@ public sealed class PanelKeyRouteEquivalenceTests
     [Test]
     public async Task A_Declaration_Split_Across_Lines_Is_The_Shape_The_Proof_Catches()
     {
-        // The declaration's type part crosses the line boundary: the whole-file
-        // pattern's lazy type part grows past the newline and finds "Router",
-        // while a per-line pattern cannot leave the line it started on.
+        // The `class` keyword and the type name sit on separate lines: the
+        // whole-file pattern's `\s+` between them crosses the newline and finds
+        // "Router", while a per-line pattern cannot leave the line it started
+        // on. The name has to be on its own line for the two to differ.
         const string Split = """
             namespace Synthetic.Control;
 
-            public sealed class Synthetic
+            public sealed class
                 Router(
             """;
 
@@ -163,13 +164,14 @@ public sealed class PanelKeyRouteEquivalenceTests
             PanelKeyRouteProbe.BuildTypeOwner([file], TypeScanStrategy.PerLine);
 
         await Assert.That(oracle.ContainsKey("Router")).IsTrue().Because(
-            "the whole-file pattern's lazy type part grows past the newline — its character class "
-            + "holds whitespace and word characters — so the declaration split across the lines "
-            + "is found. If this stops being true, the whole-file strategy is no longer the "
-            + "oracle and the comparison above proves nothing.");
+            "the whole-file pattern's `\\s+` between the `class` keyword and the name crosses "
+            + "the newline, so the declaration split across the lines is found. If this stops "
+            + "being true, the whole-file strategy is no longer the oracle and the comparison "
+            + "above proves nothing.");
 
         await Assert.That(candidate.ContainsKey("Router")).IsFalse().Because(
-            "a per-line pattern cannot leave the line it started on, so the same declaration is "
+            "a per-line pattern cannot leave the line it started on: the line with `class` has no "
+            + "name after it and the line with the name has no `class`, so the same declaration is "
             + "NOT found. THIS IS THE LIMIT OF THE CHANGE, and the reason the whole-tree "
             + "comparison is a live gate: a declaration split across lines, written anywhere in "
             + "the product tree, would move the map, and the gate above is what says so.");
