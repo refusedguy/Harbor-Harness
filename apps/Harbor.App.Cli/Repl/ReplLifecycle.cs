@@ -158,7 +158,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // A failure here is a missed reminder, never a broken startup.
         if (Harbor.Tui.CellForge.StarNag.StarNagCard.IsEnabled())
         {
-            var starNag = Harbor.Tui.CellForge.StarNag.StarNagCard.FromFile();
+            var starNag = StarNagFileStore.CreateCard();
             _ = starNag.TryShow(host.Screen.Toasts);
         }
 

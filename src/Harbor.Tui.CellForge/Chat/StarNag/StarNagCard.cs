@@ -1,8 +1,9 @@
 // StarNagCard.cs — issue #1490: a gentle "star Harbor on GitHub" reminder that
 // rides the EXISTING ToastOverlay seat. No new widget primitive, no new overlay
 // layer, no new extension axis (#555 freeze): the card is a pure state object
-// that feeds the already-shipped toast queue, and the persistence is a small
-// file in the Harbor home directory rather than a new registry or seam.
+// that feeds the already-shipped toast queue. Persistence is a save delegate
+// supplied by the CLI composition root, so this Presentation assembly never
+// touches the filesystem.
 //
 // The card is silent in plain/CI/headless/demo processes. IsEnabled() is the
 // single guard; the host calls it before doing any work, and TryShow takes an
@@ -10,7 +11,6 @@
 // touching the process environment.
 
 using Harbor.Abstractions.Env;
-using Harbor.Abstractions.Filesystem;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Services;
 
@@ -50,10 +50,13 @@ public sealed record StarNagState
     public StarNagState Dismiss() => this with { Dismissed = true };
 
     /// <summary>
-    ///     True when at least <paramref name="interval"/> launches have happened
-    ///     since the last show and the user has not dismissed the card for good.
+    ///     True when the card has never been shown, or at least
+    ///     <paramref name="interval"/> launches have happened since the last
+    ///     show, and the user has not dismissed it for good. A zero
+    ///     <see cref="LastShownAt"/> means the first show is still due.
     /// </summary>
-    public bool ShouldShow(int interval) => !Dismissed && Launches - LastShownAt >= interval;
+    public bool ShouldShow(int interval) =>
+        !Dismissed && (LastShownAt == 0 || Launches - LastShownAt >= interval);
 }
 
 /// <summary>
@@ -91,17 +94,6 @@ public sealed class StarNagCard
         _state = state ?? StarNagState.Empty;
         _save = save ?? (_ => { });
     }
-
-    /// <summary>Builds the production card over the file-backed store in the Harbor home directory.</summary>
-    public static StarNagCard FromFile(int interval = DefaultInterval)
-    {
-        string path = StorePath;
-        StarNagState state = StarNagFileStore.Load(path);
-        return new StarNagCard(interval, state, persisted => StarNagFileStore.Save(path, persisted));
-    }
-
-    /// <summary>Location of the persisted counters.</summary>
-    internal static string StorePath => Path.Combine(HarborPaths.GetHarborHome(), "starnag.txt");
 
     /// <summary>Current counter snapshot (test seam).</summary>
     public StarNagState State => _state;
@@ -187,66 +179,5 @@ public sealed class StarNagCard
         // No-op by design: MarkShown() already moved LastShownAt to this launch,
         // so the next show is due in exactly Interval more launches. Kept as a
         // named action so a host can bind the toast's "later" affordance to it.
-    }
-}
-
-/// <summary>
-///     Tiny <c>launch;dismissed;lastShownAt</c> file store. Plain text rather
-///     than JSON so the cell renderer stays reflection-free under NativeAOT,
-///     and all IO failures degrade to "never shown" rather than breaking the
-///     interactive startup.
-/// </summary>
-internal static class StarNagFileStore
-{
-    internal static StarNagState Load(string path)
-    {
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return StarNagState.Empty;
-            }
-
-            string[] parts = File.ReadAllText(path).Trim().Split(';');
-            if (parts.Length != 3)
-            {
-                return StarNagState.Empty;
-            }
-
-            int launches = int.TryParse(parts[0], out int parsedLaunches) ? parsedLaunches : 0;
-            bool dismissed = bool.TryParse(parts[1], out bool parsedDismissed) && parsedDismissed;
-            int lastShownAt = int.TryParse(parts[2], out int parsedLast) ? parsedLast : 0;
-            return new StarNagState(launches, dismissed, lastShownAt);
-        }
-        catch (IOException)
-        {
-            return StarNagState.Empty;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return StarNagState.Empty;
-        }
-    }
-
-    internal static void Save(string path, StarNagState state)
-    {
-        try
-        {
-            string? directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllText(path, $"{state.Launches};{state.Dismissed};{state.LastShownAt}");
-        }
-        catch (IOException)
-        {
-            // A reminder must never break startup.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // A reminder must never break startup.
-        }
     }
 }
