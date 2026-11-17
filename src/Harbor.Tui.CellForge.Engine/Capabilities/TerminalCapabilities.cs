@@ -32,5 +32,20 @@ public readonly struct TerminalCapabilities
     /// </summary>
     public bool Osc8Hyperlinks { get; init; }
 
+    /// <summary>OSC 7501 program status (issue #2219), environment-detected.</summary>
+    public bool Osc7501 { get; init; }
+
+    /// <summary>OSC 9;4 progress (issue #2219), environment-detected.</summary>
+    public bool Osc94Progress { get; init; }
+
+    /// <summary>OSC 7 working-directory report (issue #2219), environment-detected.</summary>
+    public bool Osc7Cwd { get; init; }
+
+    /// <summary>DECSCUSR cursor shape (issue #2219), environment-detected.</summary>
+    public bool Decscusr { get; init; }
+
+    /// <summary>Underline styles/color (issue #2219), environment-detected.</summary>
+    public bool UnderlineStyles { get; init; }
+
     public static TerminalCapabilities Unprobed() => default;
 }

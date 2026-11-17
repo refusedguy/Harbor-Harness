@@ -108,6 +108,10 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // for byte.
         host.ScreenSession.Images.Kind = host._inlineImage;
         host.Screen.Timeline.Timeline.InlineImages = host.ScreenSession.Images;
+
+        // Issue #2219: OSC 7 tells the terminal where this session lives
+        // ("open in editor" / new-tab-here). Inert when the probe said no.
+        host.ScreenSession.WorkingDirectory.Set(Directory.GetCurrentDirectory());
         ReplLifecycleLog.InlineImageProtocol(
             host.Log,
             host._inlineImage,
@@ -283,8 +287,31 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 host._selection.Clear();
                 host._replStore.Dispatch(new ChatAppMsg.Agent(agentEvt));
                 await host.Bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
+
+                // Issue #2219: zero-width terminal reports. OSC 7501 says
+                // whether the agent is working or done; OSC 9;4 gives an
+                // indeterminate busy bar for the duration of a tool call.
+                // Both emitters are probe-gated, so no bytes reach an
+                // unsupported terminal.
+                if (agentEvt is AgentStartEvent)
+                {
+                    host.ScreenSession.ProgramStatus.Set(ProgramStatusState.Working, "harbor");
+                }
+
+                if (agentEvt is ToolExecutionStartEvent)
+                {
+                    host.ScreenSession.Progress.Set(ProgressState.Indeterminate);
+                }
+
+                if (agentEvt is ToolExecutionEndEvent)
+                {
+                    host.ScreenSession.Progress.Clear();
+                }
+
                 if (agentEvt is AgentEndEvent)
                 {
+                    host.ScreenSession.ProgramStatus.Set(ProgramStatusState.Done, "harbor");
+                    host.ScreenSession.Progress.Clear();
                     await host.Titles.MaybeAutoTitleAsync(ct).ConfigureAwait(false);
                 }
 

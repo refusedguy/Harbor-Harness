@@ -5,7 +5,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
 /// Attribute bits of a cell style (celldiff §1.1). Low byte holds the eight
-/// SGR attributes; bits 8..10 are reserved for underline styles.
+/// SGR attributes; bits 8..10 carry a 3-bit underline style (issue #2219).
 /// </summary>
 [Flags]
 public enum StyleAttr : ushort
@@ -19,6 +19,22 @@ public enum StyleAttr : ushort
     Reverse = 1 << 5,
     Hidden = 1 << 6,
     Strike = 1 << 7,
+    // Bits 8..10 hold UnderlineKind (issue #2219); Cell stays 16 bytes.
+}
+
+public enum UnderlineKind : byte
+{
+    Single = 0, // SGR 4
+    Double = 1, // SGR 21
+    Curly = 2,  // SGR 4:3
+    Dotted = 3, // SGR 4:4
+    Dashed = 4, // SGR 4:5
+}
+public static class UnderlineStyle
+{
+    public const StyleAttr Mask = (StyleAttr)(7 << 8);
+    public static StyleAttr Encode(UnderlineKind kind) => (StyleAttr)((int)kind << 8);
+    public static UnderlineKind Decode(StyleAttr attrs) => (UnderlineKind)(((int)attrs & (int)Mask) >> 8);
 }
 
 /// <summary>

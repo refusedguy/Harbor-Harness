@@ -60,6 +60,18 @@ public sealed class ScreenSession
         CurrentCols = cols;
         CurrentRows = rows;
         Hyperlinks = new HyperlinkTable(cols, rows) { Enabled = Osc8HyperlinkProbe.Detect() };
+
+        // Issue #2219: every cheap protocol gets its own capability-gated
+        // emitter. All default to inert, so an unprobed/CI terminal gets the
+        // exact classic frame. Probes are environmental (no safe wire query).
+        UnderlineColors = new UnderlineColorTable(cols, rows)
+        {
+            Enabled = TerminalProtocolProbe.DetectUnderlineStyles(),
+        };
+        ProgramStatus = new ProgramStatusEmitter { Enabled = TerminalProtocolProbe.DetectOsc7501() };
+        Progress = new ProgressEmitter { Enabled = TerminalProtocolProbe.DetectOsc94Progress() };
+        WorkingDirectory = new WorkingDirectoryEmitter { Enabled = TerminalProtocolProbe.DetectOsc7Cwd() };
+        CursorShape = new CursorShapeEmitter { Enabled = TerminalProtocolProbe.DetectDecscusr() };
     }
 
     /// <summary>
@@ -70,6 +82,25 @@ public sealed class ScreenSession
     /// is false and only visible text reaches the terminal.
     /// </summary>
     public HyperlinkTable Hyperlinks { get; }
+
+    /// <summary>
+    /// Per-cell underline color side-table (issue #2219). Painters set a color
+    /// here; the flush folds SGR 58/59 into the cell's style delta. Disabled
+    /// unless the underline-style probe confirmed support.
+    /// </summary>
+    public UnderlineColorTable UnderlineColors { get; }
+
+    /// <summary>OSC 7501 program status state (#2219).</summary>
+    public ProgramStatusEmitter ProgramStatus { get; }
+
+    /// <summary>OSC 9;4 progress state (#2219).</summary>
+    public ProgressEmitter Progress { get; }
+
+    /// <summary>OSC 7 working-directory report (#2219).</summary>
+    public WorkingDirectoryEmitter WorkingDirectory { get; }
+
+    /// <summary>DECSCUSR cursor shape (#2219).</summary>
+    public CursorShapeEmitter CursorShape { get; }
 
     public EngineCells.ScreenBuffer Back => _back;
 
@@ -222,6 +253,7 @@ public sealed class ScreenSession
         CurrentCols = _back.Cols;
         CurrentRows = _back.Rows;
         Hyperlinks.Resize(CurrentCols, CurrentRows);
+        UnderlineColors.Resize(CurrentCols, CurrentRows);
 
         _back.InvalidateAll();
         _paint.Resize(CurrentCols, CurrentRows);
@@ -254,6 +286,7 @@ public sealed class ScreenSession
         _back.Resize(cols, rows);
         _paint.Resize(cols, rows);
         Hyperlinks.Resize(cols, rows);
+        UnderlineColors.Resize(cols, rows);
         _engine.Front.Resize(cols, rows);
         _back.InvalidateAll();
         _paint.InvalidateAll();
@@ -340,6 +373,7 @@ public sealed class ScreenSession
             // #2217: links set during a frame that never shipped must not leak
             // into the next frame's diff against unchanged cells.
             Hyperlinks.ClearAll();
+            UnderlineColors.ClearAll();
 
             // R6 frame contract: a frame that never shipped leaves no cursor
             // behind — the next frame positions it from its own paint.
@@ -383,12 +417,17 @@ public sealed class ScreenSession
         {
             ArmEffects();
             CopyPaintToBack();
-            _engine.Flush(_back, _writer, Hyperlinks);
+            _engine.Flush(_back, _writer, Hyperlinks, UnderlineColors);
             // Inline images (issue #387) ride this same write: the escape
             // payloads are appended to the frame buffer AFTER the cell diff, so
             // they leave through the same single backend call and never enter
             // dirty-rect accounting.
             Images.Emit(_writer);
+            // Issue #2219: zero-width protocol reports ride the same frame as
+            // the cells; each emitter is a no-op unless its probe said yes and
+            // its state changed. Kept after the diff so a trailing style is
+            // flushed before the OSC bytes are appended.
+            EmitProtocolFrames();
             // R6 frame contract (ratatui order): cursor after the diff, before
             // the backend write — same single write as the cells above.
             var cursor = EmitPendingCursor();
@@ -431,8 +470,9 @@ public sealed class ScreenSession
 
             ArmEffects();
             CopyPaintToBack();
-            _engine.Flush(_back, _writer, Hyperlinks);
+            _engine.Flush(_back, _writer, Hyperlinks, UnderlineColors);
             Images.Emit(_writer);
+            EmitProtocolFrames();
             // R6 frame contract (ratatui order): cursor after the diff, before
             // the backend write — same single write as the cells above.
             var cursor = EmitPendingCursor();
@@ -451,6 +491,18 @@ public sealed class ScreenSession
     /// (zero perf regression on non-effect frames).</summary>
     private void ArmEffects() =>
         _engine.Effects = Effects.Count > 0 ? Effects : null;
+
+    /// <summary>Appends pending #2219 protocol reports to the in-flight frame.
+    /// Every emitter is inert unless its capability probe passed and its state
+    /// changed, so the classic frame is byte-identical on unsupported terminals.
+    /// </summary>
+    private void EmitProtocolFrames()
+    {
+        ProgramStatus.Emit(_writer);
+        Progress.Emit(_writer);
+        WorkingDirectory.Emit(_writer);
+        CursorShape.Emit(_writer);
+    }
 
     /// <summary>
     /// R6 frame contract: cursor placement between the diff and the backend

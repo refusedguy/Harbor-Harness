@@ -284,6 +284,12 @@ internal sealed class ReplFrameRenderer(CellForgeReplRunner host)
         // exception used to leave the pin armed on the render thread for
         // good — the theme never updated again until restart (#458).
         using var frame = host.ScreenSession.BeginFrameScope();
+        // Issue #2219: DECSCUSR mirrors the vim composer mode — steady block
+        // in NORMAL, steady bar in insert. The emitter is inert unless the
+        // probe confirmed support and dedupes repeated shapes.
+        host.ScreenSession.CursorShape.Set(host._vim.Enabled && host._vim.NormalMode
+            ? DecscusrCursorShape.Shape.SteadyBlock
+            : DecscusrCursorShape.Shape.SteadyBar);
         // PRIM2c: dialog/toast paint through LayoutTree.Overlays (hidden layers
         // stay off the stack, so quiet frames are byte-identical to panels-only).
         host.Screen.SyncOverlays(new Rect(0, 0, cols, rows));
