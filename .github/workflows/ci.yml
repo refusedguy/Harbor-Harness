@@ -3042,10 +3042,23 @@ jobs:
       # the tool index zero files and report an empty tree, which reads as
       # "no guard fired". The floor turns that into a red job.
       - name: Triage the guard firings (issue #1726)
-        if: always() && matrix.shard == 'core'
+        if: always() && matrix.shard == 'core' && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 guard-triage \
+            --trx "TestResults/${{ matrix.shard }}/*.trx" \
+            --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+            --project Harbor.Architecture.Tests \
+            --repo-root . \
+            --min-guard-files 100 \
+            --out "guard-firings-${{ matrix.shard }}.json" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Triage the guard firings (issue #1726, ARM64)
+        if: always() && matrix.shard == 'core' && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          tools/bin/harbor-gates-linux-arm64 guard-triage \
             --trx "TestResults/${{ matrix.shard }}/*.trx" \
             --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
             --project Harbor.Architecture.Tests \
