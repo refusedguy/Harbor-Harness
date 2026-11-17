@@ -323,6 +323,11 @@ public class KeyGateFamilyRules
         // It routes j/k/h/l and Enter/Space with a command gate (no buffer,
         // Shift refused), so it is a command site like the chat tree above.
         new("GenericTreeView", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/GenericTreeView.cs"),
+        // GenericToggleSelect (#2365): the controlled-value checkbox/switch/
+        // radio/toggle/select primitive. Space activation is a command rune and
+        // arrows navigate with a strict no-modifier gate, so Shift is refused:
+        // a command site like the tree above, not a text buffer.
+        new("GenericToggleSelect", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/GenericToggleSelect.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
