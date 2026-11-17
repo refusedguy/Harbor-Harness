@@ -294,6 +294,47 @@ internal static class JsonlMessageCodec
             .Bind(x => BuildMessage(sessionId, x.id, x.createdAt, element));
     }
 
+    /// <summary>
+    ///     Decode a message whose envelope was already parsed into typed fields
+    ///     by an AOT-safe <see cref="JsonlCodecContext" /> reader: the session
+    ///     import (#2224) and the archive reader (#1750). The role-specific
+    ///     payload stays a <see cref="JsonElement" /> so the legacy-casing
+    ///     tolerance and the per-field diagnostics of the element-based path
+    ///     are preserved verbatim.
+    /// </summary>
+    /// <param name="sessionId">The session id to embed in the reconstructed message.</param>
+    /// <param name="id">The wire 'id'.</param>
+    /// <param name="parentId">The wire 'parentId', if any.</param>
+    /// <param name="role">The wire 'role'.</param>
+    /// <param name="createdAt">The already-parsed 'createdAt'.</param>
+    /// <param name="payload">The role-specific payload.</param>
+    public static Result<AgentMessage> DeserializeMessage(
+        string sessionId,
+        string id,
+        string? parentId,
+        string? role,
+        DateTimeOffset createdAt,
+        JsonElement payload)
+    {
+        if (string.IsNullOrEmpty(id))
+            return Result.Failure<AgentMessage>("missing 'id'");
+        if (string.IsNullOrEmpty(role))
+            return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
+        // Undefined is the default JsonElement: a missing 'payload' on the wire.
+        // A JSON null (ValueKind.Null) falls through to the role decoders, which
+        // report their own specific missing-field diagnostic — same as before.
+        if (payload.ValueKind == JsonValueKind.Undefined)
+            return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
+
+        return role switch
+        {
+            "user" => DecodeUser(sessionId, id, createdAt, parentId, payload),
+            "assistant" => DecodeAssistant(sessionId, id, createdAt, parentId, payload),
+            "tool_result" => DecodeToolResult(sessionId, id, createdAt, parentId, payload),
+            _ => Result.Failure<AgentMessage>($"message {id}: unknown role '{role}'")
+        };
+    }
+
     /// <summary>Read a mandatory string field: absence/shape errors and empty values both fail.</summary>
     private static Result<string> Required(JsonElement element, string field) =>
         Result.Try(
@@ -311,19 +352,8 @@ internal static class JsonlMessageCodec
     {
         string? parentId = element.TryGetProperty("parentId", out var p) ? p.GetString() : null;
         string? role = element.TryGetProperty("role", out var r) ? r.GetString() : null;
-        if (string.IsNullOrEmpty(role))
-            return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
-
-        if (!element.TryGetProperty("payload", out var payload))
-            return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
-
-        return role switch
-        {
-            "user" => DecodeUser(sessionId, id, createdAt, parentId, payload),
-            "assistant" => DecodeAssistant(sessionId, id, createdAt, parentId, payload),
-            "tool_result" => DecodeToolResult(sessionId, id, createdAt, parentId, payload),
-            _ => Result.Failure<AgentMessage>($"message {id}: unknown role '{role}'")
-        };
+        JsonElement payload = element.TryGetProperty("payload", out var payloadElement) ? payloadElement : default;
+        return DeserializeMessage(sessionId, id, parentId, role, createdAt, payload);
     }
 
     private static Result<AgentMessage> DecodeUser(

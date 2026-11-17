@@ -37,7 +37,7 @@ Harbor — зрелый, продуманный .NET 10 AI-агент harness. S
 Топ-3 критических:
 1. **§ROP-002**: `PermissionService.CheckAsync` бросает исключение на expected failure (invalid agent name) — краш под нагрузкой.
 2. **§OOP-001**: `OpenAiCompatibleLlmClient._toolCallIndexToId` — instance-level mutable state, гонка при параллельных сессиях на одном singleton-клиенте.
-3. **§PERF-005**: `JsonlSessionStore.GetMessagesAsync` — `JsonDocument.Parse` на каждой строке, ~10k аллокаций на длинную сессию.
+3. **§PERF-005**: основной путь чтения сессии уже на `Utf8JsonReader` (`JsonlLineParser`), без per-line `JsonDocument`. Остатки импорта, архива и редракции закрыты #2224 через AOT-safe `JsonSerializer.Deserialize` с source-generated `JsonlCodecContext`.
 
 ---
 
@@ -58,12 +58,12 @@ Sprint 1 (critical) + Sprint 2 (high-perf) fixes were applied by Subagent #6 (`p
 | §ROP-001 | medium | ✅ RESOLVED | `DeserializeMessage` returns `Result<AgentMessage>`; per-line errors aggregated + logged. |
 | §ROP-002 | **high** | ✅ RESOLVED | `CheckAsync`/`GetRuleset` pattern-match `Result<AgentName>`. |
 | §ROP-004 | low | ✅ RESOLVED | `MapChunk` returns `ErrorEvent` on parse failure (no silent drop). |
-| §PERF-005 | **high** | ⚠️ PARTIAL | ROP path fixed; full `Utf8JsonReader` rewrite deferred (AOT risk). |
+| §PERF-005 | **high** | ✅ RESOLVED | Read path on `Utf8JsonReader` (`JsonlLineParser`); import/archive/redaction on source-generated `JsonlCodecContext` (#2224). No direct `JsonDocument.Parse` in `src/Harbor.Storage.Jsonl`. |
 | §PERF-006 | medium | ✅ RESOLVED | `BashTool` uses `StringBuilderPool.Rent` + 100k cap + dropped-bytes log. |
 | §PERF-007 | medium | ✅ RESOLVED | `UiStore.Dispatch` is lock-free CAS on `volatile UiState _state`. |
 | §PERF-009 | low | ✅ RESOLVED | `ChatMarkdown.Cache` is `ConcurrentDictionary`; no `lock(Cache)`. |
 
-**11 of 11 critical findings addressed** (10 fully resolved, 1 partial with documented decision).
+**11 of 11 critical findings addressed** (all fully resolved; §PERF-005's last partial axis closed in #2224).
 
 Findings NOT touched in this sprint (Sprint 3+ scope): §SOLID-001, §SOLID-002, §OOP-004, §OOP-005, §OOP-006, §OOP-007, §OOP-008, §FP-001, §FP-002, §ROP-003, §PERF-001, §PERF-002, §PERF-003, §PERF-004, §PERF-008, plus all GoF / Low-level / AOT / Concurrency findings outside the critical/high-perf set. §FP-005 and §FP-007 were resolved by subagent T (tea-restorer) in Sprint 3 — see detailed entries below.
 
@@ -73,9 +73,20 @@ Findings NOT touched in this sprint (Sprint 3+ scope): §SOLID-001, §SOLID-002,
 
 ### §SOLID-001 — AgentLoop: нарушение Single Responsibility
 
-**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
+> **Status (2026-11-17, historical / partially resolved):** the split is done,
+> though the checklist item below is still open. `AgentLoop` now lives at
+> `src/Harbor.AgentRuntime/Agents/AgentLoop.cs` and is 542 lines (down from the
+> ~650 recorded here). Streaming coalescing moved to `StreamingCoalescer.cs`,
+> tool dispatch to `ToolDispatcher.cs`, per-turn work (including the `LlmEvent`
+> switch, now at `TurnRunner.cs:707-814`) to `TurnRunner.cs`, and further slices
+> to `UpdateCoalescer`, `MessageSnapshot`, `UserHookGates`, `BackgroundDrain` and
+> `ToolTableBuilder`. The ~650-line, 8-responsibility description below is the
+> historical finding. The remaining OCP aspect of the switch is tracked
+> separately as §OOP-004.
+
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs` (historical; now `src/Harbor.AgentRuntime/Agents/AgentLoop.cs`)  
 **Severity:** medium  
-**Line:** ~16 (класс целиком, ~650 строк)
+**Line:** ~16 (класс целиком, ~650 строк — historical; сейчас 542)
 
 `AgentLoop` делает **слишком много**: (1) оркестрация turn-loop, (2) streaming coalescing, (3) tool-call accumulation, (4) tool execution dispatch, (5) error handling, (6) event publishing, (7) permission gating, (8) steering queue draining. Метод `RunAsync` — один `try/catch` блок на 250 строк с вложенными switch'ами.
 
@@ -117,11 +128,16 @@ ChatScreen внутри `SpectreTuiRenderer` делает (1) key dispatch, (2) 
 
 ### §OOP-001 — OpenAiCompatibleLlmClient: thread-safety violation
 
-> **Status:** ✅ RESOLVED (Sprint 1) — `_toolCallIndexToId` field removed; the index→id map is now a local `Dictionary<int, string>` inside `StreamAsync`, passed into `MapChunk`/`MapChunkFromDocument` as a parameter. Concurrent `StreamAsync` calls on the same singleton client no longer race.
+> **Status:** ✅ RESOLVED (Sprint 1; re-verified 2026-11-17) — `_toolCallIndexToId`
+> field removed. `StreamAsync` now creates a per-call `ChunkStreamState` (index→id
+> map + malformed-chunk counter) at
+> `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs:84-86`, with
+> no instance-level mutable state. Concurrent `StreamAsync` calls on the same
+> singleton client no longer race. The field and snippet below are historical.
 
 **Файл:** `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs`  
 **Severity:** **high**  
-**Line:** 29 (поле `_toolCallIndexToId`)
+**Line:** 29 (поле `_toolCallIndexToId` — historical; сейчас per-call `ChunkStreamState` в `:84-86`)
 
 ```csharp
 private readonly Dictionary<int, string> _toolCallIndexToId = new();
@@ -258,9 +274,16 @@ private static AgentMessage? DeserializeMessage(string sessionId, JsonElement el
 
 ### §OOP-004 — AgentLoop.RunAsync: OCP violation (switch on LlmEvent)
 
-**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
+> **Status (2026-11-17, open / relocated):** the switch still exists, but it is
+> no longer in `AgentLoop`. Per-turn execution was extracted into `TurnRunner`,
+> and the switch now lives at
+> `src/Harbor.AgentRuntime/Agents/TurnRunner.cs:707-814`. The file/line below
+> are historical. The OCP finding itself is unresolved: adding an `LlmEvent`
+> variant still requires editing this switch.
+
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs` (historical; now `src/Harbor.AgentRuntime/Agents/TurnRunner.cs:707-814`)  
 **Severity:** medium  
-**Line:** 199 (`switch (evt)`)
+**Line:** 199 (`switch (evt)` — historical; сейчас `TurnRunner.cs:707`)
 
 ```csharp
 switch (evt) {
@@ -445,11 +468,20 @@ Mutable dictionary как accumulator — нарушение immutability. Дл�
 
 ### §FP-003 — AgentLoop: `_ = _eventBus.PublishAsync(...)` fire-and-forget
 
-> **Status:** ✅ RESOLVED (Sprint 1) — the `ToolContext.ReportProgress` lambda is now `async`/`await` with a try/catch that logs failures at Warning level instead of letting them die as unobserved task exceptions.
+> **Status:** ✅ RESOLVED (Sprint 1; re-verified 2026-11-17) — the
+> `ToolContext.ReportProgress` lambda is now `async`/`await` with a try/catch
+> that logs failures at Warning level. The path and line below are historical:
+> the loop now lives at `src/Harbor.AgentRuntime/Agents/AgentLoop.cs` (542 lines).
+> No bare `_ = ...PublishAsync(...)` fire-and-forget remains in the agent
+> runtime. The `_ =` on a Task that does remain is a deliberate fault-observer:
+> `ToolDispatcher.AbandonLeftoverAsync` at
+> `src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:584` attaches
+> `ContinueWith(..., OnlyOnFaulted, TaskScheduler.Default)` to log a late tool
+> call's fault, which is the sanctioned pattern, not the defect described here.
 
-**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs` (historical; now `src/Harbor.AgentRuntime/Agents/AgentLoop.cs`)  
 **Severity:** **high**  
-**Line:** 620 (в `ToolContext.ReportProgress`)
+**Line:** 620 (в `ToolContext.ReportProgress` — historical)
 
 ```csharp
 (update, c) => {
@@ -809,15 +841,14 @@ private async Task WithSessionLock(string sessionId, Func<Task> action) {
 
 ---
 
-### §PERF-005 — JsonlSessionStore.GetMessagesAsync: per-line JsonDocument.Parse
+### §PERF-005 — JSONL: per-line JsonDocument.Parse
 
-> **Status:** ⚠️ PARTIAL (Sprint 1, alongside §ROP-001) — the full `Utf8JsonReader` rewrite was judged too risky without AOT testing in this sprint. `JsonDocument.Parse` is kept, but the ROP path is fixed: per-line errors are aggregated and logged at Warning level (see §ROP-001). A future sprint can revisit option 1 (Utf8JsonReader) or option 3 (MemoryPack binary sidecar).
+> **Status:** ✅ RESOLVED — the store read path (`JsonlSessionStore` → `SessionFileReader` → `JsonlLineParser`) parses raw UTF-8 spans with `Utf8JsonReader` (commit c546b16). The remaining per-line `JsonDocument.Parse` sites on the import, archive and redaction axes were replaced in #2224 with AOT-safe `JsonSerializer.Deserialize` through the source-generated `JsonlCodecContext` (same shape as `JsonlSessionStoreCompaction.cs:205` and `JsonlGoalStore.cs:305`), preserving the ROP wrapper and the "malformed JSON line" diagnostic. `src/Harbor.Storage.Jsonl` now has no direct `JsonDocument.Parse`. Option 3 (MemoryPack sidecar) stays an optional future step, not a prerequisite.
 
-**Файл:** `src/Harbor.Storage.Jsonl/JsonlSessionStore.cs`  
-**Severity:** **high**  
-**Line:** 176
+**Файлы:** `src/Harbor.Storage.Jsonl/JsonlLineParser.cs`, `SessionPorter.cs`, `Archive/SessionArchiveReader.cs`, `SecretRedactor.cs`  
+**Severity:** **high**
 
-Для каждой строки JSONL — `JsonDocument.Parse(line)`. На 10k-сообщений сессии — 10k аллокаций pooled buffer + 10k Dictionary entries.
+Исторически для каждой строки JSONL был `JsonDocument.Parse(line)` — 10k аллокаций pooled buffer + 10k Dictionary entries на 10k-сообщений сессии. Сейчас основной путь читает raw UTF-8 spans через `Utf8JsonReader`, а импорт, архив и редракция используют source-generated `JsonSerializer.Deserialize`.
 
 **Fix — три уровня:**
 
@@ -1182,7 +1213,7 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 
 ### Sprint 2 (высокое, ~5 дней)
 - [ ] **§PERF-002**: BuildRequest → Utf8JsonWriter. (2 дня)
-- [~] **§PERF-005**: GetMessagesAsync → Utf8JsonReader. (1 день) — partial (ROP fixed; Utf8JsonReader deferred)
+- [x] **§PERF-005**: GetMessagesAsync → Utf8JsonReader; импорт/архив/редракция → AOT-safe JsonSerializer.Deserialize (#2224). ✅
 - [ ] **§PERF-001**: MapChunk → Utf8JsonReader. (1 день)
 - [ ] **§AOT-001 / §AOT-002**: JsonSerializerContext для всех JsonOptions. (1 день)
 - [~] **§FP-004**: `ChatMarkdown` → DI-сервис `IChatMarkdownCache`. (4 часа) — partial (`ConcurrentDictionary` only)

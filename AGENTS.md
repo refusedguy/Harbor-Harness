@@ -747,7 +747,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 3. **§FP-003 / §FP-006** — `_ = SomeAsync()` fire-and-forget → теряются ошибки, зависает state. **Никогда** без `.ContinueWith(OnlyOnFaulted)` или `await`.
 4. **§ROP-001** — `DeserializeMessage` возвращает `null` на ошибку → теряется диагностика. **Возвращайте `Result<T>`**, не `null`.
 5. **§PERF-002** — `JsonSerializer.Serialize<Dictionary<string,object?>>` → reflection, IL2026 под AOT. **Только `Utf8JsonWriter` или `JsonSerializerContext`** на hot paths.
-6. **§PERF-005** — `JsonDocument.Parse(line)` на каждой строке JSONL → 10k аллокаций. **Только `Utf8JsonReader`** для per-line parsing.
+6. **§PERF-005** — основной путь чтения (`JsonlLineParser`, `SessionFileReader`) уже на `Utf8JsonReader`, без per-line `JsonDocument`. Остатки (#2224) переведены на AOT-safe `JsonSerializer.Deserialize` через source-generated `JsonlCodecContext`: это импорт (`SessionPorter`), архив (`SessionArchiveReader`) и редракция (`SecretRedactor`). Прямого `JsonDocument.Parse` в `src/Harbor.Storage.Jsonl` больше нет. Для нового per-line кода по-прежнему только `Utf8JsonReader`.
 7. **§OOP-002** — `switch (ProviderId.Value) { case "deepseek": ... }` → OCP violation. **Strategy-паттерн через `IProviderCompatFlag`**, не строковый switch.
 
 Поиск существующих TODO: `grep -rn "TODO(principles)" src/`

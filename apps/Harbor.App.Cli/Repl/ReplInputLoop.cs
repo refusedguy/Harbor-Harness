@@ -111,6 +111,14 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 host.Pipeline.NotifyHint = DesktopNotifyKind.Osc99;
                 break;
 
+            case InputEventKind.Focus:
+                // #2218: CSI I / CSI O. The next ArmSpinner in the frame loop
+                // reads this and parks the heartbeat while the window is blurred.
+                // A focus report wakes the loop, so re-arming needs no extra
+                // signal. This adds no plugin or extension axis.
+                host._windowFocused = evt.Focus.IsFocused;
+                break;
+
             case InputEventKind.Paste:
             {
                 // Paste payload is verbatim by parser contract — sanitize it
@@ -284,6 +292,27 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // Key routing can mutate gates, palette, vim state or the composer —
         // the next frame takes the conservative full-scan path.
         host._broadDamageNextFrame = true;
+
+        // Floating terminal pane (issue #1491): while attached it owns input —
+        // a full barrier like the image/markup modals. The detach chord is
+        // offered through the dedicated LeaderKeyRouter first; everything else
+        // (including other leader chords) is fed to the live session or
+        // swallowed, so no key can leak into the composer beneath. Detaching
+        // simply ends this branch: the next key flows to the composer again,
+        // which is the focus-return contract. The session object is untouched
+        // by detach, so re-attaching returns the same live history/process.
+        if (host.FloatingTerminal.IsAttached)
+        {
+            if (host._terminalLeader.HandleKey(key, Environment.TickCount64))
+            {
+                host._wake.Writer.TryWrite(null);
+                return;
+            }
+
+            host.FloatingTerminal.FeedKey(key);
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
 
         // Image zoom viewer (issue #387) is MODAL, so it forms the outermost
         // input barrier: it claims keys BEFORE the palette, the setup guide,

@@ -668,6 +668,75 @@ public sealed class PluginHost
     }
 
     /// <summary>
+    ///     Stop every live run (#1720): take back exactly what each plugin
+    ///     registered and call its <c>ShutdownAsync</c>, newest run first.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the exit path. <see cref="StopAsync" /> needs a plugin name and
+    ///         is the right shape for an operator who wants one plugin down; a host
+    ///         that is going away has no such name and must not have to know which
+    ///         plugins are live to tear them all down. Without this, the runs the
+    ///         host registered at startup are never stopped — their registrations
+    ///         outlive the process and <c>ShutdownAsync</c> is never called (#1720).
+    ///     </para>
+    ///     <para>
+    ///         Teardown is best-effort by design. One plugin that refuses to roll back
+    ///         must not strand every other plugin's shutdown, so each failure is
+    ///         logged here, every run is attempted, and the first failure is returned
+    ///         to the caller. A caller that needs the detail reads the log; a caller
+    ///         that only needs to know whether everything came down reads the result.
+    ///     </para>
+    ///     <para>
+    ///         The runs are stopped newest first, the mirror of the order in which
+    ///         they were started — the same order <c>PluginRun.StopAsync</c> unwinds a
+    ///         single plugin's registrations.
+    ///     </para>
+    /// </remarks>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     Success when every run came down, or the first failure encountered while
+    ///     stopping them. Stopping is idempotent: with no live runs it succeeds.
+    /// </returns>
+    public async Task<Result> StopAllAsync(CancellationToken ct = default)
+    {
+        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            string[] names;
+            lock (_sync)
+            {
+                names = _runs.Keys.ToArray();
+            }
+
+            Array.Reverse(names);
+
+            Result firstFailure = Result.Success();
+            foreach (string name in names)
+            {
+                Result stopped = await StopRunCoreAsync(name, ct).ConfigureAwait(false);
+                if (stopped.IsFailure)
+                {
+                    _logger.LogWarning(
+                        "Stopping plugin {Name} during teardown failed: {Error}",
+                        name,
+                        stopped.Error);
+                    if (firstFailure.IsSuccess)
+                    {
+                        firstFailure = stopped;
+                    }
+                }
+            }
+
+            return firstFailure;
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    /// <summary>
     ///     Forget a plugin's definition (#1737).
     /// </summary>
     /// <remarks>

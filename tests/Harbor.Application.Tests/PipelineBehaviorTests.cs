@@ -22,11 +22,13 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class PipelineBehaviorTests
 {
-    private static PromptRequest NewRequest() => new(
+    private static PromptRequest NewRequest() => RequestFor("code");
+
+    private static PromptRequest RequestFor(string agentName) => new(
         TestSessionContext.Create("/tmp/harbor-pipeline-tests"),
         new AgentDefinition(
-            AgentName.Create("code"),
-            "Code",
+            AgentName.Create(agentName),
+            agentName,
             "pipeline test agent",
             "test-model",
             "test",
@@ -129,6 +131,33 @@ public class PipelineBehaviorTests
 
         await Assert.That(result).IsFailed();
         await Assert.That(order).IsEquivalentTo(["inner"]);
+    }
+
+    [Test]
+    public async Task AgentPipeline_TwoRunsWithDifferentRequests_SameOrderAndResult()
+    {
+        var order = new List<string>();
+        var pipeline = new AgentPipeline([
+            new RecordingBehavior(order, "outer"),
+            new RecordingBehavior(order, "inner")
+        ]);
+        PipelineNext terminal = (_, _) =>
+        {
+            order.Add("terminal");
+            return Task.FromResult(Result.Success());
+        };
+
+        Result first = await pipeline.HandleAsync(RequestFor("code"), terminal, CancellationToken.None);
+        string[] firstOrder = [.. order];
+        order.Clear();
+
+        Result second = await pipeline.HandleAsync(RequestFor("plan"), terminal, CancellationToken.None);
+        string[] secondOrder = [.. order];
+
+        await Assert.That(first).IsSuccessful();
+        await Assert.That(second).IsSuccessful();
+        await Assert.That(string.Join(",", firstOrder)).IsEqualTo("outer,inner,terminal");
+        await Assert.That(string.Join(",", secondOrder)).IsEqualTo(string.Join(",", firstOrder));
     }
 
     private sealed class RecordingBehavior(List<string> order, string name) : IPipelineBehavior

@@ -114,9 +114,16 @@ public sealed class DiffEngine
     /// scanned; any other frame runs the full scan. The frame leaves the
     /// process through the writer's single backend write at
     /// <c>EndFrame</c> — <see cref="Flush"/> itself never touches the backend.
+    /// An optional <see cref="HyperlinkTable"/> wraps changed cells in OSC 8
+    /// pairs without adding a column; a null or disabled table is byte-identical
+    /// to the classic scan.
     /// </summary>
-    public void Flush(ScreenBuffer next, AnsiWriter writer)
+    public void Flush(ScreenBuffer next, AnsiWriter writer, HyperlinkTable? links = null)
     {
+        // #2217: links are a side-table, not a Cell field. UrlAt returns null
+        // when the terminal probe said no OSC 8, so the unsupported case is
+        // byte-for-byte the plain frame. The escape bytes are zero-width and
+        // ride RawBytes inside this same frame buffer, never a side channel.
         var cursor = Diff(next).GetEnumerator();
 
         // Adjacent-cell MoveTo skip (OutputBase pattern): after a drawn cell
@@ -137,6 +144,17 @@ public sealed class DiffEngine
             }
 
             writer.SetStyle(target.Style);
+
+            // #2217: wrap this cell's visible rune in an OSC 8 pair. Open and
+            // close are emitted through RawBytes, which does not advance the
+            // tracked pen, so the MoveTo/advance column sequence below is
+            // exactly the one a frame without links would produce.
+            string? linkUrl = links?.UrlAt(x, y);
+            if (linkUrl is not null)
+            {
+                writer.RawBytes(Osc8Hyperlink.Open(linkUrl));
+            }
+
             if (cursor.IsForcedWidth)
             {
                 // Explicit advance (R1 steal, CellDiffOption.ForcedWidth): the
@@ -150,6 +168,11 @@ public sealed class DiffEngine
             {
                 writer.PutRune(new Rune(target.Rune));
                 lastX = x;
+            }
+
+            if (linkUrl is not null)
+            {
+                writer.RawBytes(Osc8Hyperlink.Close);
             }
 
             lastY = y;

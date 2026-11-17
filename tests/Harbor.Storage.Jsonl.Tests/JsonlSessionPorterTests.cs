@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Memory;
@@ -216,5 +218,48 @@ public class JsonlSessionPorterTests
         {
             if (Directory.Exists(source.GetRootDirectory())) Directory.Delete(source.GetRootDirectory(), true);
         }
+    }
+
+    /// <summary>
+    ///     #2224 / PERF-005 tail: the import of a long session must go through
+    ///     the AOT-safe source-generated context, not a pooled JSON document
+    ///     per body line. The behavioural half imports 10k messages and proves
+    ///     none are skipped; the source half pins the mechanism so a revert to
+    ///     the reflection-based document parse fails loudly.
+    /// </summary>
+    [Test]
+    public async Task Import_10kMessages_UsesAotDeserializeNotPerLineDocument()
+    {
+        string porterSource = File.ReadAllText(
+            RepoPaths.Combine("src", "Harbor.Storage.Jsonl", "SessionPorter.cs"));
+        await Assert.That(porterSource).DoesNotContain("JsonDocument.Parse");
+
+        var envelope = new ExportEnvelope(
+            Marker: "$harbor-session-export",
+            Version: 1,
+            Session: Session.Create("/proj", "code", "anthropic", "claude-opus-4", "10k fixture"),
+            Metadata: SessionMetadata.Empty);
+
+        var payload = new StringBuilder();
+        payload.Append(JsonSerializer.Serialize(envelope, JsonlCodecContext.Default.ExportEnvelope)).Append('\n');
+        for (int i = 0; i < 10_000; i++)
+        {
+            var entry = new MessageEntry(
+                Type: "message",
+                Id: $"m-{i}",
+                ParentId: null,
+                Role: "user",
+                CreatedAt: DateTimeOffset.UtcNow,
+                Payload: new UserPayload($"message {i}", "code", "claude-opus-4"));
+            payload.Append(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry)).Append('\n');
+        }
+
+        var target = CreateMemoryStore();
+        var import = await CreatePorter().ImportAsync(target, new StringReader(payload.ToString()));
+        await Assert.That(import).IsSuccessful();
+
+        var messages = await target.GetMessagesAsync(import.Value);
+        await Assert.That(messages).IsSuccessful();
+        await Assert.That(messages.Value.Count).IsEqualTo(10_000);
     }
 }

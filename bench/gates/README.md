@@ -18,9 +18,11 @@ percent of the suite. The suite is what a pull request pays.
 | the number | the MINIMUM wall time over `RUNS` runs, and the peak RSS of the child |
 | the parent | `maxrss.c`, a 2 KB C program |
 
-The minimum is the estimate that the least foreign work distorts. This
-machine is shared, and its load is 18-26, so a single run says more about
-the neighbours than about the gate.
+The minimum is the estimate that the least foreign work distorts. The
+laptop that produced the older tables was shared, and its load was 18-26,
+so a single run there said more about the neighbours than about the gate.
+The current table was taken on a CI runner, named with its run in
+§10.2 of docs/BENCHMARKS.md.
 
 The peak RSS is `/proc/<pid>/status VmHWM`, polled while the child runs.
 `getrusage(RUSAGE_CHILDREN).ru_maxrss` is printed next to it as a
@@ -74,7 +76,25 @@ gates, one after another, because that is what the harness times. The
 runner, so the job's wall is about the slowest of them and not their sum.
 The table in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) §10.2 is the sum,
 and it is the sum the harness has always measured: what one gate costs, and
-what the gates cost when they are run one after another.
+what the gates cost when they are run one after another. §10.2 also names the
+second number, the runner-minutes the same gates cost in the pull-request
+lane, where they run in different jobs.
+
+## How the set is measured on CI
+
+`workflow_dispatch` of `benchmark.yml` starts the manual-only `gate-suite`
+job. It checks out the commit with its full history, fetches `origin/dev`
+for the two gates that read history, runs
+`TREE=$GITHUB_WORKSPACE RUNS=5 ./bench/gates/measure.sh`, prints the table to
+the job summary and uploads it as `gate-suite-results`. A pull request does
+not pay for a five-run pass just to have its gates timed:
+
+```bash
+gh workflow run benchmark.yml --ref <branch>
+```
+
+Name the commit and the run in §10.2 when the numbers are used. A number
+from another tree or another machine is not a comparison.
 
 ## The gates that are NOT in the set
 
@@ -90,6 +110,7 @@ Three reasons a gate CI runs is out of the measured set, and only three.
 | `go-quality` | the gate runs `go vet` and `go build`, and the toolchain CI uses is fetched from the network; the measuring machine has none it may rely on |
 | `measure-aot-workload.sh` | the workload publishes the CLI with NativeAOT and runs it, so it needs the .NET SDK |
 | `measure-build-cpu` | the instrument runs `dotnet build` and meters it, so it needs the .NET SDK; the numbers it produces live in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) §6 |
+| `measure-compile-cost` | the instrument reads the performance summary of a `dotnet build`, so it needs the .NET SDK; the numbers it produces live in [tools/compile-cost-baseline.txt](../../tools/compile-cost-baseline.txt) |
 | `measure-jit-workload.sh` | the workload builds the CLI and runs it, so it needs the .NET SDK |
 | `measure-project-graph` | CI runs only its own self-test: the project graph is read by a human, not by a build |
 | `msbuild-evaluation-cost` | the measurement reads the performance summary of a `dotnet build`, so it needs the .NET SDK; the numbers it produces live in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) §6 |

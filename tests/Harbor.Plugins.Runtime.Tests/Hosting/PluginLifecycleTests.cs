@@ -342,6 +342,69 @@ public sealed class PluginLifecycleTests
         await Assert.That(entry.FailureReason).IsNotNull();
     }
 
+    /// <summary>
+    ///     StopAll takes back EVERY live run's registrations and shuts EVERY plugin
+    ///     down. This is the exit path (#1720): the host goes away as a whole, not
+    ///     one named plugin at a time.
+    /// </summary>
+    [Test]
+    public async Task StopAll_TakesBackEveryRegistration_AndShutsDownEveryPlugin()
+    {
+        using var fixture = await PluginTestFixture.CreateAsync("lifecycle-stop-all").ConfigureAwait(false);
+        Directory.CreateDirectory(fixture.CacheDir);
+
+        var host = new FakePluginLoadHost();
+        var first = new LifecyclePlugin("plugin-first", "tool_first");
+        var second = new LifecyclePlugin("plugin-second", "tool_second");
+        PluginScript firstScript = new("first.cs", "source-first");
+        PluginScript secondScript = new("second.cs", "source-second");
+        PluginHost pluginHost = BuildHost(
+            new InMemoryPluginSource([firstScript, secondScript]),
+            hash => hash == firstScript.Hash ? first : second,
+            fixture.PluginsDir);
+
+        await pluginHost.LoadAllAsync(host).ConfigureAwait(false);
+        await Assert.That(host.RegisteredTools.Count).IsEqualTo(2)
+            .Because("both plugins are live before teardown");
+
+        var stopped = await pluginHost.StopAllAsync().ConfigureAwait(false);
+
+        await Assert.That(stopped.IsSuccess).IsTrue();
+        await Assert.That(host.RegisteredTools.Count).IsEqualTo(0)
+            .Because("teardown takes back exactly what each run registered");
+        await Assert.That(first.ShutdownCount).IsEqualTo(1);
+        await Assert.That(second.ShutdownCount).IsEqualTo(1)
+            .Because("every live plugin gets its ShutdownAsync call on the way out");
+        await Assert.That(pluginHost.ActivePlugins.Count).IsEqualTo(0);
+        await Assert.That(pluginHost.Definitions.Count).IsEqualTo(2)
+            .Because("stopping keeps the definitions — teardown is not undefinition");
+    }
+
+    /// <summary>
+    ///     StopAll is idempotent: a second teardown with nothing live succeeds.
+    /// </summary>
+    [Test]
+    public async Task StopAll_WithNoLiveRuns_Succeeds()
+    {
+        using var fixture = await PluginTestFixture.CreateAsync("lifecycle-stop-all-empty").ConfigureAwait(false);
+        Directory.CreateDirectory(fixture.CacheDir);
+
+        var host = new FakePluginLoadHost();
+        PluginHost pluginHost = BuildHost(
+            new InMemoryPluginSource(
+                new[] { new PluginScript("lifecycle.cs", "source-v1") }),
+            _ => new LifecyclePlugin("lifecycle-plugin", "lifecycle_tool_v1"),
+            fixture.PluginsDir);
+
+        await pluginHost.LoadAllAsync(host).ConfigureAwait(false);
+        await pluginHost.StopAllAsync().ConfigureAwait(false);
+
+        var second = await pluginHost.StopAllAsync().ConfigureAwait(false);
+
+        await Assert.That(second.IsSuccess).IsTrue()
+            .Because("a teardown of an already-torn-down host is not a failure");
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     /// <summary>

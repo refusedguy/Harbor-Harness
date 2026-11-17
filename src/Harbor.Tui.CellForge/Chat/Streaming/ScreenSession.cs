@@ -1,3 +1,4 @@
+using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Rendering;
 // #436: the diff side of this session speaks the ENGINE grid (DiffEngine,
 // BufferSwapChain and the swap offers are engine APIs), qualified explicitly
@@ -58,7 +59,17 @@ public sealed class ScreenSession
         _sizeSource = sizeSource;
         CurrentCols = cols;
         CurrentRows = rows;
+        Hyperlinks = new HyperlinkTable(cols, rows) { Enabled = Osc8HyperlinkProbe.Detect() };
     }
+
+    /// <summary>
+    /// OSC 8 hyperlink side-table (issue #2217). Painters attach a URL to a
+    /// cell here; the flush wraps that cell's visible rune in zero-width
+    /// escape bytes, so the link occupies no column and Cell stays 16 bytes.
+    /// When the capability probe said no OSC 8, <see cref="HyperlinkTable.Enabled"/>
+    /// is false and only visible text reaches the terminal.
+    /// </summary>
+    public HyperlinkTable Hyperlinks { get; }
 
     public EngineCells.ScreenBuffer Back => _back;
 
@@ -210,6 +221,7 @@ public sealed class ScreenSession
         _engine.SwapFront(offer.Front);
         CurrentCols = _back.Cols;
         CurrentRows = _back.Rows;
+        Hyperlinks.Resize(CurrentCols, CurrentRows);
 
         _back.InvalidateAll();
         _paint.Resize(CurrentCols, CurrentRows);
@@ -241,6 +253,7 @@ public sealed class ScreenSession
         CurrentRows = rows;
         _back.Resize(cols, rows);
         _paint.Resize(cols, rows);
+        Hyperlinks.Resize(cols, rows);
         _engine.Front.Resize(cols, rows);
         _back.InvalidateAll();
         _paint.InvalidateAll();
@@ -324,6 +337,9 @@ public sealed class ScreenSession
             _back.InvalidateAll();
             _engine.Front.InvalidateAll();
             _engine.ClearHints();
+            // #2217: links set during a frame that never shipped must not leak
+            // into the next frame's diff against unchanged cells.
+            Hyperlinks.ClearAll();
 
             // R6 frame contract: a frame that never shipped leaves no cursor
             // behind — the next frame positions it from its own paint.
@@ -367,7 +383,7 @@ public sealed class ScreenSession
         {
             ArmEffects();
             CopyPaintToBack();
-            _engine.Flush(_back, _writer);
+            _engine.Flush(_back, _writer, Hyperlinks);
             // Inline images (issue #387) ride this same write: the escape
             // payloads are appended to the frame buffer AFTER the cell diff, so
             // they leave through the same single backend call and never enter
@@ -415,7 +431,7 @@ public sealed class ScreenSession
 
             ArmEffects();
             CopyPaintToBack();
-            _engine.Flush(_back, _writer);
+            _engine.Flush(_back, _writer, Hyperlinks);
             Images.Emit(_writer);
             // R6 frame contract (ratatui order): cursor after the diff, before
             // the backend write — same single write as the cells above.

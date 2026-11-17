@@ -270,12 +270,12 @@ public sealed class JsonlSessionPorter : ISessionPorter
     }
 
     /// <summary>
-    /// Decode one export body line. Single parse, no <c>Clone()</c> (#180):
-    /// <see cref="JsonlMessageCodec.DeserializeMessage"/> runs synchronously
-    /// inside the document lifetime, so the intermediate copy was dead weight.
-    /// The span fast path (<see cref="JsonlLineParser"/>) stays store-only —
-    /// import must tolerate legacy PascalCase aliases, which the span parser
-    /// deliberately rejects.
+    /// Decode one export body line. The envelope is deserialized through the
+    /// AOT-safe <see cref="JsonlCodecContext"/> (#2224, PERF-005 tail): a 10k
+    /// import no longer allocates a pooled JSON document per line. The span fast
+    /// path (<see cref="JsonlLineParser"/>) stays store-only. Import must
+    /// tolerate legacy PascalCase aliases inside the payload, which the span
+    /// parser deliberately rejects.
     /// </summary>
     /// <remarks>
     ///     #550: the DECODE sits inside the <c>Result.Try</c>, not in a <c>Bind</c>
@@ -290,9 +290,10 @@ public sealed class JsonlSessionPorter : ISessionPorter
     {
         // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
         // wrapping a throwing call in a Result: same catch scope, same text. Both the
-        // document parse and the decode it feeds are inside the lambda, so every way a
+        // typed deserialize and the decode it feeds are inside the lambda, so every way a
         // body line can be unreadable arrives on the same rail and is logged as one
-        // skipped line.
+        // skipped line. A malformed line still throws JsonException from
+        // JsonSerializer.Deserialize and is reported as "malformed JSON line: …".
         //
         // The trailing .Bind(x => x) is the repo's flattening idiom and it is not
         // decoration: 3.7.0 has Try<T>(Func<T>), NOT Try<T>(Func<Result<T>>), so the
@@ -301,8 +302,13 @@ public sealed class JsonlSessionPorter : ISessionPorter
         return Result.Try(
             () =>
             {
-                using var doc = JsonDocument.Parse(line);
-                return JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
+                var entry = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.MessageEntry);
+                if (entry is null)
+                    return Result.Failure<AgentMessage>("malformed JSON line: empty entry");
+                if (entry.Payload is not JsonElement payload)
+                    return Result.Failure<AgentMessage>($"malformed JSON line: message {entry.Id}: missing 'payload'");
+                return JsonlMessageCodec.DeserializeMessage(
+                    sessionId, entry.Id, entry.ParentId, entry.Role, entry.CreatedAt, payload);
             },
             ex => $"malformed JSON line: {ex.Message}")
             .Bind(x => x);
