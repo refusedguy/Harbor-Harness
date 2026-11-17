@@ -1,0 +1,40 @@
+name: Run a compiled reporter gate on this runner's architecture
+description: >
+  Runs tools/bin/harbor-gates-linux-<arch> with one gate and its arguments,
+  choosing x64 or arm64 from `runner.arch`. One caller step replaces the old
+  X64/ARM64 twin pair (issue #2205): the step name is written once, and the
+  binary and the `if: runner.arch == ...` condition live in ONE place, so a
+  rename or a casing fix can no longer be applied to only half of a pair.
+
+inputs:
+  gate:
+    description: The compiled gate's subcommand (for example `test-measurements`).
+    required: true
+  path:
+    description: The TRX directory the gate reads (for example `TestResults/core`).
+    required: true
+  top:
+    description: Optional `--top N` for the gates that render a ranked table.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: ${{ inputs.gate }}
+      shell: bash
+      env:
+        GATE: ${{ inputs.gate }}
+        GATE_PATH: ${{ inputs.path }}
+        GATE_TOP: ${{ inputs.top }}
+      run: |
+        set -euo pipefail
+        case "${{ runner.arch }}" in
+          ARM64) arch=arm64 ;;
+          *)     arch=x64 ;;
+        esac
+        args=("$GATE_PATH" --summary "$GITHUB_STEP_SUMMARY")
+        if [ -n "$GATE_TOP" ]; then
+          args+=(--top "$GATE_TOP")
+        fi
+        tools/bin/harbor-gates-linux-"${arch}" "$GATE" "${args[@]}"

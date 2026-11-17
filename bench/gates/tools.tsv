@@ -35,6 +35,7 @@ check-abstractions-contract	tools/bin/harbor-gates-linux-x64 check-abstractions-
 check-analyzer-scope	tools/bin/harbor-gates-linux-x64 check-analyzer-scope --min-files 150
 check-arch-anchors	tools/bin/harbor-gates-linux-x64 check-arch-anchors --min-files 40
 check-arch-suite-once	tools/bin/harbor-gates-linux-x64 check-arch-suite-once --min-shards 4
+check-arch-twins.py	python3 tools/check-arch-twins.py
 check-coverage-registry	tools/bin/harbor-gates-linux-x64 check-coverage-registry --coverage-dir Coverage --source-root . --registry tools/coverage-registry.txt --status Coverage/status.tsv --min-files 1200 --min-covered 400
 check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
 check-doc-facts	tools/bin/harbor-gates-linux-x64 check-doc-facts --min-facts 5
@@ -57,6 +58,7 @@ check-test-projects	tools/bin/harbor-gates-linux-x64 check-test-projects --min-p
 check-tool-schema-pin	tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --min-tools 25
 check-workflows	tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
 check-xml-doc-coverage	tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --min-members 493 --min-documented 478 --min-coverage 0.96
+ci-selftests.py	python3 tools/ci-selftests.py --min-steps 48
 ci-shard-slices.py	python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37
 coverage-report	tools/bin/harbor-gates-linux-x64 coverage-report --coverage-dir Coverage --source-root . --registry tools/coverage-registry.txt --summary Coverage/summary.md --out Coverage/coverage-per-file.md --uncovered-out Coverage/coverage-uncovered-locations.txt --min-files 1200
 demo-repro	tools/bin/harbor-gates-linux-x64 demo-repro check-manifest
@@ -67,6 +69,3 @@ guard-triage	tools/bin/harbor-gates-linux-x64 guard-triage --trx "TestResults/*.
 md-lint	tools/bin/harbor-gates-linux-x64 md-lint --min-files 250 --min-lines 60000
 normalize-mtimes	tools/bin/harbor-gates-linux-x64 normalize-mtimes --repo . --base HEAD~1
 pack-validate	tools/bin/harbor-gates-linux-x64 pack-validate out/packages
-test-census	tools/bin/harbor-gates-linux-x64 test-census TestResults --summary TestResults/summary.md --top 15
-test-measurements	tools/bin/harbor-gates-linux-x64 test-measurements TestResults --summary TestResults/summary.md
-test-skips	tools/bin/harbor-gates-linux-x64 test-skips TestResults --summary TestResults/summary.md

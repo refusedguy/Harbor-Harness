@@ -40,3 +40,6 @@ pr-cost	CI runs only its own self-test: the cost of a pull request is a measurem
 public-api-nonvacuity.sh	the proof builds a throwaway project against the public-API analyzer and requires it to fail, so it needs the .NET SDK
 run-e2e-avalonia-shards	the runner starts one `dotnet exec` per shard, so it needs the built product and the .NET SDK
 gen-e2e-shards	CI runs only its own self-test: the shard plan is a generator a human runs before a release, and no build reads it
+test-census	since #2205 CI reaches this reporter only through .github/actions/arch-gate, which picks the x64 or arm64 binary from runner.arch; the measuring harness runs tools.tsv commands directly and has no runner.arch to resolve
+test-measurements	since #2205 CI reaches this reporter only through .github/actions/arch-gate, which picks the x64 or arm64 binary from runner.arch; the measuring harness runs tools.tsv commands directly and has no runner.arch to resolve
+test-skips	since #2205 CI reaches this reporter only through .github/actions/arch-gate, which picks the x64 or arm64 binary from runner.arch; the measuring harness runs tools.tsv commands directly and has no runner.arch to resolve

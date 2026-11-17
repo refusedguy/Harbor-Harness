@@ -41,6 +41,13 @@ harness's business; the flags are the gate's business.
 `bench/gates/excluded.tsv` holds the gates CI runs that the measured set does
 NOT hold, each with the reason it is out.
 
+`test-measurements`, `test-census` and `test-skips` moved here in #2205: CI
+reaches them only through the `.github/actions/arch-gate` composite action,
+which resolves the x64 or arm64 binary from `runner.arch`. The harness runs
+the commands in `tools.tsv` directly, with no `runner.arch` to resolve, so it
+can no longer time the same command CI runs. They are still reported on every
+shard of the `test` job; only the measurement harness lost its direct handle.
+
 The two files and the workflow files are checked against each other by
 `harbor-gates check-gate-bench-set`, which is a CI gate of this repository
 (the `benchset` job of `docs.yml`). It fails when:

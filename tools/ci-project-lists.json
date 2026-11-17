@@ -16,6 +16,11 @@
     "  os[]                    ->  the OS matrix list in .github/workflows/test-os.yml",
     "                              (a project and the note that says why it is",
     "                              there)",
+    "  cache_output_paths[]    ->  the HARBOR_BUILD_OUTPUT_CACHE_PATHS env block in",
+    "                              ci.yml's build job (issue #2205). The restore and",
+    "                              save steps hash these exact lines into the cache's",
+    "                              version, so the list is byte-identical from this",
+    "                              one source.",
     "",
     "To change a list: edit THIS file, then run",
     "  python3 tools/ci-shard-slices.py --write",
@@ -138,5 +143,13 @@
       "project": "Harbor.Ipc.Tests",
       "note": "named pipes on Windows"
     }
+  ],
+  "cache_output_paths": [
+    "**/obj",
+    "**/bin",
+    "!**/runtimes/**",
+    "!**/*.resources.dll",
+    "!tools/bin",
+    "!tools/bin/**"
   ]
 }

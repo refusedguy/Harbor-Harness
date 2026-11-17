@@ -2960,22 +2960,19 @@ jobs:
       # shard, which skips every following step without it — i.e. exactly when
       # the measurement is most wanted. Reporting only, never a gate: the
       # script exits 0 on a missing or corrupt TRX set.
-      # `shell: bash` is explicit because the OS matrix (test-os.yml) reuses
-      # this step on windows-latest, where the default shell is pwsh and a
-      # trailing `\` is a ParserError, not a line continuation.
+      # #2205. The X64 and ARM64 twins used to be two steps that had to be
+      # renamed twice; one merge even dropped the second step's `-` and
+      # created a duplicate-key mapping that GitHub refused to parse. The
+      # `.github/actions/arch-gate` composite action now picks the binary
+      # from `runner.arch`, so this is ONE step with ONE name. It also sets
+      # `shell: bash` in its own step, which is what the OS matrix needs on
+      # windows-latest, where the default shell is pwsh.
       - name: Report test measurements (issue #618)
-        if: always() && runner.arch == 'X64'
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.shard }}" \
-            --summary "$GITHUB_STEP_SUMMARY"
-
-      - name: Report test measurements (issue #618, ARM64)
-        if: always() && runner.arch == 'ARM64'
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-arm64 test-measurements "TestResults/${{ matrix.shard }}" \
-            --summary "$GITHUB_STEP_SUMMARY"
+        if: always() && (runner.arch == 'X64' || runner.arch == 'ARM64')
+        uses: ./.github/actions/arch-gate
+        with:
+          gate: test-measurements
+          path: TestResults/${{ matrix.shard }}
 
       # #1884: the CENSUS, next to the measurements above. The step above
       # renders the tests that PRINTED something, so it sees ~75 of the ~8 400
@@ -2991,18 +2988,12 @@ jobs:
       # Reporting only, never a gate: the script exits 0 on a missing or
       # corrupt TRX set, and it prints its own one-line summary to the log.
       - name: Report the test census (issue #1884)
-        if: always() && runner.arch == 'X64'
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-x64 test-census "TestResults/${{ matrix.shard }}" \
-            --summary "$GITHUB_STEP_SUMMARY" --top 15
-
-      - name: Report the test census (issue #1884, ARM64)
-        if: always() && runner.arch == 'ARM64'
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-arm64 test-census "TestResults/${{ matrix.shard }}" \
-            --summary "$GITHUB_STEP_SUMMARY" --top 15
+        if: always() && (runner.arch == 'X64' || runner.arch == 'ARM64')
+        uses: ./.github/actions/arch-gate
+        with:
+          gate: test-census
+          path: TestResults/${{ matrix.shard }}
+          top: '15'
 
       # Issue #1795 — the SKIPPED tests, with their reasons, in the same
       # summary panel. A skipped test asserts nothing, and the shard loop
@@ -3011,18 +3002,11 @@ jobs:
       # (that is how the 20 skipped Avalonia golden tests were found).
       # Reporting only, never a gate: the script exits 0 on a missing TRX.
       - name: Report skipped tests (issue #1795)
-        if: always() && runner.arch == 'X64'
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.shard }}" \
-            --summary "$GITHUB_STEP_SUMMARY"
-
-      - name: Report skipped tests (issue #1795, ARM64)
-        if: always() && runner.arch == 'ARM64'
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-arm64 test-skips "TestResults/${{ matrix.shard }}" \
-            --summary "$GITHUB_STEP_SUMMARY"
+        if: always() && (runner.arch == 'X64' || runner.arch == 'ARM64')
+        uses: ./.github/actions/arch-gate
+        with:
+          gate: test-skips
+          path: TestResults/${{ matrix.shard }}
 
       # Issue #1726 — the guard firings of this shard, CLASSIFIED.
       #

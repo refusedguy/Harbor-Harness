@@ -129,6 +129,13 @@ OS_WORKFLOW = ".github/workflows/test-os.yml"
 CLI_OUTPUT_DIR = "apps/Harbor.App.Cli/bin/Release/net10.0"
 CLI_CARRYING_SHARDS = ("ui", "e2e")
 
+# F4 (issue #2205): the build-output cache's path list is a sixth derived
+# place, written in the `build` job's `env:` of ci.yml. It was rewritten by
+# both sides of three merges in one night; the restore step and the save
+# step hash these exact lines into the cache's version, so the list must be
+# byte-identical from the one source.
+CACHE_ENV_KEY = "HARBOR_BUILD_OUTPUT_CACHE_PATHS"
+
 # The kinds of file a project's slice must carry: the project's own
 # assemblies and JSON, the linux-x64 native assets, and Harbor's own
 # satellite assembly.
@@ -219,6 +226,12 @@ def load_source(root):
             raise SourceError(f"the `os` list of {SOURCE_FILE} has an entry without a project")
         if not isinstance(entry.get("note"), str) or not entry["note"]:
             raise SourceError(f"the `os` list of {SOURCE_FILE} has a project without a note")
+    cache_paths = source.get("cache_output_paths")
+    if not isinstance(cache_paths, list) or not cache_paths or not all(
+            isinstance(path, str) and path for path in cache_paths):
+        raise SourceError(
+            f"{SOURCE_FILE} has no `cache_output_paths` list — the cache's version "
+            f"would have no source")
     return source
 
 
@@ -244,6 +257,7 @@ def derive(source):
         "cli": cli,
         "coverage": coverage,
         "os": [entry["project"] for entry in source["os"]],
+        "cache_output_paths": list(source["cache_output_paths"]),
     }
 
 
@@ -362,6 +376,21 @@ def find_slice_blocks(lines):
         start, end = block_span(lines, key_index)
         blocks.append((match.group(2), key_index, start, end))
     return blocks
+
+
+def find_cache_paths(lines):
+    """The `HARBOR_BUILD_OUTPUT_CACHE_PATHS: |` block, or (None, None, None).
+
+    Returns (key index, content start, content end exclusive). This env var
+    is the single copy of the cache's path list: the restore and save steps
+    both hash these lines into the cache version, so a second hand-written
+    copy would be a different version that never hits.
+    """
+    for index, line in enumerate(lines):
+        if re.match(rf"^\s*{CACHE_ENV_KEY}: \|\s*$", line):
+            start, end = block_span(lines, index)
+            return index, start, end
+    return None, None, None
 
 
 def find_coverage_list(lines):
@@ -511,6 +540,22 @@ def plan_edits(root, source, lists):
             start, end,
             shard_list_lines(lists["shards"].get(shard, [])),
             indent,
+        ))
+
+    cache_key_index, cache_start, cache_end = find_cache_paths(ci_lines)
+    if cache_key_index is None:
+        problems.append(
+            f"{CI_WORKFLOW} carries no {CACHE_ENV_KEY} block — the cache's "
+            f"path list has no derived place to check")
+    else:
+        cache_indent = indent_of(ci_lines[cache_start]) if cache_start < cache_end \
+            else indent_of(ci_lines[cache_key_index]) + 2
+        edits.append(Edit(
+            CI_WORKFLOW,
+            f"the {CACHE_ENV_KEY} list in {CI_WORKFLOW}",
+            cache_start, cache_end,
+            list(lists["cache_output_paths"]),
+            cache_indent,
         ))
 
     ci_slices = find_slice_blocks(ci_lines)
@@ -879,6 +924,7 @@ def fixture_source(shards=None, coverage_from=None, coverage_exclude=None, os_pr
         "shards": shards,
         "coverage": {"from": coverage_from, "exclude": coverage_exclude},
         "os": os_projects,
+        "cache_output_paths": ["**/obj", "**/bin", "!**/runtimes/**"],
     }
 
 
@@ -891,8 +937,12 @@ def fixture_ci(source, lists):
         "jobs:",
         "  build:",
         "    runs-on: ubuntu-latest",
-        "    steps:",
+        "    env:",
+        f"      {CACHE_ENV_KEY}: |",
     ]
+    for line in lists["cache_output_paths"]:
+        lines.append(f"        {line}")
+    lines.append("    steps:")
     for shard, projects in lists["shards"].items():
         lines.extend([
             f"      - name: Stash build outputs — {shard} shard",
@@ -1036,6 +1086,22 @@ def self_test():
     expect(
         "a hand edit of the shard list is red",
         any("Harbor.Hand.Edited.Tests" in problem for problem in problems),
+        str(problems),
+    )
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 3b. The cache's path list (F4) moved without a regenerate. This is the
+    # one that changed the cache's VERSION in the incident #2107 measured.
+    root = fixture_tree()
+    path = os.path.join(root, CI_WORKFLOW)
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text.replace("!**/runtimes/**", "!**/runtimes/x64/**"))
+    problems = check_tree(root)
+    expect(
+        "a hand edit of the cache path list is red",
+        any(CACHE_ENV_KEY in problem for problem in problems),
         str(problems),
     )
     shutil.rmtree(root, ignore_errors=True)
