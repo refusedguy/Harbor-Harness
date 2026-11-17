@@ -306,6 +306,21 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 if (agentEvt is ToolExecutionEndEvent)
                 {
                     host.ScreenSession.Progress.Clear();
+                    // #1120: yield a frame now, while the just-completed card
+                    // is still inside the follow-tail viewport. This drain
+                    // applies every queued event before a single paint; under a
+                    // rapid follow-up flood that coalesces turn-1's success card
+                    // (the only one before the flood) into a frame where it has
+                    // already scrolled off the virtualized feed, so its success
+                    // bytes never reach the wire even though the tool ran (the
+                    // probe on disk proves it). One completion per frame keeps
+                    // every result visible when it is painted. Remaining events
+                    // stay queued for the next iteration. Their wake tokens may
+                    // already have been consumed by DrainWake() this iteration,
+                    // so re-arm the level-triggered wake before yielding.
+                    eventsChanged = true;
+                    host._wake.Writer.TryWrite(null);
+                    break;
                 }
 
                 if (agentEvt is AgentEndEvent)
