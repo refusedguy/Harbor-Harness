@@ -14,8 +14,15 @@ import (
 // A gate that cannot fail is indistinguishable from a gate that found
 // nothing, and the whole claim of this gate is that it makes a hand edit of
 // a generated workflow file visible. So the self-test writes a scratch tree,
-// checks it (green), changes ONE line of one generated file by hand (red),
-// removes a file (red), and changes nothing at all (green again).
+// checks it (green), then for EVERY file in the registry changes one line by
+// hand (red, named as that file) and removes the file (red, named as that
+// file), and changes nothing at all (green again).
+//
+// Every file, not just the first one, matters. The registry is the list of
+// files the gate claims to own, and a self-test that only proved the first
+// entry would keep passing while every later entry stopped being checked.
+// The finding has to name the file that was touched: a red check caused by
+// one entry cannot stand in for proof about another.
 //
 // It also proves the property the check rests on: the generator is a
 // function. The same model rendered twice has to be the same bytes, or the
@@ -63,9 +70,9 @@ func selfTestRun() int {
 			"a tree the gate just wrote is not green: %s", findings[0]))
 	}
 
-	// 3. One hand-edited line is red. This is the claim of the gate.
-	if len(registry) > 0 {
-		entry := registry[0]
+	// 3. One hand-edited line in EACH generated file is red, and the gate
+	//    names the file that was edited. This is the claim of the gate.
+	for _, entry := range registry {
 		path := filepath.Join(scratch, entry.path)
 		original, err := os.ReadFile(path)
 		if err != nil {
@@ -77,23 +84,27 @@ func selfTestRun() int {
 			edited = strings.Replace(string(original), "name:", "name: ", 1)
 		}
 		if edited == string(original) {
-			failures = append(failures, "could not plant a hand edit in the generated file")
-		} else {
-			if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				return gate.Broken
-			}
-			findings, _ := checkTree(scratch, 0)
-			if len(findings) == 0 {
-				failures = append(failures, fmt.Sprintf(
-					"%s: a hand edit of one line did not make the check red", entry.path))
-			}
+			failures = append(failures, fmt.Sprintf(
+				"%s: could not plant a hand edit in the generated file", entry.path))
+			continue
+		}
+		if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return gate.Broken
+		}
+		findings, _ := checkTree(scratch, 0)
+		if !namesFile(findings, entry.path) {
+			failures = append(failures, fmt.Sprintf(
+				"%s: a hand edit of one line did not make the check name this file", entry.path))
+		}
+		if err := os.WriteFile(path, original, 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return gate.Broken
 		}
 	}
 
-	// 4. A missing file is red.
-	if len(registry) > 0 {
-		entry := registry[0]
+	// 4. Each generated file, when missing, makes the check red and names that file.
+	for _, entry := range registry {
 		path := filepath.Join(scratch, entry.path)
 		if err := os.WriteFile(path, []byte(entry.build().Render()), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -104,9 +115,13 @@ func selfTestRun() int {
 			return gate.Broken
 		}
 		findings, _ := checkTree(scratch, 0)
-		if len(findings) == 0 {
+		if !namesFile(findings, entry.path) {
 			failures = append(failures, fmt.Sprintf(
-				"%s: a missing generated file did not make the check red", entry.path))
+				"%s: a missing generated file did not make the check name this file", entry.path))
+		}
+		if err := os.WriteFile(path, []byte(entry.build().Render()), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return gate.Broken
 		}
 	}
 
@@ -126,7 +141,19 @@ func selfTestRun() int {
 		return gate.Red
 	}
 
-	fmt.Printf("OK: the generator is deterministic, and the checker is red on a hand edit, on a missing file, and below its floor (%d file(s))\n",
+	fmt.Printf("OK: the generator is deterministic, and for all %d registered file(s) the checker is red and names the file on a hand edit and on a missing file; it is red below its floor\n",
 		len(registry))
 	return gate.Green
+}
+
+// namesFile reports whether the findings include one about this exact file.
+// A red check is not enough: with a registry of more than one file, a failure
+// about a different file would let a broken entry pass its own self-test.
+func namesFile(findings []finding, path string) bool {
+	for _, item := range findings {
+		if item.path == path {
+			return true
+		}
+	}
+	return false
 }
