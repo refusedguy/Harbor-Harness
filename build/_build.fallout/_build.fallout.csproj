@@ -5,8 +5,8 @@
 
     This is the canonical Fallout port of the 32-file orchestrator that used
     to live only in build/_build/. It started as the step-0 pilot (issue
-    #2179), rewritten once by `fallout-migrate --dry-run` (Fallout.Migrate
-    10.4.0) and hand-checked:
+    #2179), rewritten once by `fallout-migrate` in dry-run mode
+    (Fallout.Migrate 10.4.0) and hand-checked:
 
         NUKE.Common 10.1.0    => Fallout.Common 10.4.0
         NUKEBuild             => FalloutBuild
