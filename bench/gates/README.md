@@ -83,6 +83,7 @@ Three reasons a gate CI runs is out of the measured set, and only three.
 | gate | why it is out |
 |---|---|
 | `all` | the runner is not a gate: it starts the gates of the tree list in parallel, and the set measures each of them on its own. The job's wall is the slowest of them, not their sum |
+| `check-compiled-tree` | the gate judges the build-start stamp and the compiled outputs the CI lane produced; the measuring machine has no .NET SDK and does not build, so there are no outputs to judge |
 | `check-dup-jscpd.py` | the gate downloads the jscpd binary from the network on first use, and there is no network and no binary on the measuring machine |
 | `check-tunit-analyzer-gate.py` | the control runs the compiler: it builds a throwaway project and reads its output, and the measuring machine has no .NET SDK |
 | `contract-domains` | CI runs only its own self-test: the census of who uses the two contract roots is a measurement a human runs before deciding whether to cut the root, and no build reads it |
