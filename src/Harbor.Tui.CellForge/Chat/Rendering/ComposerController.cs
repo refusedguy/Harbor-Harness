@@ -150,10 +150,6 @@ public sealed class ComposerController
     public void RestoreToComposer(string text)
     {
         _ = Buffer.InsertText(text);
-        // O7 (#1482): a queue undo restores the newest payload as a fresh draft.
-        // Pin the caret to the end even when a partial draft survives, matching
-        // the projector's text-change contract (issue #1202).
-        _ = Buffer.MoveTo(Buffer.Length);
     }
 
     /// <summary>Key-family dispatch table (#197): a new key family adds a handler, never an edit here.</summary>

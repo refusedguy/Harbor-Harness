@@ -11,9 +11,9 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <see cref="ScreenBuffer"/> (Pilot-style frame-text asserts); the dialog is
 /// the stock <see cref="DialogOverlay"/> seated through the stock
 /// <see cref="DialogOverlayLayer"/> on an <see cref="OverlayStack"/>. Nothing
-/// here registers a plugin axis or a key plane — the freeze (#555) holds.
+/// here registers a plugin axis or a key plane, so the freeze (#555) holds.
 /// </summary>
-// Rendering reads global TerminalColorPalette — serialized vs theme tests.
+// Rendering reads global TerminalColorPalette, serialized vs theme tests.
 [NotInParallel("pty")]
 public class QueuedPromptDockTests
 {
@@ -46,6 +46,16 @@ public class QueuedPromptDockTests
         return TestRender.Art(session.PaintBuffer);
     }
 
+    private static QueuedPromptDock Opened(out ComposerController composer)
+    {
+        composer = new ComposerController();
+        composer.EnqueueQueued("first");
+        composer.EnqueueQueued("second");
+        var dock = new QueuedPromptDock(composer);
+        dock.Open();
+        return dock;
+    }
+
     [Test]
     public async Task DockFrame_ShowsCounter_WhenQueued_AndClearsAfterDrain()
     {
@@ -65,12 +75,7 @@ public class QueuedPromptDockTests
     [Test]
     public async Task Dialog_ShowsQueueOldestFirst()
     {
-        var composer = new ComposerController();
-        composer.EnqueueQueued("first");
-        composer.EnqueueQueued("second");
-        var dock = new QueuedPromptDock(composer);
-
-        dock.Open();
+        var dock = Opened(out var composer);
 
         await Assert.That(dock.IsOpen).IsTrue();
         await Assert.That(dock.Dialog.Options).IsEquivalentTo(new[] { "first", "second" });
@@ -83,11 +88,7 @@ public class QueuedPromptDockTests
     [Test]
     public async Task UndoNewest_RestoresTextToComposer_WithCaretAtEnd_AndDropsCounter()
     {
-        var composer = new ComposerController();
-        composer.EnqueueQueued("first");
-        composer.EnqueueQueued("second");
-        var dock = new QueuedPromptDock(composer);
-        dock.Open();
+        var dock = Opened(out var composer);
 
         await Assert.That(dock.UndoNewest()).IsTrue();
 
@@ -101,11 +102,7 @@ public class QueuedPromptDockTests
     [Test]
     public async Task DeleteNewest_RemovesEntry_WithoutRestoringText()
     {
-        var composer = new ComposerController();
-        composer.EnqueueQueued("first");
-        composer.EnqueueQueued("second");
-        var dock = new QueuedPromptDock(composer);
-        dock.Open();
+        var dock = Opened(out var composer);
 
         await Assert.That(dock.DeleteNewest()).IsTrue();
 
