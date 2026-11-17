@@ -551,9 +551,21 @@ func parsedFindings(root string, text string) ([]finding, []finding, int) {
 
 // stats is what the scan saw.
 type stats struct {
-	covered  int
-	parsed   int
-	excluded int
+	covered      int
+	parsed       int
+	excluded     int
+	baselineRows int
+	partial      bool
+}
+
+// subjectProject is the project half of a finding's subject. The subject is
+// "<project> :: <reference>", and a baseline row about a project that is no
+// longer in the tree is stale in any answer, partial or complete.
+func subjectProject(subject string) string {
+	if index := strings.Index(subject, " :: "); index >= 0 {
+		return subject[:index]
+	}
+	return subject
 }
 
 // scan is the gate.
@@ -643,8 +655,40 @@ func scan(root string, findingsPath string, coveragePath string, baselinePath st
 	for _, row := range rows {
 		carried[row.key()] = true
 	}
+	result.baselineRows = len(rows)
+
+	// A cached build restores obj/ and bin/, and MSBuild recompiles only the
+	// projects whose sources changed. The analyzer emits RT0002 only for the
+	// projects it actually compiled, so that run answers with a STRICT SUBSET
+	// of the baseline: every finding it holds is carried, and rows are missing
+	// only because their projects were not recompiled. Reading that as "the
+	// tree no longer produces" is the defect #2129 reverted: run 44035722975
+	// rebuilt three projects, parsed three findings, and the gate named 48
+	// rows stale that the tree still carries. An answer holding at most HALF
+	// of the baseline rows, all of them carried, is that partial shape. It
+	// suppresses the stale finding for rows whose projects are still in the
+	// tree; a row about a project that is GONE is stale in any answer, a
+	// nearly complete answer still flags its missing row, and a new finding
+	// still fails below.
+	partial := len(parsed) > 0 && len(parsed)*2 <= len(rows)
+	if partial {
+		for _, item := range parsed {
+			if !carried[item.key()] {
+				partial = false
+				break
+			}
+		}
+	}
+	result.partial = partial
+	projects := map[string]bool{}
+	for _, project := range knownProjects(root) {
+		projects[project] = true
+	}
 	for _, row := range rows {
 		if !parsedKeys[row.key()] {
+			if partial && projects[subjectProject(row.subject)] {
+				continue
+			}
 			findings = append(findings, finding{
 				rule:    "RT-STALE-BASELINE",
 				subject: row.subject,
@@ -678,6 +722,10 @@ func report(findings []finding, baselinePath string, result stats) int {
 		fmt.Println("OK: no unused reference outside the baseline.")
 		fmt.Printf("  the analyzer ran in %d project(s); %d finding(s) parsed; %d dropped as another gate's scope.\n",
 			result.covered, result.parsed, result.excluded)
+		if result.partial {
+			fmt.Printf("  the answer is PARTIAL: %d of %d baseline row(s) re-emitted by this incremental build; missing rows are not called stale.\n",
+				result.parsed, result.baselineRows)
+		}
 		return gate.Green
 	}
 	byRule := map[string][]finding{}

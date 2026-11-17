@@ -129,6 +129,34 @@ func selfTestRun() int {
 		filepath.Join(root, "tools", "reference-trimmer-baseline.txt"), 2)
 	check("a stale baseline row is red", hasRule(found, "RT-STALE-BASELINE"), "")
 
+	// 3b. A NEARLY COMPLETE answer is not called partial: one missing row
+	// still has to be a stale-row finding. Only an answer holding at most
+	// half the baseline rows is the incremental-build shape.
+	writeFile(root, filepath.Join("tools", "reference-trimmer-baseline.txt"),
+		fixtureBaseline+"RT0002 | src/Harbor.Two/Harbor.Two.csproj :: Gone.Package | a reason that is long enough to be a reason and not a category | @refusedguy\n")
+	found, _ = scan(root, filepath.Join(root, "findings.log"),
+		filepath.Join(root, "coverage.txt"),
+		filepath.Join(root, "tools", "reference-trimmer-baseline.txt"), 2)
+	check("a nearly complete answer still calls a missing row stale",
+		hasRule(found, "RT-STALE-BASELINE"), "")
+
+	// 3c. A PARTIAL answer: an incremental build re-emits at most half of
+	// the baseline's rows, and the rest belong to projects that are still in
+	// the tree. They were not recompiled, so they are not stale. The
+	// new-finding direction still fails (case 2), and a row about a project
+	// that is GONE still fails (case 3).
+	writeFile(root, filepath.Join("tools", "reference-trimmer-baseline.txt"),
+		fixtureBaseline+
+			"RT0002 | src/Harbor.Two/Harbor.Two.csproj :: Gone.Package | a reason that is long enough to be a reason and not a category | @refusedguy\n"+
+			"RT0002 | src/Harbor.Two/Harbor.Two.csproj :: Also.Gone | a reason that is long enough to be a reason and not a category | @refusedguy\n"+
+			"RT0002 | src/Harbor.One/Harbor.One.csproj :: Gone.Package | a reason that is long enough to be a reason and not a category | @refusedguy\n"+
+			"RT0002 | src/Harbor.One/Harbor.One.csproj :: Also.Gone | a reason that is long enough to be a reason and not a category | @refusedguy\n")
+	found, _ = scan(root, filepath.Join(root, "findings.log"),
+		filepath.Join(root, "coverage.txt"),
+		filepath.Join(root, "tools", "reference-trimmer-baseline.txt"), 2)
+	check("a partial answer does not call a missing row stale",
+		!hasRule(found, "RT-STALE-BASELINE"), "")
+
 	// 4. A baseline row without a reason.
 	writeFile(root, filepath.Join("tools", "reference-trimmer-baseline.txt"),
 		"RT0003 | src/Harbor.One/Harbor.One.csproj :: Ghost.Package | too short | @refusedguy\n")
