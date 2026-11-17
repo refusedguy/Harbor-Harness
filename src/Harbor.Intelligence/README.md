@@ -1,5 +1,7 @@
 # Harbor.Intelligence
 
+## What
+
 The first leaf of the `Harbor.Intelligence` assembly (#1626, ADR-018 variant A).
 It owns the read-only git probes that used to live in `Harbor.Application/Git`:
 a process-backed `IGitQuery` and the pure parser for `git worktree list

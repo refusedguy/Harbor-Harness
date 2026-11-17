@@ -749,9 +749,9 @@ re-run.
 
 Before ROP-D only assemblies with a hand-written `typeof()` probe had layer rules
 (~18 src projects). `FullLayerMatrixTests.cs` closes the gap with one data
-table covering **every main-solution src assembly** (**59 rows** as of 2026-11-17
-(#1626's `Harbor.Intelligence` first leaf landed with the git-probe extraction;
-#1625's `Harbor.PolicyConfig` row landed earlier; the count is 60
+table covering **every main-solution src assembly** (**59 rows** as of 2026-11-17;
+the #1626 `Harbor.Intelligence` first leaf and the #1625 `Harbor.PolicyConfig` row
+landed with their extractions; the count is 60
 src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
 `OutOfScopeAssemblies` — see §2 banner; the table was 45 rows at inception and
 47/50 src dirs as of 2026-08-27):
