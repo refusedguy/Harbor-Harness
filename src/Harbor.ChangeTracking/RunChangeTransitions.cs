@@ -135,7 +135,7 @@ public sealed class RunTransitionTable
     }
 
     /// <summary>The registered state behaviours, for callers that extend the table.</summary>
-    public IReadOnlyCollection<IRunState> States => _states.Values;
+    public IEnumerable<IRunState> States => _states.Values;
 
     /// <summary>The eight built-in lifecycle states, in chain order.</summary>
     public static RunTransitionTable CreateDefault() => new(
