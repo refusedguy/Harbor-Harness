@@ -100,7 +100,7 @@ public class GlyphCacheTests
         // Narrow, wide and zero-width runes through both paint paths.
         (int X, int Y, int Rune)[] glyphs =
         [
-            (0, 0, 'H'), (1, 0, '界'), (3, 0, '\u0301'), (0, 1, '🙂'),
+            (0, 0, 'H'), (1, 0, '界'), (3, 0, '\u0301'), (0, 1, 0x1F642),
         ];
         foreach (var (x, y, rune) in glyphs)
         {
@@ -169,7 +169,7 @@ public class GlyphCacheTests
         var style = new EngineCells.CellStyle(
             EngineCells.PackedColor.Indexed(9), EngineCells.PackedColor.Indexed(4), EngineCells.StyleAttr.Bold);
 
-        int[] glyphs = ['A', 'B', '界', '🙂'];
+        int[] glyphs = ['A', 'B', '界', 0x1F642];
 
         // Populate the keys before counting: misses legitimately allocate arrays.
         for (int i = 0; i < 100_000; i++)
