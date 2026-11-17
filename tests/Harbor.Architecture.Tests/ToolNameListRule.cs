@@ -165,8 +165,8 @@ public sealed class ToolNameListRule
     ///         liveness test below reports as an error. The three that remain each
     ///         carry a table the finder recognises: the catalog itself, which is
     ///         the one place a builtin tool's name is written down; the permission
-    ///         presentation, whose switch labels are C# constants and cannot read
-    ///         the catalog; and the turn-change oracle, whose write/no-write split
+    ///         presentation, whose presenter-registry keys are string literals and
+    ///         cannot read the catalog; and the turn-change oracle, whose write/no-write split
     ///         is a policy no tool declaration can state. The count is a
     ///         measurement, not a target.
     ///     </para>
@@ -191,8 +191,9 @@ public sealed class ToolNameListRule
         ["src/Harbor.Tui.CellForge/Chat/Panels/PermissionPresentation.cs"] =
             "Per-tool permission presentation (opencode steal #1170): which gate "
             + "renders a diff, a command, a pattern or file:line:col. A tool does "
-            + "not declare how its permission prompt is drawn; the renderer owns that. The switch labels "
-            + "are C# constants, so they cannot read `WellKnownTools` and the names are written out here.",
+            + "not declare how its permission prompt is drawn; the renderer owns that. The presenter "
+            + "registry keys are string literals, so they cannot read `WellKnownTools` and the names "
+            + "are written out here.",
     };
 
     /// <summary>

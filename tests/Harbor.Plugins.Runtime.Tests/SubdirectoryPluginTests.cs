@@ -57,13 +57,13 @@ public sealed class SubdirectoryPluginTests
 
         var result = await loader.DiscoverAndLoadAsync().ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Count).IsEqualTo(1);
         await Assert.That(result.Value[0].Name).IsEqualTo("hello-world-subdir");
 
         ITool tool = host.RegisteredTools.Single(t => t.Name.Value == "hello_subdir");
         ToolResult exec = await ExecuteWithMemoryRetryAsync(tool).ConfigureAwait(false);
-        await Assert.That(exec.IsError).IsFalse();
+        await Assert.That(exec).HasSucceeded();
         await Assert.That(exec.Output).Contains("Hello from Subdir!");
     }
 
@@ -103,7 +103,7 @@ public sealed class SubdirectoryPluginTests
 
         var result = await pluginHost.LoadAllAsync(new FakePluginLoadHost()).ConfigureAwait(false);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("DuoHelperMfprobe");
     }
 

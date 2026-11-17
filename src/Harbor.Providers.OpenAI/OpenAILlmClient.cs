@@ -73,8 +73,10 @@ public sealed class OpenAILlmClient : ILlmClient
                     return;
                 }
 
-                // Choose API: Responses API for o1/o3/o4-mini, Chat Completions for others
-                bool useResponsesApi = OpenAiRequestBuilder.IsReasoningModel(request.Model) || _config.ForceResponsesApi;
+                // Choose API: Responses API for reasoning models, Chat Completions for others.
+                // Reasoning-model detection is a registered Strategy (#1498), not a
+                // string-prefix test in this client.
+                bool useResponsesApi = ReasoningModelStrategies.IsReasoningModel(request.Model) || _config.ForceResponsesApi;
                 var httpRequest = useResponsesApi
                     ? OpenAiRequestBuilder.BuildResponsesRequest(request, _baseUrl, _logger)
                     : OpenAiRequestBuilder.BuildChatCompletionsRequest(request, _baseUrl, _logger);

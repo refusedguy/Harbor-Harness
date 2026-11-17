@@ -265,18 +265,7 @@ public static class MarkupPngBaker
 
         foreach (MarkupAnnotation item in model.Items)
         {
-            switch (item.Kind)
-            {
-                case MarkupKind.Rectangle:
-                    DrawRect(image, item);
-                    break;
-                case MarkupKind.Arrow:
-                    DrawArrow(image, item);
-                    break;
-                default:
-                    DrawLabel(image, item);
-                    break;
-            }
+            MarkupPainters.For(item.Kind).PaintPng(image, item);
         }
     }
 
@@ -461,7 +450,7 @@ public static class MarkupPngBaker
         }
     }
 
-    private static void DrawRect(RgbaImage image, MarkupAnnotation item)
+    internal static void DrawRect(RgbaImage image, MarkupAnnotation item)
     {
         var (x0, y0) = ToPixels(item.From, image);
         var (x1, y1) = ToPixels(item.To, image);
@@ -476,7 +465,7 @@ public static class MarkupPngBaker
         Line(image, left, bottom, left, top, half, Red);
     }
 
-    private static void DrawArrow(RgbaImage image, MarkupAnnotation item)
+    internal static void DrawArrow(RgbaImage image, MarkupAnnotation item)
     {
         var (x0, y0) = ToPixels(item.From, image);
         var (x1, y1) = ToPixels(item.To, image);
@@ -498,7 +487,7 @@ public static class MarkupPngBaker
         }
     }
 
-    private static void DrawLabel(RgbaImage image, MarkupAnnotation item)
+    internal static void DrawLabel(RgbaImage image, MarkupAnnotation item)
     {
         if (string.IsNullOrEmpty(item.Text))
         {
