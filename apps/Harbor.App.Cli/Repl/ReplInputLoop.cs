@@ -111,6 +111,14 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 host.Pipeline.NotifyHint = DesktopNotifyKind.Osc99;
                 break;
 
+            case InputEventKind.Focus:
+                // #2218: CSI I / CSI O. The next ArmSpinner in the frame loop
+                // reads this and parks the heartbeat while the window is blurred.
+                // A focus report wakes the loop, so re-arming needs no extra
+                // signal. This adds no plugin or extension axis.
+                host._windowFocused = evt.Focus.IsFocused;
+                break;
+
             case InputEventKind.Paste:
             {
                 // Paste payload is verbatim by parser contract — sanitize it

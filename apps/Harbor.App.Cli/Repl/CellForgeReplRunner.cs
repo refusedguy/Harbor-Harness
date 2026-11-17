@@ -349,6 +349,14 @@ internal sealed class CellForgeReplRunner(
     internal int? _slashExitCode;
 
     /// <summary>
+    ///     Terminal focus state from CSI ?1004h reports (issue #2218). Starts
+    ///     focused so the normal heartbeat is unchanged until the terminal says
+    ///     otherwise; a focus loss parks the animation clock and the frame
+    ///     heartbeat, so spinners and glow stop consuming frames in background.
+    /// </summary>
+    internal volatile bool _windowFocused = true;
+
+    /// <summary>
     ///     Runs the REPL until quit. Returns the exit code
     ///     (slash <c>/exit</c> wins over the loop's own, mirroring legacy).
     /// </summary>
@@ -372,8 +380,8 @@ internal sealed class CellForgeReplRunner(
     /// revives by itself once the latch expires instead of freezing mid-sequence
     /// forever. Internal for the heartbeat unit tests (InternalsVisibleTo).
     /// </summary>
-    internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating) =>
-        ReplLifecycle.ShouldKeepHeartbeat(mode, mascotAnimating);
+    internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating, bool windowFocused = true) =>
+        ReplLifecycle.ShouldKeepHeartbeat(mode, mascotAnimating, windowFocused);
 }
 
 /// <summary>
