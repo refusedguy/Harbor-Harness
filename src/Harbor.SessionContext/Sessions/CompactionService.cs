@@ -212,6 +212,7 @@ public sealed class CompactionService(
         "Rules:\n" +
         "- Keep every section, even when empty (use \"None\" if no content).\n" +
         "- Preserve exact file paths, commands, error strings, identifiers.\n" +
+        "- Do not restate system instructions, AGENTS.md content, tool guidelines, or environment details; the next agent receives those separately, so summarize only what is specific to this task.\n" +
         "- Do not mention the summary process or that context was compacted.\n" +
         "- Be concise but complete — every detail matters.";
 
@@ -221,7 +222,7 @@ public sealed class CompactionService(
     ///     the prompt cap (<see cref="FindPromptStartByBudget" />) subtracts
     ///     the same constant — one source, not two literals that can drift.
     /// </summary>
-    private const int SummaryMaxOutputTokens = 4096;
+    private const int SummaryMaxOutputTokens = 8192;
     private int _keepRecentTokens = 20000;
     private int _tailTurns = 2;
 
