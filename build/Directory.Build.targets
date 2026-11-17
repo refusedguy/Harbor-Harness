@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  build/Directory.Build.targets — pilot isolation for issue #2179.
+
+  MSBuild's Directory.Build.targets search stops at the FIRST file found
+  walking up from the project directory, so adding this file under build/
+  would otherwise hide the repository-root Directory.Build.targets from
+  both build projects. Import it explicitly, first, so the rest of the
+  tree (generated-file settings, AOT defaults) is unchanged.
+
+  Why this file exists: _build.csproj has the SDK's default `**/*.cs` glob,
+  rooted at build/. Once the pilot sources were added under
+  build/_build.fallout/, the NUKE project started compiling them too
+  (CS0101 duplicate Build, CS0246 missing Fallout). The pilot must not
+  change a single line of build/_build/ or build/_build.csproj, so the
+  exclusion lives here and is scoped to the NUKE project by name.
+-->
+<Project>
+
+  <Import Project="../Directory.Build.targets"/>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == '_build'">
+    <Compile Remove="_build.fallout/**/*.cs"/>
+  </ItemGroup>
+
+</Project>

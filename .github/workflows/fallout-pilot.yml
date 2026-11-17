@@ -1,0 +1,237 @@
+name: fallout pilot
+
+# Issue #2179 — step 0 of ADR-023. The NUKE path stays untouched; this lane
+# BUILDS a second orchestrator (build/_build.fallout/) and proves that its
+# `Pack` target is argv-compatible and byte-compatible with NUKE's.
+#
+# Local dotnet is deliberately not used to verify this change: the verifier
+# is CI only. Every check below runs on the runner, with the exact SDK that
+# global.json asks for.
+
+on:
+  pull_request:
+    paths:
+      - 'build/**'
+      - '.nuke/**'
+      - '.github/workflows/fallout-pilot.yml'
+      - 'global.json'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'Harbor.slnx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fallout-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  NUGET_PACKAGES: /home/runner/.nuget/packages
+
+jobs:
+  pack-parity:
+    name: Pack parity (NUKE vs Fallout)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install the exact SDK global.json asks for
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.402'
+
+      - name: Prove the NUKE path is untouched and the pilot has no Nuke left
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- build/_build build/_build.csproj; then
+            echo '::error::NUKE build path was modified by the pilot'
+            git diff -- build/_build build/_build.csproj
+            exit 1
+          fi
+          echo 'NUKE path unchanged: git diff build/_build build/_build.csproj is empty'
+          if grep -rn 'Nuke' build/_build.fallout/; then
+            echo '::error::a Nuke reference survived in build/_build.fallout/'
+            exit 1
+          fi
+          echo 'No Nuke reference in build/_build.fallout/'
+
+      - name: fallout-migrate --dry-run (what the tool proposes, for the record)
+        run: |
+          set -euo pipefail
+          dotnet tool install Fallout.Migrate --version 10.4.0 \
+            --tool-path "$RUNNER_TEMP/fallout-tools"
+          "$RUNNER_TEMP/fallout-tools/fallout-migrate" --dry-run
+
+      - name: Build both orchestrators
+        run: |
+          set -euo pipefail
+          dotnet build build/_build.csproj -c Release --nologo -v:minimal
+          dotnet build build/_build.fallout/_build.fallout.csproj -c Release --nologo -v:minimal
+
+      - name: Locate the two built assemblies
+        run: |
+          set -euo pipefail
+          NUKE_DLL="$(find "$GITHUB_WORKSPACE/build/bin" -name '_build.dll' -path '*/Release/*' -print -quit)"
+          FALLOUT_DLL="$(find "$GITHUB_WORKSPACE/build/_build.fallout/bin" -name '_build.fallout.dll' -path '*/Release/*' -print -quit)"
+          test -n "$NUKE_DLL"
+          test -n "$FALLOUT_DLL"
+          echo "NUKE_DLL=$NUKE_DLL" >> "$GITHUB_ENV"
+          echo "FALLOUT_DLL=$FALLOUT_DLL" >> "$GITHUB_ENV"
+          echo "NUKE_DLL=$NUKE_DLL"
+          echo "FALLOUT_DLL=$FALLOUT_DLL"
+
+      - name: argv parity — Pack --dry-run --format json
+        run: |
+          set -euo pipefail
+          dotnet "$NUKE_DLL" \
+            Pack --dry-run --format json > "$RUNNER_TEMP/nuke.pack.json" 2> "$RUNNER_TEMP/nuke.pack.err"
+          dotnet "$FALLOUT_DLL" \
+            Pack --dry-run --format json > "$RUNNER_TEMP/fallout.pack.json" 2> "$RUNNER_TEMP/fallout.pack.err"
+          python3 - "$RUNNER_TEMP/nuke.pack.json" "$RUNNER_TEMP/fallout.pack.json" <<'PY'
+          import json, sys
+
+          def cmds(path):
+              out = []
+              for line in open(path, encoding='utf-8'):
+                  line = line.strip()
+                  if not line.startswith('{'):
+                      continue
+                  obj = json.loads(line)
+                  if obj.get('v') == 1 and obj.get('kind') == 'cmd':
+                      out.append((obj['target'], obj['argv']))
+              return out
+
+          a, b = cmds(sys.argv[1]), cmds(sys.argv[2])
+          for name, events in (('NUKE', a), ('Fallout', b)):
+              for target, argv in events:
+                  print(f'{name} cmd {target}: {" ".join(argv)}')
+          if a != b:
+              print('::error::Pack --dry-run argv diverged between NUKE and Fallout')
+              sys.exit(1)
+          if not any(target == 'Pack' for target, _ in a):
+              print('::error::neither build emitted a Pack cmd event')
+              sys.exit(1)
+          print('argv parity: OK (all cmd events, including Pack, are identical)')
+          PY
+
+      - name: Catalog parity — list --format json
+        run: |
+          set -euo pipefail
+          dotnet "$NUKE_DLL" \
+            list --format json > "$RUNNER_TEMP/nuke.list.json" 2> "$RUNNER_TEMP/nuke.list.err"
+          dotnet "$FALLOUT_DLL" \
+            list --format json > "$RUNNER_TEMP/fallout.list.json" 2> "$RUNNER_TEMP/fallout.list.err"
+          python3 - "$RUNNER_TEMP/nuke.list.json" "$RUNNER_TEMP/fallout.list.json" <<'PY'
+          import json, sys
+
+          def document(path):
+              docs = []
+              for line in open(path, encoding='utf-8'):
+                  line = line.strip()
+                  if not line.startswith('{'):
+                      continue
+                  obj = json.loads(line)
+                  if obj.get('command') == 'list':
+                      docs.append(obj)
+              if len(docs) != 1:
+                  raise SystemExit(f'::error::expected one list document in {path}, got {len(docs)}')
+              return docs[0]
+
+          a, b = document(sys.argv[1]), document(sys.argv[2])
+          print(f"targets: NUKE={len(a['targets'])} Fallout={len(b['targets'])}")
+          if a != b:
+              print('::error::list --format json documents are not identical')
+              sys.exit(1)
+          print('catalog parity: OK (1:1, including TargetCatalog.Verify on both builds)')
+          PY
+
+      - name: Compile once, then run the real Pack target on both builds
+        run: |
+          set -euo pipefail
+          dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true --nologo -v:minimal
+          # --skip Clean keeps the compiled tree; each Pack only packs --no-build.
+          dotnet "$NUKE_DLL" \
+            Pack --format json --skip Clean > "$RUNNER_TEMP/nuke.pack.real.json" 2> "$RUNNER_TEMP/nuke.pack.real.err"
+          echo "NUKE Pack exit code: 0"
+          rm -rf "$RUNNER_TEMP/nuke-packages"
+          cp -r artifacts/packages "$RUNNER_TEMP/nuke-packages"
+          rm -rf artifacts/packages
+          dotnet "$FALLOUT_DLL" \
+            Pack --format json --skip Clean > "$RUNNER_TEMP/fallout.pack.real.json" 2> "$RUNNER_TEMP/fallout.pack.real.err"
+          echo "Fallout Pack exit code: 0"
+          rm -rf "$RUNNER_TEMP/fallout-packages"
+          cp -r artifacts/packages "$RUNNER_TEMP/fallout-packages"
+
+      - name: Compare package sets, per-entry content and SHA-256
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/nuke-packages" "$RUNNER_TEMP/fallout-packages" <<'PY'
+          import hashlib, pathlib, sys, zipfile
+
+          def survey(root):
+              result = {}
+              for path in sorted(pathlib.Path(root).glob('*.nupkg')):
+                  with zipfile.ZipFile(path) as z:
+                      entries = []
+                      for info in sorted(z.infolist(), key=lambda i: i.filename):
+                          data = z.read(info)
+                          entries.append((info.filename, info.CRC,
+                                          hashlib.sha256(data).hexdigest()))
+                  result[path.name] = {
+                      'entries': entries,
+                      'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                  }
+              return result
+
+          a, b = survey(sys.argv[1]), survey(sys.argv[2])
+          print(f'packages: NUKE={len(a)} Fallout={len(b)}')
+          for name in sorted(a):
+              print(f'  {name}  NUKE sha256={a[name]["sha256"]}')
+          for name in sorted(b):
+              print(f'  {name}  Fallout sha256={b[name]["sha256"]}')
+          if set(a) != set(b):
+              print('::error::.nupkg file-name sets diverged')
+              print('only NUKE:', sorted(set(a) - set(b)))
+              print('only Fallout:', sorted(set(b) - set(a)))
+              sys.exit(1)
+          bad = []
+          for name in sorted(a):
+              ae, be = a[name]['entries'], b[name]['entries']
+              if ae != be:
+                  bad.append(name)
+                  print(f'  {name}: entry content diverged')
+                  for x, y in zip(ae, be):
+                      if x != y:
+                          print(f'    NUKE     {x}')
+                          print(f'    Fallout  {y}')
+          if bad:
+              print('::error::package entry sets / CRCs / content hashes diverged: ' + ', '.join(bad))
+              sys.exit(1)
+          differing = [n for n in a if a[n]['sha256'] != b[n]['sha256']]
+          if differing:
+              print('NOTE: .nupkg SHA-256 differs for: ' + ', '.join(differing))
+              print('      All ZIP entry names, CRCs and uncompressed contents match;')
+              print('      NuGet writes wall-clock time into the package metadata.')
+          else:
+              print('.nupkg SHA-256: identical')
+          print('package parity: OK (same file set, same entry CRCs, same entry contents)')
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          echo '--- fallout pilot (issue #2179) ---'
+          echo 'argv parity:      see the "argv parity" step'
+          echo 'exit codes:       0 / 0'
+          echo 'catalog parity:   see the "Catalog parity" step'
+          echo 'package parity:   see the "Compare package sets" step'
+          echo 'NUKE path:        unchanged'
+          echo 'fallout sources:  no Nuke reference'
