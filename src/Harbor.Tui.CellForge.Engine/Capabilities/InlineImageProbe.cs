@@ -63,17 +63,17 @@ public static class InlineImageProbe
             return overridden;
         }
 
+        if (IsInsideMultiplexer(lookup))
+        {
+            return InlineImageKind.None;
+        }
+
         // Sixel is intentionally kept out of the reviewed override table: that
         // table is the byte-exact target of a compiled gate rewrite, and #2222
         // should not force a gate-binary rebuild. The override still works.
         if (overrideValue == "sixel")
         {
             return InlineImageKind.Sixel;
-        }
-
-        if (IsInsideMultiplexer(lookup))
-        {
-            return InlineImageKind.None;
         }
 
         if (IsKittyFamily(lookup))
