@@ -73,9 +73,20 @@ Findings NOT touched in this sprint (Sprint 3+ scope): §SOLID-001, §SOLID-002,
 
 ### §SOLID-001 — AgentLoop: нарушение Single Responsibility
 
-**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
+> **Status (2026-11-17, historical / partially resolved):** the split is done,
+> though the checklist item below is still open. `AgentLoop` now lives at
+> `src/Harbor.AgentRuntime/Agents/AgentLoop.cs` and is 542 lines (down from the
+> ~650 recorded here). Streaming coalescing moved to `StreamingCoalescer.cs`,
+> tool dispatch to `ToolDispatcher.cs`, per-turn work (including the `LlmEvent`
+> switch, now at `TurnRunner.cs:707-814`) to `TurnRunner.cs`, and further slices
+> to `UpdateCoalescer`, `MessageSnapshot`, `UserHookGates`, `BackgroundDrain` and
+> `ToolTableBuilder`. The ~650-line, 8-responsibility description below is the
+> historical finding. The remaining OCP aspect of the switch is tracked
+> separately as §OOP-004.
+
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs` (historical; now `src/Harbor.AgentRuntime/Agents/AgentLoop.cs`)  
 **Severity:** medium  
-**Line:** ~16 (класс целиком, ~650 строк)
+**Line:** ~16 (класс целиком, ~650 строк — historical; сейчас 542)
 
 `AgentLoop` делает **слишком много**: (1) оркестрация turn-loop, (2) streaming coalescing, (3) tool-call accumulation, (4) tool execution dispatch, (5) error handling, (6) event publishing, (7) permission gating, (8) steering queue draining. Метод `RunAsync` — один `try/catch` блок на 250 строк с вложенными switch'ами.
 
@@ -117,11 +128,16 @@ ChatScreen внутри `SpectreTuiRenderer` делает (1) key dispatch, (2) 
 
 ### §OOP-001 — OpenAiCompatibleLlmClient: thread-safety violation
 
-> **Status:** ✅ RESOLVED (Sprint 1) — `_toolCallIndexToId` field removed; the index→id map is now a local `Dictionary<int, string>` inside `StreamAsync`, passed into `MapChunk`/`MapChunkFromDocument` as a parameter. Concurrent `StreamAsync` calls on the same singleton client no longer race.
+> **Status:** ✅ RESOLVED (Sprint 1; re-verified 2026-11-17) — `_toolCallIndexToId`
+> field removed. `StreamAsync` now creates a per-call `ChunkStreamState` (index→id
+> map + malformed-chunk counter) at
+> `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs:84-86`, with
+> no instance-level mutable state. Concurrent `StreamAsync` calls on the same
+> singleton client no longer race. The field and snippet below are historical.
 
 **Файл:** `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs`  
 **Severity:** **high**  
-**Line:** 29 (поле `_toolCallIndexToId`)
+**Line:** 29 (поле `_toolCallIndexToId` — historical; сейчас per-call `ChunkStreamState` в `:84-86`)
 
 ```csharp
 private readonly Dictionary<int, string> _toolCallIndexToId = new();
@@ -258,9 +274,16 @@ private static AgentMessage? DeserializeMessage(string sessionId, JsonElement el
 
 ### §OOP-004 — AgentLoop.RunAsync: OCP violation (switch on LlmEvent)
 
-**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
+> **Status (2026-11-17, open / relocated):** the switch still exists, but it is
+> no longer in `AgentLoop`. Per-turn execution was extracted into `TurnRunner`,
+> and the switch now lives at
+> `src/Harbor.AgentRuntime/Agents/TurnRunner.cs:707-814`. The file/line below
+> are historical. The OCP finding itself is unresolved: adding an `LlmEvent`
+> variant still requires editing this switch.
+
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs` (historical; now `src/Harbor.AgentRuntime/Agents/TurnRunner.cs:707-814`)  
 **Severity:** medium  
-**Line:** 199 (`switch (evt)`)
+**Line:** 199 (`switch (evt)` — historical; сейчас `TurnRunner.cs:707`)
 
 ```csharp
 switch (evt) {
@@ -445,11 +468,20 @@ Mutable dictionary как accumulator — нарушение immutability. Дл�
 
 ### §FP-003 — AgentLoop: `_ = _eventBus.PublishAsync(...)` fire-and-forget
 
-> **Status:** ✅ RESOLVED (Sprint 1) — the `ToolContext.ReportProgress` lambda is now `async`/`await` with a try/catch that logs failures at Warning level instead of letting them die as unobserved task exceptions.
+> **Status:** ✅ RESOLVED (Sprint 1; re-verified 2026-11-17) — the
+> `ToolContext.ReportProgress` lambda is now `async`/`await` with a try/catch
+> that logs failures at Warning level. The path and line below are historical:
+> the loop now lives at `src/Harbor.AgentRuntime/Agents/AgentLoop.cs` (542 lines).
+> No bare `_ = ...PublishAsync(...)` fire-and-forget remains in the agent
+> runtime. The `_ =` on a Task that does remain is a deliberate fault-observer:
+> `ToolDispatcher.AbandonLeftoverAsync` at
+> `src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:584` attaches
+> `ContinueWith(..., OnlyOnFaulted, TaskScheduler.Default)` to log a late tool
+> call's fault, which is the sanctioned pattern, not the defect described here.
 
-**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs` (historical; now `src/Harbor.AgentRuntime/Agents/AgentLoop.cs`)  
 **Severity:** **high**  
-**Line:** 620 (в `ToolContext.ReportProgress`)
+**Line:** 620 (в `ToolContext.ReportProgress` — historical)
 
 ```csharp
 (update, c) => {
