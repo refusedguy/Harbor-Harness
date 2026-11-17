@@ -22,7 +22,7 @@
 //     each project: how many files the compiler reads and how many lines
 //     they hold. Those are measurements.
 //
-// WHY THE PER-PROJECT COST IS COMPUTED AND NOT READ
+// # WHY THE PER-PROJECT COST IS COMPUTED AND NOT READ
 //
 // The Performance Summary reports a project's time INCLUSIVE of the builds of
 // the projects it references, and a project that many projects reference is

@@ -21,8 +21,8 @@ const (
 
 // rowRe is one row of a performance summary section:
 //
-//	 1234 ms  /w/src/Harbor.Core/Harbor.Core.csproj                       1 calls
-//	 1234 ms  Csc                                                          109 calls
+//	1234 ms  /w/src/Harbor.Core/Harbor.Core.csproj                       1 calls
+//	1234 ms  Csc                                                          109 calls
 //
 // The scope may contain spaces (a project path may), so it is matched
 // lazily and the trailing "N calls" is what closes the row.
@@ -104,7 +104,7 @@ func ParseLogReader(source string, reader io.Reader) (*Log, error) {
 
 func parseLog(source string, reader io.Reader) (*Log, error) {
 	out := &Log{
-		Source:       source,
+		Source:        source,
 		ProjectMillis: map[string]int64{},
 		ProjectCalls:  map[string]int{},
 		Tasks:         map[string]int64{},

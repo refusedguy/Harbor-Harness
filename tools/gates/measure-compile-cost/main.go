@@ -39,8 +39,8 @@ import (
 // half a second to one second; a number of seconds alone flags a project
 // that was already expensive.
 type Budget struct {
-	Percent  float64
-	Seconds  float64
+	Percent float64
+	Seconds float64
 }
 
 // DefaultBudget is the budget the repository records.
@@ -444,7 +444,7 @@ type verdict struct {
 
 // compare compares the measurement with the recorded baseline.
 //
-// THE GROWTH IS A SHARE, NOT A CLOCK
+// # THE GROWTH IS A SHARE, NOT A CLOCK
 //
 // The rule is "+20 % AND +10 s", and both numbers are about the project's
 // SHARE of the compiler's time, because a threshold on a live wall clock
