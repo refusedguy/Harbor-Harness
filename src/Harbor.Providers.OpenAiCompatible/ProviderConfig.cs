@@ -311,6 +311,15 @@ public sealed class DynamicModelCatalog : IModelCatalog
     private readonly TimeProvider _time;
 
     /// <summary>
+    ///     Sentinel for a model that did not report <c>context_length</c>. Do
+    ///     not invent a positive window: a fake 4096 looks authoritative to
+    ///     consumers, so the compaction guard treats it as a real (tiny) window
+    ///     and the context-usage UI draws a bogus 4k bar. 0 is the repo-wide
+    ///     "window not reported" value that consumers already branch on.
+    /// </summary>
+    private const int UnknownContextWindow = 0;
+
+    /// <summary>
     ///     Construct the catalogue.
     /// </summary>
     /// <param name="http">Client the model list is fetched over.</param>
@@ -657,7 +666,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
             return Result.Failure<ModelInfo>("model entry has no 'id' (or it is null)");
 
         string displayName = GetStringField(item, mapping.DisplayName ?? "name") ?? id;
-        int contextWindow = GetIntField(item, mapping.ContextWindow ?? "context_length") ?? 4096;
+        int contextWindow = GetIntField(item, mapping.ContextWindow ?? "context_length") ?? UnknownContextWindow;
         int maxOutput = GetIntField(item, mapping.MaxOutputTokens ?? "max_output_tokens") ?? 4096;
 
         return Result.Success(new ModelInfo(

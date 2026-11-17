@@ -1,6 +1,8 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
@@ -246,5 +248,33 @@ public class TokenTrackerTests
         await Assert.That(new TokenTracker { ReserveTokens = 4_096 }.ReserveTokens).IsEqualTo(4_096);
         Assert.Throws<ArgumentOutOfRangeException>(() => { _ = new TokenTracker { ReserveTokens = 0 }; });
         Assert.Throws<ArgumentOutOfRangeException>(() => { _ = new TokenTracker { ReserveTokens = -1 }; });
+    }
+
+    /// <summary>
+    ///     Regression for the missing-context_length path: ProviderConfig now
+    ///     maps an unreported window to 0. The tracker must refuse to compact
+    ///     (no budget can be computed) and say so at Warning. The old code
+    ///     lumped 0 in with a small known window and logged only at Debug, so a
+    ///     provider that omitted context_length silently disabled compaction.
+    /// </summary>
+    [Test]
+    public async Task ShouldCompact_UnknownContextWindow_RefusesButWarns()
+    {
+        var logger = new CapturingLogger<TokenTracker>();
+        var tracker = new TokenTracker(new HeuristicTokenEstimator(), logger);
+        var history = new List<AgentMessage> { Msg("s1", new string('a', 4_000)) };
+        tracker.RecordAppendedMessage(history[0]);
+
+        // Unknown window (0 from a missing context_length).
+        await Assert.That(tracker.ShouldCompact(history, Model(0))).IsFalse();
+        await Assert.That(logger.Warnings.Count).IsEqualTo(1);
+        await Assert.That(logger.Contains("no context window")).IsTrue();
+
+        // A reported window below the reserve stays a quiet Debug-only skip:
+        // the warning is reserved for the genuinely unknown case.
+        var quietLogger = new CapturingLogger<TokenTracker>();
+        var quietTracker = new TokenTracker(new HeuristicTokenEstimator(), quietLogger);
+        await Assert.That(quietTracker.ShouldCompact(history, Model(4_096))).IsFalse();
+        await Assert.That(quietLogger.Warnings.Count).IsEqualTo(0);
     }
 }
