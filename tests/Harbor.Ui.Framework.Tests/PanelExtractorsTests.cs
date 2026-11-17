@@ -207,6 +207,47 @@ public class PanelExtractorsTests
         await Assert.That(changes[0].FilePath).IsEqualTo("<unknown>");
     }
 
+    /// <summary>
+    ///     #1101 failure path: a result line with no paired Tool line has no
+    ///     name or path to extract. Internally both are <c>Maybe.None</c>, and
+    ///     only the row carries the display sentinel. Absence is a type here,
+    ///     never a magic string used to steer the loop. The rendered row is
+    ///     unchanged from before this slice.
+    /// </summary>
+    [Test]
+    public async Task ExtractRecentChanges_OrphanResult_UsesSentinelForMissingNameAndPath()
+    {
+        var lines = new List<ChatLine>
+        {
+            ToolResult("✓ orphan result", "orphan-1"),
+        };
+
+        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+
+        await Assert.That(changes.Count).IsEqualTo(1);
+        await Assert.That(changes[0].ToolName).IsEqualTo("<unknown>");
+        await Assert.That(changes[0].FilePath).IsEqualTo("<unknown>");
+    }
+
+    /// <summary>
+    ///     #1101 failure path: a paired tool line whose text carries no
+    ///     <c>→ {tool}</c> name yields <c>Maybe.None</c>, so the row is skipped
+    ///     exactly as it was when the empty name failed the tracked-tool check.
+    /// </summary>
+    [Test]
+    public async Task ExtractRecentChanges_ToolLineWithoutName_IsSkipped()
+    {
+        var lines = new List<ChatLine>
+        {
+            Tool("edit {\"path\":\"a.cs\"}", "t1"),
+            ToolResult("✓ ok", "t1"),
+        };
+
+        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+
+        await Assert.That(changes).IsEmpty();
+    }
+
     [Test]
     public async Task ExtractRecentChanges_MarksIsErrorFromPrefix()
     {
