@@ -188,7 +188,7 @@ func Run(args []string) int {
 			fmt.Fprintln(os.Stderr, "check-reference-trimmer: cannot read the findings file:", err)
 			return gate.Broken
 		}
-		parsed, _, _ := parsedFindings(root, string(data))
+		parsed, _ := parsedFindings(root, string(data))
 		for _, item := range parsed {
 			fmt.Printf("%s | %s | TODO reason for this candidate | @refusedguy\n", item.rule, item.subject)
 		}
@@ -234,32 +234,6 @@ func parseInt(text string) (int, bool) {
 		value = -value
 	}
 	return value, true
-}
-
-// guardedScope is the scope of the sibling gate.
-//
-// The list is read from the sibling gate rather than copied, so it cannot
-// drift: if that gate widens its scope, this one follows on the next run.
-func guardedScope(root string) []string {
-	data, err := os.ReadFile(filepath.Join(root, "tools", "gates", "check-abstractions-contract", "main.go"))
-	if err != nil {
-		return nil
-	}
-	text := string(data)
-	start := strings.Index(text, "var scope = []string{")
-	if start < 0 {
-		return nil
-	}
-	rest := text[start+len("var scope = []string{"):]
-	end := strings.Index(rest, "}")
-	if end < 0 {
-		return nil
-	}
-	var scope []string
-	for _, match := range regexp.MustCompile(`"([^"]*)"`).FindAllStringSubmatch(rest[:end], -1) {
-		scope = append(scope, match[1])
-	}
-	return scope
 }
 
 // normalizePath turns a path out of the build log into a repository-relative
@@ -512,48 +486,24 @@ func walkProjects(root string, dir string, found *[]string) {
 	}
 }
 
-// parsedFindings is (findings, quality problems, excluded count) for one
-// analyzer log.
+// parsedFindings is (findings, quality problems) for one analyzer log.
 //
-// The exclusion is the projects whose package set another gate already
-// answers for. Their findings are dropped here, not silenced: the count is
-// reported, so a reader can see that the gate did not look at them rather
-// than being left to assume it did.
-func parsedFindings(root string, text string) ([]finding, []finding, int) {
+// The scope is the whole solution, including the projects whose package set
+// the sibling check-abstractions-contract gate also answers for. The two
+// gates ask different questions of those projects — that gate asks whether
+// a non-BCL using has a declaration, this one asks whether the compiler binds
+// a type from a reference — so dropping either answer would leave a blind
+// spot. A project that appears for the first time in the log is in scope too:
+// it has no baseline row, so a dead reference in it is a new finding.
+func parsedFindings(root string, text string) ([]finding, []finding) {
 	projects := knownProjects(root)
-	parsed, quality := parseFindings(text, root, projects)
-	guarded := guardedScope(root)
-	excluded := 0
-	if len(guarded) > 0 {
-		var kept []finding
-		for _, item := range parsed {
-			directory := item.project
-			if idx := strings.LastIndexByte(directory, '/'); idx >= 0 {
-				directory = directory[:idx]
-			}
-			skip := false
-			for _, scope := range guarded {
-				if directory == scope || strings.HasPrefix(directory, scope+"/") {
-					skip = true
-					break
-				}
-			}
-			if skip {
-				excluded++
-				continue
-			}
-			kept = append(kept, item)
-		}
-		parsed = kept
-	}
-	return parsed, quality, excluded
+	return parseFindings(text, root, projects)
 }
 
 // stats is what the scan saw.
 type stats struct {
 	covered      int
 	parsed       int
-	excluded     int
 	baselineRows int
 	partial      bool
 }
@@ -599,10 +549,9 @@ func scan(root string, findingsPath string, coveragePath string, baselinePath st
 		return findings, result
 	}
 
-	parsed, quality, excluded := parsedFindings(root, text)
+	parsed, quality := parsedFindings(root, text)
 	findings = append(findings, quality...)
 	result.parsed = len(parsed)
-	result.excluded = excluded
 
 	// The coverage file is the answer to "how many projects did the analyzer
 	// actually run in".
@@ -724,8 +673,8 @@ func scan(root string, findingsPath string, coveragePath string, baselinePath st
 func report(findings []finding, baselinePath string, result stats) int {
 	if len(findings) == 0 {
 		fmt.Println("OK: no unused reference outside the baseline.")
-		fmt.Printf("  the analyzer ran in %d project(s); %d finding(s) parsed; %d dropped as another gate's scope.\n",
-			result.covered, result.parsed, result.excluded)
+		fmt.Printf("  the analyzer ran in %d project(s); %d finding(s) parsed.\n",
+			result.covered, result.parsed)
 		if result.partial {
 			fmt.Printf("  the answer is PARTIAL: %d of %d baseline row(s) re-emitted by this incremental build; missing rows are not called stale.\n",
 				result.parsed, result.baselineRows)
@@ -741,8 +690,8 @@ func report(findings []finding, baselinePath string, result stats) int {
 		byRule[item.rule] = append(byRule[item.rule], item)
 	}
 	fmt.Printf("ReferenceTrimmer gate: %d finding(s).\n", len(findings))
-	fmt.Printf("  the analyzer ran in %d project(s); %d finding(s) parsed; %d dropped as another gate's scope.\n",
-		result.covered, result.parsed, result.excluded)
+	fmt.Printf("  the analyzer ran in %d project(s); %d finding(s) parsed.\n",
+		result.covered, result.parsed)
 	sort.Strings(ruleOrder)
 	for _, rule := range ruleOrder {
 		fmt.Printf("\n%s (%d):\n", rule, len(byRule[rule]))
