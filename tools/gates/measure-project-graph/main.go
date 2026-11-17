@@ -1,5 +1,6 @@
 // Package measureprojectgraph is the compiled port of
-// tools/measure-project-graph.py.
+// tools/measure-project-graph.py, extended with the price of a change
+// (issue #2112).
 //
 // The gate measures the shape of the project dependency graph: the depth,
 // the level widths and the critical path, parsed from the solution and the
@@ -9,43 +10,26 @@
 // it. The exit code is the contract of the binary: 0 green, 1 red, 2 the
 // gate could not run.
 //
-// The text this prints is the text the python original printed.
+// THE TEXT THIS PRINTS IS THE TEXT THE PYTHON ORIGINAL PRINTED, plus the
+// radius: how many projects a change in one project rebuilds, and what that
+// set costs.
 package measureprojectgraph
 
 import (
-	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
+	"harbor.local/gates/internal/buildcost"
 	"harbor.local/gates/internal/gate"
 )
-
-// projectPathRe is `<Project Path="...">` in a solution file.
-var projectPathRe = regexp.MustCompile(`<Project\s+Path="([^"]+)"`)
-
-// result is the measured shape of the graph.
-type result struct {
-	solution     string
-	projects     []string
-	edges        map[string]map[string]bool
-	levels       map[string]int
-	byLevel      map[int][]string
-	levelNumbers []int
-	depth        int
-	width        int
-	edgeCount    int
-	levelsWide4  int
-	levelsWide2  int
-	critical     []string
-}
 
 // Run is the gate entry point.
 func Run(args []string) int {
 	solution := "Harbor.slnx"
+	baseline := ""
 	jsonOut := ""
 	selfTest := false
 
@@ -63,6 +47,16 @@ func Run(args []string) int {
 				value = args[i]
 			}
 			solution = value
+		case "--baseline":
+			if !hasValue {
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "--baseline needs a path")
+					return gate.Broken
+				}
+				i++
+				value = args[i]
+			}
+			baseline = value
 		case "--json":
 			if !hasValue {
 				if i+1 >= len(args) {
@@ -76,7 +70,9 @@ func Run(args []string) int {
 		case "--self-test":
 			selfTest = true
 		case "--help", "-h":
-			fmt.Println("usage: harbor-gates measure-project-graph [--solution Harbor.slnx] [--json out.json] [--self-test]")
+			fmt.Println("usage: harbor-gates measure-project-graph [--solution Harbor.slnx]")
+			fmt.Println("                                             [--baseline tools/compile-cost-baseline.txt]")
+			fmt.Println("                                             [--json out.json] [--self-test]")
 			return gate.Green
 		default:
 			fmt.Fprintf(os.Stderr, "unrecognized argument: %s\n", arg)
@@ -88,23 +84,53 @@ func Run(args []string) int {
 		return selfTestRun()
 	}
 
-	data, err := os.ReadFile(solution)
+	root, err := gate.RepoRoot()
+	if err != nil {
+		root = "."
+	}
+	// The report names the solution the way the caller named it; the gate
+	// resolves it to find the tree. The python original printed the
+	// argument, and the workflows read that line.
+	label := solution
+	if !filepath.IsAbs(solution) {
+		candidate := filepath.Join(root, solution)
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			solution = candidate
+		}
+	}
+
+	graph, err := buildcost.ReadGraph(solution)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cannot read the solution:", err)
 		return gate.Broken
 	}
-	projects := readSolutionProjects(string(data))
+	graph.Solution = label
+	measured := analyze(graph)
 
-	root := filepath.Dir(absolutePath(solution))
-	if root == "" {
-		root = "."
-	}
-
-	measured := analyze(solution, projects, root, readProjectReferences)
 	printResult(measured)
 
+	// The price of the radius comes from the recorded measurement: the
+	// baseline says what every project cost the compiler, and the radius
+	// says what those projects cost together.
+	prices := map[string]float64{}
+	if baseline != "" {
+		path := baseline
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(root, path)
+		}
+		recorded, err := buildcost.ReadBaseline(path)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return gate.Broken
+		}
+		prices = recorded.Projects
+		printRadius(graph, prices, recorded.Radius)
+	} else {
+		printRadius(graph, prices, nil)
+	}
+
 	if jsonOut != "" {
-		if err := os.WriteFile(jsonOut, []byte(renderJSON(measured)), 0o644); err != nil {
+		if err := os.WriteFile(jsonOut, []byte(renderJSON(measured, graph, prices)), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, "cannot write the json:", err)
 			return gate.Broken
 		}
@@ -112,33 +138,41 @@ func Run(args []string) int {
 	return gate.Green
 }
 
+// result is the measured shape of the graph.
+type result struct {
+	solution     string
+	projects     []string
+	edges        map[string]map[string]bool
+	levels       map[string]int
+	byLevel      map[int][]string
+	levelNumbers []int
+	depth        int
+	width        int
+	edgeCount    int
+	levelsWide4  int
+	levelsWide2  int
+	critical     []string
+}
+
 // analyze measures the shape of the graph.
-//
-// The reader of the edges is a parameter so the self-test can plant a graph
-// without touching the disk.
-func analyze(solution string, projects []string, root string, references func(path string) []string) *result {
+func analyze(graph *buildcost.Graph) *result {
 	out := &result{
-		solution: solution,
-		projects: projects,
+		solution: graph.Solution,
+		projects: graph.Projects,
 		edges:    map[string]map[string]bool{},
 		levels:   map[string]int{},
 		byLevel:  map[int][]string{},
 	}
 
 	// An edge points from the referring project to the project it references.
-	for _, project := range projects {
-		absolute := filepath.Join(root, project)
-		for _, reference := range references(absolute) {
-			// Normalize to the solution-relative form when the reference is
-			// a path inside the repo; framework/nuget references are skipped.
-			candidate := filepath.Clean(filepath.Join(filepath.Dir(project), reference))
-			candidate = strings.ReplaceAll(candidate, "\\", "/")
-			if contains(projects, candidate) {
-				if out.edges[project] == nil {
-					out.edges[project] = map[string]bool{}
-				}
-				out.edges[project][candidate] = true
-			}
+	for _, project := range graph.Projects {
+		references := graph.References[project]
+		if len(references) == 0 {
+			continue
+		}
+		out.edges[project] = map[string]bool{}
+		for _, reference := range references {
+			out.edges[project][reference] = true
 		}
 	}
 
@@ -170,7 +204,7 @@ func analyze(solution string, projects []string, root string, references func(pa
 		out.levels[project] = value
 		return value
 	}
-	for _, project := range projects {
+	for _, project := range graph.Projects {
 		levelOf(project)
 	}
 
@@ -215,7 +249,7 @@ func analyze(solution string, projects []string, root string, references func(pa
 		memo[project] = chain
 		return chain
 	}
-	for _, project := range projects {
+	for _, project := range out.projects {
 		chain := longestChain(project)
 		if len(chain) > len(out.critical) {
 			out.critical = chain
@@ -268,71 +302,10 @@ func splitFlag(arg string) (string, string, bool) {
 	return arg, "", false
 }
 
-// absolutePath is the absolute form of a path, the way python's
-// os.path.abspath resolves it against the working directory.
-func absolutePath(path string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return filepath.Clean(path)
-	}
-	return filepath.Join(cwd, path)
-}
-
-// readSolutionProjects reads the projects of a solution file.
-func readSolutionProjects(text string) []string {
-	var projects []string
-	for _, match := range projectPathRe.FindAllStringSubmatch(text, -1) {
-		projects = append(projects, strings.ReplaceAll(match[1], "\\", "/"))
-	}
-	return projects
-}
-
-// readProjectReferences reads the ProjectReference edges of a project file.
-//
-// A file that cannot be read or parsed has no edges: the python original
-// caught the error and returned an empty list.
-func readProjectReferences(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	decoder := xml.NewDecoder(strings.NewReader(string(data)))
-	var refs []string
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			break
-		}
-		element, ok := token.(xml.StartElement)
-		if !ok || element.Name.Local != "ProjectReference" {
-			continue
-		}
-		for _, attr := range element.Attr {
-			if attr.Name.Local == "Include" && attr.Value != "" {
-				refs = append(refs, strings.ReplaceAll(attr.Value, "\\", "/"))
-			}
-		}
-	}
-	return refs
-}
-
-// contains is the membership test of the python original's project list.
-func contains(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-
 // renderJSON writes the result the way python's json.dump(indent=2) wrote
 // it: the keys in the order of the literal, two spaces of indent, and no
 // trailing newline.
-func renderJSON(out *result) string {
+func renderJSON(out *result, graph *buildcost.Graph, prices map[string]float64) string {
 	var text strings.Builder
 	text.WriteString("{\n")
 	keys := []string{
@@ -346,12 +319,13 @@ func renderJSON(out *result) string {
 		"levels_wide_enough_for_2_compilers",
 		"critical_path",
 		"critical_path_length",
+		"radii",
 	}
 	for index, key := range keys {
 		text.WriteString("  ")
 		text.WriteString(jsonString(key))
 		text.WriteString(": ")
-		text.WriteString(jsonValue(out, key))
+		text.WriteString(jsonValue(out, graph, prices, key))
 		if index < len(keys)-1 {
 			text.WriteString(",")
 		}
@@ -362,7 +336,7 @@ func renderJSON(out *result) string {
 }
 
 // jsonValue renders one value of the result.
-func jsonValue(out *result, key string) string {
+func jsonValue(out *result, graph *buildcost.Graph, prices map[string]float64, key string) string {
 	switch key {
 	case "solution":
 		return jsonString(out.solution)
@@ -414,6 +388,8 @@ func jsonValue(out *result, key string) string {
 		return text.String()
 	case "critical_path_length":
 		return fmt.Sprintf("%d", len(out.critical))
+	case "radii":
+		return renderRadiiJSON(graph, prices)
 	}
 	return "null"
 }
