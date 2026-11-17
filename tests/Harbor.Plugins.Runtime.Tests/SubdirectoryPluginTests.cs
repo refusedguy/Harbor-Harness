@@ -87,6 +87,17 @@ public sealed class SubdirectoryPluginTests
         var collected = await CollectAsync(fixture.PluginsDir).ConfigureAwait(false);
         await Assert.That(collected.Count).IsEqualTo(2);
 
+        // The host fails on the FIRST script that cannot load (ContinueOnError
+        // is false) and returns that error. Filesystem enumeration order is
+        // not stable across runners, so without a fixed order this assertion
+        // below is a coin flip: reached first, DuoHelper.cs compiles cleanly
+        // but carries no plugin ("No public IPlugin implementations..."), and
+        // reached first, DuoTool.cs fails with the missing-type diagnostic
+        // that names DuoHelperMfprobe. Sort DESCENDING by path so DuoTool.cs
+        // is compiled first and the loud failure is deterministically the
+        // cross-file missing-type diagnostic the contract promises.
+        collected.Sort((a, b) => string.CompareOrdinal(b.Path, a.Path));
+
         var source = new InMemoryPluginSource(collected);
         var pluginHost = PluginHostFactory.Build(source, fixture, continueOnError: false);
 

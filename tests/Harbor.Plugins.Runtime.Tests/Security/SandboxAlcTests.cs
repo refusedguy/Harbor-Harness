@@ -96,12 +96,23 @@ public sealed class SandboxAlcTests
 
         WeakReference alcRef = CreateLoadUnloadAndTrack();
         bool unloaded = false;
-        for (int i = 0; i < 10 && !unloaded; i++)
+        // A collectible ALC is released only after the finalizer that drops its
+        // loader allocator runs. Under a parallel runner a neighbouring test
+        // holding the finalizer queue can delay that by several collections,
+        // so give it bounded room (30 forced collections with a finalizer wait
+        // each) rather than failing on the first handful. The bound is still
+        // finite: a genuine unload leak never releases the reference and the
+        // assertion below still catches it.
+        for (int i = 0; i < 30 && !unloaded; i++)
         {
             ForceCollect();
             GC.WaitForPendingFinalizers();
             ForceCollect();
             unloaded = !alcRef.IsAlive;
+            if (!unloaded)
+            {
+                await Task.Delay(10);
+            }
         }
 
         await Assert.That(unloaded).IsTrue();
