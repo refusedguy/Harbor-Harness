@@ -5,7 +5,7 @@ using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core;
 
-using EngineCells = Harbor.Tui.CellForge.Rendering;
+// EngineCells is a project-wide global alias (GlobalUsings.cs, #436).
 using UIR = Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
