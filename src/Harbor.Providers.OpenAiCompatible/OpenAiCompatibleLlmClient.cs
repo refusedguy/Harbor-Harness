@@ -121,7 +121,7 @@ public sealed class OpenAiCompatibleLlmClient : ProviderLlmClientBase, ILlmClien
         }
     }
 
-    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) => await _modelCatalog.GetModelsAsync(_config, cancellationToken).ConfigureAwait(false);
+    public override async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) => await _modelCatalog.GetModelsAsync(_config, cancellationToken).ConfigureAwait(false);
 
     // #1100: internal so the wire/scaling tests can drive the serializer
     // directly (InternalsVisibleTo covers Harbor.Providers.Tests). Also the

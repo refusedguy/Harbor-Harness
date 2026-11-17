@@ -80,7 +80,7 @@ public sealed class AnthropicLlmClient : ProviderLlmClientBase, ILlmClient
         // the ErrorEvent alone is invisible in traces.
         AnthropicLlmClientLog.StreamTaskFailed(Logger, ex, ex.Message);
 
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+    public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
     {
         // Anthropic doesn't have a /models endpoint — return hardcoded catalog
         var models = AnthropicModels.All;

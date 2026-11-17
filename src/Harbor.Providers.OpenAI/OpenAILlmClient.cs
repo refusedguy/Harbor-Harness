@@ -95,7 +95,7 @@ public sealed class OpenAILlmClient : ProviderLlmClientBase, ILlmClient
         // the ErrorEvent alone is invisible in traces.
         OpenAILlmClientLog.StreamTaskFailed(Logger, ex, ex.Message);
 
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+    public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
     {
         // OpenAI has /v1/models endpoint, but it returns IDs only (no pricing/context info)
         // Better to return hardcoded catalog with full metadata
