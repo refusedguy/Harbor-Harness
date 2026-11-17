@@ -286,6 +286,14 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
     private readonly Dictionary<string, string> _toolNames = new(StringComparer.Ordinal);
 
     /// <summary>
+    ///     #1494: one reusable dispatcher for the LlmEvent family. A visitor per
+    ///     delta would allocate on the streaming hot path; the owner keeps it.
+    /// </summary>
+    private readonly LlmEventVisitor _llmEvents;
+
+    public ChatHistoryViewModel() => _llmEvents = new HistoryLlmEventVisitor(this);
+
+    /// <summary>
     ///     The accumulated chat entries (one per finalized message or tool result).
     /// </summary>
     public IReadOnlyList<ChatEntry> Entries => _entries;
@@ -304,20 +312,9 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
                 break;
 
             case MessageUpdateEvent mu:
-                switch (mu.LlmEvent)
-                {
-                    case TextDeltaEvent td:
-                        StreamingText += td.Delta;
-                        break;
-                    case ThinkingDeltaEvent thd:
-                        IsThinking = true;
-                        ThinkingText += thd.Delta;
-                        break;
-                    case ToolCallStartEvent tcs:
-                        _toolNames[tcs.Id] = tcs.ToolName;
-                        AddEntry(new ChatEntry("tool", $"→ {tcs.ToolName}", DateTimeOffset.UtcNow, tcs.Id, tcs.ToolName));
-                        break;
-                }
+                // #1494: same dispatcher as the live bridge, so a new LlmEvent
+                // cannot paint on screen while going missing from the history.
+                _llmEvents.Accept(mu.LlmEvent);
                 break;
 
             case MessageEndEvent:
@@ -399,6 +396,48 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
     /// </summary>
     [RelayCommand]
     private void ClearHistory() => Clear();
+
+    /// <summary>
+    ///     History half of the #1494 dispatcher. Arms that do not affect the
+    ///     transcript are declared empty so every new LlmEvent is an explicit
+    ///     decision here too.
+    /// </summary>
+    private sealed class HistoryLlmEventVisitor(ChatHistoryViewModel vm) : LlmEventVisitor
+    {
+        public override void Visit(TextStartEvent e) { }
+
+        public override void Visit(TextDeltaEvent e) => vm.StreamingText += e.Delta;
+
+        public override void Visit(TextEndEvent e) { }
+
+        public override void Visit(ThinkingStartEvent e) { }
+
+        public override void Visit(ThinkingDeltaEvent e)
+        {
+            vm.IsThinking = true;
+            vm.ThinkingText += e.Delta;
+        }
+
+        public override void Visit(ThinkingEndEvent e) { }
+
+        public override void Visit(ToolCallStartEvent e)
+        {
+            vm._toolNames[e.Id] = e.ToolName;
+            vm.AddEntry(new ChatEntry("tool", $"→ {e.ToolName}", DateTimeOffset.UtcNow, e.Id, e.ToolName));
+        }
+
+        public override void Visit(ToolCallDeltaEvent e) { }
+
+        public override void Visit(ToolCallEndEvent e) { }
+
+        public override void Visit(StepStartEvent e) { }
+
+        public override void Visit(StepFinishEvent e) { }
+
+        public override void Visit(FinishEvent e) { }
+
+        public override void Visit(ErrorEvent e) { }
+    }
 
     // T2 reactive conventions (#1184). Streaming/thinking text deltas are
     // cheap repaints; entry-list and streaming-lifecycle flips are layout —
