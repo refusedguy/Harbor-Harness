@@ -113,16 +113,22 @@ public class BreadcrumbTrailTests
         trail.Push(1);
         trail.Push(2);
         trail.Push(3);
-        trail.Back();
 
         var segments = trail.Segments();
         await Assert.That(segments.Count).IsEqualTo(3);
         await Assert.That(segments[0].Label).IsEqualTo("node1");
         await Assert.That(segments[0].IsCurrent).IsFalse();
         await Assert.That(segments[1].Label).IsEqualTo("node2");
-        await Assert.That(segments[1].IsCurrent).IsTrue();
+        await Assert.That(segments[1].IsCurrent).IsFalse();
         await Assert.That(segments[2].Label).IsEqualTo("node3");
-        await Assert.That(segments[2].IsCurrent).IsFalse();
+        await Assert.That(segments[2].IsCurrent).IsTrue();
+
+        // Going back drops the forward tail from the rendered segments too.
+        trail.Back();
+        var backSegments = trail.Segments();
+        await Assert.That(backSegments.Count).IsEqualTo(2);
+        await Assert.That(backSegments[1].Label).IsEqualTo("node2");
+        await Assert.That(backSegments[1].IsCurrent).IsTrue();
     }
 
     [Test]
