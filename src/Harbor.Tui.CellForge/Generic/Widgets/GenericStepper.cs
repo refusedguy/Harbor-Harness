@@ -44,7 +44,7 @@ public readonly record struct GenericStepperState(int Current, int Count)
 /// <c>Stepper</c>, issue #2363). It paints a marker per step plus connectors,
 /// with the status of each segment derived from an externally owned
 /// <see cref="GenericStepperState"/>. Unlike a progress bar it carries no
-/// ratio and no completion logic — "what step am I on" belongs to the host.
+/// ratio and no completion logic. "What step am I on" belongs to the host.
 /// </summary>
 public static class GenericStepper
 {

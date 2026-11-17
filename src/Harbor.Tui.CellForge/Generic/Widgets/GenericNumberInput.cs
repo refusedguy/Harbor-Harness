@@ -16,7 +16,7 @@ public enum NumberStepAction
 /// <summary>
 /// Generic numeric input over cells (gpui-kit <c>NumberInput</c>, issue #2363):
 /// a <see cref="GenericTextField"/> carries the editable digits while this
-/// primitive owns the numeric contract — min/max bounds, a fixed step, a
+/// primitive owns the numeric contract: min/max bounds, a fixed step, a
 /// display formatter and Up/Down stepping. No chat, form or plugin coupling;
 /// it is a neutral primitive future dialogs and forms compose from.
 /// </summary>

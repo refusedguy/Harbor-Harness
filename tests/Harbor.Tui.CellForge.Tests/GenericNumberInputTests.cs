@@ -4,7 +4,7 @@ using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
-// Painting reads the global TerminalColorPalette — serialized with other paint tests.
+// Painting reads the global TerminalColorPalette, so serialize with other paint tests.
 [NotInParallel("pty")]
 public class GenericNumberInputTests
 {
