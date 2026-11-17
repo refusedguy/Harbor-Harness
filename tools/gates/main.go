@@ -80,6 +80,7 @@ import (
 	genseamgraph "harbor.local/gates/gen-seam-graph"
 	genworkflows "harbor.local/gates/gen-workflows"
 	goquality "harbor.local/gates/go-quality"
+	guardtriage "harbor.local/gates/guard-triage"
 	gate "harbor.local/gates/internal/gate"
 	measurebuildcpu "harbor.local/gates/measure-build-cpu"
 	measurecompilecost "harbor.local/gates/measure-compile-cost"
@@ -299,6 +300,11 @@ var registry = []registered{
 		name:    "go-quality",
 		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
 		run:     goquality.Run,
+	},
+	{
+		name:    "guard-triage",
+		summary: "what each architecture-guard firing MEANT: a defect, a style rule, or noise",
+		run:     guardtriage.Run,
 	},
 	{
 		name:    "measure-build-cpu",
