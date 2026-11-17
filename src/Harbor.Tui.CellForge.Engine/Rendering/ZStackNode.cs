@@ -23,6 +23,9 @@ public sealed class ZStackNode : ContainerNode
     /// <summary>Child count (z-order is index order, lower first).</summary>
     public int Count => _children.Count;
 
+    /// <inheritdoc />
+    protected override IReadOnlyList<INode> ChildNodes => _children;
+
     /// <summary>Setup-time: pushes <paramref name="child"/> on top of the stack.</summary>
     public void Add(INode child)
     {

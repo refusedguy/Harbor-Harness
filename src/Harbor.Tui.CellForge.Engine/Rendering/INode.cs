@@ -26,9 +26,9 @@ public readonly record struct Constraints(int MaxWidth, int MaxHeight)
 }
 
 /// <summary>
-/// Composable layout node: three phases, always in order, on the render
+/// Composable layout node: four phases, always in order, on the render
 /// thread only (ConsoleEx <c>IDOMPaintable</c> / Termina measure-render
-/// lesson, chat-agnostic):
+/// lesson, GPUI's request_layout/prepaint/paint pipeline, chat-agnostic):
 /// <list type="number">
 ///   <item><description><see cref="Measure"/> — report the desired
 ///     <see cref="Size"/> within bounds. Pure: no buffer writes, no state
@@ -38,9 +38,14 @@ public readonly record struct Constraints(int MaxWidth, int MaxHeight)
 ///     <see cref="Rect"/> from the parent; containers position children via
 ///     the pure solvers (<see cref="FlexLayout"/>, <see cref="StackLayout"/>).
 ///     No painting.</description></item>
+///   <item><description><see cref="Prepaint"/> — between arrange and paint:
+///     prepare the data a node will draw and cache it under a stable
+///     <see cref="ElementId"/>. Reused on later frames when id and version
+///     key still match. Default is a no-op for nodes that opt out.</description></item>
 ///   <item><description><see cref="Paint"/> — paint within
-///     <see cref="Arranged"/> clipped to the clip. Reads
-///     state, writes cells, mutates nothing else.</description></item>
+///     <see cref="Arranged"/> clipped to the clip. Nodes that participate in
+///     prepaint only replay the prepared range; other nodes keep reading
+///     state here.</description></item>
 /// </list>
 /// </summary>
 public interface INode
@@ -51,6 +56,16 @@ public interface INode
     /// <summary>Accepts the final rect; containers arrange children here.</summary>
     /// <param name="rect">Assigned area. Negative extents count as zero.</param>
     void Arrange(Rect rect);
+
+    /// <summary>
+    /// Prepares paint data after arrange and before paint. Containers forward
+    /// with a child id; <see cref="PrepaintNode"/> reuses the committed record
+    /// when the id and the version key are unchanged. The default no-op keeps
+    /// existing nodes source-compatible.
+    /// </summary>
+    /// <param name="context">Frame context owning the record cache and scene.</param>
+    /// <param name="id">Stable path of this node in the frame tree.</param>
+    PrepaintRecord Prepaint(PrepaintContext context, ElementId id) => PrepaintRecord.Empty;
 
     /// <summary>Paints within <see cref="Arranged"/> clipped to the clip.</summary>
     /// <param name="buffer">Target grid. Never null.</param>
