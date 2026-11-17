@@ -39,7 +39,8 @@
 //   * a capability name that is not in `PluginCapabilities` — the same strict
 //     reading the comment directive gets, because an unknown capability is a
 //     request the host cannot honour;
-//   * an extension axis that is not in `PluginAxisRegistry`.
+//   * an extension axis that is not in `PluginAxisRegistry`;
+//   * a declared skill, hook or MCP server whose entry cannot be read (#2229).
 //
 // A refused manifest is a REFUSAL of the plugin, not a fallback to the
 // no-manifest behaviour: the plugin shipped a declaration, the declaration
@@ -77,7 +78,10 @@ public static class PluginManifestReader
 
     /// <summary>The manifest fields this build understands.</summary>
     private static readonly string[] KnownFields =
-        ["schemaVersion", "name", "version", "harbor", "capabilities", "axes", "config"];
+    [
+        "schemaVersion", "name", "version", "harbor", "capabilities", "axes", "config",
+        "skills", "hooks", "mcpServers",
+    ];
 
     /// <summary>
     ///     The manifest path that belongs to a plugin source path: the same
@@ -320,6 +324,48 @@ public static class PluginManifestReader
             }
         }
 
+        IReadOnlyList<PluginSkillDeclaration>? skills = null;
+        if (fields.TryGetValue("skills", out JsonElement skillsElement))
+        {
+            var read = PluginBundleDeclarationsReader.ReadSkills(skillsElement, origin);
+            if (read.IsSuccess)
+            {
+                skills = read.Value;
+            }
+            else
+            {
+                return read.ConvertFailure<PluginManifest>();
+            }
+        }
+
+        IReadOnlyList<PluginHookDeclaration>? hooks = null;
+        if (fields.TryGetValue("hooks", out JsonElement hooksElement))
+        {
+            var read = PluginBundleDeclarationsReader.ReadHooks(hooksElement, origin);
+            if (read.IsSuccess)
+            {
+                hooks = read.Value;
+            }
+            else
+            {
+                return read.ConvertFailure<PluginManifest>();
+            }
+        }
+
+        IReadOnlyList<PluginMcpServerDeclaration>? mcpServers = null;
+        if (fields.TryGetValue("mcpServers", out JsonElement mcpServersElement))
+        {
+            var read = PluginBundleDeclarationsReader.ReadMcpServers(mcpServersElement, origin);
+            if (read.IsSuccess)
+            {
+                mcpServers = read.Value;
+            }
+            else
+            {
+                return read.ConvertFailure<PluginManifest>();
+            }
+        }
+
         return Result.Success(new PluginManifest
         {
             SchemaVersion = schemaVersion,
@@ -329,6 +375,9 @@ public static class PluginManifestReader
             Capabilities = capabilities,
             Axes = axes,
             Config = config,
+            Skills = skills,
+            Hooks = hooks,
+            McpServers = mcpServers,
             ContentHash = contentHash,
         });
     }

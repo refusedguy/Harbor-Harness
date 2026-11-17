@@ -130,6 +130,52 @@ public sealed class PluginManifestDiscoveryTests
     }
 
     /// <summary>
+    ///     #2229: a broken bundle declaration is reported on the script, and the
+    ///     plugin count does not shrink. The script still travels to the host,
+    ///     which refuses it with the reason; discovery never turns a broken
+    ///     declaration into a plugin that appears not to exist.
+    /// </summary>
+    [Test]
+    public async Task FileSystemSource_BrokenBundleManifest_DoesNotReduceThePluginCount()
+    {
+        using var fixture = await PluginTestFixture.CreateAsync("manifest-bundle-broken").ConfigureAwait(false);
+        await fixture.WritePluginAsync("public class A {}", "good.cs").ConfigureAwait(false);
+        await fixture.WriteManifestAsync(
+            """
+            {
+              "skills": [ { "path": "skills/a.md" } ],
+              "mcpServers": [ { "name": "s", "command": "c" } ]
+            }
+            """,
+            "good.cs").ConfigureAwait(false);
+        await fixture.WritePluginAsync("public class B {}", "broken.cs").ConfigureAwait(false);
+        await fixture.WriteManifestAsync(
+            """{ "skills": [ { "name": "no-path" } ] }""",
+            "broken.cs").ConfigureAwait(false);
+
+        var source = new FileSystemPluginSource(
+            new[] { fixture.PluginsDir },
+            NullLogger<FileSystemPluginSource>.Instance);
+        var scripts = new List<PluginScript>();
+        await foreach (PluginScript script in source.GetScriptsAsync().ConfigureAwait(false))
+        {
+            scripts.Add(script);
+        }
+
+        await Assert.That(scripts.Count).IsEqualTo(2)
+            .Because("a manifest error is carried as a reason, not paid for with a missing plugin");
+
+        PluginScript good = scripts.Single(s => Path.GetFileName(s.Path) == "good.cs");
+        PluginScript broken = scripts.Single(s => Path.GetFileName(s.Path) == "broken.cs");
+        await Assert.That(good.ManifestError).IsNull();
+        await Assert.That(good.Manifest!.Skills!.Count).IsEqualTo(1);
+        await Assert.That(good.Manifest!.McpServers!.Count).IsEqualTo(1);
+        await Assert.That(broken.Manifest).IsNull();
+        await Assert.That(broken.ManifestError).IsNotNull();
+        await Assert.That(broken.ManifestError!).Contains("skills[0].path");
+    }
+
+    /// <summary>
     ///     The manifest is part of the plugin's content, so the content hash
     ///     covers it: the same source with a manifest and without one is two
     ///     different plugins as far as the trust decision and the compile cache
