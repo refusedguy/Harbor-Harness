@@ -766,6 +766,15 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check that the producer rows name the tree's real call sites
         run: tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
+      # #2119. The event-topology gate is the only one that asks whether the
+      # producers block of docs/EVENT_TOPOLOGY.md still names the publish
+      # calls the tree holds. A `file:line` fence cannot see that class of
+      # defect — the four lines the block cited were all real lines and none
+      # of them published — so the failure path is tested here for the same
+      # reason as the others: a rule edited until it matches nothing is
+      # indistinguishable from a rule that matched nothing.
+      - name: Event-topology gate fails on a stale producer citation
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --self-test
 
   links:
     name: internal links
