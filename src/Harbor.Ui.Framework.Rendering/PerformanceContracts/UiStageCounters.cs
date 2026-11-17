@@ -35,6 +35,14 @@ using System.Runtime.CompilerServices;
 ///         </description></item>
 ///     </list>
 ///     <para>
+///         <b>The two damage counters are not stages.</b> <see cref="HintHits"/>
+///         and <see cref="HintMisses"/> (#2220) are the two outcomes of one
+///         hinted-scan vs full-scan decision in the cell-diff path. They share
+///         this snapshot so a diagnostics run can report the fallback rate
+///         next to the stage tallies; they do not join the frequency chain
+///         below and must never be summed with it.
+///     </para>
+///     <para>
 ///         So the invariant is <c>TerminalWrites ≥ Materializations ≥ MarkdownParses</c>
 ///         per frame, and <see cref="BlocksLaidOut" /> sits above all three:
 ///         the sum of the four is meaningless and no gate may assert on it. What
@@ -87,6 +95,11 @@ public static class UiStageCounters
     private static long _materializations;
     private static long _markdownParses;
     private static long _terminalWrites;
+    // #2220: the portable encoder's damage-decision outcome. Mirrors the
+    // engine's EngineStageCounters fields so the hit/miss metric covers both
+    // damage mechanisms that the unified contract joins.
+    private static long _hintHits;
+    private static long _hintMisses;
 
     /// <summary>
     ///     Master switch. Off by default: the render path pays one predictable
@@ -131,12 +144,26 @@ public static class UiStageCounters
     /// </summary>
     public static long TerminalWrites => Interlocked.Read(ref _terminalWrites);
 
-    /// <summary>All four counters as one value, for a scripted run to print.</summary>
-    public static UiStageSnapshot Snapshot() =>
-        new(BlocksLaidOut, Materializations, MarkdownParses, TerminalWrites);
+    /// <summary>
+    ///     Frames whose hints stayed under the canonical area threshold and
+    ///     used the hinted scan (#2220). No-hint frames count neither this nor
+    ///     <see cref="HintMisses" /> — no decision was made for them.
+    /// </summary>
+    public static long HintHits => Interlocked.Read(ref _hintHits);
 
     /// <summary>
-    ///     Zeroes all four. Tests call this before their window so a preceding
+    ///     Frames with hints above the threshold that fell back to a full
+    ///     scan (#2220). Together with <see cref="HintHits"/> this is the
+    ///     fallback-rate metric both damage mechanisms report.
+    /// </summary>
+    public static long HintMisses => Interlocked.Read(ref _hintMisses);
+
+    /// <summary>All six counters as one value, for a scripted run to print.</summary>
+    public static UiStageSnapshot Snapshot() =>
+        new(BlocksLaidOut, Materializations, MarkdownParses, TerminalWrites, HintHits, HintMisses);
+
+    /// <summary>
+    ///     Zeroes all six. Tests call this before their window so a preceding
     ///     test cannot move the number — and so a failure names this test's
     ///     work rather than the suite's history.
     /// </summary>
@@ -146,6 +173,8 @@ public static class UiStageCounters
         Interlocked.Exchange(ref _materializations, 0);
         Interlocked.Exchange(ref _markdownParses, 0);
         Interlocked.Exchange(ref _terminalWrites, 0);
+        Interlocked.Exchange(ref _hintHits, 0);
+        Interlocked.Exchange(ref _hintMisses, 0);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -183,10 +212,28 @@ public static class UiStageCounters
             Interlocked.Increment(ref _terminalWrites);
         }
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void CountHintHit()
+    {
+        if (_enabled)
+        {
+            Interlocked.Increment(ref _hintHits);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void CountHintMiss()
+    {
+        if (_enabled)
+        {
+            Interlocked.Increment(ref _hintMisses);
+        }
+    }
 }
 
 /// <summary>
-///     One reading of all four <see cref="UiStageCounters" />. A record struct so
+///     One reading of all six <see cref="UiStageCounters" />. A record struct so
 ///     reading the counters allocates nothing and can be returned from a
 ///     benchmark without the measurement growing an <c>Allocated</c> column.
 /// </summary>
@@ -194,8 +241,12 @@ public static class UiStageCounters
 /// <param name="Materializations">See <see cref="UiStageCounters.Materializations" />.</param>
 /// <param name="MarkdownParses">See <see cref="UiStageCounters.MarkdownParses" />.</param>
 /// <param name="TerminalWrites">See <see cref="UiStageCounters.TerminalWrites" />.</param>
+/// <param name="HintHits">See <see cref="UiStageCounters.HintHits" />.</param>
+/// <param name="HintMisses">See <see cref="UiStageCounters.HintMisses" />.</param>
 public readonly record struct UiStageSnapshot(
     long BlocksLaidOut,
     long Materializations,
     long MarkdownParses,
-    long TerminalWrites);
+    long TerminalWrites,
+    long HintHits,
+    long HintMisses);

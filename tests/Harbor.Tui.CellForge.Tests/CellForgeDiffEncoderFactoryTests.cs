@@ -41,15 +41,19 @@ public class CellForgeDiffEncoderFactoryTests
     [Test]
     public async Task Threshold_Single_Source_Of_Truth()
     {
-        // Three constants, and the test's whole subject IS those constants:
+        // Four constants, and the test's whole subject IS those constants:
         // it exists to catch them drifting apart, and to pin the number they
         // all agree on. A change to any one of them recompiles the
         // comparisons to a different pair of numbers and the test fails, so
-        // these are change detectors, not tautologies. TUnit's
+        // these are change detectors, not tautologies. #2220 adds the engine's
+        // CellDamageContract: DiffEngine now aliases it, and this assertion is
+        // the mechanical tie to the portable encoder's canonical value that
+        // the BCL-only leaf cannot reference directly (#436). TUnit's
         // TUnitAssertions0005 reports the constant first argument; see the
         // policy in tests/Directory.Build.props.
 #pragma warning disable TUnitAssertions0005 // the threshold constants are the subject: the test checks they agree and pins their value
-        await Assert.That(DiffEngine.HintAreaThreshold).IsEqualTo(RowHashDiffEncoder.HintAreaThreshold);
+        await Assert.That(DiffEngine.HintAreaThreshold).IsEqualTo(CellDamageContract.HintAreaThreshold);
+        await Assert.That(CellDamageContract.HintAreaThreshold).IsEqualTo(RowHashDiffEncoder.HintAreaThreshold);
         await Assert.That(RowHashDiffEncoder.HintAreaThreshold).IsEqualTo(CellDiffHints.HintAreaThreshold);
         await Assert.That(CellDiffHints.HintAreaThreshold).IsEqualTo(0.25);
 #pragma warning restore TUnitAssertions0005

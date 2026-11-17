@@ -23,10 +23,13 @@ namespace Harbor.Tui.CellForge.Rendering;
 ///     intersection down.</description></item>
 /// </list>
 /// Render-thread owned, not thread-safe (same as <c>DiffEngine</c>).
+/// Implements <see cref="IDamageRegion"/>: its region can be handed straight
+/// to <see cref="DiffEngine.FrameHint(IDamageRegion, int, int)"/>, so widget
+/// invalidation and frame hints share one damage contract (#2220).
 /// All operations are allocation-free after setup (<c>for</c> index loops,
 /// no LINQ, no closures); <c>AddChild</c>/<c>RemoveChild</c> are setup-time.
 /// </summary>
-public sealed class DirtyRect
+public sealed class DirtyRect : IDamageRegion
 {
     private readonly List<ChildEntry> _children = [];
     private Rect? _dirty;
