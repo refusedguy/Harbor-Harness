@@ -328,6 +328,10 @@ public class KeyGateFamilyRules
         // arrows navigate with a strict no-modifier gate, so Shift is refused:
         // a command site like the tree above, not a text buffer.
         new("GenericToggleSelect", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/GenericToggleSelect.cs"),
+        // Rating (#2367): the compact star-rating primitive. Arrows, vim keys,
+        // Home/End and digits select a value; no text buffer and Shift is
+        // refused, so it is a command site. Read-only refuses keys outright.
+        new("Rating", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/Rating.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
