@@ -26,18 +26,18 @@ from the tree, not from a hand-kept list.
 
 | | count | what it is |
 |---|---:|---|
-| `.cs` files in the tree | 189 | |
-| top-level classes | 247 | |
-| classes with at least one `[Test]` | 171 | |
-| **rules (guards about the repository)** | **159** | the population of this audit |
+| `.cs` files in the tree | 188 | |
+| top-level classes | 245 | |
+| classes with at least one `[Test]` | 170 | |
+| **rules (guards about the repository)** | **158** | the population of this audit |
 | instrument self-tests | 14 | the guard machinery proving it can fail, not a rule about the product |
 | engine / probe | 2 | `ScanRule` (the shared runner) and the #861 probe file |
-| helper classes without tests | 76 | probes, fixtures, records, planted controls |
-| `[Test]` attributes | 1116 | |
-| lines in the tree | 110,064 | |
+| helper classes without tests | 75 | probes, fixtures, records, planted controls |
+| `[Test]` attributes | 1112 | |
+| lines in the tree | 109,583 | |
 
-One tier-C guard was removed after the audit (#1727, see [Post-audit removal](#post-audit-removal-1727)):
-the counts above are the 2026-10-22 snapshot minus that one file.
+Two tier-C guards were removed after the audit (#1727, see [Post-audit removal](#post-audit-removal-1727)):
+the counts above are the 2026-10-22 snapshot minus those two files.
 
 ### The "110" of the issue
 
@@ -47,12 +47,12 @@ ends in `Rule` or `Rules`:
 ```
 commit d96b66ec (2026-10-20)  ->  110 classes named *Rule / *Rules
 this tree (2026-10-22)         ->  129 classes named *Rule / *Rules
-after #1727                    ->  128 classes named *Rule / *Rules
-this tree, the real population  ->  159 rules (171 test-bearing classes, minus 14 self-tests)
+after #1727                    ->  126 classes named *Rule / *Rules
+this tree, the real population  ->  158 rules (170 test-bearing classes, minus 14 self-tests)
 ```
 
-Two corrections turn that into the real number. **18** `*Rule`-named classes were added since (19
-minus the one removed by #1727),
+Two corrections turn that into the real number. **17** `*Rule`-named classes were added since (19
+minus the two removed by #1727),
 and — the bigger half — **32 guards do not follow the suffix convention at all**:
 `FullLayerMatrixTests`, `ResultFailureConversionTests`, `MaybeAbsenceTests`,
 `TokenTrackingRatchet`, `FatInterfaceShapeRatchet`, `EnforcerIntegrityTests` and the other
@@ -60,10 +60,10 @@ and — the bigger half — **32 guards do not follow the suffix convention at a
 engine). So:
 
 ```
-128 classes named *Rule / *Rules
+126 classes named *Rule / *Rules
  -  1  the shared engine (ScanRule)
  + 32  guards that do not follow the naming convention
- = 159 guards
+ = 158 guards
 ```
 
 A name-shape count and a rule count are different numbers. The audit uses the second one.
@@ -96,12 +96,12 @@ The distribution is the headline of the second half of this audit: **more than h
 rules carry a ledger, a pinned number or a text anchor**, and that is what makes an innocent
 change expensive.
 
-| tier | rules | share of the 159 |
+| tier | rules | share of the 158 |
 |---|---:|---:|
-| A | 50 | 31.4% |
-| B | 100 | 62.9% |
-| C | 9 | 5.7% |
-| **total** | **159** | |
+| A | 50 | 31.6% |
+| B | 100 | 63.3% |
+| C | 8 | 5.1% |
+| **total** | **158** | |
 
 ## The rules, one by one
 
@@ -269,7 +269,7 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `UiFrameworkNullabilityRules` | `UiFrameworkNullabilityRules.cs` | Source-scans the nine Ui.Framework assemblies for `null!` and grades each site. | ProjectionCache declared six members non-nullable and initialised them with null!, so the compiler was asked to accept a value nobody assigned. | The nine assembly paths are named; a rename of an assembly needs an edit. | 1 |
 | `VendoredHtmlSurfaceRules` | `VendoredHtmlSurfaceRules.cs` | Compares the two vendored CollapseWhitespace implementations against each other by re-typing both and comparing over an exhaustive alphabet. | #878: the two vendored helpers disagree on 758 of the whitespace cases, so a behaviour that looked like one thing was two. | The rule grades the VENDORED tree, which is not built by CI: a change there is not caught by the compiler, which is the point. | 1 |
 
-### Tier C — does not catch a defect (9 rules)
+### Tier C — does not catch a defect (8 rules)
 
 | rule | file | checks | defect signal | refactoring signal | cost |
 |---|---|---|---|---|---:|
@@ -277,7 +277,6 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `BenchmarkContractTests` | `BenchmarkContractTests.cs` | Enumerates the benchmark sources and requires the seven contract fields (Operation / Payload / StateReset / Drain / RetainedState / AwaitSemantics /… | #408: a number that nobody can attribute cannot answer 'is this faster than before?', and a benchmark that carries state between iterations measures… | A new benchmark class needs its contract; the enumeration re-points itself. | 1 |
 | `ContribBoundaryNameRule` | `ContribBoundaryNameRule.cs` | Walks src/ and contrib/ for type declarations and compares the cross-boundary name set with a written-down baseline. | Nothing by its own header: it is 'a MEASUREMENT, not a prohibition'. | The baseline is a written-down set of names. The renderer move-out (16249cb1) changed the set and the rule fired on the shape change, not on a defect. | 2 |
 | `ExistenceCheckLivenessRule` | `ExistenceCheckLivenessRule.cs` | Reads the existence-check tables of the rules that hold them and asks, for each row, whether the named thing still exists and is still reachable. | Nothing by itself: it is the liveness half of the ledger checks, and it fires on a stale ROW, not on broken code. | Its whole job is to fire when a row goes stale after a rename or a move: this is a rule whose firing IS the refactoring signal. | 2 |
-| `OverlayKeyPlaneCensusRule` | `OverlayKeyPlaneCensusRule.cs` | Counts the IOverlayLayer implementations under src/ and apps/ and measures their reachability. | Nothing by its own header: it is 'a MEASUREMENT + ratchet'. | The count is a measurement of the tree's shape. A new overlay layer moves it, and the rule fires on the count rather than on a defect. | 2 |
 | `ProjectKeyedScanRule` | `ProjectKeyedScanRule.cs` | Walks src/ for directories with .cs files and no .csproj, and reports which project compiles each file. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the second form of 'a measurement that cannot see its subject'. | The measurement is of the tree's shape. Every directory that is created without a csproj moves the answer. | 2 |
 | `ReadmeCoverageTests` | `ReadmeCoverageTests.cs` | Walks the src/ csproj directories and requires a README.md in each; for a packable project it requires the named sections to be present. | #430: the coverage lived as prose in a document and had already drifted twice (32/51, 45/54, then 48/54 actually measured). | Adding a project needs a README: a chore, not a bug. This is the measured 'style' class: the firing means 'the tree grew', not 'the code is wrong'. | 2 |
 | `ScanVisibilityRule` | `ScanVisibilityRule.cs` | Walks each tree through the shared helper and reports the trees that come back empty. | Nothing by its own header: it is 'a MEASUREMENT, not a fix' -- the first form of 'a measurement that cannot see its subject'. | The invisible-tree set is a written-down list; adding a tree changes the answer. | 2 |
@@ -442,22 +441,22 @@ The census is a computation over the tree, not a list anyone maintains:
 
 ```bash
 # the population: one entry per class with at least one [Test]
-grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1116 test attributes
+grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1112 test attributes
 
 # the files and the lines of the tree
-ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 189 files
-cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 110064 lines
+ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 188 files
+cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 109583 lines
 
 # the classes, and the ones that carry a [Test]. A [Test] method belongs to
 # the type that encloses it, so the last declaration before it is its class.
 awk 'match($0, /^(public|internal|private|protected)[A-Za-z ]*(class|record|struct|interface|enum) [A-Za-z_][A-Za-z0-9_]*/) { n = split(substr($0, RSTART, RLENGTH), a, " "); if (a[n-1] == "class") c[a[n]] = 1; cur = a[n] } /^[ \t]*\[Test/ { if (cur != "") t[cur] = 1 } END { nc = 0; for (k in c) nc++; nt = 0; for (k in t) if (k in c) nt++; print "top-level classes:", nc; print "classes with a [Test]:", nt }' \
     tests/Harbor.Architecture.Tests/*.cs
-# top-level classes: 247
-# classes with a [Test]: 171
+# top-level classes: 245
+# classes with a [Test]: 170
 
 # the tiers
 python3 -c "import json;d=json.load(open('tests/Harbor.Architecture.Tests/rule-tiers.json'));print(d['tier_counts'])"
-# {'A': 50, 'B': 100, 'C': 9}
+# {'A': 50, 'B': 100, 'C': 8}
 ```
 
 ## Post-audit removal (#1727)
@@ -478,12 +477,30 @@ outside this file: the two remaining references in `BuildGraphCoverageRule.cs` a
 are prose comparisons, not calls. No successor is needed, because nothing graded a defect. Removal
 is recorded in the `removals` array of `rule-tiers.json`.
 
+`OverlayKeyPlaneCensusRule` was removed on 2026-11-17 under the same #1727 batch. Its own header
+called it a "MEASUREMENT + ratchet for issue #812": four verdicts compared a live walk of the
+`IOverlayLayer` implementations with written-down name tables (`RegisteredLayers`,
+`RegisteredButCannotReadKeys`, `NeverConstructedInProduct`, `ArmedButNotHostRouted`). Every row
+graded the shape of the tree, not a property of product code; adding or removing a layer moved the
+count, and the firing's fix was an edit to the guard's table, which is this audit's definition of
+a rule bound to form.
+
+**No invariant was lost.** The dead key plane it pinned is already carried as acknowledged debt by
+`PanelKeyRouteReachabilityRule`, the real guard for #857/#812: `PanelKeyRouteProbe.Ledger` names
+`OverlayStack.RouteKey` and that rule's planted positive controls hold the debt. Whether to wire or
+delete `RouteKey` is a deferred product decision, not a defect signal. The paint-half fact is
+recorded in `OverlayKeyRouteClaimRule`'s header. `OverlayKeyPlaneProbe` and `OverlayLayerCensus`
+had no consumers outside the file; the only remaining reference is a historical attribution in
+`docs/DIALOG_OVERLAY_KIND_CENSUS.md`, updated to point at the surviving guard. Tier C 9 -> 8,
+cost-2 22 -> 21, guards 159 -> 158. The reason is recorded in the `removals` array of
+`rule-tiers.json`.
+
 ## Related
 
 - #1724, the epic this audit belongs to.
 - #1726, the measurement this audit leans on: [docs/GUARD_VALUE_MEASUREMENT.md](GUARD_VALUE_MEASUREMENT.md)
   and [`tools/guard-triage-classes.json`](../tools/guard-triage-classes.json).
-- #1727, the Tier C removal. The ten Tier C rules below are its input.
+- #1727, the Tier C removal. The eight Tier C rules below are its input.
 - #1729, the pilot that turned two text rules into Roslyn analyzers -- the shape the 74
   `roslyn-analyzer` candidates would take.
 - [docs/ARCHITECTURE_LAYERS.md](ARCHITECTURE_LAYERS.md), the contract the rules enforce.

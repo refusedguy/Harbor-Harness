@@ -4,22 +4,22 @@
   "issue": 1725,
   "population": {
     "tree": "tests/Harbor.Architecture.Tests",
-    "cs_files": 189,
-    "top_level_classes": 247,
-    "classes_with_tests": 171,
-    "guards": 159,
+    "cs_files": 188,
+    "top_level_classes": 245,
+    "classes_with_tests": 170,
+    "guards": 158,
     "instrument_self_tests": 14,
     "engine_or_probe": 2,
-    "helper_classes_without_tests": 76,
-    "test_attributes": 1116,
-    "tree_lines": 110064,
+    "helper_classes_without_tests": 75,
+    "test_attributes": 1112,
+    "tree_lines": 109583,
     "ticket_claim_110": {
       "value": 110,
       "measured_at_commit": "d96b66ec",
       "measured_at_date": "2026-10-20",
       "what_it_counted": "classes whose name ends in Rule or Rules, in tests/Harbor.Architecture.Tests",
       "still_true": false,
-      "note": "The 110 was exact on 2026-10-20 and is stale. On the audit tree there were 129 classes named *Rule or *Rules, one of which (ScanRule) is the shared engine rather than a guard, so 128 guards carried that name; after #1727 removed ScanUniverseRule the count is 127 -- and 32 more guards do not follow the convention at all (FullLayerMatrixTests, ResultFailureConversionTests, MaybeAbsenceTests, TokenTrackingRatchet, FatInterfaceShapeRatchet and the other *Tests-named guards). The real population was 160 at audit time and is 159 after the #1727 removal."
+      "note": "The 110 was exact on 2026-10-20 and is stale. On the audit tree there were 129 classes named *Rule or *Rules, one of which (ScanRule) is the shared engine rather than a guard, so 128 guards carried that name; after #1727 removed ScanUniverseRule and OverlayKeyPlaneCensusRule the count is 126 -- and 32 more guards do not follow the convention at all (FullLayerMatrixTests, ResultFailureConversionTests, MaybeAbsenceTests, TokenTrackingRatchet, FatInterfaceShapeRatchet and the other *Tests-named guards). The real population was 160 at audit time and is 158 after the two #1727 removals."
     }
   },
   "tiers": {
@@ -47,12 +47,12 @@
   "tier_counts": {
     "A": 50,
     "B": 100,
-    "C": 9
+    "C": 8
   },
   "false_positive_cost_counts": {
     "0": 51,
     "1": 86,
-    "2": 22
+    "2": 21
   },
   "semantic_candidates": {
     "count": 76,
@@ -2087,27 +2087,6 @@
       "estimated_lines_saved": 150
     },
     {
-      "id": "OverlayKeyPlaneCensusRule",
-      "file": "tests/Harbor.Architecture.Tests/OverlayKeyPlaneCensusRule.cs",
-      "kind": "guard",
-      "note": null,
-      "tests": 4,
-      "file_lines": 480,
-      "subject": "The overlay plane's census: how many layers implement the overlay contract, and which are reachable.",
-      "checks": "Counts the IOverlayLayer implementations under src/ and apps/ and measures their reachability.",
-      "defect_signal": "Nothing by its own header: it is 'a MEASUREMENT + ratchet'.",
-      "refactor_signal": "The count is a measurement of the tree's shape. A new overlay layer moves it, and the rule fires on the count rather than on a defect.",
-      "false_positive_cost": 2,
-      "tier": "C",
-      "evidence": [
-        "file header: 'MEASUREMENT + ratchet for issue #812'"
-      ],
-      "semantic_candidate": false,
-      "semantic_kind": null,
-      "already_semantic": false,
-      "estimated_lines_saved": 0
-    },
-    {
       "id": "OverlayKeyRouteClaimRule",
       "file": "tests/Harbor.Architecture.Tests/OverlayKeyRouteClaimRule.cs",
       "kind": "guard",
@@ -3755,6 +3734,15 @@
       "removed_at": "2026-11-17",
       "reason": "Pure one-off MEASUREMENT ('a MEASUREMENT, not a fix' per its own header). Its two baselines are written-down literals pinned to the shape of the test tree: all 5 measured firings (runs 39117642149, 39365793623, 39380697456, 39416159291) were class=noise, and commits 6ba00729 and 40df718b had to edit this rule in the same commit as the test-tree change. That is the definition of a rule bound to form: the repair is to the guard, not to the code.",
       "invariant_disposition": "No code invariant is lost. The header itself records that the product side is already complete (LayerDependencyTests.AllExpectedHarborAssembliesAreLoaded) and that the six perimeter-bearing consumers already carry their own exclusions; the file only declared a census of what the reflection helper cannot see. `ScanUniverseProbe` had no consumers outside this file (only prose references in BuildGraphCoverageRule.cs and ScanRule.cs). The reflection-scan boundary remains measured operationally by those consumers' own guards; no successor is needed because nothing graded a defect."
+    },
+    {
+      "id": "OverlayKeyPlaneCensusRule",
+      "file": "tests/Harbor.Architecture.Tests/OverlayKeyPlaneCensusRule.cs",
+      "issue": 1727,
+      "tier": "C",
+      "removed_at": "2026-11-17",
+      "reason": "Pure census + ratchet ('MEASUREMENT + ratchet for issue #812' per the file header). Its four verdicts compare a live walk of the IOverlayLayer implementations with written-down name tables (RegisteredLayers, RegisteredButCannotReadKeys, NeverConstructedInProduct, ArmedButNotHostRouted). Every row grades the shape of the tree, not a property of product code: a new or removed overlay layer moves the count, and the repair is an edit to the guard's table. That is a rule bound to form, which issue #1727 defines as tier C.",
+      "invariant_disposition": "No code invariant is lost. The dead key plane this file pinned is already carried as acknowledged debt by PanelKeyRouteReachabilityRule (the GUARD for #857/#812): its PanelKeyRouteProbe.Ledger names OverlayStack.RouteKey and its tests hold that debt with planted positive controls. Whether to wire or delete RouteKey is a deferred product decision, not a defect signal, and the paint-half fact (SyncOverlays / PaintOver calls) is recorded in OverlayKeyRouteClaimRule's header. OverlayKeyPlaneProbe and OverlayLayerCensus had no consumers outside this file. The only remaining reference is a historical attribution in docs/DIALOG_OVERLAY_KIND_CENSUS.md, updated to point at the surviving guard. No successor is needed because nothing graded a defect."
     }
   ]
 }
