@@ -22,25 +22,32 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// renderer shares one reducer-owned experience. The legacy
 /// <see cref="Bind(char, Action)"/> overload stays for action-only chords
 /// (palette toggles, slash hand-offs) that have no reducer transition yet.
+/// #2359: the arm window and the staged message live in the shared engine
+/// <see cref="PendingChordQueue{T}"/>; this router owns only the chord vocabulary.
 /// </remarks>
 public sealed class LeaderKeyRouter
 {
     /// <summary>Chord resolve window in ms (arm → key). Mirrors opencode's leader timeout.</summary>
-    public const int TimeoutMs = 2000;
+    public const int TimeoutMs = PendingChordQueue<AppMsg>.TimeoutMs;
 
     private readonly Dictionary<char, Action> _bindings = [];
     private readonly Dictionary<char, (AppMsg Msg, Action? Run)> _messages = [];
-    private long _armedAtMs = long.MinValue;
+
+    // #2359: one pending-chord queue for every chord router. The 2000 ms arm
+    // window and the staged message live in the engine primitive, so this
+    // router owns only the chord vocabulary (Ctrl+X and its bound chars) —
+    // no second timing implementation, no second pending state.
+    private readonly PendingChordQueue<AppMsg> _pending = new();
 
     /// <summary>True while a leader press is awaiting its chord.</summary>
-    public bool IsPending => _armedAtMs != long.MinValue;
+    public bool IsPending => _pending.IsPending;
 
     /// <summary>
     /// Last msg-bound chord resolved by <see cref="HandleKey"/>, awaiting a
     /// host <see cref="TakePendingMsg"/> drain. Null when no msg-bound chord
     /// fired since the last drain.
     /// </summary>
-    public AppMsg? PendingMsg { get; private set; }
+    public AppMsg? PendingMsg => _pending.Pending;
 
     /// <summary>Registers a single-character chord. Re-binding replaces.</summary>
     public void Bind(char chord, Action action)
@@ -66,12 +73,7 @@ public sealed class LeaderKeyRouter
     /// returned value through <c>UiStore.Dispatch</c>. Mirrors the palette's
     /// <c>TakePendingCommit</c> hand-off: no host-side chord stacks.
     /// </summary>
-    public AppMsg? TakePendingMsg()
-    {
-        var msg = PendingMsg;
-        PendingMsg = null;
-        return msg;
-    }
+    public AppMsg? TakePendingMsg() => _pending.Take();
 
     /// <summary>
     /// Removes a chord binding (action and message forms). The chord returns
@@ -89,16 +91,7 @@ public sealed class LeaderKeyRouter
     /// Disarms a pending leader press without resolving (escape-clears-pending).
     /// Returns true when a pending press was actually cleared.
     /// </summary>
-    public bool Cancel()
-    {
-        if (!IsPending)
-        {
-            return false;
-        }
-
-        _armedAtMs = long.MinValue;
-        return true;
-    }
+    public bool Cancel() => _pending.Cancel();
 
     /// <summary>
     /// Feeds a key event. Returns true when the event was consumed (the leader
@@ -108,16 +101,18 @@ public sealed class LeaderKeyRouter
     /// </summary>
     public bool HandleKey(in KeyEvent key, long nowMs)
     {
-        if (IsPending && nowMs - _armedAtMs > TimeoutMs)
+        // Same order as before: expiry first, then the unarmed leader check,
+        // then escape. Only the state moved — into the shared queue.
+        if (_pending.IsPending && !_pending.IsWithinWindow(nowMs))
         {
-            _armedAtMs = long.MinValue; // window expired
+            _ = _pending.Cancel(); // window expired
         }
 
-        if (!IsPending)
+        if (!_pending.IsPending)
         {
             if (IsLeaderPress(key))
             {
-                _armedAtMs = nowMs;
+                _ = _pending.TryArm(nowMs);
                 return true;
             }
 
@@ -126,11 +121,11 @@ public sealed class LeaderKeyRouter
 
         if (key.Key == KeyCode.Escape)
         {
-            _armedAtMs = long.MinValue; // escape-clears-pending
+            _ = _pending.Cancel(); // escape-clears-pending
             return true;
         }
 
-        _armedAtMs = long.MinValue;
+        _ = _pending.TryResolve(nowMs); // in-window; disarm
         if (key.Key != KeyCode.Char || !key.Modifiers.IsUnmodified())
         {
             return true; // armed but not a plain char — consume and disarm
@@ -139,7 +134,7 @@ public sealed class LeaderKeyRouter
         char chord = char.ToLowerInvariant((char)key.Character.Value);
         if (_messages.TryGetValue(chord, out var bound))
         {
-            PendingMsg = bound.Msg;
+            _pending.Stage(bound.Msg);
             bound.Run?.Invoke();
         }
         else if (_bindings.TryGetValue(chord, out var action))
