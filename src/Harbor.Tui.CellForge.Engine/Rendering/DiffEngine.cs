@@ -40,9 +40,26 @@ public sealed class DiffEngine
     // never see a Scene keep the classic path byte-for-byte and allocation-free.
     private ScreenBuffer? _sceneScratch;
 
-    public DiffEngine(int cols, int rows) => _front = new ScreenBuffer(cols, rows);
+    public DiffEngine(int cols, int rows) : this(new ScreenBuffer(cols, rows)) { }
 
-    public DiffEngine(ScreenBuffer front) => _front = front;
+    public DiffEngine(ScreenBuffer front)
+    {
+        ArgumentNullException.ThrowIfNull(front);
+        _front = front;
+        // #2352: the diff engine owns the ready-cell-pattern cache and shares
+        // it with its mirror grid, so cache-backed paints and the diff path
+        // resolve the same patterns.
+        GlyphCache = front.GlyphCache ?? new GlyphCache();
+        front.GlyphCache = GlyphCache;
+    }
+
+    /// <summary>
+    ///     #2352: the ready-cell-pattern cache shared with the grids. Created
+    ///     once per diff engine and propagated to the back buffer in
+    ///     <see cref="Flush"/>, so a glyph painted with
+    ///     <see cref="ScreenBuffer.SetGlyph"/> is a cache hit on the next frame.
+    /// </summary>
+    public GlyphCache GlyphCache { get; }
 
     /// <summary>The terminal-mirror buffer.</summary>
     public ScreenBuffer Front => _front;
@@ -155,6 +172,12 @@ public sealed class DiffEngine
         HyperlinkTable? links = null,
         UnderlineColorTable? underlineColors = null)
     {
+        // #2352: hand the ready-cell-pattern cache to the back buffer too.
+        // The wire format is untouched — this only lets the NEXT frame's
+        // cache-backed paint (ScreenBuffer.SetGlyph) hit the patterns already
+        // resolved on this frame.
+        next.GlyphCache ??= GlyphCache;
+
         // #2217: links are a side-table, not a Cell field. UrlAt returns null
         // when the terminal probe said no OSC 8, so the unsupported case is
         // byte-for-byte the plain frame. The escape bytes are zero-width and
