@@ -80,10 +80,11 @@
 // The other blind spot in this class is not a path filter at all: it is a MISSING
 // PROJECT FILE. `src/Harbor.Storage.Shared` and `src/Harbor.Providers.Shared` hold
 // compiled product code and have no `.csproj`, so nothing ever yields their names.
-// See `ProjectKeyedScanRule.cs`. The two are kept apart on purpose: one is a path
-// that is walked and then rejected, the other is a key that is never generated.
-// A fix for either does not fix the other, and a header that conflated them
-// would hide exactly the distinction a future reader needs.
+// That case is held by `SharedSourceLinkRules` (the GUARD for #456): its R1/R3
+// verdicts require every csproj-less source folder to be declared and every shared
+// file to be linked into a real project. One blind spot is a path that is walked
+// and then rejected, the other a key that is never generated; no single filter
+// edit fixes both, and a header that conflated them would hide the distinction.
 //
 // A FOURTH, FOUND BY THE RED RUN — the filter is not a predicate over paths
 // ------------------------------------------------------------------------
