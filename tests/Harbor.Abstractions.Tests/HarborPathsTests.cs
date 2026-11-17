@@ -7,10 +7,11 @@ namespace Harbor.Abstractions.Tests;
 
 /// <summary>
 ///     <see cref="HarborPaths" /> — the single Harbor-home resolution (#1570).
-///     Hosting forwards to it, and the former verbatim copies in
-///     Harbor.Application (<c>WorkspacePaths</c>) and Harbor.Tools.Builtin
-///     (<c>McpOAuthTokenCache</c>) now delegate here, so one policy edit
-///     reaches hermetic tests, portable installs and OAuth tokens alike.
+///     Every caller reaches it directly now (the Hosting forwarder was deleted
+///     in #1392), as are the former verbatim copies in Harbor.Application
+///     (<c>WorkspacePaths</c>) and Harbor.Tools.Builtin
+///     (<c>McpOAuthTokenCache</c>), so one policy edit reaches hermetic tests,
+///     portable installs and OAuth tokens alike.
 /// </summary>
 /// <remarks>
 ///     Writes <c>HARBOR_HOME</c> process state, so the class declares a

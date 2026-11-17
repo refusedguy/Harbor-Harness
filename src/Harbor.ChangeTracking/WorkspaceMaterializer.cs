@@ -26,9 +26,10 @@ namespace Harbor.ChangeTracking;
 ///     <para>
 ///         The runs root resolves through
 ///         <c>Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome()</c>
-///         (<c>HARBOR_HOME</c> or <c>~/.harbor</c>) — the same helper
-///         Harbor.Hosting forwards to (#1570). Application depends on
-///         Abstractions only, and no longer carries its own copy of the
+///         (<c>HARBOR_HOME</c> or <c>~/.harbor</c>) — the single helper every
+///         caller now uses directly (#1570; the Hosting forwarder was removed
+///         in #1392). Application depends on Abstractions only, and no longer
+///         carries its own copy of the
 ///         resolution: the one-line fan-in lives in <see cref="WorkspacePaths" />.
 ///     </para>
 /// </remarks>

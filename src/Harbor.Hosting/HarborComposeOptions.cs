@@ -188,5 +188,5 @@ public sealed class HarborComposeOptions
         EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
     };
 
-    private static string DefaultHarborDir() => HarborPaths.GetHarborHome();
+    private static string DefaultHarborDir() => Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome();
 }
