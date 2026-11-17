@@ -1,5 +1,8 @@
 using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Rendering;
+
+// #436 dual Rect vocabulary: the test project aliases Rect to UIR globally,
+// so MouseRouter.Bind needs the engine's Rect under its own name.
+using EngineRect = Harbor.Tui.CellForge.Rendering.Rect;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -35,8 +38,8 @@ public class MouseRouterZOrderTests
         var router = new MouseRouter(80, 24);
         var bottom = new Target("bottom");
         var top = new Target("top");
-        router.Bind(bottom, new Rect(0, 0, 40, 10));
-        router.Bind(top, new Rect(0, 0, 40, 10));
+        router.Bind(bottom, new EngineRect(0, 0, 40, 10));
+        router.Bind(top, new EngineRect(0, 0, 40, 10));
 
         router.Press(5, 5);
 
@@ -50,10 +53,10 @@ public class MouseRouterZOrderTests
         var router = new MouseRouter(80, 24);
         var first = new Target("first");
         var second = new Target("second");
-        router.Bind(first, new Rect(0, 0, 40, 10));
-        router.Bind(second, new Rect(0, 0, 40, 10));
+        router.Bind(first, new EngineRect(0, 0, 40, 10));
+        router.Bind(second, new EngineRect(0, 0, 40, 10));
 
-        router.Rebind(first, new Rect(0, 0, 40, 10));
+        router.Rebind(first, new EngineRect(0, 0, 40, 10));
         router.Press(5, 5);
 
         await Assert.That(first.Presses).IsEqualTo(1);
