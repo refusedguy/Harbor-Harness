@@ -217,12 +217,12 @@ public class ResultTryAdoptionTests
 
         // Narrowed catches must stay invisible: Result.Try would widen them and
         // change behaviour. Both were real sites this wave deliberately kept.
-        const string narrowedByType = planted.Replace("catch (Exception ex)", "catch (IOException)", StringComparison.Ordinal);
+        string narrowedByType = planted.Replace("catch (Exception ex)", "catch (IOException)", StringComparison.Ordinal);
         await Assert.That(ScanText(narrowedByType, "src/Planted/NarrowedByType.cs", []).ToList())
             .IsEmpty()
             .Because("catch(IOException) is narrower than Result.Try and must not be reported");
 
-        const string narrowedByFilter = planted.Replace("catch (Exception ex)", "catch (Exception ex) when (ex is IOException)", StringComparison.Ordinal);
+        string narrowedByFilter = planted.Replace("catch (Exception ex)", "catch (Exception ex) when (ex is IOException)", StringComparison.Ordinal);
         await Assert.That(ScanText(narrowedByFilter, "src/Planted/NarrowedByFilter.cs", []).ToList())
             .IsEmpty()
             .Because("a catch with an exception filter is narrower than Result.Try and must not be reported");
