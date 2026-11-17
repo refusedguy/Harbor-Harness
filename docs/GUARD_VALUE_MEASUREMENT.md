@@ -2,8 +2,9 @@
 
 > Status (2026-10-21): a measurement, on `dev` at `086ef777`, over the CI runs of
 > 2026-09-26 .. 2026-10-20. A dated record, not a normative claim about the
-> current tree. Every number below was produced by `tools/guard-triage.py` over
-> the CI job logs of that window; the classification of each rule is in
+> current tree. Every number below was produced by the `guard-triage` tool (then
+> `tools/guard-triage.py`, now the compiled gate) over the CI job logs of that
+> window; the classification of each rule is in
 > `tools/guard-triage-classes.json`, next to the firings it was decided from.
 
 Issue #1726 asks one question that cannot be answered by reading the guards:
@@ -88,18 +89,20 @@ survive the whole window, which is what a retrospective needs.
 
 ## The tool
 
-`tools/guard-triage.py` reads what a run already produced and writes down what
-every guard firing meant.
+`guard-triage` reads what a run already produced and writes down what every
+guard firing meant. It was originally the Python script `tools/guard-triage.py`;
+that script is gone and the same tool now ships as the compiled gate, so the
+commands below use the binary. The old output is unchanged.
 
 ```bash
 # over a CI job log
-python3 tools/guard-triage.py --log run-12345.log --repo-root . --out firings.json
+./tools/bin/harbor-gates-linux-x64 guard-triage --log run-12345.log --repo-root . --out firings.json
 
 # over the TRX of a shard
-python3 tools/guard-triage.py --trx "TestResults/core/*.trx" --repo-root . --out firings.json
+./tools/bin/harbor-gates-linux-x64 guard-triage --trx "TestResults/core/*.trx" --repo-root . --out firings.json
 
 # the self-test: the tool still parses a failure it is given
-python3 tools/guard-triage.py --self-test
+./tools/bin/harbor-gates-linux-x64 guard-triage --self-test
 ```
 
 It writes three things: a machine-readable JSON report (every firing, with the
