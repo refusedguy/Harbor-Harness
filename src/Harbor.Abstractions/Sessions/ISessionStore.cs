@@ -110,6 +110,48 @@ public interface ISessionStore
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default);
 
     /// <summary>
+    ///     Append several messages to a session as ONE atomic write (#2226):
+    ///     either every message lands or none does.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the primitive the fork path uses to copy a parent's
+    ///         history. A crash in the middle of a sequence of
+    ///         <see cref="AppendMessageAsync" /> calls leaves a partial child
+    ///         that reads like a complete one; a batch has a single commit
+    ///         point, so the child holds either the whole prefix or none of it.
+    ///     </para>
+    ///     <para>
+    ///         <b>Default implementation:</b> append one message at a time and
+    ///         fail on the first error. This preserves every message and the
+    ///         store's own failure text, but it is NOT atomic. A durable store
+    ///         that can commit several records in one transaction must override
+    ///         this member; the default is the conservative shape (nothing is
+    ///         silently dropped) for a store that cannot.
+    ///     </para>
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messages">The messages to append, in order.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Success, or failure if the session does not exist or a write fails.</returns>
+    public async Task<Result> AppendMessagesBatchAsync(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        CancellationToken ct = default)
+    {
+        for (int i = 0; i < messages.Count; i++)
+        {
+            Result appended = await AppendMessageAsync(sessionId, messages[i], ct).ConfigureAwait(false);
+            if (appended.IsFailure)
+            {
+                return appended;
+            }
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
     ///     Append a NEW VERSION of an existing message (e.g. an edit, or a
     ///     compaction summary that replaces what came before it).
     /// </summary>
@@ -492,4 +534,16 @@ public interface ISessionContext
     ///     </para>
     /// </remarks>
     public ICompactionEventStore? CompactionEvents => null;
+
+    /// <summary>
+    ///     The operation-marker seam of this session's store, or null when the
+    ///     store records no fork/turn markers (#2226).
+    /// </summary>
+    /// <remarks>
+    ///     The default is null: a session context whose store records no
+    ///     markers says so instead of pretending a crash can be detected. The
+    ///     turn runner asks for the seam before it claims a turn, so a null
+    ///     answer is a decision it can act on, not a silent gap.
+    /// </remarks>
+    public ISessionOperationEventStore? OperationEvents => null;
 }

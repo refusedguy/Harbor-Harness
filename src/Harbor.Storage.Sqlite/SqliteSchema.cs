@@ -83,6 +83,21 @@ internal static class SqliteSchema
                                        FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
                                    );
                                    CREATE INDEX IF NOT EXISTS idx_compaction_events_session ON compaction_events(session_id);
+
+                                   -- #2226: durable fork/turn crash markers. A start with no
+                                   -- matching end is the evidence a crash left behind.
+                                   CREATE TABLE IF NOT EXISTS operation_events (
+                                       id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                       session_id TEXT NOT NULL,
+                                       kind TEXT NOT NULL,
+                                       owner TEXT,
+                                       turn INTEGER,
+                                       boundary_message_id TEXT,
+                                       copied INTEGER NOT NULL DEFAULT 0,
+                                       occurred_at TEXT NOT NULL,
+                                       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                                   );
+                                   CREATE INDEX IF NOT EXISTS idx_operation_events_session ON operation_events(session_id);
                                    """;
 
     /// <summary>

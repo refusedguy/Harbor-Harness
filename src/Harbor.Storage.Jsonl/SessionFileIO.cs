@@ -111,6 +111,54 @@ internal static class SessionFileIO
     }
 
     /// <summary>
+    ///     Append a batch of pre-encoded records to a JSONL file as ONE atomic
+    ///     write (#2226). The original is copied to a temp sibling, every line
+    ///     is appended there, and the temp is renamed over the target. A crash
+    ///     therefore leaves either the old file or the full batch, never a
+    ///     prefix of it — the property a fork's history copy depends on.
+    /// </summary>
+    /// <remarks>
+    ///     Synchronous, like <see cref="RewriteRecordsAtomic" />: the caller
+    ///     holds the per-session semaphore, and the whole point is that no
+    ///     other writer can observe the intermediate temp file.
+    /// </remarks>
+    internal static void AppendBatchAtomic(string targetPath, IReadOnlyList<byte[]> lines)
+    {
+        if (lines.Count == 0)
+        {
+            return;
+        }
+
+        string directory = Path.GetDirectoryName(targetPath)!;
+        string tempPath = Path.Combine(directory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+        bool committed = false;
+        try
+        {
+            using (var source = new FileStream(
+                       targetPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 64 * 1024))
+            using (var sink = new FileStream(
+                       tempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024))
+            {
+                source.CopyTo(sink);
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    sink.Write(lines[i]);
+                }
+            }
+
+            File.Move(tempPath, targetPath, overwrite: true);
+            committed = true;
+        }
+        finally
+        {
+            if (!committed)
+            {
+                TryDeleteTemp(tempPath);
+            }
+        }
+    }
+
+    /// <summary>
     ///     Whether <paramref name="plan" /> ends up changing the file, decided
     ///     without writing anything. Uses a dry scan only when the plan cannot
     ///     answer from the file's length alone.

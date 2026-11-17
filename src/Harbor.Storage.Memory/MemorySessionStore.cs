@@ -27,7 +27,7 @@ namespace Harbor.Storage.Memory;
 ///         the fold of that log, by the same shared fold every backend uses.
 ///     </para>
 /// </remarks>
-public sealed partial class MemorySessionStore : ISessionStore, ICompactionEventStore
+public sealed partial class MemorySessionStore : ISessionStore, ICompactionEventStore, ISessionOperationEventStore
 {
     private readonly ConcurrentDictionary<string, List<SessionLogEntry>> _logs = new();
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
@@ -77,6 +77,36 @@ public sealed partial class MemorySessionStore : ISessionStore, ICompactionEvent
 
         Touch(sessionId);
 
+        return Task.FromResult(Result.Success());
+    }
+
+    /// <summary>
+    ///     Append a batch in one lock (#2226): the in-memory equivalent of the
+    ///     SQLite transaction and the JSONL atomic rewrite.
+    /// </summary>
+    public Task<Result> AppendMessagesBatchAsync(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        CancellationToken ct = default)
+    {
+        if (!_logs.TryGetValue(sessionId, out var log))
+            return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
+
+        lock (log)
+        {
+            for (int i = 0; i < messages.Count; i++)
+            {
+                log.Add(new SessionLogEntry
+                {
+                    Kind = SessionLogEntryKind.Message,
+                    Id = messages[i].Id,
+                    Position = log.Count,
+                    Message = messages[i],
+                });
+            }
+        }
+
+        Touch(sessionId);
         return Task.FromResult(Result.Success());
     }
 

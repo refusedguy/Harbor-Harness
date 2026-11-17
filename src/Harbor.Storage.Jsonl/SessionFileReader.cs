@@ -151,6 +151,18 @@ internal static class SessionFileReader
         CarriesTypeValue(line, "\"compaction\""u8);
 
     /// <summary>
+    ///     True when the line is an operation marker (<c>"type":"operation"</c>).
+    /// </summary>
+    /// <remarks>
+    ///     Fork and turn markers are the durable crash claims of #2226. Like
+    ///     the compaction records they say what happened to the SESSION, never
+    ///     what the model said, so the message read path drops them before the
+    ///     message parser sees them. The operation axis reads them by name.
+    /// </remarks>
+    internal static bool IsOperationLine(ReadOnlySpan<byte> line) =>
+        CarriesTypeValue(line, "\"operation\""u8);
+
+    /// <summary>
     ///     True when the line carries feedback — a rating or a remark. The
     ///     feedback is what the USER said about the agent's work, and it is
     ///     not history: the message read path drops these lines here, so the
@@ -588,6 +600,14 @@ internal static class SessionFileReader
         // lock marker. The records themselves stay in the file: they are read
         // by the compaction axis, which asks for them by name.
         if (IsCompactionLine(record))
+        {
+            return true;
+        }
+
+        // #2226: the fork/turn crash markers are session facts, not model
+        // text. They stay in the file for the operation axis, but never reach
+        // the history the model context is built from.
+        if (IsOperationLine(record))
         {
             return true;
         }

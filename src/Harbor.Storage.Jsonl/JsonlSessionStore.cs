@@ -26,7 +26,7 @@ namespace Harbor.Storage.Jsonl;
 ///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
-public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore, ISessionGoalStore, ICompactionEventStore
+public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore, ISessionGoalStore, ICompactionEventStore, ISessionOperationEventStore
 {
     // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
     // See JsonlCodecContext.cs for the registered types.
@@ -409,6 +409,66 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 // append — no intermediate string, no Serialize + concat.
                 byte[] line = SessionFileIO.EncodeLine(entry, JsonlCodecContext.Default.MessageEntry);
                 await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+
+            _messageCache.TryRemove(sessionId, out _);
+        }, ResultErrors.Message)
+            .TapError(e => JsonlSessionStoreLog.AppendMessageFailed(_logger, sessionId, e));
+    }
+
+    /// <summary>
+    ///     Append a whole batch in ONE atomic rewrite (#2226).
+    /// </summary>
+    /// <remarks>
+    ///     Every message is encoded first, then the batch is appended to a temp
+    ///     sibling of the session file and renamed over it. A crash leaves the
+    ///     old file or the full batch, never a prefix — which is what makes a
+    ///     forked child's history all-or-nothing.
+    /// </remarks>
+    public async Task<Result> AppendMessagesBatchAsync(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
+        if (resolved.IsFailure)
+        {
+            return resolved.ConvertFailure();
+        }
+
+        string sessionFile = resolved.Value;
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Result.Failure(SessionStoreErrors.SessionNotFound(sessionId));
+        }
+
+        return await Result.Try(async () =>
+        {
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                var lines = new byte[messages.Count][];
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    var entry = new MessageEntry(
+                        "message",
+                        messages[i].Id,
+                        messages[i].ParentId,
+                        messages[i].Role,
+                        messages[i].CreatedAt,
+                        JsonlMessageCodec.SerializeMessagePayload(ForWrite(messages[i])));
+                    lines[i] = SessionFileIO.EncodeLine(entry, JsonlCodecContext.Default.MessageEntry);
+                }
+
+                SessionFileIO.AppendBatchAtomic(sessionFile, lines);
             }
             finally
             {

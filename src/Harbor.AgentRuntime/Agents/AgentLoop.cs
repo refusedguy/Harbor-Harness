@@ -389,10 +389,62 @@ public sealed class AgentLoop : IAgentLoop
                     break;
                 }
                 turn++;
+
+                // #2226: claim the turn durably BEFORE it starts. A durable
+                // store records a TurnStart; a crash leaves it unmatched, which
+                // is how an interrupted turn is told apart from a finished one.
+                // The claim is best-effort: a store with no marker seam (or a
+                // failed write) simply leaves no evidence, never breaks a run.
+                ISessionOperationEventStore? turnMarkers = session.OperationEvents;
+                bool turnClaimed = false;
+                if (turnMarkers is not null)
+                {
+                    Result claim = await turnMarkers.AppendOperationEventAsync(
+                        session.Session.Id,
+                        new SessionOperationEvent
+                        {
+                            Kind = SessionOperationKind.TurnStart,
+                            Turn = turn,
+                            OccurredAt = _clock.GetUtcNow(),
+                        },
+                        CancellationToken.None).ConfigureAwait(false);
+                    turnClaimed = claim.IsSuccess;
+                    if (claim.IsFailure)
+                    {
+                        AgentLoopLog.TurnClaimFailed(_logger, session.Session.Id, turn, claim.Error);
+                    }
+                }
+
                 // [G4]: the whole turn (compaction → prompt → stream → tools →
                 // drains → turn-end event → end-of-run decision) runs inside TurnRunner.
-                TurnStepResult step = await _turnRunner.RunTurnAsync(
-                    session, agent, client, model, turn, truncationFallback, ct, runBudget, repeatGuard, loopGuard).ConfigureAwait(false);
+                TurnStepResult step;
+                try
+                {
+                    step = await _turnRunner.RunTurnAsync(
+                        session, agent, client, model, turn, truncationFallback, ct, runBudget, repeatGuard, loopGuard).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // Release LAST, on every exit (including cancellation): an
+                    // end without a start would falsely claim a turn that never
+                    // ran, while a start without an end is the crash evidence.
+                    if (turnClaimed)
+                    {
+                        Result release = await turnMarkers!.AppendOperationEventAsync(
+                            session.Session.Id,
+                            new SessionOperationEvent
+                            {
+                                Kind = SessionOperationKind.TurnEnd,
+                                Turn = turn,
+                                OccurredAt = _clock.GetUtcNow(),
+                            },
+                            CancellationToken.None).ConfigureAwait(false);
+                        if (release.IsFailure)
+                        {
+                            AgentLoopLog.TurnClaimReleaseFailed(_logger, session.Session.Id, turn, release.Error);
+                        }
+                    }
+                }
                 truncationFallback = step.TruncationFallback;
                 if (step.RunFailure is { } runFailure)
                 {
@@ -555,4 +607,9 @@ internal static partial class AgentLoopLog
     [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "UserPromptSubmit hooks failed for session={SessionId}; failing closed to Deny")]
     public static partial void UserPromptSubmitHooksFailed(ILogger logger, Exception ex, string sessionId);
 
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to claim turn {Turn} of session {SessionId}: {Error}")]
+    public static partial void TurnClaimFailed(ILogger logger, string sessionId, int turn, string error);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Failed to release turn {Turn} of session {SessionId}: {Error}")]
+    public static partial void TurnClaimReleaseFailed(ILogger logger, string sessionId, int turn, string error);
 }

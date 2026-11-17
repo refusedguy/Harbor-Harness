@@ -29,7 +29,7 @@ namespace Harbor.Storage.Sqlite;
 ///         still don't (WAL + busy_timeout carry them).
 ///     </para>
 /// </remarks>
-public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpointStore, ICompactionEventStore
+public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpointStore, ICompactionEventStore, ISessionOperationEventStore
 {
 
     private readonly string _dbPath;
@@ -204,6 +204,66 @@ public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpoi
                 upd.Parameters.Add(StampParam("@now", DateTimeOffset.UtcNow));
                 upd.Parameters.AddWithValue("@sid", sessionId);
                 upd.ExecuteNonQuery();
+
+                tx.Commit();
+            }, ResultErrors.Message)
+            .TapError(e => SqliteSessionStoreLog.AppendMessageFailed(_logger, sessionId, e));
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Append a whole batch in ONE transaction (#2226). A constraint
+    ///     failure on any row rolls the entire batch back.
+    /// </summary>
+    public async Task<Result> AppendMessagesBatchAsync(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        CancellationToken ct = default)
+    {
+        EnsureInitialized();
+
+        var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return Result.Try(() =>
+            {
+                using var conn = OpenConnection();
+                using var tx = conn.BeginTransaction();
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    AgentMessage message = messages[i];
+                    using var cmd = conn.CreateCommand();
+                    cmd.Transaction = tx;
+                    cmd.CommandText = """
+                                      INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, created_at_ms, payload)
+                                      VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @createdMs, @payload)
+                                      """;
+                    cmd.Parameters.AddWithValue("@id", message.Id);
+                    cmd.Parameters.AddWithValue("@sid", sessionId);
+                    cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@role", message.Role);
+                    cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
+                    cmd.Parameters.Add(StampParam("@created", message.CreatedAt));
+                    cmd.Parameters.Add(LongParam("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds()));
+                    cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
+                    cmd.ExecuteNonQuery();
+                }
+
+                if (messages.Count > 0)
+                {
+                    using var upd = conn.CreateCommand();
+                    upd.Transaction = tx;
+                    upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
+                    upd.Parameters.Add(StampParam("@now", DateTimeOffset.UtcNow));
+                    upd.Parameters.AddWithValue("@sid", sessionId);
+                    upd.ExecuteNonQuery();
+                }
 
                 tx.Commit();
             }, ResultErrors.Message)
