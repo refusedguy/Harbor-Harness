@@ -43,7 +43,8 @@ public class AgentLoopTests
 
     private static (AgentLoop loop, ProviderRegistry providers, ToolRegistry tools, AgentRegistry agents, InMemoryEventBus bus) CreateLoop(
         ILlmClient client,
-        Action<CompactionService>? configureCompaction = null)
+        int keepRecentTokens = 20000,
+        int tailTurns = 2)
     {
         var providers = new ProviderRegistry();
         providers.Register(ProviderId.Create("test"), () => client);
@@ -59,8 +60,9 @@ public class AgentLoopTests
         var compaction = new CompactionService(
             new TokenTracker(),
             providers,
-            NullLogger<CompactionService>.Instance);
-        configureCompaction?.Invoke(compaction);
+            NullLogger<CompactionService>.Instance,
+            keepRecentTokens: keepRecentTokens,
+            tailTurns: tailTurns);
         var permissions = new PermissionService(agents, NullLogger<PermissionService>.Instance);
         var converter = new MessageConverter();
         var tokenTracker = new TokenTracker();
@@ -121,12 +123,6 @@ public class AgentLoopTests
         }
 
         return new Harbor.TestKit.TestSessionContext(session, messages);
-    }
-
-    private static void ConfigureAggressiveCompaction(CompactionService svc)
-    {
-        svc.KeepRecentTokens = 4000;
-        svc.TailTurns = 0;
     }
 
     [Test]
@@ -277,7 +273,7 @@ public class AgentLoopTests
             new LlmEvent[] { TestEvents.TextDelta("s", "summary text"), TestEvents.StepFinish(usage: new Usage(0, 10)) },
             new LlmEvent[] { TestEvents.TextDelta(delta: "done"), TestEvents.StepFinish(usage: new Usage(5, 5)) });
 
-        var (loop, _, _, _, bus) = CreateLoop(client, ConfigureAggressiveCompaction);
+        var (loop, _, _, _, bus) = CreateLoop(client, keepRecentTokens: 4000, tailTurns: 0);
         var session = CreateSeededSession(seedCount: 20);
         var seedIds = session.Messages.Select(m => m.Id).ToArray();
         var completed = new List<CompactionCompletedEvent>();
@@ -335,7 +331,7 @@ public class AgentLoopTests
             },
             new LlmEvent[] { TestEvents.TextDelta(delta: "done"), TestEvents.StepFinish(usage: new Usage(5, 5)) });
 
-        var (loop, _, _, _, bus) = CreateLoop(client, ConfigureAggressiveCompaction);
+        var (loop, _, _, _, bus) = CreateLoop(client, keepRecentTokens: 4000, tailTurns: 0);
         var session = CreateSeededSession(seedCount: 20);
         var started = new List<CompactionStartedEvent>();
         var failed = new List<CompactionFailedEvent>();

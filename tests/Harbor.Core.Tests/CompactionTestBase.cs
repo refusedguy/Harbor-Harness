@@ -109,11 +109,9 @@ public abstract class CompactionTestBase
             new TokenTracker(),
             providers,
             logger ?? NullLogger<CompactionService>.Instance,
-            secondaryModel)
-        {
-            KeepRecentTokens = keepRecentTokens,
-            TailTurns = tailTurns,
-        };
+            secondaryModel,
+            keepRecentTokens: keepRecentTokens,
+            tailTurns: tailTurns);
     }
     /// <summary>Capturing client bound to a fixed provider id and catalog.</summary>
     protected sealed class CapturingLlmClient(string summary, ModelInfo[] catalog) : ILlmClient

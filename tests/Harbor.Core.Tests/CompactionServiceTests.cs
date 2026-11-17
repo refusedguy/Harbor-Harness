@@ -46,14 +46,20 @@ public class CompactionServiceTests
         Pricing.Unknown,
         "openai");
 
-    private static CompactionService CreateService(ILlmClient? client = null, ITokenTracker? tracker = null)
+    private static CompactionService CreateService(
+        ILlmClient? client = null,
+        ITokenTracker? tracker = null,
+        int keepRecentTokens = 20000,
+        int tailTurns = 2)
     {
         var providers = new ProviderRegistry();
         providers.Register(ProviderId.Create("test"), () => client ?? new SummaryLlmClient("summary"));
         return new CompactionService(
             tracker ?? new TokenTracker(),
             providers,
-            NullLogger<CompactionService>.Instance);
+            NullLogger<CompactionService>.Instance,
+            keepRecentTokens: keepRecentTokens,
+            tailTurns: tailTurns);
     }
 
     private static ToolResultMessage ToolResult(string toolName, string output) => new(
@@ -167,12 +173,11 @@ public class CompactionServiceTests
     [Test]
     public async Task CompactAsync_PrunesHead_KeepsTail()
     {
-        var svc = CreateService();
         // 6 messages, each ~110 tokens (40 chars / 4 + 100 overhead). With
         // KeepRecentTokens=500 we keep ~4 messages in the tail and prune the
-        // first 2 into the summary.
-        svc.KeepRecentTokens = 500;
-        svc.TailTurns = 0; // disable the tail_turns floor for a deterministic cut
+        // first 2 into the summary. TailTurns=0 disables the floor for a
+        // deterministic cut.
+        var svc = CreateService(keepRecentTokens: 500, tailTurns: 0);
 
         var messages = new List<AgentMessage>
         {
@@ -210,9 +215,7 @@ public class CompactionServiceTests
     {
         // When the candidate cut lands on a ToolResultMessage, FindCutPoint must
         // skip past it (continue) so the head keeps the matching assistant tool call.
-        var svc = CreateService();
-        svc.KeepRecentTokens = 200;
-        svc.TailTurns = 0;
+        var svc = CreateService(keepRecentTokens: 200, tailTurns: 0);
 
         var messages = new List<AgentMessage>
         {
@@ -238,9 +241,8 @@ public class CompactionServiceTests
     [Test]
     public async Task CompactAsync_TailTurnsFloor_Enforced()
     {
-        var svc = CreateService();
-        svc.KeepRecentTokens = 1; // keep almost nothing
-        svc.TailTurns = 2; // but enforce at least 2*4 = 8 tail messages
+        // Keep almost nothing, but enforce at least 2*4 = 8 tail messages.
+        var svc = CreateService(keepRecentTokens: 1, tailTurns: 2);
 
         var messages = new List<AgentMessage>();
         for (int i = 0; i < 12; i++)
@@ -256,9 +258,7 @@ public class CompactionServiceTests
     [Test]
     public async Task CompactAsync_SummaryMessage_ContainsSummaryText()
     {
-        var svc = CreateService(new SummaryLlmClient("my custom summary"));
-        svc.KeepRecentTokens = 60;
-        svc.TailTurns = 0;
+        var svc = CreateService(new SummaryLlmClient("my custom summary"), keepRecentTokens: 60, tailTurns: 0);
 
         var messages = new List<AgentMessage>
         {
@@ -286,9 +286,8 @@ public class CompactionServiceTests
         // messages inside ContextWindow − output − reserve.
         var capturing = new CapturingSummaryClient("capped summary");
         var tracker = new TokenTracker { ReserveTokens = 100 };
-        var svc = CreateService(capturing, tracker);
-        svc.KeepRecentTokens = 1; // each message is ~200 tokens: tailStart == Count
-        svc.TailTurns = 0;
+        // Each message is ~200 tokens: tailStart == Count.
+        var svc = CreateService(capturing, tracker, keepRecentTokens: 1, tailTurns: 0);
 
         var messages = new List<AgentMessage>();
         for (int i = 0; i < 10; i++)
@@ -328,9 +327,7 @@ public class CompactionServiceTests
     {
         // Companion: a head inside the budget is pasted whole, with no marker.
         var capturing = new CapturingSummaryClient("full summary");
-        var svc = CreateService(capturing);
-        svc.KeepRecentTokens = 1;
-        svc.TailTurns = 0;
+        var svc = CreateService(capturing, keepRecentTokens: 1, tailTurns: 0);
 
         var messages = new List<AgentMessage> { MessageFixtures.User("fit-aa"), MessageFixtures.User("fit-bb") };
 
@@ -464,12 +461,12 @@ public class CompactionServiceTests
         await Assert.That(svc.KeepRecentTokens).IsEqualTo(20000);
         await Assert.That(svc.TailTurns).IsEqualTo(2);
 
-        svc.TailTurns = 0;
-        await Assert.That(svc.TailTurns).IsEqualTo(0);
+        var zeroTail = CreateService(tailTurns: 0);
+        await Assert.That(zeroTail.TailTurns).IsEqualTo(0);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.KeepRecentTokens = 0; });
-        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.KeepRecentTokens = -5; });
-        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.TailTurns = -1; });
+        Assert.Throws<ArgumentOutOfRangeException>(() => CreateService(keepRecentTokens: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CreateService(keepRecentTokens: -5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CreateService(tailTurns: -1));
     }
 
     private static AssistantMessage AssistantWithToolCall(string id, string toolName)

@@ -30,7 +30,9 @@ public sealed class CompactionService(
     IProviderRegistry providers,
     ILogger<CompactionService> logger,
     string? secondaryModel = null,
-    IRetryPolicy? retryPolicy = null) : ICompactionService
+    IRetryPolicy? retryPolicy = null,
+    int keepRecentTokens = 20000,
+    int tailTurns = 2) : ICompactionService
 {
     // #1106 (no-retry summary): the summarization stream rides the same retry
     // budget as the main-loop turn stream (TurnRunner.StreamRetryOptions) —
@@ -223,36 +225,40 @@ public sealed class CompactionService(
     ///     the same constant — one source, not two literals that can drift.
     /// </summary>
     private const int SummaryMaxOutputTokens = 8192;
-    private int _keepRecentTokens = 20000;
-    private int _tailTurns = 2;
+
+    // Defaults (20000 / 2) are preserved from the former settable properties
+    // in the constructor signature above. Values are fixed at construction
+    // now, so the read-only public surface cannot be mutated after DI has
+    // created the shared singleton (#2215).
+    private readonly int _keepRecentTokens = ValidateKeepRecentTokens(keepRecentTokens);
+    private readonly int _tailTurns = ValidateTailTurns(tailTurns);
+
+    // Guards used to live in the property setters. They run once at
+    // construction now, so the same bad values are still refused (#1101)
+    // while the properties become read-only.
+    private static int ValidateKeepRecentTokens(int value)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, 0);
+        return value;
+    }
+
+    private static int ValidateTailTurns(int value)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(value);
+        return value;
+    }
 
     /// <summary>
     ///     Target token count for the kept tail when compacting.
     ///     Must be &gt; 0 (mirrors <c>CompactionConfig.Validate</c>).
     /// </summary>
-    public int KeepRecentTokens
-    {
-        get => _keepRecentTokens;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, 0);
-            _keepRecentTokens = value;
-        }
-    }
+    public int KeepRecentTokens => _keepRecentTokens;
 
     /// <summary>
     ///     Minimum number of recent turns to keep verbatim after compaction.
     ///     Zero disables the floor (existing test/loop usage); negative is refused.
     /// </summary>
-    public int TailTurns
-    {
-        get => _tailTurns;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(value);
-            _tailTurns = value;
-        }
-    }
+    public int TailTurns => _tailTurns;
 
     // #472: the history-shaping policy is NOT here any more. TruncateToFit,
     // TruncateToFitStrict and MaterializeCompactedView moved to CompactionPolicy
