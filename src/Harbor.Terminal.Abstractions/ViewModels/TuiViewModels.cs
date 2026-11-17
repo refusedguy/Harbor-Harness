@@ -515,13 +515,14 @@ public sealed partial class DiffPreviewViewModel : ObservableObject, ITuiViewMod
     /// <inheritdoc />
     public Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        if (@event is ToolExecutionEndEvent tee && !tee.IsError)
+        // #1100: the tool declares the file change on its result. The old
+        // Output.Contains("Wrote ") || Output.Contains("Edited ") scan ran on
+        // every completion and broke whenever a tool reworded its message.
+        if (@event is ToolExecutionEndEvent tee
+            && !tee.IsError
+            && tee.Result.Effect == ToolResultEffect.FileChange)
         {
-            // Heuristic: detect file paths from output
-            if (tee.Result.Output.Contains("Wrote ") || tee.Result.Output.Contains("Edited "))
-            {
-                AddDiff(new DiffEntry("file-change", tee.Result.Output, DateTimeOffset.UtcNow));
-            }
+            AddDiff(new DiffEntry("file-change", tee.Result.Output, DateTimeOffset.UtcNow));
         }
         return Task.CompletedTask;
     }

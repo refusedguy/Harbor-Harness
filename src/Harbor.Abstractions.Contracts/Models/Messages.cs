@@ -321,6 +321,25 @@ public sealed partial record FilePart(
 }
 
 /// <summary>
+///     The file-level effect a tool result declares (#1100).
+/// </summary>
+/// <remarks>
+///     A result that changed a file carries <see cref="FileChange" />. Every
+///     other result carries <see cref="None" />. Consumers branch on this
+///     value instead of scanning the output text for "Wrote " or "Edited ".
+///     It is a byte-backed enum so it survives a MemoryPack round-trip the
+///     same way <see cref="ToolErrorInfo" /> does.
+/// </remarks>
+public enum ToolResultEffect : byte
+{
+    /// <summary>No file-level effect declared. The default for every result.</summary>
+    None,
+
+    /// <summary>The tool changed a file, so the TUI diff preview records it.</summary>
+    FileChange,
+}
+
+/// <summary>
 ///     Result of a single tool execution (returned by ITool.ExecuteAsync).
 ///     Does not include tool call ID/name — those are added by the agent loop when persisting.
 /// </summary>
@@ -335,13 +354,14 @@ public sealed partial record ToolResult
     ///     survives a round-trip the way <see cref="Metadata" /> never could.
     /// </summary>
     [MemoryPackConstructor]
-    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, IReadOnlyList<DeferredToolContext>? DeferredContexts, ToolErrorInfo? ErrorInfo)
+    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, IReadOnlyList<DeferredToolContext>? DeferredContexts, ToolErrorInfo? ErrorInfo, ToolResultEffect Effect)
     {
         this.Output = Output;
         this.IsError = IsError;
         this.Attachments = Attachments;
         this.DeferredContexts = DeferredContexts;
         this.ErrorInfo = ErrorInfo;
+        this.Effect = Effect;
     }
 
     /// <summary>
@@ -429,6 +449,19 @@ public sealed partial record ToolResult
     /// </remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ToolErrorInfo? ErrorInfo { get; init; }
+
+    /// <summary>
+    ///     The file-level effect this call declared, #1100.
+    ///     <see cref="ToolResultEffect.None" /> unless the tool changed a file.
+    /// </summary>
+    /// <remarks>
+    ///     This is a typed sibling of <see cref="Output" />, not a pattern in
+    ///     the text. The TUI diff preview used to scan every tool result for
+    ///     "Wrote " and "Edited ", which ran on every completion and broke
+    ///     the moment a tool reworded its message. A tool that writes or edits
+    ///     a file sets <see cref="ToolResultEffect.FileChange" /> once, here.
+    /// </remarks>
+    public ToolResultEffect Effect { get; init; }
 
     /// <summary>
     ///     Returns a successful tool result with optional metadata.
