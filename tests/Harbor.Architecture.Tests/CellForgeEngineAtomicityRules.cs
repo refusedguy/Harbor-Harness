@@ -1040,6 +1040,18 @@ public sealed class CellForgeEngineAtomicityRules
         // in without the old engine→rendering conversion. Single import
         // adaptation, no body logic change, namespace unchanged.
         ("Widgets/FloatingTerminalSession.cs", "Chat/Widgets/FloatingTerminalSession.cs"),
+
+        // #1620 adapted slice 2: PromptBuffer keeps its body and namespace;
+        // its `UnicodeWidth` name was pinned by the Chat project's global
+        // alias to Harbor.Ui.Framework.Rendering.UnicodeWidth. The engine has
+        // no such alias and cannot import Harbor.Ui.Framework.*, so the moved
+        // file spells the name through an explicit using of the engine's own
+        // verbatim port (Harbor.Tui.CellForge.Rendering.UnicodeWidth).
+        // EditOutcome / EditOutcomeKind are declared in this file and move
+        // with it, so the chat callers (MarkdownEditOps, ComposerController)
+        // keep resolving them in the same namespace. Single alias adaptation,
+        // no body logic change, namespace unchanged.
+        ("Rendering/PromptBuffer.cs", "Chat/Rendering/PromptBuffer.cs"),
     ];
 
     /// <summary>
@@ -1111,9 +1123,10 @@ public sealed class CellForgeEngineAtomicityRules
         await Assert.That(drift).IsEmpty()
             .Because(
                 "#1627 batch B moved the adapted engine leaves (guard retype, re-homed enum), and #1620's "
-                + "adapted slice adds FloatingTerminalSession (global-alias key vocabulary → explicit "
-                + "engine input using), behind the same one-home-no-shadow contract as the verbatim "
-                + "rows: AdaptedLeafMoves grades the whole-file leaves, and the re-home check grades "
+                + "adapted slices add FloatingTerminalSession (global-alias key vocabulary → explicit "
+                + "engine input using) and PromptBuffer (global-alias UnicodeWidth → explicit engine "
+                + "port using), behind the same one-home-no-shadow contract as the verbatim rows: "
+                + "AdaptedLeafMoves grades the whole-file leaves, and the re-home check grades "
                 + "AutocompleteMode's move out of AutocompleteTrigger.cs without retyping any chat "
                 + "caller. Drift: " + Offenders(drift));
     }
