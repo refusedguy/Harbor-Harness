@@ -85,24 +85,26 @@ internal static class McpToolDiscovery
                     break;
                 }
 
-                if (listed.IsFailure)
+                JsonDocument payload;
+                if (listed.IsSuccess)
+                {
+                    try
+                    {
+                        payload = JsonDocument.Parse(listed.Value);
+                    }
+                    catch (JsonException)
+                    {
+                        logger?.LogWarning(
+                            "MCP server '{Server}' returned malformed tools/list JSON on page {Page}; keeping the pages already listed",
+                            server, page + 1);
+                        break;
+                    }
+                }
+                else
                 {
                     logger?.LogWarning(
                         "Cannot list tools of MCP server '{Server}' (page {Page}): {Error}; keeping the pages already listed",
                         server, page + 1, listed.Error);
-                    break;
-                }
-
-                JsonDocument payload;
-                try
-                {
-                    payload = JsonDocument.Parse(listed.Value);
-                }
-                catch (JsonException)
-                {
-                    logger?.LogWarning(
-                        "MCP server '{Server}' returned malformed tools/list JSON on page {Page}; keeping the pages already listed",
-                        server, page + 1);
                     break;
                 }
 
