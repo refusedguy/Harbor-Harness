@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Env;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
@@ -133,6 +134,16 @@ public static class Program
         {
             // clean shutdown
         }
+        finally
+        {
+            // #1720: unload rolls back exactly what each plugin registered and
+            // calls ShutdownAsync. The MCP server going away is not the same as the
+            // plugin runs going away: without this the process exits with live
+            // registrations and no plugin ever gets its teardown call.
+            Result teardown = await host.StopAllAsync().ConfigureAwait(false);
+            if (teardown.IsFailure)
+                ProgramLog.PluginTeardownFailed(logger, teardown.Error);
+        }
 
         return 0;
     }
@@ -188,4 +199,7 @@ internal static partial class ProgramLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to read the plugin configuration: {Error}. The plugins start with their own defaults.")]
     public static partial void ConfigLoadFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Plugin teardown on exit did not complete cleanly: {Error}")]
+    public static partial void PluginTeardownFailed(ILogger logger, string error);
 }

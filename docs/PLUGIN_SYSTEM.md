@@ -799,8 +799,9 @@ does a door that does not do what its row says.
       doesn't abort the rest.
 4. The CLI calls plugin tools via MCP; compilation errors surface as `isError`
    tool results.
-5. On shutdown: each plugin's ShutdownAsync() is called in reverse-load order
-   (planned — see §Roadmap below; current host does not call ShutdownAsync on exit).
+5. On `harbor-plugins-host` exit: `PluginHost.StopAllAsync()` stops every live
+   run in reverse-load order — each registration is taken back and each plugin's
+   `ShutdownAsync()` is called (#1720).
 ```
 
 Legacy in-process path (JIT only): the same pipeline compiled and registered
@@ -973,7 +974,7 @@ strong naming, etc.).
       `plugin_manager` tool reads the inventory and proposes a change; the change
       happens only after the user approves that call.
 - [ ] v0.5 — `harbor plugins gc`: clean orphaned cache files.
-- [ ] v0.6 — `ShutdownAsync` lifecycle: call on Harbor exit in reverse-load order.
+- [x] `ShutdownAsync` lifecycle (#1720): on `harbor-plugins-host` exit, `StopAllAsync` takes back every run's registrations and calls `ShutdownAsync` in reverse-load order.
 - [ ] v0.6 — Hot-reload: watch `~/.harbor/plugins/` for changes and reload on the fly.
 - [x] Out-of-process CS-plugin serving by default (#1055s3):
       `harbor-plugins-host` compiles CS-source plugins with Roslyn in its own
