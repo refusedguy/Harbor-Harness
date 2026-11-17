@@ -478,8 +478,19 @@ internal static class PanelKeyRouteProbe
     ///     <c>Type.Member(</c> call stops resolving, and the rule degrades into
     ///     reporting nothing — a green gate over a blind one.
     /// </summary>
+    /// <remarks>
+    ///     The leading and post-modifier whitespace is <c>[ \t]</c>, NOT
+    ///     <c>\s</c>. <c>\s</c> contains the newline, so under Multiline an
+    ///     <c>^\s*</c> at one line could consume the newlines of every following
+    ///     line while looking for a declaration, and the whole-file oracle
+    ///     degenerated into a quadratic walk (measured 30 188 ms over the
+    ///     product tree). Horizontal whitespace keeps the anchor on the line it
+    ///     starts at. The <c>\s+</c> between <c>class</c> and the type name stays:
+    ///     that is the one place the whole-file oracle is meant to cross a line,
+    ///     and <c>PanelKeyRouteEquivalenceTests</c> proves it still does.
+    /// </remarks>
     private static readonly Regex TypeDeclaration =
-        new(@"^\s*(?:public|internal|private|protected)?\s*(?:sealed\s+|static\s+|abstract\s+|partial\s+|readonly\s+|record\s+)*(?:class|struct|interface|enum|record)\s+(?<name>[A-Za-z_]\w*)",
+        new(@"^[ \t]*(?:public|internal|private|protected)?[ \t]*(?:sealed\s+|static\s+|abstract\s+|partial\s+|readonly\s+|record\s+)*(?:class|struct|interface|enum|record)\s+(?<name>[A-Za-z_]\w*)",
             RegexOptions.Compiled | RegexOptions.Multiline);
 
     /// <summary>
