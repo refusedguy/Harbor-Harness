@@ -52,6 +52,13 @@ public sealed class ChatScreenBridge : IDisposable
     /// </summary>
     private readonly LlmEventVisitor _llmEvents;
 
+    /// <summary>
+    ///     #1485: the render path's single AgentEvent dispatcher. Created once
+    ///     per bridge, like <see cref="_llmEvents"/>, so the streaming hot path
+    ///     stays allocation-free.
+    /// </summary>
+    private readonly AgentEventDispatcher _agentEvents;
+
     private readonly ToolCardTracker _cards;
     private readonly ContextSegmentSync _context;
     private readonly EventSubscription _subscription;
@@ -107,6 +114,7 @@ public sealed class ChatScreenBridge : IDisposable
         _status = status ?? throw new ArgumentNullException(nameof(status));
         _streams = new StreamCoalescer(panel, status);
         _llmEvents = new BridgeLlmEventVisitor(this);
+        _agentEvents = new AgentEventDispatcher(this);
         _cards = new ToolCardTracker(panel);
         _context = new ContextSegmentSync(status);
         _gates = new ApprovalGateRouter(panel, status) { Coordinator = coordinator };
@@ -138,250 +146,394 @@ public sealed class ChatScreenBridge : IDisposable
 
     private ValueTask HandleEvent(AgentEvent evt, CancellationToken ct)
     {
-        switch (evt)
+        // #1485: the one traversal over the AgentEvent union on the render path.
+        // Per-event control flow (child routing, history replay, status/gates)
+        // lives in the dispatcher; the nested LlmEvent dispatch stays with the
+        // #1494 visitor owned by this bridge.
+        _agentEvents.Accept(evt);
+        return ValueTask.CompletedTask;
+    }
+
+    // ── AgentEvent dispatch (Visitor, #1485) ──────────────────────────────────
+
+    /// <summary>
+    ///     The single traversal over the <see cref="AgentEvent" /> union on the
+    ///     render path. Every member is named, and <see cref="Accept" /> is the
+    ///     only place that branches on the runtime type. A new kind cannot ride
+    ///     along silently: each walker must declare what it means for it, and an
+    ///     unrecognised runtime type is refused by <see cref="VisitUnknown" />.
+    /// </summary>
+    /// <remarks>
+    ///     Mirrors <see cref="LlmEventVisitor" /> (#1494). This is a dispatch
+    ///     helper inside the render path, not a new TUI extension axis (#555 stays
+    ///     frozen). One instance per bridge: a reference-type switch plus virtual
+    ///     calls, no delegates, no dictionary and no per-event allocation on the
+    ///     streaming hot path.
+    /// </remarks>
+    internal abstract class AgentEventVisitor
+    {
+        public abstract void Visit(AgentStartEvent e);
+        public abstract void Visit(TurnStartEvent e);
+        public abstract void Visit(MessageStartEvent e);
+        public abstract void Visit(MessageUpdateEvent e);
+        public abstract void Visit(MessageEndEvent e);
+        public abstract void Visit(ToolExecutionStartEvent e);
+        public abstract void Visit(ToolExecutionUpdateEvent e);
+        public abstract void Visit(ToolExecutionEndEvent e);
+        public abstract void Visit(TurnEndEvent e);
+        public abstract void Visit(AgentEndEvent e);
+        public abstract void Visit(AgentErrorEvent e);
+        public abstract void Visit(PluginBlockedEvent e);
+        public abstract void Visit(CompactionStartedEvent e);
+        public abstract void Visit(CompactionCompletedEvent e);
+        public abstract void Visit(CompactionFailedEvent e);
+        public abstract void Visit(SessionStatsEvent e);
+        public abstract void Visit(SessionChangedEvent e);
+
+        /// <summary>
+        ///     Handle an event whose runtime type is outside the closed union.
+        ///     Throws by default; a walker may override to report it, never to
+        ///     drop it without a trace.
+        /// </summary>
+        protected virtual void VisitUnknown(AgentEvent e) =>
+            throw new NotSupportedException(
+                $"{GetType().Name} has no arm for agent event '{e.GetType().Name}'. "
+                + "A new AgentEvent subtype must ship with a Visit arm on AgentEventVisitor, "
+                + "an arm in Accept, and an explicit decision in every walker.");
+
+        /// <summary>Dispatch one event to the arm for its kind.</summary>
+        public void Accept(AgentEvent e)
         {
-            case AgentStartEvent started:
-                // [UX5] #265: a child sub-agent announces on the same bus —
-                // it never replays into the parent timeline; its session just
-                // opens a transcript header on the running task card.
-                if (started.Kind == SessionKind.Subagent)
-                {
-                    if (_cards.TryGetRunningTask(out var subTaskId))
-                    {
-                        _cards.NoteSubagentStart(subTaskId, started.SessionId);
-                    }
+            switch (e)
+            {
+                case AgentStartEvent agentStart:
+                    Visit(agentStart);
+                    return;
+                case TurnStartEvent turnStart:
+                    Visit(turnStart);
+                    return;
+                case MessageStartEvent msgStart:
+                    Visit(msgStart);
+                    return;
+                case MessageUpdateEvent msgUpdate:
+                    Visit(msgUpdate);
+                    return;
+                case MessageEndEvent msgEnd:
+                    Visit(msgEnd);
+                    return;
+                case ToolExecutionStartEvent toolStart:
+                    Visit(toolStart);
+                    return;
+                case ToolExecutionUpdateEvent toolUpdate:
+                    Visit(toolUpdate);
+                    return;
+                case ToolExecutionEndEvent toolEnd:
+                    Visit(toolEnd);
+                    return;
+                case TurnEndEvent turnEnd:
+                    Visit(turnEnd);
+                    return;
+                case AgentEndEvent agentEnd:
+                    Visit(agentEnd);
+                    return;
+                case AgentErrorEvent agentError:
+                    Visit(agentError);
+                    return;
+                case PluginBlockedEvent pluginBlocked:
+                    Visit(pluginBlocked);
+                    return;
+                case CompactionStartedEvent compactionStarted:
+                    Visit(compactionStarted);
+                    return;
+                case CompactionCompletedEvent compactionCompleted:
+                    Visit(compactionCompleted);
+                    return;
+                case CompactionFailedEvent compactionFailed:
+                    Visit(compactionFailed);
+                    return;
+                case SessionStatsEvent sessionStats:
+                    Visit(sessionStats);
+                    return;
+                case SessionChangedEvent sessionChanged:
+                    Visit(sessionChanged);
+                    return;
+            }
 
-                    break;
+            VisitUnknown(e);
+        }
+    }
+
+    /// <summary>
+    ///     Render-path walker for <see cref="AgentEvent" /> (#1485). Every arm
+    ///     is the old HandleEvent case body verbatim, with bridge state reached
+    ///     through the owner. Child-traffic gates, history replay, retry and
+    ///     compaction/status wiring are unchanged.
+    /// </summary>
+    private sealed class AgentEventDispatcher(ChatScreenBridge bridge) : AgentEventVisitor
+    {
+        public override void Visit(AgentStartEvent started)
+        {
+            // [UX5] #265: a child sub-agent announces on the same bus —
+            // it never replays into the parent timeline; its session just
+            // opens a transcript header on the running task card.
+            if (started.Kind == SessionKind.Subagent)
+            {
+                if (bridge._cards.TryGetRunningTask(out var subTaskId))
+                {
+                    bridge._cards.NoteSubagentStart(subTaskId, started.SessionId);
                 }
 
-                _parentSessionId = started.SessionId;
-                ReplayHistory(started.Messages);
-                _context.RememberContextWindow(started.Model);
-                _runHadError = false;
-                _status.Phase = AgentPhase.Auto;
-                _status.Mode = StatusBarMode.Running;
-                break;
+                return;
+            }
 
-            case MessageStartEvent started:
-                // [UX5] #265: child text never streams into the parent feed.
-                if (IsForeignChild(started.Message.SessionId))
-                {
-                    break;
-                }
-
-                MarkSeen(started.Message);
-                _streams.StartStream();
-                break;
-
-            case MessageUpdateEvent update:
-                // [UX5] #265: child deltas buffer into the task transcript.
-                if (IsForeignChild(update.Partial.SessionId))
-                {
-                    RouteChildUpdate(update);
-                    break;
-                }
-
-                // #1494: the LlmEvent arms live in BridgeLlmEventVisitor,
-                // shared with the history view model through LlmEventVisitor.
-                _llmEvents.Accept(update.LlmEvent);
-                break;
-
-            case ToolExecutionStartEvent execStart:
-                {
-                    // [UX5] #265: while a task card runs, non-task executions
-                    // are its child tools — they feed the live suffix and the
-                    // transcript instead of opening their own cards.
-                    if (_cards.TryGetRunningTask(out var ownerTaskId)
-                        && !ToolCardTracker.IsTaskTool(execStart.ToolName))
-                    {
-                        _cards.NoteTaskChildStart(ownerTaskId, execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args));
-                        break;
-                    }
-
-                    _cards.EnsureCard(execStart.ToolCallId, execStart.ToolName, execStart.Args, restampStarted: true);
-                    _status.Phase = AgentPhase.ToolCall;
-                    _status.Mode = StatusBarMode.Running;
-                    break;
-                }
-
-            case ToolExecutionUpdateEvent { RetryAttempt: not null, RetryMaxAttempts: not null } retry:
-                // #76: tool-retry mirror — render-only. Precomputed once per change
-                // (never interpolated per frame); cleared on ToolExecutionEndEvent.
-                _status.Retry = RetryCountdown.Line(
-                    retry.RetryAttempt.Value,
-                    retry.RetryMaxAttempts.Value,
-                    Math.Max(0, (int)Math.Ceiling(retry.RetryBackoffSeconds ?? 0)));
-                _toolRetryShown = true;
-
-                // [UX5] #265: retries also surface on the task suffix in red —
-                // the task's own id, or any id without a card (live children
-                // never open their own cards) while a task card runs.
-                if (_cards.TryGetRunningTask(out var retryTaskId)
-                    && (string.Equals(retry.ToolCallId, retryTaskId, StringComparison.Ordinal)
-                        || !_cards.IsKnownCard(retry.ToolCallId)))
-                {
-                    _cards.NoteTaskRetry(retryTaskId, retry.RetryAttempt.Value, retry.RetryMaxAttempts.Value);
-                }
-
-                break;
-
-            case ToolExecutionEndEvent execEnd:
-                // [UX5] #265: a live child end only closes its transcript line.
-                // Only the task's own end completes the card.
-                if (_cards.TryGetRunningTask(out var finishedOwnerId)
-                    && !string.Equals(execEnd.ToolCallId, finishedOwnerId, StringComparison.Ordinal)
-                    && _cards.NoteTaskChildEnd(finishedOwnerId, execEnd.ToolCallId, execEnd.IsError))
-                {
-                    break;
-                }
-
-                _cards.CompleteCard(execEnd);
-                if (_toolRetryShown)
-                {
-                    _status.Retry = null;
-                    _toolRetryShown = false;
-                }
-
-                break;
-
-            case MessageEndEvent ended:
-                // [UX5] #265: a child message close flushes its buffered text
-                // as one transcript paragraph — never a parent stream block.
-                if (IsForeignChild(ended.Message.SessionId))
-                {
-                    if (_cards.TryGetRunningTask(out var textTaskId))
-                    {
-                        _cards.FlushTaskText(textTaskId);
-                    }
-
-                    break;
-                }
-
-                MarkSeen(ended.Message);
-                _streams.FinishStream();
-                break;
-
-            case TurnEndEvent turnEnd:
-                // [UX5] #265: child turns never mark parent history.
-                if (IsForeignTurn(turnEnd))
-                {
-                    break;
-                }
-
-                MarkSeen(turnEnd.AssistantMessage);
-                foreach (var toolResults in turnEnd.ToolResults)
-                {
-                    MarkSeen(toolResults);
-                }
-
-                break;
-
-            case CompactionStartedEvent:
-                AppendSystem("compacting history…");
-                _status.Mode = StatusBarMode.Compacting;
-                break;
-
-            case CompactionCompletedEvent:
-                AppendSystem("history compacted");
-                _status.Mode = StatusBarMode.Running;
-                break;
-
-            // #840: the third member of a family this switch already declared
-            // twice, and the arm that was missing is the expensive one —
-            // CompactionBehavior calls its truncation fallback irreversible and
-            // then continues the run, so nothing downstream of this event would
-            // have told the user.
-            //
-            // NOT a duplicate of #839. That fix added a ChatRole.System line to
-            // UiState.Chat.Lines, and this timeline never reads it:
-            // ChatScreenProjector (issue #1202; reached via
-            // CellForgeTuiRenderer.ProjectStateIntoWidgets) hands the store's
-            // UiState to Status.ProjectedState and the sidebar and nothing else.
-            // The store projection feeds the desktop app transcript.
-            // This ring is what HARBOR_TUI=cellforge paints.
-            case CompactionFailedEvent cf:
-                AppendSystem(CompactionLifecycleLines.Failed(cf.Error));
-                _status.Mode = StatusBarMode.Running;
-                break;
-
-            case SessionStatsEvent stats:
-                // #623: the ctx segment is NOT fed from here. These totals are
-                // session-cumulative spend (SessionMetadata.AddUsage), so
-                // rendering them as occupancy pinned the bar at 100% by turn 4
-                // on a 128k window while the actual request never grew.
-                // StepFinishEvent.Usage.InputTokens is the request just sent.
-                // #651: the token cell takes the SAME figure for the same reason
-                // — the sum is the bill, and a cell that reported it answered
-                // "what am I paying" with a number that read as "how full am I".
-                // DisplayedInputTokens keeps the total as the fallback for a
-                // session whose totals arrive with no request behind them.
-                // #653: the cost is the core's, and null (→ "—") is the core's
-                // own answer for a model that publishes no price — this bridge
-                // used to never receive this event at all, so its footer showed
-                // no cost while the projection showed a fabricated one.
-                _status.SetUsage(
-                    ContextUsage.DisplayedInputTokens(
-                        _context.LastRequestTokens,
-                        stats.Metadata.TokensInput),
-                    stats.Metadata.TokensOutput,
-                    stats.Metadata.IsCostKnown ? stats.Metadata.Cost : null);
-                break;
-
-            case SessionChangedEvent changed:
-                // [UX5] #265: keep the child-traffic filter aligned when the
-                // user switches sessions.
-                _parentSessionId = changed.SessionId;
-                break;
-
-            case AgentErrorEvent error:
-                _streams.FlushStreamNow();
-                _cards.CompleteError(NewErrorCardId(), "error", ErrorBlurb(error.Message), error.Message);
-                _runHadError = true;
-                _status.Phase = AgentPhase.Errored;
-                _status.SignalMascot(MascotReaction.ErrorBlink);
-                _status.Mode = StatusBarMode.Idle;
-                break;
-
-            case AgentEndEvent agentEnd:
-                // [UX5] #265: the child run's AgentEnd must not idle the
-                // parent footer, bounce the mascot, or flush parent streams.
-                if (IsForeignAgentEnd(agentEnd))
-                {
-                    break;
-                }
-
-                foreach (var message in agentEnd.NewMessages)
-                {
-                    MarkSeen(message);
-                }
-
-                _streams.FlushStreamNow();
-
-                // #567: a cancelled run publishes AgentEndEvent(Cancelled: true)
-                // and never a ToolExecutionEndEvent for the call it was aborting,
-                // so the in-flight card kept its running glyph and spun forever.
-                // Sweep the open calls into an explicit terminal state; before the
-                // enum collapse there was no such state and no way to say "stopped".
-                if (agentEnd.Cancelled)
-                {
-                    _cards.StopRunningCalls(ToolCallState.Cancelled, "cancelled by user");
-                    _status.Phase = AgentPhase.Errored;
-                    _status.SignalMascot(MascotReaction.ErrorBlink);
-                    _status.Mode = StatusBarMode.Idle;
-                    break;
-                }
-
-                _status.Phase = _runHadError ? AgentPhase.Errored : AgentPhase.Succeeded;
-                if (!_runHadError)
-                {
-                    _status.SignalMascot(MascotReaction.SuccessBounce);
-                }
-
-                _status.Mode = StatusBarMode.Idle;
-                break;
+            bridge._parentSessionId = started.SessionId;
+            bridge.ReplayHistory(started.Messages);
+            bridge._context.RememberContextWindow(started.Model);
+            bridge._runHadError = false;
+            bridge._status.Phase = AgentPhase.Auto;
+            bridge._status.Mode = StatusBarMode.Running;
         }
 
-        return ValueTask.CompletedTask;
+        /// <summary>The bridge draws nothing for a turn start; the parent's
+        /// status line is already in Running from AgentStart. The old switch
+        /// had no arm here either.</summary>
+        public override void Visit(TurnStartEvent started) { }
+
+        public override void Visit(MessageStartEvent started)
+        {
+            // [UX5] #265: child text never streams into the parent feed.
+            if (bridge.IsForeignChild(started.Message.SessionId))
+            {
+                return;
+            }
+
+            bridge.MarkSeen(started.Message);
+            bridge._streams.StartStream();
+        }
+
+        public override void Visit(MessageUpdateEvent update)
+        {
+            // [UX5] #265: child deltas buffer into the task transcript.
+            if (bridge.IsForeignChild(update.Partial.SessionId))
+            {
+                bridge.RouteChildUpdate(update);
+                return;
+            }
+
+            // #1494: the nested LlmEvent dispatch stays with the shared visitor.
+            bridge._llmEvents.Accept(update.LlmEvent);
+        }
+
+        public override void Visit(MessageEndEvent ended)
+        {
+            // [UX5] #265: a child message close flushes its buffered text
+            // as one transcript paragraph — never a parent stream block.
+            if (bridge.IsForeignChild(ended.Message.SessionId))
+            {
+                if (bridge._cards.TryGetRunningTask(out var textTaskId))
+                {
+                    bridge._cards.FlushTaskText(textTaskId);
+                }
+
+                return;
+            }
+
+            bridge.MarkSeen(ended.Message);
+            bridge._streams.FinishStream();
+        }
+
+        public override void Visit(ToolExecutionStartEvent execStart)
+        {
+            // [UX5] #265: while a task card runs, non-task executions
+            // are its child tools — they feed the live suffix and the
+            // transcript instead of opening their own cards.
+            if (bridge._cards.TryGetRunningTask(out var ownerTaskId)
+                && !ToolCardTracker.IsTaskTool(execStart.ToolName))
+            {
+                bridge._cards.NoteTaskChildStart(ownerTaskId, execStart.ToolCallId, execStart.ToolName, ChatScreenBridge.Summarize(execStart.Args));
+                return;
+            }
+
+            bridge._cards.EnsureCard(execStart.ToolCallId, execStart.ToolName, execStart.Args, restampStarted: true);
+            bridge._status.Phase = AgentPhase.ToolCall;
+            bridge._status.Mode = StatusBarMode.Running;
+        }
+
+        public override void Visit(ToolExecutionUpdateEvent update)
+        {
+            if (update.RetryAttempt is null || update.RetryMaxAttempts is null)
+            {
+                // Ordinary progress updates carry no retry fraction; the old
+                // guarded switch arm did not run for them either.
+                return;
+            }
+
+            // #76: tool-retry mirror — render-only. Precomputed once per change
+            // (never interpolated per frame); cleared on ToolExecutionEndEvent.
+            bridge._status.Retry = RetryCountdown.Line(
+                update.RetryAttempt.Value,
+                update.RetryMaxAttempts.Value,
+                Math.Max(0, (int)Math.Ceiling(update.RetryBackoffSeconds ?? 0)));
+            bridge._toolRetryShown = true;
+
+            // [UX5] #265: retries also surface on the task suffix in red —
+            // the task's own id, or any id without a card (live children
+            // never open their own cards) while a task card runs.
+            if (bridge._cards.TryGetRunningTask(out var retryTaskId)
+                && (string.Equals(update.ToolCallId, retryTaskId, StringComparison.Ordinal)
+                    || !bridge._cards.IsKnownCard(update.ToolCallId)))
+            {
+                bridge._cards.NoteTaskRetry(retryTaskId, update.RetryAttempt.Value, update.RetryMaxAttempts.Value);
+            }
+        }
+
+        public override void Visit(ToolExecutionEndEvent execEnd)
+        {
+            // [UX5] #265: a live child end only closes its transcript line.
+            // Only the task's own end completes the card.
+            if (bridge._cards.TryGetRunningTask(out var finishedOwnerId)
+                && !string.Equals(execEnd.ToolCallId, finishedOwnerId, StringComparison.Ordinal)
+                && bridge._cards.NoteTaskChildEnd(finishedOwnerId, execEnd.ToolCallId, execEnd.IsError))
+            {
+                return;
+            }
+
+            bridge._cards.CompleteCard(execEnd);
+            if (bridge._toolRetryShown)
+            {
+                bridge._status.Retry = null;
+                bridge._toolRetryShown = false;
+            }
+        }
+
+        public override void Visit(TurnEndEvent turnEnd)
+        {
+            // [UX5] #265: child turns never mark parent history.
+            if (bridge.IsForeignTurn(turnEnd))
+            {
+                return;
+            }
+
+            bridge.MarkSeen(turnEnd.AssistantMessage);
+            foreach (var toolResults in turnEnd.ToolResults)
+            {
+                bridge.MarkSeen(toolResults);
+            }
+        }
+
+        public override void Visit(AgentEndEvent agentEnd)
+        {
+            // [UX5] #265: the child run's AgentEnd must not idle the
+            // parent footer, bounce the mascot, or flush parent streams.
+            if (bridge.IsForeignAgentEnd(agentEnd))
+            {
+                return;
+            }
+
+            foreach (var message in agentEnd.NewMessages)
+            {
+                bridge.MarkSeen(message);
+            }
+
+            bridge._streams.FlushStreamNow();
+
+            // #567: a cancelled run publishes AgentEndEvent(Cancelled: true)
+            // and never a ToolExecutionEndEvent for the call it was aborting,
+            // so the in-flight card kept its running glyph and spun forever.
+            // Sweep the open calls into an explicit terminal state; before the
+            // enum collapse there was no such state and no way to say "stopped".
+            if (agentEnd.Cancelled)
+            {
+                bridge._cards.StopRunningCalls(ToolCallState.Cancelled, "cancelled by user");
+                bridge._status.Phase = AgentPhase.Errored;
+                bridge._status.SignalMascot(MascotReaction.ErrorBlink);
+                bridge._status.Mode = StatusBarMode.Idle;
+                return;
+            }
+
+            bridge._status.Phase = bridge._runHadError ? AgentPhase.Errored : AgentPhase.Succeeded;
+            if (!bridge._runHadError)
+            {
+                bridge._status.SignalMascot(MascotReaction.SuccessBounce);
+            }
+
+            bridge._status.Mode = StatusBarMode.Idle;
+        }
+
+        public override void Visit(AgentErrorEvent error)
+        {
+            bridge._streams.FlushStreamNow();
+            bridge._cards.CompleteError(bridge.NewErrorCardId(), "error", ChatScreenBridge.ErrorBlurb(error.Message), error.Message);
+            bridge._runHadError = true;
+            bridge._status.Phase = AgentPhase.Errored;
+            bridge._status.SignalMascot(MascotReaction.ErrorBlink);
+            bridge._status.Mode = StatusBarMode.Idle;
+        }
+
+        /// <summary>Sandbox enforcement is audited elsewhere; the feed has no
+        /// card for it, matching the old switch's missing arm.</summary>
+        public override void Visit(PluginBlockedEvent blocked) { }
+
+        public override void Visit(CompactionStartedEvent started)
+        {
+            bridge.AppendSystem("compacting history…");
+            bridge._status.Mode = StatusBarMode.Compacting;
+        }
+
+        public override void Visit(CompactionCompletedEvent completed)
+        {
+            bridge.AppendSystem("history compacted");
+            bridge._status.Mode = StatusBarMode.Running;
+        }
+
+        // #840: the third member of a family the old switch declared twice,
+        // and the arm that was missing is the expensive one — CompactionBehavior
+        // calls its truncation fallback irreversible and then continues the
+        // run, so nothing downstream of this event would have told the user.
+        //
+        // NOT a duplicate of #839. That fix added a ChatRole.System line to
+        // UiState.Chat.Lines, and this timeline never reads it:
+        // ChatScreenProjector (issue #1202; reached via
+        // CellForgeTuiRenderer.ProjectStateIntoWidgets) hands the store's
+        // UiState to Status.ProjectedState and the sidebar and nothing else.
+        // The store projection feeds the desktop app transcript.
+        // This ring is what HARBOR_TUI=cellforge paints.
+        public override void Visit(CompactionFailedEvent failed)
+        {
+            bridge.AppendSystem(CompactionLifecycleLines.Failed(failed.Error));
+            bridge._status.Mode = StatusBarMode.Running;
+        }
+
+        public override void Visit(SessionStatsEvent stats)
+        {
+            // #623: the ctx segment is NOT fed from here. These totals are
+            // session-cumulative spend (SessionMetadata.AddUsage), so
+            // rendering them as occupancy pinned the bar at 100% by turn 4
+            // on a 128k window while the actual request never grew.
+            // StepFinishEvent.Usage.InputTokens is the request just sent.
+            // #651: the token cell takes the SAME figure for the same reason
+            // — the sum is the bill, and a cell that reported it answered
+            // "what am I paying" with a number that read as "how full am I".
+            // DisplayedInputTokens keeps the total as the fallback for a
+            // session whose totals arrive with no request behind them.
+            // #653: the cost is the core's, and null (→ "—") is the core's
+            // own answer for a model that publishes no price — this bridge
+            // used to never receive this event at all, so its footer showed
+            // no cost while the projection showed a fabricated one.
+            bridge._status.SetUsage(
+                ContextUsage.DisplayedInputTokens(
+                    bridge._context.LastRequestTokens,
+                    stats.Metadata.TokensInput),
+                stats.Metadata.TokensOutput,
+                stats.Metadata.IsCostKnown ? stats.Metadata.Cost : null);
+        }
+
+        public override void Visit(SessionChangedEvent changed)
+        {
+            // [UX5] #265: keep the child-traffic filter aligned when the
+            // user switches sessions.
+            bridge._parentSessionId = changed.SessionId;
+        }
     }
 
     /// <summary>
