@@ -1,4 +1,3 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -67,26 +66,10 @@ internal static class FloatingTerminalPanePainter
     /// <summary>Paints a bordered box and the newest scrollback lines.</summary>
     internal static void Paint(ScreenBuffer buffer, Rect box, FloatingTerminalSession session)
     {
-        buffer.Fill(box, Cell.Blank);
-
-        // Top / bottom borders.
-        for (int x = box.X; x < box.Right; x++)
-        {
-            buffer.SetRune(x, box.Y, new Rune('─'), CellStyle.Plain);
-            buffer.SetRune(x, box.Bottom - 1, new Rune('─'), CellStyle.Plain);
-        }
-
-        // Left / right borders.
-        for (int y = box.Y; y < box.Bottom; y++)
-        {
-            buffer.SetRune(box.X, y, new Rune('│'), CellStyle.Plain);
-            buffer.SetRune(box.Right - 1, y, new Rune('│'), CellStyle.Plain);
-        }
-
-        buffer.SetRune(box.X, box.Y, new Rune('╭'), CellStyle.Plain);
-        buffer.SetRune(box.Right - 1, box.Y, new Rune('╮'), CellStyle.Plain);
-        buffer.SetRune(box.X, box.Bottom - 1, new Rune('╰'), CellStyle.Plain);
-        buffer.SetRune(box.Right - 1, box.Bottom - 1, new Rune('╯'), CellStyle.Plain);
+        // Single owner of the dialog frame (#553): PanelChrome blanks the
+        // interior and draws the rounded box. Spelling corners here would
+        // create a second box painter (PanelChromeTests).
+        PanelChrome.PaintBorderBox(buffer, box, BoxStyle.RoundedPanel);
 
         int innerW = Math.Max(0, box.Width - 2);
         if (innerW > 0)
