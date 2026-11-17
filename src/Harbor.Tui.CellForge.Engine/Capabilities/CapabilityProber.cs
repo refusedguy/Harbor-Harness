@@ -88,13 +88,10 @@ public sealed class CapabilityProber
             var kittyAnswer = await transport.WaitAsync(kittyTimeout ?? DefaultKittyTimeout, cancellationToken).ConfigureAwait(false);
             if (kittyAnswer is { Kind: CapabilityEventKind.KittyFlagsReport } kittyReport)
             {
-                // #2217: OSC 8 has no wire query; compose the environmental
-                // probe into whatever this ladder concludes. Done at the
-                // return so no cited line above shifts.
-                return Evaluate([kittyReport]) with
-                {
-                    Osc8Hyperlinks = Osc8HyperlinkProbe.Detect(_environmentLookup),
-                };
+                // #2217/#2219: none of these protocols has a safe wire query;
+                // compose the environmental probes into whatever this ladder
+                // concludes. Done at the return so no cited line above shifts.
+                return WithEnvironmental(Evaluate([kittyReport]));
             }
         }
 
@@ -103,7 +100,22 @@ public sealed class CapabilityProber
         var decrqm = await transport.WaitAsync(DefaultFallbackTimeout, cancellationToken).ConfigureAwait(false);
 
         return decrqm is null
-            ? TerminalCapabilities.Unprobed() with { Probed = true, Osc8Hyperlinks = Osc8HyperlinkProbe.Detect(_environmentLookup) }
-            : Evaluate([decrqm.GetValueOrDefault()]) with { Osc8Hyperlinks = Osc8HyperlinkProbe.Detect(_environmentLookup) };
+            ? WithEnvironmental(TerminalCapabilities.Unprobed() with { Probed = true })
+            : WithEnvironmental(Evaluate([decrqm.GetValueOrDefault()]));
     }
+
+    /// <summary>
+    /// Folds every environment-detected protocol switch (#2217, #2219) into
+    /// the wire-probed capabilities. All default to false on an unknown
+    /// terminal, so the fallback frame is byte-identical to the classic one.
+    /// </summary>
+    private TerminalCapabilities WithEnvironmental(TerminalCapabilities caps) => caps with
+    {
+        Osc8Hyperlinks = Osc8HyperlinkProbe.Detect(_environmentLookup),
+        Osc7501 = TerminalProtocolProbe.DetectOsc7501(_environmentLookup),
+        Osc94Progress = TerminalProtocolProbe.DetectOsc94Progress(_environmentLookup),
+        Osc7Cwd = TerminalProtocolProbe.DetectOsc7Cwd(_environmentLookup),
+        Decscusr = TerminalProtocolProbe.DetectDecscusr(_environmentLookup),
+        UnderlineStyles = TerminalProtocolProbe.DetectUnderlineStyles(_environmentLookup),
+    };
 }

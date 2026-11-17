@@ -116,9 +116,14 @@ public sealed class DiffEngine
     /// <c>EndFrame</c> — <see cref="Flush"/> itself never touches the backend.
     /// An optional <see cref="HyperlinkTable"/> wraps changed cells in OSC 8
     /// pairs without adding a column; a null or disabled table is byte-identical
-    /// to the classic scan.
+    /// to the classic scan. An optional <see cref="UnderlineColorTable"/> feeds
+    /// SGR 58/59 into the same style encoder, also zero-width (#2219).
     /// </summary>
-    public void Flush(ScreenBuffer next, AnsiWriter writer, HyperlinkTable? links = null)
+    public void Flush(
+        ScreenBuffer next,
+        AnsiWriter writer,
+        HyperlinkTable? links = null,
+        UnderlineColorTable? underlineColors = null)
     {
         // #2217: links are a side-table, not a Cell field. UrlAt returns null
         // when the terminal probe said no OSC 8, so the unsupported case is
@@ -143,7 +148,9 @@ public sealed class DiffEngine
                 writer.MoveTo(x, y);
             }
 
-            writer.SetStyle(target.Style);
+            // #2219: the underline color is a side-table read, not a Cell field.
+            // The writer folds 58/59 into the same SGR delta as the style.
+            writer.SetStyle(target.Style, underlineColors?.ColorAt(x, y) ?? default);
 
             // #2217: wrap this cell's visible rune in an OSC 8 pair. Open and
             // close are emitted through RawBytes, which does not advance the
