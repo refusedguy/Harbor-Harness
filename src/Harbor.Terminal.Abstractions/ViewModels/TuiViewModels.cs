@@ -235,6 +235,38 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
 
     public ChatHistoryViewModel() => _llmEvents = new HistoryLlmEventVisitor(this);
 
+    // #1100: the per-tool-end preview budget. Named so the display rule and
+    // the allocation gate in Harbor.Tui.Tests cannot drift on the number.
+    internal const int PreviewMaxChars = 200;
+    private const string PreviewEllipsis = "...";
+
+    /// <summary>
+    ///     Build the one-line transcript preview for a tool result (#1100).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Why a helper.</b> The old inline expression
+    ///         <c>Output[..200] + "..."</c> allocated TWICE for every long
+    ///         tool result: a 200-char substring, then a 203-char concatenation
+    ///         holding the ellipsis. Tools like read/grep/bash routinely return
+    ///         far more than 200 chars, so this ran on most tool completions.
+    ///         <c>string.Concat(ReadOnlySpan&lt;char&gt;, ReadOnlySpan&lt;char&gt;)</c>
+    ///         writes the whole preview into ONE new string. Short outputs keep
+    ///         the original instance (zero allocations), exactly as before.
+    ///     </para>
+    ///     <para>
+    ///         The rendered text is byte-for-byte identical to the old
+    ///         expression: first <see cref="PreviewMaxChars"/> characters
+    ///         followed by "..." when the output is longer, otherwise the
+    ///         output itself. <c>internal</c> only so the allocation gate can
+    ///         measure this exact method (InternalsVisibleTo Harbor.Tui.Tests).
+    ///     </para>
+    /// </remarks>
+    internal static string BuildToolResultPreview(string output) =>
+        output.Length > PreviewMaxChars
+            ? string.Concat(output.AsSpan(0, PreviewMaxChars), PreviewEllipsis.AsSpan())
+            : output;
+
     /// <summary>
     ///     The accumulated chat entries (one per finalized message or tool result).
     /// </summary>
@@ -272,7 +304,7 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
 
             case ToolExecutionEndEvent tee:
                 string label = tee.IsError ? "✗" : "✓";
-                string preview = tee.Result.Output.Length > 200 ? tee.Result.Output[..200] + "..." : tee.Result.Output;
+                string preview = BuildToolResultPreview(tee.Result.Output);
                 _toolNames.TryGetValue(tee.ToolCallId, out string? resultTool);
                 _toolNames.Remove(tee.ToolCallId);
                 AddEntry(new ChatEntry("tool-result", $"{label} {preview}", DateTimeOffset.UtcNow, tee.ToolCallId, resultTool));
