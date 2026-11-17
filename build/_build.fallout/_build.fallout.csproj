@@ -1,23 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    _build.fallout.csproj — step-0 pilot build entry point (issue #2179).
+    _build.fallout.csproj — PRIMARY Fallout build entry point (#2180 step 1).
 
-    A SECOND build project, living next to the NUKE one. It is the same
-    32-file build orchestrator as build/_build/, rewritten once by
-    `fallout-migrate in dry-run mode` (Fallout.Migrate 10.4.0) and hand-checked:
+    This is the canonical Fallout port of the 32-file orchestrator that used
+    to live only in build/_build/. It started as the step-0 pilot (issue
+    #2179), rewritten once by `fallout-migrate` in dry-run mode
+    (Fallout.Migrate 10.4.0) and hand-checked:
 
         NUKE.Common 10.1.0    => Fallout.Common 10.4.0
         NUKEBuild             => FalloutBuild
         using NUKE.*          => using Fallout.*  (ProjectModel => Fallout.Solutions)
 
-    build/_build/ and build/_build.csproj are NOT touched by this pilot.
-    Nothing in CI switches over to this project yet; the comparison is
-    performed by .github/workflows/fallout-pilot.yml.
+    Step 1 fixes this copy as primary: the pins below are the ADR-023 pins,
+    the root marker is .fallout/, and .github/workflows/fallout-pilot.yml is
+    the CI verifier (15-target argv/exit-code parity and the AOT/R9 publish).
 
-    The project sits in its OWN directory so its obj/ and bin/ cannot
-    collide with the NUKE project's, and so `build/Directory.Build.props`
-    (permissive, no parent import, CPM off) still applies to it.
+    build/_build/ and build/_build.csproj are NOT touched until step 4, so the
+    "NUKE diff empty" acceptance criterion still holds. The project sits in
+    its OWN directory so its obj/ and bin/ cannot collide with the NUKE
+    project's, and so `build/Directory.Build.props` (permissive, no parent
+    import, CPM off) still applies to it.
   -->
 
   <PropertyGroup>

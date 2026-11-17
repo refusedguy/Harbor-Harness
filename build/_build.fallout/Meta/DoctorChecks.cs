@@ -337,24 +337,24 @@ public static class DoctorChecks
         var required = new[]
         {
             System.IO.Path.Combine(ctx.RootDirectory, "Harbor.slnx"),
-            System.IO.Path.Combine(ctx.RootDirectory, "build", "_build.csproj"),
-            System.IO.Path.Combine(ctx.RootDirectory, ".nuke")
+            System.IO.Path.Combine(ctx.RootDirectory, "build", "_build.fallout", "_build.fallout.csproj"),
+            System.IO.Path.Combine(ctx.RootDirectory, ".fallout")
         };
         var missing = required.Where(p => !File.Exists(p) && !Directory.Exists(p)).ToList();
         return missing.Count == 0
-            ? new CheckResult("solution.files", CheckResult.Ok, "Harbor.slnx, build/_build.csproj, .nuke/ present")
+            ? new CheckResult("solution.files", CheckResult.Ok, "Harbor.slnx, build/_build.fallout/_build.fallout.csproj, .fallout/ present")
             : new CheckResult(
                 "solution.files", CheckResult.Fail, $"missing: {string.Join(", ", missing.Select(System.IO.Path.GetFileName))}",
                 "Run from the repository root; restore deleted solution files");
     }
     private static CheckResult CheckBootstrapCache(DoctorContext ctx)
     {
-        var dll = System.IO.Path.Combine(ctx.RootDirectory, ".nuke", "bin", "net10.0", "_build.dll");
+        var dll = System.IO.Path.Combine(ctx.RootDirectory, ".fallout", "bin", "net10.0", "_build.fallout.dll");
         if (!File.Exists(dll))
         {
             return new CheckResult(
-                "bootstrap.cache", CheckResult.Warn, ".nuke/bin/net10.0/_build.dll not built yet",
-                "First ./build.sh run will compile the tool automatically (slower)");
+                "bootstrap.cache", CheckResult.Warn, ".fallout/bin/net10.0/_build.fallout.dll not built yet",
+                "First fallout bootstrap run will compile the tool automatically (slower)");
         }
         var newestSource = Directory
             .EnumerateFiles(System.IO.Path.Combine(ctx.RootDirectory, "build"), "*", SearchOption.AllDirectories)
