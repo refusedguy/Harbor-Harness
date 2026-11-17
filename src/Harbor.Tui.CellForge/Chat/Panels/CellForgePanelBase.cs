@@ -30,6 +30,14 @@ namespace Harbor.Tui.CellForge.Panels;
 public abstract class CellForgePanelBase : IPanelProvider
 {
     /// <inheritdoc />
+    /// <remarks>
+    /// <b>Stable-key identity (#2356):</b> the key is a frame invariant: for one
+    /// logical entity it never changes as a result of producing a frame; changing
+    /// it is an explicit act. Here the id is the routing key for dock geometry,
+    /// focus and Alt+1..9, so <see cref="Build"/> must not derive it from the
+    /// per-frame <see cref="PanelContext.State"/>; a different id remaps a
+    /// different panel, not a repaint.
+    /// </remarks>
     public abstract string Id { get; }
 
     /// <inheritdoc />

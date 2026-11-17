@@ -9,6 +9,9 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// is always admitted even if alone over budget (a session never loses its
 /// live tail). Backing storage grows geometrically and never shrinks —
 /// steady-state appends allocate nothing.
+/// <para><b>Stable-key identity (#2356):</b> a resident block is addressed by its
+/// reference, the same identity <see cref="TimelineLayoutCache.PinAnchor"/>
+/// captures, so appending and evicting never re-key a surviving block.</para>
 /// </summary>
 public sealed class TimelineRing
 {

@@ -25,7 +25,14 @@ namespace Harbor.Tui.CellForge;
 /// <typeparam name="TState">Snapshot type (today always <see cref="UiState"/>).</typeparam>
 public interface IProjector<in TState>
 {
-    /// <summary>Screen (or panel group) this projector serves; the registry key.</summary>
+    /// <summary>
+    /// Screen (or panel group) this projector serves; the registry key.
+    /// <para><b>Stable-key identity (#2356):</b> the key is a frame invariant: for
+    /// one logical entity it never changes as a result of producing a frame;
+    /// changing it is an explicit act. Here the id addresses the screen's geometry
+    /// and held state, so <see cref="Project"/> must not derive it from the state
+    /// snapshot; a different id is a re-registration, not a repaint.</para>
+    /// </summary>
     string ScreenId { get; }
 
     /// <summary>Folds <paramref name="state"/> into this screen's widgets.</summary>

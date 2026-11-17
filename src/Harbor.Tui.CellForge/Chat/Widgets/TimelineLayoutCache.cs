@@ -129,6 +129,11 @@ public sealed class TimelineLayoutCache
     // Scroll anchor: block IDENTITY + row within it, captured before rebuilds.
     // There is deliberately no pixel field (#416): the anchor is restored from
     // identity alone, so a stale Y can never be returned as a substitute.
+    // Stable-key identity (#2356): the key is a frame invariant: for one logical
+    // entity it never changes as a result of producing a frame; changing it is an
+    // explicit act. Here the key is this block reference: repaints and width flips
+    // keep it, and only an explicit Replace (same message, new instance) changes
+    // it, with the anchor deliberately following it.
     private IChatBlock? _anchorBlock;
     private int _anchorRow;
 
@@ -286,6 +291,9 @@ public sealed class TimelineLayoutCache
     /// within it) — so a width-change rebuild can restore the anchored CONTENT
     /// rather than the same pixel. The pixel is only ever an input here, used to
     /// resolve which block the viewport top lands in; it is never retained.
+    /// <para>This block reference is the timeline's stable key (#2356): constant
+    /// across frames for one logical message, changed only by an explicit
+    /// <see cref="Replace"/> that the anchor then follows.</para>
     /// </summary>
     public void PinAnchor(long scrollTopY)
     {
