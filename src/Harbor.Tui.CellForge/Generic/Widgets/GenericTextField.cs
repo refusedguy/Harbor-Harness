@@ -198,7 +198,7 @@ public sealed class GenericTextField : IGenericFormField
 
             if (IsFocused)
             {
-                PaintCursor(buffer, rect.X, rect.Y, hintStyle);
+                TextRunes.PaintCursor(buffer, rect.X, rect.Y, hintStyle);
             }
 
             return;
@@ -226,22 +226,9 @@ public sealed class GenericTextField : IGenericFormField
             int cursorX = rect.X + (cursorCells - _scroll);
             if (cursorX >= rect.X && cursorX < rect.X + width)
             {
-                PaintCursor(buffer, cursorX, rect.Y, textStyle);
+                TextRunes.PaintCursor(buffer, cursorX, rect.Y, textStyle);
             }
         }
-    }
-
-    private static void PaintCursor(ScreenBuffer buffer, int x, int y, CellStyle baseStyle)
-    {
-        if ((uint)x >= (uint)buffer.Cols || (uint)y >= (uint)buffer.Rows)
-        {
-            return;
-        }
-
-        var style = new CellStyle(baseStyle.Fg, baseStyle.Bg, baseStyle.Attrs | StyleAttr.Reverse);
-        int rune = buffer.Get(x, y).Rune;
-        Rune r = rune == 0 || rune == ' ' ? new Rune('_') : new Rune(rune);
-        buffer.SetRune(x, y, r, in style);
     }
 
     private static int RuneCount(string s)
