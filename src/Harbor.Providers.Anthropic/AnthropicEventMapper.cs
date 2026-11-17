@@ -420,55 +420,171 @@ internal static class AnthropicEventMapper
         int? cacheReadTokens, int? cacheWriteTokens, bool sawUsageObject,
         ChunkStreamState? state)
     {
-        switch (kind)
+        var context = new EmitContext(blockIndex, blockId, blockType, blockName,
+            deltaType, deltaText, stopReason, sawStopReason,
+            inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,
+            sawUsageObject, state);
+        _byKind[(byte)kind].Emit(events, in context);
+    }
+
+    /// <summary>
+    ///     Strategy for emitting one wire chunk. Handlers are stateless
+    ///     singletons in the static tables below, so a new wire kind adds a
+    ///     handler instead of a branch in <see cref="Emit" />.
+    /// </summary>
+    private interface IEventHandler
+    {
+        void Emit(List<LlmEvent> events, in EmitContext context);
+    }
+
+    /// <summary>
+    ///     Fields buffered by the parser. A struct passed by <c>in</c> keeps
+    ///     the per-chunk dispatch free of allocations.
+    /// </summary>
+    private readonly record struct EmitContext(
+        int BlockIndex,
+        string BlockId,
+        string? BlockType,
+        string? BlockName,
+        string? DeltaType,
+        string? DeltaText,
+        string? StopReason,
+        bool SawStopReason,
+        int InputTokens,
+        int OutputTokens,
+        int? CacheReadTokens,
+        int? CacheWriteTokens,
+        bool SawUsageObject,
+        ChunkStreamState? State);
+
+    // Dispatch tables: the wire event kind and, inside the two content-block
+    // kinds, the wire block/delta type. Built once; the hot path only reads.
+    private static readonly IEventHandler[] _byKind =
+    {
+        NoOp.Instance,                  // Unknown
+        new MessageStartHandler(),      // MessageStart
+        new ContentBlockStartHandler(), // ContentBlockStart
+        new ContentBlockDeltaHandler(), // ContentBlockDelta
+        new MessageDeltaHandler(),      // MessageDelta
+        NoOp.Instance                   // MessageStop
+    };
+
+    private static readonly Dictionary<string, IEventHandler> _startByType = new(StringComparer.Ordinal)
+    {
+        ["text"] = new TextStartHandler(),
+        ["thinking"] = new ThinkingStartHandler(),
+        ["tool_use"] = new ToolUseStartHandler()
+    };
+
+    private static readonly Dictionary<string, IEventHandler> _deltaByType = new(StringComparer.Ordinal)
+    {
+        ["text_delta"] = new TextDeltaHandler(),
+        ["thinking_delta"] = new ThinkingDeltaHandler(),
+        ["input_json_delta"] = new ToolCallDeltaHandler()
+    };
+
+    private static IEventHandler ForStart(string? blockType) =>
+        blockType is not null && _startByType.TryGetValue(blockType, out var handler)
+            ? handler
+            : NoOp.Instance;
+
+    private static IEventHandler ForDelta(string? deltaType) =>
+        deltaType is not null && _deltaByType.TryGetValue(deltaType, out var handler)
+            ? handler
+            : NoOp.Instance;
+
+    private sealed class NoOp : IEventHandler
+    {
+        public static readonly NoOp Instance = new();
+
+        public void Emit(List<LlmEvent> events, in EmitContext context) { }
+    }
+
+    private sealed class MessageStartHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context) =>
+            events.Add(new StepStartEvent(0));
+    }
+
+    private sealed class ContentBlockStartHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context) =>
+            ForStart(context.BlockType).Emit(events, in context);
+    }
+
+    private sealed class TextStartHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context) =>
+            events.Add(new TextStartEvent(context.BlockId));
+    }
+
+    private sealed class ThinkingStartHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context) =>
+            events.Add(new ThinkingStartEvent(context.BlockId));
+    }
+
+    private sealed class ToolUseStartHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context)
         {
-            case AnthropicEventKind.MessageStart:
-                events.Add(new StepStartEvent(0));
-                break;
+            events.Add(new ToolCallStartEvent(context.BlockId, context.BlockName ?? ""));
+            // #203 E5: remember index→wire-id so the following
+            // input_json deltas correlate (else they fall back to
+            // "0" and the coalescer drops the args).
+            var state = context.State;
+            if (state is not null && !string.IsNullOrEmpty(context.BlockId))
+                state.IndexToId[context.BlockIndex] = context.BlockId;
+        }
+    }
 
-            case AnthropicEventKind.ContentBlockStart:
-                if (blockType == "text")
-                    events.Add(new TextStartEvent(blockId));
-                else if (blockType == "thinking")
-                    events.Add(new ThinkingStartEvent(blockId));
-                else if (blockType == "tool_use")
-                {
-                    events.Add(new ToolCallStartEvent(blockId, blockName ?? ""));
-                    // #203 E5: remember index→wire-id so the following
-                    // input_json deltas correlate (else they fall back to
-                    // "0" and the coalescer drops the args).
-                    if (state is not null && !string.IsNullOrEmpty(blockId))
-                        state.IndexToId[blockIndex] = blockId;
-                }
+    private sealed class ContentBlockDeltaHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context) =>
+            ForDelta(context.DeltaType).Emit(events, in context);
+    }
 
-                break;
+    private sealed class TextDeltaHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context)
+        {
+            if (!string.IsNullOrEmpty(context.DeltaText))
+                events.Add(new TextDeltaEvent("0", context.DeltaText!));
+        }
+    }
 
-            case AnthropicEventKind.ContentBlockDelta:
-                // DOM parity: deltas carry the fixed "0" id (Anthropic omits
-                // ids on deltas) and only non-empty strings emit.
-                if (deltaType == "text_delta" && !string.IsNullOrEmpty(deltaText))
-                    events.Add(new TextDeltaEvent("0", deltaText!));
-                else if (deltaType == "thinking_delta" && !string.IsNullOrEmpty(deltaText))
-                    events.Add(new ThinkingDeltaEvent("0", deltaText!));
-                else if (deltaType == "input_json_delta" && !string.IsNullOrEmpty(deltaText))
-                    events.Add(new ToolCallDeltaEvent(ResolveToolDeltaId(state, blockIndex), deltaText!));
-                break;
+    private sealed class ThinkingDeltaHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context)
+        {
+            if (!string.IsNullOrEmpty(context.DeltaText))
+                events.Add(new ThinkingDeltaEvent("0", context.DeltaText!));
+        }
+    }
 
-            case AnthropicEventKind.MessageDelta:
-                // DOM parity: no stop_reason inside delta → no event at all.
-                if (sawStopReason)
-                {
-                    events.Add(new StepFinishEvent(0, stopReason ?? "stop",
-                        sawUsageObject
-                            ? new Usage(inputTokens, outputTokens, null, cacheReadTokens, cacheWriteTokens)
-                            : null));
-                }
+    private sealed class ToolCallDeltaHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context)
+        {
+            if (!string.IsNullOrEmpty(context.DeltaText))
+                events.Add(new ToolCallDeltaEvent(
+                    ResolveToolDeltaId(context.State, context.BlockIndex), context.DeltaText!));
+        }
+    }
 
-                break;
-
-            case AnthropicEventKind.MessageStop:
-            case AnthropicEventKind.Unknown:
-                break;
+    private sealed class MessageDeltaHandler : IEventHandler
+    {
+        public void Emit(List<LlmEvent> events, in EmitContext context)
+        {
+            // DOM parity: no stop_reason inside delta → no event at all.
+            if (context.SawStopReason)
+            {
+                events.Add(new StepFinishEvent(0, context.StopReason ?? "stop",
+                    context.SawUsageObject
+                        ? new Usage(context.InputTokens, context.OutputTokens, null,
+                            context.CacheReadTokens, context.CacheWriteTokens)
+                        : null));
+            }
         }
     }
 

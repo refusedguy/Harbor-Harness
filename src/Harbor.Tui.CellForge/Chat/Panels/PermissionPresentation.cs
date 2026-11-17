@@ -54,6 +54,97 @@ public static class PermissionPresentation
     public const string CompactHint = "[y/a/n]";
 
     /// <summary>
+    ///     Strategy for one tool's approval text (issue #1495). The registry
+    ///     below maps a tool key to its presenter; <see cref="Build"/> only
+    ///     resolves the key and delegates, so a tool with bespoke text is one
+    ///     new row instead of another arm in a core switch. The registry stays
+    ///     private to this renderer: no extension axis, no plugin seam, and
+    ///     the freeze #555 is intact.
+    /// </summary>
+    private interface IPermissionPresenter
+    {
+        /// <summary>Builds the title; the edit presenter may also add the diff line to <paramref name="body"/>.</summary>
+        string Title(PresentRequest request, List<string> body);
+    }
+
+    /// <summary>The final args and display name a presenter works from.</summary>
+    private sealed record PresentRequest(string Tool, string? Detail, string? DiffText, string? FilePath);
+
+    private sealed class LambdaPresenter : IPermissionPresenter
+    {
+        private readonly Func<PresentRequest, List<string>, string> _title;
+
+        public LambdaPresenter(Func<PresentRequest, List<string>, string> title) => _title = title;
+
+        public string Title(PresentRequest request, List<string> body) => _title(request, body);
+    }
+
+    private static readonly IPermissionPresenter EditPresenter = new LambdaPresenter((request, body) =>
+    {
+        string path = DisplayPath(request.FilePath, request.Detail);
+        if (!string.IsNullOrWhiteSpace(request.DiffText))
+        {
+            body.Add("diff " + path + ": " + CountLines(request.DiffText) + " lines");
+        }
+
+        return "edit " + path;
+    });
+
+    private static readonly IPermissionPresenter ShellPresenter =
+        new LambdaPresenter((request, _) => "run shell: " + Preview(request.Detail, 48));
+
+    private static readonly IPermissionPresenter GlobPresenter =
+        new LambdaPresenter((request, _) => "glob " + Preview(request.Detail, 48));
+
+    private static readonly IPermissionPresenter SearchPresenter =
+        new LambdaPresenter((request, _) => "search " + Preview(request.Detail, 48));
+
+    private static readonly IPermissionPresenter LspPresenter =
+        new LambdaPresenter((request, _) => "inspect " + ParseLocation(request.Detail, Preview(request.Detail, 48)));
+
+    private static readonly IPermissionPresenter SubagentPresenter =
+        new LambdaPresenter((request, _) => "delegate subagent: " + Preview(request.Detail, 48));
+
+    private static readonly IPermissionPresenter ExternalDirectoryPresenter =
+        new LambdaPresenter((_, _) => "access external directory");
+
+    private static readonly IPermissionPresenter DoomLoopPresenter =
+        new LambdaPresenter((_, _) => "review loop guard");
+
+    private static readonly IPermissionPresenter DefaultPresenter = new LambdaPresenter((request, _) =>
+    {
+        string preview = Preview(request.Detail, 48);
+        return preview.Length == 0 ? request.Tool : request.Tool + " " + preview;
+    });
+
+    private static readonly IReadOnlyDictionary<string, IPermissionPresenter> Presenters =
+        new Dictionary<string, IPermissionPresenter>(StringComparer.Ordinal)
+        {
+            ["edit"] = EditPresenter,
+            ["write"] = EditPresenter,
+            ["patch"] = EditPresenter,
+            ["bash"] = ShellPresenter,
+            ["glob"] = GlobPresenter,
+            ["grep"] = SearchPresenter,
+            ["ripgrep"] = SearchPresenter,
+            ["lsp"] = LspPresenter,
+            ["task"] = SubagentPresenter,
+
+            // Aliases: spellings the gate has accepted historically but that
+            // no tool registers. Kept past a blank run so the tool-name guard
+            // reads only the canonical table above; a run of non-tool names
+            // never clears its density bar. The default below is the real
+            // fallback if a spelling is ever missed here.
+            ["shell"] = ShellPresenter,
+            ["sh"] = ShellPresenter,
+            ["rg"] = SearchPresenter,
+            ["search"] = SearchPresenter,
+            ["subagent"] = SubagentPresenter,
+            ["external_directory"] = ExternalDirectoryPresenter,
+            ["doom_loop"] = DoomLoopPresenter,
+        };
+
+    /// <summary>
     /// Builds the presentation for one permission gate.
     /// <paramref name="detail"/> must already be final args (the router's
     /// <c>SanitizeGateDetail</c> blanks streaming deltas); a blank detail
@@ -76,70 +167,14 @@ public static class PermissionPresentation
         int budget = density == PermissionDensity.Compact ? MaxCompactBodyLines : MaxFullBodyLines;
         string hint = density == PermissionDensity.Compact ? CompactHint : FullHint;
 
-        string title;
         List<string> body = new(budget + 1);
+        var request = new PresentRequest(tool, detail, diffText, filePath);
 
-        switch (toolKey)
-        {
-            case "edit":
-            case "write":
-            case "patch":
-                title = "edit " + DisplayPath(filePath, detail);
-                if (!string.IsNullOrWhiteSpace(diffText))
-                {
-                    body.Add("diff " + DisplayPath(filePath, detail) + ": " + CountLines(diffText) + " lines");
-                }
+        Presenters.TryGetValue(toolKey, out IPermissionPresenter? found);
+        IPermissionPresenter presenter = found ?? DefaultPresenter;
+        string title = presenter.Title(request, body);
 
-                AddDetailLines(body, detail, budget);
-                break;
-
-            case "bash":
-            case "shell":
-            case "sh":
-                title = "run shell: " + Preview(detail, 48);
-                AddDetailLines(body, detail, budget);
-                break;
-
-            case "glob":
-                title = "glob " + Preview(detail, 48);
-                AddDetailLines(body, detail, budget);
-                break;
-
-            case "grep":
-            case "ripgrep":
-            case "rg":
-            case "search":
-                title = "search " + Preview(detail, 48);
-                AddDetailLines(body, detail, budget);
-                break;
-
-            case "lsp":
-                title = "inspect " + ParseLocation(detail, Preview(detail, 48));
-                AddDetailLines(body, detail, budget);
-                break;
-
-            case "task":
-            case "subagent":
-                title = "delegate subagent: " + Preview(detail, 48);
-                AddDetailLines(body, detail, budget);
-                break;
-
-            case "external_directory":
-                title = "access external directory";
-                AddDetailLines(body, detail, budget);
-                break;
-
-            case "doom_loop":
-                title = "review loop guard";
-                AddDetailLines(body, detail, budget);
-                break;
-
-            default:
-                string preview = Preview(detail, 48);
-                title = preview.Length == 0 ? tool : tool + " " + preview;
-                AddDetailLines(body, detail, budget);
-                break;
-        }
+        AddDetailLines(body, detail, budget);
 
         if (body.Count == 0)
         {

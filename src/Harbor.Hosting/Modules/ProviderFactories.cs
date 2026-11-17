@@ -131,46 +131,61 @@ internal sealed class OllamaProviderFactory : IProviderFactory
 }
 
 #if HARBOR_WITH_ALL_PROVIDERS
-internal sealed class AnthropicProviderFactory : IProviderFactory
+/// <summary>
+///     #1500: one factory for every native provider whose client has the
+///     shared <c>(HttpClient, TConfig, IAuthResolver, ILogger&lt;TClient&gt;)</c>
+///     shape. The HTTP client, config, auth resolver, logger and retry
+///     decoration are wired here; a concrete factory only names its id,
+///     client type, config type and constructor delegate.
+/// </summary>
+internal abstract class ParameterizedProviderFactory<TClient, TConfig> : IProviderFactory
+    where TClient : class, ILlmClient
+    where TConfig : new()
 {
+    private readonly string _providerId;
     private readonly IHttpClientFactory _httpFactory;
     private readonly AuthStore _authStore;
+    private readonly Func<HttpClient, TConfig, IAuthResolver, ILogger<TClient>, TClient> _clientFactory;
 
-    public AnthropicProviderFactory(IHttpClientFactory httpFactory, AuthStore authStore)
+    protected ParameterizedProviderFactory(
+        string providerId,
+        IHttpClientFactory httpFactory,
+        AuthStore authStore,
+        Func<HttpClient, TConfig, IAuthResolver, ILogger<TClient>, TClient> clientFactory)
     {
+        _providerId = providerId;
         _httpFactory = httpFactory;
         _authStore = authStore;
+        _clientFactory = clientFactory;
     }
 
-    public ProviderId ProviderId => ProviderId.Create("anthropic");
+    public ProviderId ProviderId => ProviderId.Create(_providerId);
 
-    public ILlmClient CreateClient(ILoggerFactory loggerFactory) => new AnthropicLlmClient(
-        _httpFactory.CreateClient("anthropic"),
-        new AnthropicConfig(),
-        new ConfigAuthResolver(_authStore, "anthropic"),
+    public ILlmClient CreateClient(ILoggerFactory loggerFactory) => _clientFactory(
+        _httpFactory.CreateClient(_providerId),
+        new TConfig(),
+        new ConfigAuthResolver(_authStore, _providerId),
+        loggerFactory.CreateLogger<TClient>())
         // #1502: transient-retry at the provider seam (preflight = first event).
-        loggerFactory.CreateLogger<AnthropicLlmClient>()).WithTransientRetry(loggerFactory);
+        .WithTransientRetry(loggerFactory);
 }
 
-internal sealed class OpenAiProviderFactory : IProviderFactory
+internal sealed class AnthropicProviderFactory : ParameterizedProviderFactory<AnthropicLlmClient, AnthropicConfig>
 {
-    private readonly IHttpClientFactory _httpFactory;
-    private readonly AuthStore _authStore;
-
-    public OpenAiProviderFactory(IHttpClientFactory httpFactory, AuthStore authStore)
+    public AnthropicProviderFactory(IHttpClientFactory httpFactory, AuthStore authStore)
+        : base("anthropic", httpFactory, authStore,
+            static (http, config, auth, logger) => new AnthropicLlmClient(http, config, auth, logger))
     {
-        _httpFactory = httpFactory;
-        _authStore = authStore;
     }
+}
 
-    public ProviderId ProviderId => ProviderId.Create("openai");
-
-    public ILlmClient CreateClient(ILoggerFactory loggerFactory) => new OpenAILlmClient(
-        _httpFactory.CreateClient("openai"),
-        new OpenAIConfig(),
-        new ConfigAuthResolver(_authStore, "openai"),
-        // #1502: transient-retry at the provider seam (preflight = first event).
-        loggerFactory.CreateLogger<OpenAILlmClient>()).WithTransientRetry(loggerFactory);
+internal sealed class OpenAiProviderFactory : ParameterizedProviderFactory<OpenAILlmClient, OpenAIConfig>
+{
+    public OpenAiProviderFactory(IHttpClientFactory httpFactory, AuthStore authStore)
+        : base("openai", httpFactory, authStore,
+            static (http, config, auth, logger) => new OpenAILlmClient(http, config, auth, logger))
+    {
+    }
 }
 #endif
 

@@ -1,3 +1,4 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Terminal.Abstractions.ViewModels;
 
 namespace Harbor.Terminal.Abstractions.Views.Grouping;
@@ -24,9 +25,9 @@ public static class TranscriptMountBudget
         Func<string, TranscriptGroupKind, bool> isExpanded,
         Func<TranscriptGroupKind, bool> isGrouped)
     {
-        ArgumentNullException.ThrowIfNull(row);
-        ArgumentNullException.ThrowIfNull(isExpanded);
-        ArgumentNullException.ThrowIfNull(isGrouped);
+        Ensure.NotNull(row);
+        Ensure.NotNull(isExpanded);
+        Ensure.NotNull(isGrouped);
 
         if (row is not TranscriptRow.Group group)
         {
@@ -44,7 +45,7 @@ public static class TranscriptMountBudget
     /// </summary>
     public static string GroupKey(TranscriptRow.Group group, int level = 0)
     {
-        ArgumentNullException.ThrowIfNull(group);
+        Ensure.NotNull(group);
 
         return $"{FirstLeafKey(group.Children)}:{group.Kind}:{level}";
     }
@@ -55,7 +56,7 @@ public static class TranscriptMountBudget
     /// </summary>
     public static int RowsBefore(IReadOnlyList<int> weights, int end, int budget)
     {
-        ArgumentNullException.ThrowIfNull(weights);
+        Ensure.NotNull(weights);
         ArgumentOutOfRangeException.ThrowIfNegative(budget);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(end, weights.Count);
 
@@ -75,7 +76,7 @@ public static class TranscriptMountBudget
     /// </summary>
     public static int RowsAfter(IReadOnlyList<int> weights, int start, int budget)
     {
-        ArgumentNullException.ThrowIfNull(weights);
+        Ensure.NotNull(weights);
         ArgumentOutOfRangeException.ThrowIfNegative(start);
         ArgumentOutOfRangeException.ThrowIfNegative(budget);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(start, weights.Count);
@@ -106,11 +107,11 @@ public static class TranscriptMountBudget
         Func<bool> isActive,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(rows);
-        ArgumentNullException.ThrowIfNull(messageCount);
-        ArgumentNullException.ThrowIfNull(hasMore);
-        ArgumentNullException.ThrowIfNull(loadMoreAsync);
-        ArgumentNullException.ThrowIfNull(isActive);
+        Ensure.NotNull(rows);
+        Ensure.NotNull(messageCount);
+        Ensure.NotNull(hasMore);
+        Ensure.NotNull(loadMoreAsync);
+        Ensure.NotNull(isActive);
 
         while (isActive()
             && rows.Count > 0

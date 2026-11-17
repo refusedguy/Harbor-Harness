@@ -148,68 +148,10 @@ public sealed partial class StatusBarViewModel : ReactiveViewModel
     /// <inheritdoc />
     public override Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        switch (@event)
-        {
-            case AgentStartEvent ase:
-                Status = "running";
-                SetModel(ase.Model);
-                break;
-            case AgentEndEvent:
-                Status = "idle";
-                QueuedCount = 0;
-                break;
-            case MessageUpdateEvent mu when mu.LlmEvent is StepFinishEvent sf && sf.Usage is not null:
-                TokensIn += sf.Usage.InputTokens;
-                TokensOut += sf.Usage.OutputTokens;
-                // The one event that carries the size of the request just sent —
-                // the ctx cell's occupancy reading (#623). SessionStatsEvent is
-                // deliberately not a source: its totals are session-cumulative.
-                RequestTokens = sf.Usage.InputTokens;
-                if (_pricing is not null)
-                    Cost += _pricing.CalculateCost(sf.Usage);
-                break;
-            case ToolExecutionStartEvent:
-                QueuedCount++;
-                break;
-            case ToolExecutionEndEvent:
-                if (QueuedCount > 0)
-                    QueuedCount--;
-                break;
-            case SessionStatsEvent ss:
-                // #653: the core owns the number — assign it, never re-derive it.
-                // These totals are session-cumulative spend; they feed the
-                // cost/token cells, not the ctx cell (#623).
-                Cost = ss.Metadata.Cost;
-                IsCostKnown = ss.Metadata.IsCostKnown;
-                TokensIn = ss.Metadata.TokensInput;
-                TokensOut = ss.Metadata.TokensOutput;
-                break;
-            case AgentErrorEvent:
-                Status = "error";
-                break;
-            case CompactionStartedEvent:
-                Status = "compacting";
-                break;
-            case CompactionCompletedEvent:
-                Status = "running";
-                break;
-            // #773: the third arm of the lifecycle. This VM has no
-            // MessageStartEvent arm, so unlike the store projection nothing
-            // would have cleared a stale "compacting" — the cell would have
-            // read "compacting" from the failure until the AgentEndEvent arm
-            // above reset it to "idle". The run continues on truncated
-            // history, so "running" is the truth, and the degradation itself
-            // is narrated by the renderers that have a transcript.
-            //
-            // Not "error", for two reasons: the turn is not failing, and this
-            // VM's AgentEndEvent arm resets to "idle" unconditionally — so an
-            // "error" would not even survive to the end of the run, and would
-            // disagree with the store projection, which deliberately preserves
-            // it (#687).
-            case CompactionFailedEvent:
-                Status = "running";
-                break;
-        }
+        // #1493: the per-event arms now live in the closed visitor registry in
+        // StatusBarEventUpdaters.cs. A new lifecycle stage adds an updater there;
+        // this dispatch never changes.
+        ApplyUpdater(this, @event);
         return Task.CompletedTask;
     }
 
@@ -286,6 +228,14 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
     private readonly Dictionary<string, string> _toolNames = new(StringComparer.Ordinal);
 
     /// <summary>
+    ///     #1494: one reusable dispatcher for the LlmEvent family. A visitor per
+    ///     delta would allocate on the streaming hot path; the owner keeps it.
+    /// </summary>
+    private readonly LlmEventVisitor _llmEvents;
+
+    public ChatHistoryViewModel() => _llmEvents = new HistoryLlmEventVisitor(this);
+
+    /// <summary>
     ///     The accumulated chat entries (one per finalized message or tool result).
     /// </summary>
     public IReadOnlyList<ChatEntry> Entries => _entries;
@@ -304,20 +254,9 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
                 break;
 
             case MessageUpdateEvent mu:
-                switch (mu.LlmEvent)
-                {
-                    case TextDeltaEvent td:
-                        StreamingText += td.Delta;
-                        break;
-                    case ThinkingDeltaEvent thd:
-                        IsThinking = true;
-                        ThinkingText += thd.Delta;
-                        break;
-                    case ToolCallStartEvent tcs:
-                        _toolNames[tcs.Id] = tcs.ToolName;
-                        AddEntry(new ChatEntry("tool", $"→ {tcs.ToolName}", DateTimeOffset.UtcNow, tcs.Id, tcs.ToolName));
-                        break;
-                }
+                // #1494: same dispatcher as the live bridge, so a new LlmEvent
+                // cannot paint on screen while going missing from the history.
+                _llmEvents.Accept(mu.LlmEvent);
                 break;
 
             case MessageEndEvent:
@@ -399,6 +338,48 @@ public sealed partial class ChatHistoryViewModel : ReactiveViewModel
     /// </summary>
     [RelayCommand]
     private void ClearHistory() => Clear();
+
+    /// <summary>
+    ///     History half of the #1494 dispatcher. Arms that do not affect the
+    ///     transcript are declared empty so every new LlmEvent is an explicit
+    ///     decision here too.
+    /// </summary>
+    private sealed class HistoryLlmEventVisitor(ChatHistoryViewModel vm) : LlmEventVisitor
+    {
+        public override void Visit(TextStartEvent e) { }
+
+        public override void Visit(TextDeltaEvent e) => vm.StreamingText += e.Delta;
+
+        public override void Visit(TextEndEvent e) { }
+
+        public override void Visit(ThinkingStartEvent e) { }
+
+        public override void Visit(ThinkingDeltaEvent e)
+        {
+            vm.IsThinking = true;
+            vm.ThinkingText += e.Delta;
+        }
+
+        public override void Visit(ThinkingEndEvent e) { }
+
+        public override void Visit(ToolCallStartEvent e)
+        {
+            vm._toolNames[e.Id] = e.ToolName;
+            vm.AddEntry(new ChatEntry("tool", $"→ {e.ToolName}", DateTimeOffset.UtcNow, e.Id, e.ToolName));
+        }
+
+        public override void Visit(ToolCallDeltaEvent e) { }
+
+        public override void Visit(ToolCallEndEvent e) { }
+
+        public override void Visit(StepStartEvent e) { }
+
+        public override void Visit(StepFinishEvent e) { }
+
+        public override void Visit(FinishEvent e) { }
+
+        public override void Visit(ErrorEvent e) { }
+    }
 
     // T2 reactive conventions (#1184). Streaming/thinking text deltas are
     // cheap repaints; entry-list and streaming-lifecycle flips are layout —

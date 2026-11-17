@@ -2,11 +2,16 @@
 
 ## What
 
-The first leaf of the `Harbor.Intelligence` assembly (#1626, ADR-018 variant A).
-It owns the read-only git probes that used to live in `Harbor.Application/Git`:
-a process-backed `IGitQuery` and the pure parser for `git worktree list
---porcelain`. Application-layer sibling of `Harbor.Registries` and
-`Harbor.Hooks`, extractable and packable on its own.
+Leaves of the `Harbor.Intelligence` assembly (#1626, ADR-018 variant A), moved
+verbatim out of `Harbor.Application` with their namespaces preserved:
+
+- **Git probes** (`Harbor.Application.Git`): a process-backed `IGitQuery` and
+  the pure parser for `git worktree list --porcelain` (first leaf, #2273).
+- **Provider health check** (`Harbor.Application.Providers`): the concrete
+  `ProviderHealthCheck` adapter for `IProviderHealthCheck` (second leaf).
+
+Application-layer sibling of `Harbor.Registries` and `Harbor.Hooks`, extractable
+and packable on its own.
 
 ## Layer
 
@@ -15,8 +20,9 @@ Application. The layer matrix row is
 
 ## Public API
 
-Consumers bind `Harbor.Application.Git` types. The namespace survives the
-extraction (verbatim slice move), so existing usings keep compiling:
+Consumers bind `Harbor.Application.Git` and `Harbor.Application.Providers` types.
+The namespaces survive the extraction (verbatim slice move), so existing usings
+keep compiling:
 
 ```csharp
 public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
@@ -29,10 +35,16 @@ public static class WorktreePorcelainParser
 {
     public static IReadOnlyList<GitWorktreeInfo> Parse(string? output);
 }
+
+public sealed class ProviderHealthCheck : IProviderHealthCheck
+{
+    public Task<Result<ProviderHealth>> CheckAsync(ProviderId providerId, CancellationToken cancellationToken = default);
+    public static string Classify(string rawError);
+}
 ```
 
-`IGitQuery`, `GitWorkspaceStatus` and `GitWorktreeInfo` are declared in
-`Harbor.Abstractions/Git/IGitQuery.cs` and stay there.
+`IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo` and `IProviderHealthCheck`
+are declared in `Harbor.Abstractions` and stay there.
 
 ## Wiring
 
@@ -43,7 +55,8 @@ services.AddSingleton<IGitQuery, ProcessGitQuery>();
 ```
 
 That lives in `src/Harbor.Hosting/Modules/TuiModule.cs` and
-`apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs`. Both hold a direct
+`apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs`. `ProviderHealthCheck`
+is registered in `src/Harbor.Hosting/Modules/CoreModule.cs`. All hold a direct
 `ProjectReference` to this assembly.
 
 ## Usage
@@ -63,7 +76,8 @@ life of the process (#884).
 
 ## Dependencies
 
-- `Harbor.Abstractions` — `IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo`.
+- `Harbor.Abstractions` — `IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo`,
+  `IProviderHealthCheck`, `IProviderRegistry`, `ProviderHealth`.
 - `Harbor.Extensions` — `StringBuilderPool` for the per-spawn stdout buffer.
 - `Microsoft.Extensions.Logging.Abstractions` — `ILogger<T>` and
   `[LoggerMessage]` delegates.
@@ -73,8 +87,8 @@ life of the process (#884).
 ## Known limitations
 
 - This is a partial slice of #1626. Skills, Diagnostics, Filesystem,
-  Attachments, ProviderHealthCheck and Telemetry still live in
-  `Harbor.Application` and move into this assembly in later slices.
+  Attachments and Telemetry still live in `Harbor.Application` and move into
+  this assembly in later slices.
 - `GetStatus` and `ListWorktrees` are synchronous: the port is sync and one
   caller paints a UI badge on the render thread.
 - A hung git is killed at 3 seconds and reported as "no workspace", not as an

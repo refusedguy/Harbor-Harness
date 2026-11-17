@@ -5,6 +5,51 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.State;
+
+/// <summary>
+///     A Command: encapsulates the execution of one concrete <see cref="TuiEffect" />
+///     type. Handlers are looked up by effect type in a
+///     <see cref="TuiEffectHandlerRegistry" /> so the runner dispatches instead of
+///     switching. This stays inside the existing effect axis (#555). It is a
+///     dispatch detail, not a new plugin extension seam.
+/// </summary>
+/// <typeparam name="TEffect">The effect this handler executes.</typeparam>
+public interface ITuiEffectHandler<in TEffect>
+    where TEffect : TuiEffect
+{
+    /// <summary>Execute the effect with the same fire-and-forget contract as the old switch arms.</summary>
+    void Execute(TEffect effect);
+}
+
+/// <summary>
+///     Command registry for <see cref="TuiEffect" />: maps a concrete effect type
+///     to the handler that runs it. A missing mapping is a no-op, matching the
+///     former switch's default behaviour for unknown / <see cref="TuiEffect.None" />
+///     effects.
+/// </summary>
+internal sealed class TuiEffectHandlerRegistry
+{
+    private readonly Dictionary<Type, Action<TuiEffect>> _handlers = new();
+
+    public void Register<TEffect>(ITuiEffectHandler<TEffect> handler)
+        where TEffect : TuiEffect
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        _handlers[typeof(TEffect)] = effect => handler.Execute((TEffect)effect);
+    }
+
+    public bool TryExecute(TuiEffect effect)
+    {
+        if (effect is null || !_handlers.TryGetValue(effect.GetType(), out var handler))
+        {
+            return false;
+        }
+
+        handler(effect);
+        return true;
+    }
+}
+
 /// <summary>
 ///     Default <see cref="ITuiEffectRunner" />. The ONLY place that touches
 ///     <see cref="IAgentRunner" /> / the slash handler. Renderers stay free of
@@ -36,6 +81,9 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     private readonly Func<string, Task>? _activateSession;
     private readonly Func<Task>? _openSession;
 
+    // Command dispatch: one handler per effect type; Run only looks up + executes.
+    private readonly TuiEffectHandlerRegistry _handlers;
+
     // #91: rebindable mid-flight via RebindStore. Every async effect captures
     // its store once at entry (a volatile read) and dispatches the whole run
     // into that snapshot, so a session switch can never redirect an in-flight
@@ -60,6 +108,14 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _coordinator = coordinator;
         _activateSession = activateSession;
         _openSession = openSession;
+
+        _handlers = new TuiEffectHandlerRegistry();
+        _handlers.Register(new PromptAgentHandler(this));
+        _handlers.Register(new RunSlashHandler(this));
+        _handlers.Register(new AbortAgentHandler(this));
+        _handlers.Register(new QuitAppHandler(this));
+        _handlers.Register(new ActivateSessionHandler(this));
+        _handlers.Register(new RequestOpenSessionHandler(this));
     }
 
     public void RebindStore(UiStore newStore)
@@ -71,70 +127,113 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     /// <summary>Slash command list for input autocomplete.</summary>
     public static ImmutableArray<string> KnownSlashCommands => ChatCommands.Slash;
 
+    /// <summary>
+    ///     Dispatch an effect to its registered handler. Lookup + execute only,
+    ///     with no per-effect arms, so adding an effect never edits this method.
+    ///     <para>
+    ///         §FP-006 (RESOLVED): each fire-and-forget async branch lives in its
+    ///         handler and goes through the shared TaskFireAndForget helper (task
+    ///         tracking + OnlyOnFaulted log). The Run contract stays synchronous
+    ///         (per ITuiEffectRunner.Run): unobserved-task exceptions surface via
+    ///         _logger instead of dying in TaskScheduler.UnobservedTaskException.
+    ///     </para>
+    ///     <para>
+    ///         Architecture audit v2 §3.4 (CT-002 RESOLVED): the inner async methods
+    ///         (PromptAsync, RunSlashAsync, AbortAsync) catch
+    ///         OperationCanceledException FIRST and route it to a clean "idle"
+    ///         transition instead of letting the generic Exception catch set the
+    ///         status to "error". An Esc-abort is no longer misreported as a failure.
+    ///     </para>
+    /// </summary>
     public void Run(TuiEffect effect)
     {
-        // §FP-006 (RESOLVED): each fire-and-forget async branch goes through the
-        // shared TaskFireAndForget helper (task tracking + OnlyOnFaulted log).
-        // The Run contract stays synchronous (per ITuiEffectRunner.Run), so we
-        // still do NOT await — but unobserved-task exceptions are now surfaced
-        // via _logger instead of dying in TaskScheduler.UnobservedTaskException.
-        // Run synchronously is fine because the continuation just logs.
-        //
-        // Architecture audit v2 §3.4 (CT-002 RESOLVED): the inner async methods
-        // (PromptAsync, RunSlashAsync, AbortAsync) catch OperationCanceledException
-        // FIRST and route it to a clean "idle" transition instead of letting the
-        // generic Exception catch set the status to "error". An Esc-abort is no
-        // longer misreported as a failure.
-        switch (effect)
+        _handlers.TryExecute(effect);
+    }
+
+    /// <summary>
+    ///     Register (or replace) the handler for an effect type. Lets callers and
+    ///     tests add a new effect without editing <see cref="Run" />. The registry
+    ///     is keyed by the concrete <see cref="TuiEffect" /> runtime type.
+    /// </summary>
+    public void RegisterEffectHandler<TEffect>(ITuiEffectHandler<TEffect> handler)
+        where TEffect : TuiEffect
+        => _handlers.Register(handler);
+
+    // Command handlers. Each owns exactly one former switch arm, including the
+    // fire-and-forget / logging shape, and reaches the host's dependencies through
+    // its instance. The async methods below stay unchanged.
+    private sealed class PromptAgentHandler(TuiEffectHost host)
+        : ITuiEffectHandler<TuiEffect.PromptAgent>
+    {
+        public void Execute(TuiEffect.PromptAgent effect) =>
+            TaskFireAndForget.Forget(
+                host.PromptAsync(effect.Text),
+                ex => { if (host._logger is not null) TuiEffectHostLog.PromptEffectFailed(host._logger, ex); });
+    }
+
+    private sealed class RunSlashHandler(TuiEffectHost host)
+        : ITuiEffectHandler<TuiEffect.RunSlash>
+    {
+        public void Execute(TuiEffect.RunSlash effect) =>
+            TaskFireAndForget.Forget(
+                host.RunSlashAsync(effect.Command),
+                ex => { if (host._logger is not null) TuiEffectHostLog.RunSlashFailed(host._logger, ex, effect.Command); });
+    }
+
+    private sealed class AbortAgentHandler(TuiEffectHost host)
+        : ITuiEffectHandler<TuiEffect.AbortAgent>
+    {
+        public void Execute(TuiEffect.AbortAgent effect) =>
+            TaskFireAndForget.Forget(
+                host.AbortAsync(),
+                ex => { if (host._logger is not null) TuiEffectHostLog.AbortFailed(host._logger, ex); });
+    }
+
+    private sealed class QuitAppHandler(TuiEffectHost host)
+        : ITuiEffectHandler<TuiEffect.QuitApp>
+    {
+        public void Execute(TuiEffect.QuitApp effect) =>
+            host._store.Dispatch(new AppMsg.Quit());
+    }
+
+    private sealed class ActivateSessionHandler(TuiEffectHost host)
+        : ITuiEffectHandler<TuiEffect.ActivateSession>
+    {
+        public void Execute(TuiEffect.ActivateSession effect)
         {
-            case TuiEffect.None:
-                break;
-            case TuiEffect.PromptAgent p:
-                TaskFireAndForget.Forget(
-                    PromptAsync(p.Text),
-                    ex => { if (_logger is not null) TuiEffectHostLog.PromptEffectFailed(_logger, ex); });
-                break;
-            case TuiEffect.RunSlash s:
-                TaskFireAndForget.Forget(
-                    RunSlashAsync(s.Command),
-                    ex => { if (_logger is not null) TuiEffectHostLog.RunSlashFailed(_logger, ex, s.Command); });
-                break;
-            case TuiEffect.AbortAgent:
-                TaskFireAndForget.Forget(
-                    AbortAsync(),
-                    ex => { if (_logger is not null) TuiEffectHostLog.AbortFailed(_logger, ex); });
-                break;
-            case TuiEffect.QuitApp:
-                _store.Dispatch(new AppMsg.Quit());
-                break;
-            case TuiEffect.ActivateSession act:
-                // Tab-strip activate (#388). The session switch itself lives in
-                // the composition root (ISessionManager.OpenSessionAsync) and
-                // arrives as a delegate; hosts that never switch sessions leave
-                // it null and the tab focus is then a pure state change.
-                if (_activateSession is null)
-                {
-                    if (_logger is not null) TuiEffectHostLog.ActivateSessionIgnored(_logger, act.SessionId.Value);
-                    break;
-                }
-                TaskFireAndForget.Forget(
-                    _activateSession(act.SessionId.Value),
-                    ex => { if (_logger is not null) TuiEffectHostLog.ActivateSessionFailed(_logger, ex, act.SessionId.Value); });
-                break;
-            case TuiEffect.RequestOpenSession:
-                // Opening a session from the strip (issue #389). Same delegate
-                // shape as the activate case above: the picker lives in the
-                // composition root, so a host without one just logs and the key
-                // stays harmless.
-                if (_openSession is null)
-                {
-                    if (_logger is not null) TuiEffectHostLog.RequestOpenSessionIgnored(_logger);
-                    break;
-                }
-                TaskFireAndForget.Forget(
-                    _openSession(),
-                    ex => { if (_logger is not null) TuiEffectHostLog.RequestOpenSessionFailed(_logger, ex); });
-                break;
+            // Tab-strip activate (#388). The session switch itself lives in the
+            // composition root (ISessionManager.OpenSessionAsync) and arrives as a
+            // delegate; hosts that never switch sessions leave it null and the tab
+            // focus is then a pure state change.
+            if (host._activateSession is null)
+            {
+                if (host._logger is not null) TuiEffectHostLog.ActivateSessionIgnored(host._logger, effect.SessionId.Value);
+                return;
+            }
+
+            TaskFireAndForget.Forget(
+                host._activateSession(effect.SessionId.Value),
+                ex => { if (host._logger is not null) TuiEffectHostLog.ActivateSessionFailed(host._logger, ex, effect.SessionId.Value); });
+        }
+    }
+
+    private sealed class RequestOpenSessionHandler(TuiEffectHost host)
+        : ITuiEffectHandler<TuiEffect.RequestOpenSession>
+    {
+        public void Execute(TuiEffect.RequestOpenSession effect)
+        {
+            // Opening a session from the strip (issue #389). Same delegate shape
+            // as the activate case above: the picker lives in the composition
+            // root, so a host without one just logs and the key stays harmless.
+            if (host._openSession is null)
+            {
+                if (host._logger is not null) TuiEffectHostLog.RequestOpenSessionIgnored(host._logger);
+                return;
+            }
+
+            TaskFireAndForget.Forget(
+                host._openSession(),
+                ex => { if (host._logger is not null) TuiEffectHostLog.RequestOpenSessionFailed(host._logger, ex); });
         }
     }
 
