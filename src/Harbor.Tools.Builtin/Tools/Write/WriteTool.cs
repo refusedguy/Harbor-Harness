@@ -194,9 +194,7 @@ public sealed partial class WriteTool : ITool
                 overwritten = existed,
                 fileVersion = FileVersion.Token(digest)
             })
-        {
-            Effect = ToolResultEffect.FileChange
-        };
+        with { Effect = ToolResultEffect.FileChange };
     }
 
     private static bool GetBoolDefaultTrue(JsonElement args, string name)

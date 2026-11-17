@@ -280,9 +280,7 @@ public sealed partial class EditTool : ITool
         return ToolResult.Success(
             msg.ToString(),
             new { path, changes = totalReplacements, steps = editSteps, fileVersion = FileVersion.Token(digest) })
-        {
-            Effect = ToolResultEffect.FileChange
-        };
+        with { Effect = ToolResultEffect.FileChange };
     }
 
     /// <summary>
