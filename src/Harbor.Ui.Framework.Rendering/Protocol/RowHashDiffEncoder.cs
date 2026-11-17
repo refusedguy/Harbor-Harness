@@ -41,8 +41,10 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
 
         int cols = next.Cols;
         int rows = next.Rows;
+        // Keep the original null-state flow: the property pattern in the same
+        // expression tells the compiler hints is non-null in the second arm.
+        bool useHints = hints is { Count: > 0 } && HintAreaWithinThreshold(hints, cols, rows);
         bool hasHints = hints is { Count: > 0 };
-        bool useHints = hasHints && HintAreaWithinThreshold(hints, cols, rows);
 
         // #2220: one decision, one tally. A no-hint frame makes no choice and
         // increments neither counter; a miss means the caller's hints exceeded
