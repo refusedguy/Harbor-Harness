@@ -65,6 +65,19 @@ func hasRule(found []finding, rule string) bool {
 	return false
 }
 
+// manyRows is a full baseline of n rows and the n log lines that reproduce
+// them. The same baseline is fed to a full log and a partial log below, so the
+// only thing that changes between the two cases is how much of the tree the
+// analyzer actually recompiled.
+func manyRows(n int) (string, string) {
+	var log, baseline strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&log, "/home/runner/work/Repo/Repo/src/Harbor.One/Harbor.One.csproj : warning RT0003: PackageReference Extra.Package.%02d can be removed [/home/runner/work/Repo/Repo/src/Harbor.One/Harbor.One.csproj]\n", i)
+		fmt.Fprintf(&baseline, "RT0003 | src/Harbor.One/Harbor.One.csproj :: Extra.Package.%02d | a reason that is long enough to be a reason and not a category | @refusedguy\n", i)
+	}
+	return log.String(), baseline.String()
+}
+
 // selfTestRun proves the gate is red when it should be.
 func selfTestRun() int {
 	var failures []string
@@ -171,6 +184,44 @@ func selfTestRun() int {
 		filepath.Join(root, "coverage.txt"),
 		filepath.Join(root, "tools", "reference-trimmer-baseline.txt"), 2)
 	check("a coverage count below the floor is red", hasRule(found, "RT-SCAN-BLIND"), "")
+
+	// The rest of the cases use ONE unchanged baseline of 12 rows. The full
+	// log reproduces all 12; the partial log reproduces only 2. Nothing in the
+	// baseline moves between them, exactly as on a cached dev run where the
+	// PR did not touch the baseline.
+	fullLog, twelveRows := manyRows(12)
+	partialLog, _ := manyRows(2)
+	baselineRel := "tools/reference-trimmer-baseline.txt"
+	baselinePath := filepath.Join(root, baselineRel)
+	writeFile(root, "coverage.txt", fixtureCoverage)
+	writeFile(root, baselineRel, twelveRows)
+
+	// 10. Positive control for the strict path: a full compile with a dead row.
+	deadRow := "RT0003 | src/Harbor.One/Harbor.One.csproj :: Dead.Package | a reason that is long enough to be a reason and not a category | @refusedguy\n"
+	writeFile(root, "findings.log", fullLog)
+	writeFile(root, baselineRel, twelveRows+deadRow)
+	found, fullStats := scan(root, filepath.Join(root, "findings.log"),
+		filepath.Join(root, "coverage.txt"), baselinePath, 2)
+	check("a full compile is not partial", !fullStats.partial,
+		fmt.Sprintf("parsed %d of %d", fullStats.parsed, fullStats.baseline))
+	check("a full compile with a dead row is red", hasRule(found, "RT-STALE-BASELINE"), "")
+
+	// 11. The same 12-row baseline, a partial log: the 10 rows the log did not
+	// reproduce must not be called stale.
+	writeFile(root, baselineRel, twelveRows)
+	writeFile(root, "findings.log", partialLog)
+	found, partialStats := scan(root, filepath.Join(root, "findings.log"),
+		filepath.Join(root, "coverage.txt"), baselinePath, 2)
+	check("a partial compile is detected", partialStats.partial,
+		fmt.Sprintf("parsed %d of %d, skipped %d", partialStats.parsed, partialStats.baseline, partialStats.skippedStale))
+	check("a partial compile with unchanged baseline is not stale-red", !hasRule(found, "RT-STALE-BASELINE"), "")
+
+	// 12. Positive control for the partial path: a new finding in a project
+	// that did recompile is still red.
+	writeFile(root, "findings.log", partialLog+"/home/runner/work/Repo/Repo/src/Harbor.One/Harbor.One.csproj : warning RT0001: Reference Fresh.Package can be removed [/home/runner/work/Repo/Repo/src/Harbor.One/Harbor.One.csproj]\n")
+	found, _ = scan(root, filepath.Join(root, "findings.log"),
+		filepath.Join(root, "coverage.txt"), baselinePath, 2)
+	check("a partial compile still catches a new finding", hasRule(found, "RT-NEW-FINDING"), "")
 
 	if len(failures) > 0 {
 		fmt.Printf("\nself-test FAILED: %s\n", strings.Join(failures, ", "))

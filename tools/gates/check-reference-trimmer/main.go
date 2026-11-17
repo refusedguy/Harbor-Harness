@@ -549,11 +549,26 @@ func parsedFindings(root string, text string) ([]finding, []finding, int) {
 	return parsed, quality, excluded
 }
 
+// partialStaleFloor is the largest number of baseline rows a full compile may
+// fail to reproduce before the gate calls the compile partial.
+//
+// A full compile that is in sync with the baseline reproduces every row. A
+// full compile whose diff closed one finding but forgot to delete its row
+// misses exactly one, and that is the case the stale check exists to catch.
+// A cached compile that skipped most projects misses many rows at once; those
+// rows are not stale, they were simply not recompiled. The gate cannot tell
+// the two apart from the warning log, so above this floor it stops calling
+// them stale and says so out loud instead.
+const partialStaleFloor = 8
+
 // stats is what the scan saw.
 type stats struct {
-	covered  int
-	parsed   int
-	excluded int
+	covered      int
+	parsed       int
+	excluded     int
+	baseline     int // valid rows in the baseline file
+	partial      bool
+	skippedStale int // baseline rows withheld because the compile was partial
 }
 
 // scan is the gate.
@@ -643,15 +658,37 @@ func scan(root string, findingsPath string, coveragePath string, baselinePath st
 	for _, row := range rows {
 		carried[row.key()] = true
 	}
+
+	// A cached compile reuses obj/ and bin/, so the coverage file still lists
+	// every project (the .tsv files survive) while the warning log only holds
+	// findings from the projects that actually recompiled. Counting the rows
+	// the log failed to reproduce is the only signal the gate has for that
+	// difference. One or two missing rows are a real stale finding; a large
+	// deficit is a partial compile, and calling those rows stale is a lie.
+	missing := 0
 	for _, row := range rows {
 		if !parsedKeys[row.key()] {
-			findings = append(findings, finding{
-				rule:    "RT-STALE-BASELINE",
-				subject: row.subject,
-				message: fmt.Sprintf("the baseline row on line %d carries %s for a finding the tree no longer produces. Delete the row in the same diff that closed the finding.", row.lineNo, row.rule),
-			})
+			missing++
 		}
 	}
+	result.baseline = len(rows)
+	result.partial = missing > partialStaleFloor
+	for _, row := range rows {
+		if parsedKeys[row.key()] {
+			continue
+		}
+		if result.partial {
+			result.skippedStale++
+			continue
+		}
+		findings = append(findings, finding{
+			rule:    "RT-STALE-BASELINE",
+			subject: row.subject,
+			message: fmt.Sprintf("the baseline row on line %d carries %s for a finding the tree no longer produces. Delete the row in the same diff that closed the finding.", row.lineNo, row.rule),
+		})
+	}
+	// This check is independent of partial detection: a new finding in a
+	// project that did recompile is red on a partial compile too.
 	for _, item := range parsed {
 		if carried[item.key()] {
 			continue
@@ -678,6 +715,10 @@ func report(findings []finding, baselinePath string, result stats) int {
 		fmt.Println("OK: no unused reference outside the baseline.")
 		fmt.Printf("  the analyzer ran in %d project(s); %d finding(s) parsed; %d dropped as another gate's scope.\n",
 			result.covered, result.parsed, result.excluded)
+		if result.partial {
+			fmt.Printf("  partial compile, stale check skipped, %d of %d findings; %d baseline row(s) not reproduced.\n",
+				result.parsed, result.baseline, result.skippedStale)
+		}
 		return gate.Green
 	}
 	byRule := map[string][]finding{}
@@ -691,6 +732,10 @@ func report(findings []finding, baselinePath string, result stats) int {
 	fmt.Printf("ReferenceTrimmer gate: %d finding(s).\n", len(findings))
 	fmt.Printf("  the analyzer ran in %d project(s); %d finding(s) parsed; %d dropped as another gate's scope.\n",
 		result.covered, result.parsed, result.excluded)
+	if result.partial {
+		fmt.Printf("  partial compile, stale check skipped, %d of %d findings; %d baseline row(s) not reproduced.\n",
+			result.parsed, result.baseline, result.skippedStale)
+	}
 	sort.Strings(ruleOrder)
 	for _, rule := range ruleOrder {
 		fmt.Printf("\n%s (%d):\n", rule, len(byRule[rule]))
