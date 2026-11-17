@@ -367,9 +367,12 @@ public sealed class MarkupOverlay
     private static void PaintAnnotation(ScreenBuffer buffer, Rect image, MarkupAnnotation item, bool selected)
     {
         var painter = MarkupPainters.For(item.Kind);
-        var style = selected
-            ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold)
-            : painter.UnselectedStyle;
+        // Annotation priority (ordinary unselected → selected) lives in
+        // StylePriority, shared with every other state-driven widget.
+        var catalog = new StyleCatalog(
+            painter.UnselectedStyle,
+            Selected: new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
+        var style = StylePriority.Resolve(catalog, selected ? VisualState.Selected : VisualState.None, disabled: false);
         painter.PaintOverlay(buffer, image, item.From, item.To, item.Text, style);
     }
 

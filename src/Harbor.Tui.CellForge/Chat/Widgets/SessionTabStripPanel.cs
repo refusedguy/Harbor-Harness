@@ -174,6 +174,8 @@ public sealed class SessionTabStripPanel : Panel
 
     private static readonly CellStyle ActiveStyle = new(attrs: StyleAttr.Reverse);
     private static readonly CellStyle InactiveTitleStyle = ChatPalette.Dim;
+    // Tab title priority (ordinary inactive → active) lives in StylePriority.
+    private static readonly StyleCatalog TitleCatalog = new(InactiveTitleStyle, Active: ActiveStyle);
     private static readonly CellStyle PinnedStyle = new(ChatPalette.Accent);
     private static readonly CellStyle DirtyStyle = new(ChatPalette.Warning);
     private static readonly CellStyle ErrorMarkerStyle = new(ChatPalette.Error);
@@ -706,7 +708,7 @@ public sealed class SessionTabStripPanel : Panel
             rect.X + cell.TitleX,
             y,
             cell.Title.AsSpan(),
-            cell.IsActive ? ActiveStyle : InactiveTitleStyle);
+            StylePriority.Resolve(TitleCatalog, cell.IsActive ? VisualState.Active : VisualState.None, disabled: false));
 
         // The marker: full colour while unread (error-red wins over amber),
         // a dimming linger for a few frames after the signal clears. A

@@ -444,6 +444,8 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
         var titleStyle = ChatPalette.ToolArgs;
         var detailStyle = ChatPalette.Dim;
         var headerStyle = new CellStyle(ChatPalette.Muted, attrs: StyleAttr.Bold);
+        // Item priority (ordinary title → picked) lives in StylePriority.
+        var itemCatalog = new StyleCatalog(titleStyle, Selected: selectedStyle);
         int painted = 0;
         for (int i = firstVis; i < _flatView.Count && painted < availableRows; i++)
         {
@@ -457,7 +459,8 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
             {
                 bool isPicked = i == pickedVis;
                 int titleLen = Math.Min(text.Length, innerW);
-                buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen), isPicked ? selectedStyle : titleStyle);
+                buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen),
+                    StylePriority.Resolve(itemCatalog, isPicked ? VisualState.Selected : VisualState.None, disabled: false));
 
                 // Second plan: the item detail (short id, status, …) dimmed
                 // after the title when space remains. Empty details paint

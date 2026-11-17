@@ -136,12 +136,14 @@ public sealed class CalendarView
                 {
                     var fill = Cell.From(new Rune(' '), selectedBg);
                     buffer.Fill(new Rect(x, y, Math.Min(3, rect.Right - x), 1), in fill);
-                    buffer.SetText(x, y, text, selectedStyle);
                 }
-                else
-                {
-                    buffer.SetText(x, y, text, evt ? eventStyle : dayStyle);
-                }
+
+                // Day priority (ordinary/event → selected) lives in
+                // StylePriority. The selected background fill above is
+                // unchanged; only the text style is resolved centrally.
+                var dayCatalog = new StyleCatalog(evt ? eventStyle : dayStyle, Selected: selectedStyle);
+                buffer.SetText(x, y, text,
+                    StylePriority.Resolve(dayCatalog, selected ? VisualState.Selected : VisualState.None, disabled: false));
 
                 // Event marker in the third cell of the day slot.
                 var marker = new Rune(evt ? '·' : ' ');
