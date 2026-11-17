@@ -207,121 +207,15 @@ on:
       - 'docs/toc.yml'
       - 'api/**'
       - '.github/workflows/docs.yml'
+  # No `paths:` filter here on purpose. Six of this workflow's jobs are
+  # required status checks on the `dev` ruleset (checker self-test, internal
+  # links, markdown lint, normative citations, tree gates, test project
+  # coverage). A filtered trigger leaves those contexts unreported on a PR
+  # that touches none of the listed paths — e.g. an `apps/**/*.csproj`-only
+  # change (#2299) — so an otherwise green PR is BLOCKED by checks that never
+  # ran. Every PR must publish all six contexts; the jobs below are cheap and
+  # need no SDK, so the trigger stays total.
   pull_request:
-    paths:
-      - '**.md'
-      # #947. TEST-CITE-DRIFT reads `tests/**/*.cs`, so a PR that inserts a
-      # line above a cited one — the only way this defect is ever created —
-      # touches none of the paths above unless .cs is here. Without these three
-      # the rule is unreachable on exactly the PRs it exists for, which is the
-      # #509 failure (a `paths-ignore` that made a gate green by never running)
-      # wearing a different hat.
-      - 'tests/**/*.cs'
-      - 'src/**/*.cs'
-      - 'apps/**/*.cs'
-      # #428. `check-abstractions-contract.py` reads four guarded projects'
-      # .csproj files and the .cs they compile. A csproj is how a dependency
-      # enters this repository, so a workflow that watched only .cs could not
-      # trigger on the change the gate exists to catch — the #509 failure (a
-      # gate made green by never running) wearing a different hat. Same for
-      # Directory.Packages.props, which is where a version is pinned.
-      - 'src/**/*.csproj'
-      - 'Directory.Packages.props'
-      - 'tools/check-doc-cites.py'
-      - 'tools/md_gate.py'
-      - 'tools/gates/check-abstractions-contract/**'
-      # #1728. The arch-anchor gate reads the architecture rule tree and its own
-      # exceptions file, so a PR that edits the gate itself has to run it.
-      - 'tools/arch-anchor-exceptions.txt'
-      # #1726. The guard triage reads the TRX of the `test` job, and its
-      # self-test runs here with the other python tools. A PR that edits the
-      # tool, or the registry that says what a firing MEANT, must run the
-      # self-test, or the edit lands unvalidated.
-      - 'tools/guard-triage-classes.json'
-      # #1778. Same trigger as above: the duplicate-body gate measures
-      # `tests/**/*.cs` and compares the result against its committed
-      # baseline, so a PR that edits the tree it measures — or the gate, or
-      # the baseline — must run it. The gate is compiled now; its sources
-      # are under `tools/gates/`, which the trigger below already covers.
-      - 'tools/test-dup-baseline.json'
-      # #1847. Same trigger as above: the second duplication gate measures
-      # `src/`, `apps/` and `tests/` and compares the result against its
-      # committed baseline, so a PR that edits the tree it measures — or the
-      # gate, the config, or the baseline — must run it. The gate is compiled
-      # now; its sources are under `tools/gates/`, which the trigger below
-      # already covers.
-      - 'tools/jscpd-baseline.json'
-      - '.jscpd.json'
-      # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
-      # the result against its committed exceptions file, so a PR that edits
-      # the gate or the exceptions must run it — and so must a PR that edits
-      # the tree it measures. The gate is compiled now; its sources are under
-      # `tools/gates/`, and the trigger below names the gate's own directory
-      # as well, so an edit of either runs the job.
-      - 'tools/gates/check-test-json-reflection/**'
-      - 'tools/test-json-reflection-exceptions.txt'
-      # #1823. Same trigger as above: the completeness gate reads the test
-      # projects, the solution and the CI lists, so a PR that edits any of
-      # the three must run it. The gate is compiled now; its sources are
-      # under `tools/gates/`, which the trigger below already covers.
-      - 'tests/**/*.csproj'
-      - 'Harbor.slnx'
-      - '.github/workflows/ci.yml'
-      - '.github/workflows/test-os.yml'
-      - 'tools/test-project-baseline.txt'
-      - 'build/_build/Targets/TestTarget.cs'
-      # #1575. Same trigger as above: the string-switch gate reads `src/` and
-      # `apps/` and compares the result against its committed exceptions
-      # file, so a PR that edits the gate or the exceptions must run it.
-      - 'tools/string-switch-exceptions.txt'
-      # #1884. Same trigger as above: the two reporters and their self-tests.
-      - 'tools/gates/test-measurements/**'
-      - 'tools/gates/test-census/**'
-      # #1795. The third reporter (the skipped tests, with their reasons) and
-      # its self-test — same trigger as the two above.
-      - 'tools/gates/test-skips/**'
-      # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
-      # reads the frozen contract sources, so a PR touching the gate runs it.
-      - 'tools/gates/check-xml-doc-coverage/**'
-      # #1845. Same trigger as above: the re-signing gate reads the commit
-      # history, so a PR that edits the gate runs its self-test.
-      - 'tools/gates/check-public-api-resign/**'
-      # The merge-loss gate. Same trigger as above: a pull request that
-      # touches a workflow file is the one that gets merged LOCALLY, so the
-      # gate has to run on it.
-      - '.github/workflows/**'
-      - 'tools/merge-loss-exceptions.txt'
-      # #1730. The banned-API exemption gate reads BannedSymbols.txt (the
-      # catalogue of every `#pragma warning disable RS0030` the product tree
-      # carries) and the src/ and apps/ sources it compares against. A pull request
-      # that edits the catalogue has to run it, or the catalogue and the
-      # tree drift apart with nothing noticing - and the ban is a security
-      # control, so a drift is a hole in it.
-      - 'BannedSymbols.txt'
-      # #1731. Same trigger as above: the seam-graph gate reads the C# tree
-      # and compares the result with the committed document.
-      - 'tools/gates/**'
-      - 'tools/bin/**'
-      - 'docs/SEAM_GRAPH.md'
-      # #1888. Same trigger as above: the policy checker, and the three tools
-      # whose self-test no workflow ran until the policy asked for one.
-      - 'tools/check-gate-policy.py'
-      - 'tools/gates/test-skips/**'
-      # #1558. Same trigger as above: the chain census measures `src/` and
-      # `apps/` (the .cs paths above), so a PR that edits the gate or the
-      # baseline must run it.
-      - 'tools/result-chains-baseline.json'
-      # #1781. Same trigger as above: the shard-balance gate reads the shard
-      # lists in ci.yml and the recorded cost of every project, so a PR that
-      # edits the gate, the measurement or the workflow's shard lists must run
-      # it.
-      - 'tools/shard-costs.json'
-      # #431. Same trigger as above: the site manifest and its nav.
-      # api/** mirrors the push block for the same reason.
-      - 'docfx.json'
-      - 'docs/toc.yml'
-      - 'api/**'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions: {}
