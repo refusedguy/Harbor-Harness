@@ -224,3 +224,5 @@ Harbor.Abstractions.Sessions.SessionOperationMarkers
 static Harbor.Abstractions.Sessions.SessionOperationMarkers.FindIncompleteTurn(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>! events) -> int?
 static Harbor.Abstractions.Sessions.SessionOperationMarkers.FindUnmatchedStarts(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>! events, Harbor.Abstractions.Sessions.SessionOperationKind start, Harbor.Abstractions.Sessions.SessionOperationKind end) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>!
 static Harbor.Abstractions.Sessions.SessionOperationMarkers.HasIncompleteFork(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>! events) -> bool
+Harbor.Abstractions.Models.TokenCell
+static Harbor.Abstractions.Models.TokenCell.ToCompact(long tokens) -> string!

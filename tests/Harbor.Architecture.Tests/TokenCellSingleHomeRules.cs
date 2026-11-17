@@ -149,9 +149,10 @@ public sealed class TokenCellSingleHomeRules
             // thousand and none of them is a scaled token cell.
             @"(?=[^\n]*/\s*1_?000(?:_000)?(?:\.0)?\s*[,)])(?=[^\n]*\.ToString\(\s*\x22\s*(?:[Ff][0-9]|0\.#))(?=[^\n]*[KkMm]\b)",
             "the token cell has more than one writer, in more than one precision — `F1`, "
-            + "`F2` and `0.#` all survive in the tree. Do not add a seventh: declare the "
-            + "line below with the reason it cannot share a writer, or send it to "
-            + "StatusBarText.TokensToCompact. Which notation is canonical is ADR-010 §6's "
+            + "`F2` and `0.#` all survive in the tree. Do not add another: declare the "
+            + "line below with the reason it cannot share a writer, or send it to the home "
+            + "that already writes that shape — StatusBarText.TokensToCompact or "
+            + "TokenCell.ToCompact. Which notation is canonical is ADR-010 §6's "
             + "open question and this file does not answer it. See issue #788."),
         new Rule(
             "TOKEN-CELL-ASSEMBLED-BY-HAND",
@@ -185,12 +186,13 @@ public sealed class TokenCellSingleHomeRules
     private sealed record LineHome(string RelativePath, string Marker, int ExpectedMatches, string Reason);
 
     /// <summary>
-    ///     Every writer that survives today: nineteen entries over twenty sites,
-    ///     because <c>StatusViewModel</c> spells its cell on two lines. Each names
-    ///     the magnitude it renders and the reader it renders it for, because the
-    ///     only reason seven copies of one number are defensible is that they have
-    ///     different readers — and that is the fact the owner needs when ADR-010
-    ///     §6 is decided.
+    ///     Every writer that survives today: seventeen entries over eighteen
+    ///     sites, because <c>StatusViewModel</c> spells its cell on two lines.
+    ///     The #788 slice collapsed the two byte-identical string spellings of
+    ///     '0.# + k/M' into one home in <c>TokenCell</c>; the two model-facing
+    ///     raw reports and the per-frame span twin remain declared for their
+    ///     own readers. Each entry still names the magnitude and its reader —
+    ///     the fact the owner needs when ADR-010 §6 is decided.
     /// </summary>
     /// <remarks>
     ///     Deliberately NOT sorted by file: this table is a reader-facing argument
@@ -230,29 +232,31 @@ public sealed class TokenCellSingleHomeRules
             + "reference here first."),
 
         new LineHome(
-            "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
-            @">= 1_000_000 => (v / 1_000_000.0).ToString(""0.#"", CultureInfo.InvariantCulture) + ""M"",",
+            "src/Harbor.Abstractions.Contracts/Models/TokenCell.cs",
+            @">= 1_000_000 => (tokens / 1_000_000.0).ToString(""0.#""",
             1,
-            "CONVENTION '0.# + k/M', magnitude A, reader: a human at the CellForge status "
-            + "widget. Trailing zeros are trimmed here and not in the status bar, which is the "
-            + "second axis of ADR-010 §1. This is the ONLY token notation a golden frame pins "
-            + "(tests/fixtures/celldiff/ce3-status-widths.golden.txt:3), so it is also the "
-            + "surface whose change costs the most baselines — the asymmetry §6 prices."),
+            "CONVENTION '0.# + k/M', magnitude A — the ONE string home since the #788 slice. "
+            + "StatusViewModel.FormatCount (the CellForge widget, the only notation a golden "
+            + "frame pins) and SideBarView.FormatTokens (the per-message header) used to spell "
+            + "this expression twice, byte-for-byte; both delegate here now with unchanged "
+            + "output. Trailing zeros are trimmed here and not in the status bar, which is the "
+            + "second axis of ADR-010 §1. This home does NOT choose the canon — §6 stays open."),
 
         new LineHome(
-            "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
-            @">= 1_000 => (v / 1_000.0).ToString(""0.#"", CultureInfo.InvariantCulture) + ""k"",",
+            "src/Harbor.Abstractions.Contracts/Models/TokenCell.cs",
+            @">= 1_000 => (tokens / 1000.0).ToString(""0.#""",
             1,
-            "The K branch of the same writer. Note the case: 'k' here against 'K' in "
+            "The K branch of the same home. Note the case: 'k' here against 'K' in "
             + "StatusBarText — the only axis on which the two conventions actually disagree, "
-            + "because 'M' is upper-case everywhere (ADR-010 §2.1)."),
+            + "because 'M' is upper-case everywhere (ADR-010 §2.1). The per-frame span twin in "
+            + "SideBarView stays a separate, declared writer: it cannot allocate a string here."),
 
         new LineHome(
             "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
             @"Tokens = FormatCount(inputTokens) + ""↑ "" + FormatCount(outputTokens) + ""↓"";",
             2,
-            "The cell composed from the home above, magnitude A — twice, in SetUsage and its "
-            + "sibling. Two lines rather than one is the reason ExpectedMatches is a field "
+            "The cell composed from TokenCell.ToCompact, magnitude A — twice, in SetUsage and "
+            + "its sibling. Two lines rather than one is the reason ExpectedMatches is a field "
             + "and not a constant: a home that must stay line-precise still has to be able to "
             + "say 'these two lines'."),
 
@@ -274,21 +278,13 @@ public sealed class TokenCellSingleHomeRules
             + "than assumed. It is drift, not a convention, and it is the cheapest thing here "
             + "for the owner to overrule."),
 
-        new LineHome(
-            "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
-            @"< 1_000_000 => (tokens / 1000.0).ToString(""0.#"", System.Globalization.CultureInfo.InvariantCulture) + ""k"",",
-            1,
-            "MAGNITUDE A' — the PER-MESSAGE token spend, not the session total. Reached only "
-            + "from StreamCoalescer.FinishStream, which feeds it _msgTokensIn/_msgTokensOut, "
-            + "accumulated per message at StreamCoalescer.FormatDuration. This is the one rendering "
-            + "in the table that is a DIFFERENT quantity sharing a notation with a session "
-            + "cell, and it is why the count of 'copies' cannot be settled by reading shapes."),
-
-        new LineHome(
-            "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
-            @"_ => (tokens / 1_000_000.0).ToString(""0.#"", System.Globalization.CultureInfo.InvariantCulture) + ""M"",",
-            1,
-            "The M branch of the same per-message writer."),
+        // #788 slice: SideBarView.FormatTokens no longer spells the '0.# + k/M'
+        // figures — it delegates to TokenCell.ToCompact above. Its reader is still
+        // the per-message header (StreamCoalescer.FinishStream feeds it
+        // _msgTokensIn/_msgTokensOut, accumulated per message), which is a
+        // DIFFERENT quantity from the session total; removing a duplicate
+        // expression does not merge those two quantities. The span twin below
+        // stays its own declared writer because the sidebar paints every frame.
 
         new LineHome(
             "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
@@ -305,10 +301,10 @@ public sealed class TokenCellSingleHomeRules
             "private static int FormatTokensTo(long tokens, Span<char> into)",
             1,
             "The span helper above delegates to, so these two entries are ONE writer seen from "
-            + "two angles — the site's docstring calls the public FormatTokens its 'twin', but "
-            + "ADR-010 §2.3 measured that the public string is reached from the message header "
-            + "while the span one is reached from the sidebar: two surfaces, two readers, so "
-            + "the docstring's claim of kinship no longer holds where it matters."),
+            + "two angles — its docstring now names TokenCell.ToCompact as the shape it mirrors "
+            + "without allocating. ADR-010 §2.3 measured that the public string is reached from "
+            + "the message header while the span one is reached from the sidebar: two surfaces, "
+            + "two readers, so the string helper is a shared shape and the span path stays here."),
 
         new LineHome(
             "src/Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs",
@@ -504,6 +500,7 @@ public sealed class TokenCellSingleHomeRules
         MustContain =
         [
             "src/Harbor.Ui.Framework.State/State/StatusBarText.cs",
+            "src/Harbor.Abstractions.Contracts/Models/TokenCell.cs",
             "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
             "src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs",
             "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
