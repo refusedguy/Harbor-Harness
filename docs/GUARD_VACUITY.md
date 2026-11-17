@@ -212,3 +212,32 @@ half stays unverified until it gets one.
   [docs/GUARD_VALUE_MEASUREMENT.md](GUARD_VALUE_MEASUREMENT.md).
 - #1888, the policy the gates obey, and the checker that keeps the table
   honest: [docs/CI_GATES.md](CI_GATES.md).
+
+## Second-pass addendum (2026-11-17): the eight were an overcount
+
+A bounded re-read of the eight guards on the tree at `7248f9e3` found that three
+of them already carried evidence the 2026-10-22 census did not credit. A fourth
+is covered by the open follow-up #2265. This is a re-read, not a regenerated
+census, so the dated table above is left intact.
+
+| guard | evidence on the current tree |
+|---|---|
+| `LayerDependencyTests` | a planted offender in `PositiveControl_FindForbiddenReferences_ReportsARealReference` (open follow-up to this sweep) |
+| `AbstractionsSplitLayerRules` | each assembly's identity is asserted before its references are compared (`AbstractionsSplitLayerRules.cs:171,195,217`). That is the "assembly was FOUND" floor the table asked for |
+| `EnforcerIntegrityTests` | `srcProjects.Count > 0` and `real.Count > 0` (`EnforcerIntegrityTests.cs:184,199`) are floors on the walked sets |
+| `ResultMaybeSignatureTests` | `scanned > 100` (`ResultMaybeSignatureTests.cs:126`) plus an in-test positive control that drives the regex with a planted `Result<string?>` and rejects the two honest shapes |
+
+Counting those four, and #2265's control over `LayerDependencyTests`, the split
+is **156 of 160 with a control or floor, 4 without**: `NetArchLayerRules`,
+`FullLayerMatrixTests`, `ReadmeCoverageTests` and `ResultTryAdoptionTests`.
+`NetArchLayerRules` does assert a non-empty assembly population
+(`NetArchLayerRules.cs:487`), but that is a floor on the inventory, not on the
+forbidden-edge matcher, so it stays listed until it gets the planted offender
+the original table asked for. The earlier addendum's 153/7 is the narrower pass
+that credited only `LayerDependencyTests`.
+
+The repair for the remaining four is a declaration per guard in
+`rule-tiers.json` (`positive_control` or `discovery_floor`, each with a file:line
+witness), filled in by the guard's author and checked in review. A gate that
+greps rule files for control-shaped words would be a tier-B rule: it turns every
+innocent rename into a red build, which is worse than four unguarded rules.
