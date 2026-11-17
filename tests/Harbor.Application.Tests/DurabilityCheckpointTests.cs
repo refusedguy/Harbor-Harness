@@ -76,7 +76,7 @@ public class DurabilityCheckpointTests
         }
     ]);
 
-    private static AgentLoop NewLoop(ScriptedLlmClient client, ITool tool, AgentDefinition agent) =>
+    private static AgentLoop NewLoop(ScriptedLlmClient client, ITool tool, AgentDefinition agent, FakeEventBus? bus = null) =>
         new(
             new FakeProviderRegistry(client),
             new FakeToolRegistry(tool),
@@ -85,7 +85,7 @@ public class DurabilityCheckpointTests
             new FakeCompactionService(),
             new FakeTokenTracker(),
             new RetryPolicy(),
-            new FakeEventBus(),
+            bus ?? new FakeEventBus(),
             new PermissionService(new FakeAgentRegistry(agent), NullLogger<PermissionService>.Instance),
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance);
@@ -396,5 +396,59 @@ public class DurabilityCheckpointTests
         {
             runner.Dispose();
         }
+    }
+
+    [Test]
+    public async Task CancelLandsOnCheckpoint_CheckpointSettlesDetached_AndTheRunEndsCancelled()
+    {
+        // #2216: a stop landing ON the durability checkpoint used to escape
+        // as an OCE, leaving the records committed so far with no durable
+        // record of them. Crush settles that write on
+        // WithTimeout(WithoutCancel(ctx), 5s); Harbor must do the same: the
+        // second attempt gets a token the stop cannot cancel, with a deadline.
+        AgentDefinition agent = TestAgents.AllowAll();
+        var tool = new CountingTool();
+        var client = ScriptedClient();
+        var bus = new FakeEventBus();
+        using var cts = new CancellationTokenSource();
+
+        var checkpointTokens = new List<CancellationToken>();
+        bool checkpointSettled = false;
+        var session = new CheckpointSessionContext(NewSession(), (reason, token) =>
+        {
+            if (!string.Equals(reason, "before the model request", StringComparison.Ordinal))
+            {
+                return Task.FromResult(Result.Success());
+            }
+
+            checkpointTokens.Add(token);
+            if (checkpointTokens.Count == 1)
+            {
+                // The stop lands on the write, and the store observes the
+                // token it was handed. That OCE is what #2216 keeps from
+                // escaping the turn.
+                cts.Cancel();
+                token.ThrowIfCancellationRequested();
+            }
+
+            checkpointSettled = true;
+            return Task.FromResult(Result.Success());
+        });
+
+        var loop = NewLoop(client, tool, agent, bus);
+        Result result = await loop.RunAsync(session, agent, cts.Token);
+
+        // The interrupted write was settled, on a fresh bounded token rather
+        // than the cancelled run token.
+        await Assert.That(checkpointSettled).IsTrue();
+        await Assert.That(checkpointTokens.Count).IsEqualTo(2);
+        await Assert.That(checkpointTokens[0].IsCancellationRequested).IsTrue();
+        await Assert.That(checkpointTokens[1].IsCancellationRequested).IsFalse();
+        await Assert.That(checkpointTokens[1].CanBeCanceled).IsTrue();
+
+        // No partial write without a terminal fact: the cancelled end event
+        // reaches the bus even though the stop landed on the checkpoint.
+        await Assert.That(bus.Events.OfType<AgentEndEvent>().Any(e => e.Cancelled)).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 }
