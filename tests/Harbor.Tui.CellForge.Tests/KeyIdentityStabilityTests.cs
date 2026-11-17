@@ -88,7 +88,7 @@ public class KeyIdentityStabilityTests
 
     // ── Panel key ───────────────────────────────────────────────────────────
 
-    private static readonly IPanelProvider[] BuiltinPanels =
+    private static readonly CellForgePanelBase[] BuiltinPanels =
     [
         new CellForgeHelpPanel(),
         new CellForgeTodoListPanel(),
@@ -151,8 +151,8 @@ public class KeyIdentityStabilityTests
 
     // ── Timeline key ────────────────────────────────────────────────────────
 
-    // Reuse the existing width-sensitive IChatBlock double rather than adding a
-    // new implementer (the seam-graph gate tracks IChatBlock implementers).
+    // Reuse the existing width-sensitive chat-block double rather than adding a
+    // new implementer (the seam-graph gate tracks chat-block implementers).
     // 10 lines x 20 chars = 200 chars: 3 rows at width 80, 2 at width 120.
     private static WrappingBlock Block(string id) =>
         new(id, logicalLines: 10, lineChars: 19, honestEstimate: true);
