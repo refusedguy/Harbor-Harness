@@ -248,6 +248,8 @@ public sealed class FilePickerView : IStatefulGenericWidget<GenericNavState>
         var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var titleStyle = ChatPalette.ToolArgs;
         var detailStyle = ChatPalette.Dim;
+        // Item priority (ordinary title → picked) lives in StylePriority.
+        var itemCatalog = new StyleCatalog(titleStyle, Selected: selectedStyle);
 
         int painted = 0;
         for (int i = 0; i < _results.Count && painted < availableRows; i++)
@@ -263,7 +265,8 @@ public sealed class FilePickerView : IStatefulGenericWidget<GenericNavState>
             string glyph = item.IsDirectory ? "▸ " : "· ";
             string text = glyph + item.Path;
             int titleLen = Math.Min(text.Length, listW);
-            buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen), isPicked ? selectedStyle : titleStyle);
+            buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen),
+                StylePriority.Resolve(itemCatalog, isPicked ? VisualState.Selected : VisualState.None, disabled: false));
 
             if (!string.IsNullOrEmpty(item.Detail) && titleLen < listW)
             {

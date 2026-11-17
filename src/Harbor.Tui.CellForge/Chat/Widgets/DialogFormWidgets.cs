@@ -174,6 +174,8 @@ public sealed class DialogSelectList : IStatefulGenericWidget<GenericNavState>
         }
 
         var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
+        // Item priority (ordinary text → picked) lives in StylePriority.
+        var itemCatalog = new StyleCatalog(ChatPalette.ToolArgs, Selected: selectedStyle);
         int painted = 0;
         for (int i = firstVis; i < _values.Count && painted < rect.Height; i++)
         {
@@ -183,7 +185,8 @@ public sealed class DialogSelectList : IStatefulGenericWidget<GenericNavState>
             {
                 text = text[..Math.Max(0, rect.Width - 1)] + "…";
             }
-            buffer.SetText(rect.X, rect.Y + painted, text, isPicked ? selectedStyle : ChatPalette.ToolArgs);
+            buffer.SetText(rect.X, rect.Y + painted, text,
+                StylePriority.Resolve(itemCatalog, isPicked ? VisualState.Selected : VisualState.None, disabled: false));
             painted++;
         }
         if (_values.Count > rect.Height)

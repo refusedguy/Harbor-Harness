@@ -535,9 +535,11 @@ public sealed class DiffViewerOverlay
             var hunk = _hunks[h];
             bool selected = h == _selectedHunk;
             string title = hunk.Header.Length > 0 ? hunk.Header : $"(hunk {h + 1})";
-            var titleStyle = selected
-                ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold)
-                : new CellStyle(ChatPalette.Text, attrs: StyleAttr.Bold);
+            // Hunk title priority (ordinary → selected) lives in StylePriority.
+            var titleCatalog = new StyleCatalog(
+                new CellStyle(ChatPalette.Text, attrs: StyleAttr.Bold),
+                Selected: new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
+            var titleStyle = StylePriority.Resolve(titleCatalog, selected ? VisualState.Selected : VisualState.None, disabled: false);
             foreach (string chunk in Flow((selected ? "› " : "  ") + title, innerW))
             {
                 rows.Add(new DiffBodyRow(h, true, chunk, titleStyle));

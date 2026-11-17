@@ -677,6 +677,9 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
         CellStyle selectedStyle, bool highlight)
     {
         var border = ChatPalette.Dim;
+        // One catalog per row: ordinary cell style + the selected override.
+        // Priority (ordinary → selected) is owned by StylePriority, not here.
+        var catalog = new StyleCatalog(cellStyle, Selected: selectedStyle);
         int cursor = x;
         int end = x + maxWidth;
 
@@ -697,7 +700,8 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
             // (header cell included), both a single cell. No selection (or
             // HighlightSpacing.Never) keeps the old paint byte-identical.
             bool selected = highlight && IsSelectedCell(rowIndex, c, selectedRow, selectedColumn);
-            buffer.SetText(cursor, y, fitted[offset + c], selected ? selectedStyle : cellStyle);
+            buffer.SetText(cursor, y, fitted[offset + c],
+                StylePriority.Resolve(catalog, selected ? VisualState.Selected : VisualState.None, disabled: false));
             cursor += UnicodeWidth.Width(fitted[offset + c]);
             if (cursor >= end)
             {

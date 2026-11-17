@@ -219,6 +219,8 @@ public sealed partial class DialogOverlay
         var onStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var offStyle = new CellStyle(ChatPalette.Muted);
         // Two-tone pass: selected option accented, the rest muted.
+        // Priority (ordinary off → selected on) lives in StylePriority.
+        var choiceCatalog = new StyleCatalog(offStyle, Selected: onStyle);
         int cursor = x;
         for (int i = 0; i < _radio.Count && cursor < x + innerW; i++)
         {
@@ -237,7 +239,8 @@ public sealed partial class DialogOverlay
             {
                 break;
             }
-            buffer.SetText(cursor, y, chip.AsSpan(0, len), i == selected ? onStyle : offStyle);
+            buffer.SetText(cursor, y, chip.AsSpan(0, len),
+                StylePriority.Resolve(choiceCatalog, i == selected ? VisualState.Selected : VisualState.None, disabled: false));
             cursor += len;
         }
     }
@@ -276,6 +279,11 @@ public sealed partial class DialogOverlay
         }
         int span = _buttons.Count;
         int gap = 2;
+        // Button focus priority (ordinary muted → focused accent) lives in
+        // StylePriority, shared with every other state-driven widget.
+        var buttonCatalog = new StyleCatalog(
+            new CellStyle(ChatPalette.Muted),
+            Focused: new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
         int total = 0;
         for (int i = 0; i < span; i++)
         {
@@ -287,7 +295,8 @@ public sealed partial class DialogOverlay
         for (int i = 0; i < span; i++)
         {
             var button = _buttons[i];
-            var style = i == _focusedButton ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold) : new CellStyle(ChatPalette.Muted);
+            var style = StylePriority.Resolve(
+                buttonCatalog, i == _focusedButton ? VisualState.Focused : VisualState.None, disabled: false);
             buffer.SetText(cursor, y, "[", style);
             buffer.SetText(cursor + 1, y, button.Label, style);
             buffer.SetText(cursor + 1 + button.Label.Length, y, "]", style);
