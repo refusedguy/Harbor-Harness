@@ -52,7 +52,7 @@ public class TextInputTests
             },
         };
 
-        await Assert.That(Paint(input, 20, 1)).IsEqualTo("[x]$hi         USD[OK]");
+        await Assert.That(Paint(input, 20, 1)).IsEqualTo("[x]$hi       USD[OK]");
     }
 
     [Test]
