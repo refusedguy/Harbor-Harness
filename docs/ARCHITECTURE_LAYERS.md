@@ -74,7 +74,8 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Application (permissions, resources, skills,          │
 │                       filesystem probes)                        │
 │  - Harbor.Intelligence (git probes: ProcessGitQuery +           │
-│    WorktreePorcelainParser; ProviderHealthCheck; #1626)         │
+│    WorktreePorcelainParser; ProviderHealthCheck;                │
+│    DefaultFileTreePolicy; #1626)                                │
 │  - Harbor.AgentRuntime (agent loop: AgentLoop, TurnRunner,      │
 │    ToolDispatcher, pipeline behaviors; #1623 extraction)        │
 │  - Harbor.SessionContext (compaction, prompt assembly, token    │
@@ -750,8 +751,9 @@ re-run.
 Before ROP-D only assemblies with a hand-written `typeof()` probe had layer rules
 (~18 src projects). `FullLayerMatrixTests.cs` closes the gap with one data
 table covering **every main-solution src assembly** (**59 rows** as of 2026-11-17;
-the #1626 `Harbor.Intelligence` leaves (git probes, then ProviderHealthCheck) and
-the #1625 `Harbor.PolicyConfig` row landed with their extractions; the count is 60
+the #1626 `Harbor.Intelligence` leaves (git probes, ProviderHealthCheck, then
+DefaultFileTreePolicy) and the #1625 `Harbor.PolicyConfig` row landed with their
+extractions; the count is 60
 src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
 `OutOfScopeAssemblies` — see §2 banner; the table was 45 rows at inception and
 47/50 src dirs as of 2026-08-27):
