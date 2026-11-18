@@ -234,8 +234,15 @@ public sealed class RetryLlmClientDecorator : ILlmClient
             // events. Raise the canonical exception channel the policy's
             // StreamErrorClassifier knows — the ErrorEvent itself is NOT
             // delivered; the retry attempt (or the exhaustion handler) owns it.
+            // #2615: carry the server's Retry-After hint on the same channel
+            // IRetryAfterHint uses (RetryPolicy.TryGetRetryAfter reads both),
+            // so a 429/503 sleeps the requested delay instead of burning the
+            // rate-limit budget on a fixed backoff.
             await source.DisposeAsync().ConfigureAwait(false);
-            throw new LlmStreamErrorException(err);
+            var failure = new LlmStreamErrorException(err);
+            if (err.RetryAfter is { } retryAfter)
+                failure.Data["RetryAfter"] = retryAfter;
+            throw failure;
         }
 
         // First real event obtained: the attempt succeeded and the *open*

@@ -169,6 +169,36 @@ public class RetryLlmClientDecoratorTests
     }
 
     /// <summary>
+    ///     #2615: the server's Retry-After on a terminal 429 error event is
+    ///     handed to the shared policy, which sleeps it instead of the
+    ///     computed backoff. Nothing else about the stream changes.
+    /// </summary>
+    [Test]
+    public async Task TransientErrorEvent_WithRetryAfter_PolicySleepsServerDelay()
+    {
+        var time = new ManualTimeProvider(fireTimerOnCreate: true);
+        var inner = new ScriptedLlmClient(
+            Events(new ErrorEvent(
+                "HTTP 429: slow down",
+                Kind: ProviderErrorKind.RateLimit,
+                StatusCode: 429,
+                RetryAfter: TimeSpan.FromSeconds(30))),
+            Events(TestEvents.TextDelta("t1", "ok"), TestEvents.LlmFinish()));
+        var decorator = new RetryLlmClientDecorator(
+            inner,
+            new RetryPolicy(time),
+            options: new RetryOptions(3, TimeSpan.FromMilliseconds(1), false));
+
+        var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));
+
+        await Assert.That(error).IsNull();
+        await Assert.That(events.Count).IsEqualTo(2);
+        await Assert.That(inner.Calls).IsEqualTo(2);
+        await Assert.That(time.Delays.Count).IsEqualTo(1);
+        await Assert.That(time.Delays[0]).IsEqualTo(TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>
     ///     A fatal first <see cref="ErrorEvent" /> (401/400-style — retrying a
     ///     bad key cannot fix it) is delivered verbatim on attempt #1.
     /// </summary>

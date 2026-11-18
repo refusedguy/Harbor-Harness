@@ -6,6 +6,7 @@
 
 using System.Buffers;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Pipelines;
 using System.Net.Http;
 using System.Numerics;
@@ -292,6 +293,12 @@ internal static class SsePump
                     string bounded = ProviderErrors.BuildProviderErrorMessage(
                         apiErrorLabel, (int)response.StatusCode, errorBody);
                     SsePumpLog.ProviderError(logger, apiErrorLabel, (int)response.StatusCode, bounded);
+                    // #2615: the server's Retry-After hint rides on the SAME
+                    // terminal ErrorEvent — no extra event, no change to the
+                    // stream contract. The policy reads it through the shared
+                    // retry side-channel and sleeps it (clamped to the budget)
+                    // instead of burning attempts on a fixed backoff.
+                    TryParseRetryAfter(response, out TimeSpan? retryAfter);
                     await writer.WriteAsync(new ErrorEvent(
                         bounded,
                         errorBody.Length > ProviderErrors.MaxProviderErrorBodyChars ? errorBody : null,
@@ -303,7 +310,8 @@ internal static class SsePump
                         // what classifies it, and the agent loop compacts and
                         // retries on that kind.
                         Kind: ProviderErrors.ClassifyResponse(response.StatusCode, errorBody),
-                        StatusCode: (int)response.StatusCode), ct).ConfigureAwait(false);
+                        StatusCode: (int)response.StatusCode,
+                        RetryAfter: retryAfter), ct).ConfigureAwait(false);
                     return;
                 }
 
@@ -336,6 +344,39 @@ internal static class SsePump
                 $"Stream failed: {ex.Message}", ex.ToString(),
                 ProviderErrors.FromException(ex, ct)), ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    ///     Read an HTTP <c>Retry-After</c> header (delta-seconds or HTTP-date)
+    ///     from a non-success response. Unparseable or negative values are
+    ///     ignored: the retry policy then falls back to its computed backoff.
+    ///     Kept here, beside the response that owns the header, because the
+    ///     exception-shaped classifier downstream never sees the response.
+    /// </summary>
+    private static bool TryParseRetryAfter(HttpResponseMessage response, out TimeSpan? retryAfter)
+    {
+        retryAfter = null;
+        if (!response.Headers.TryGetValues("Retry-After", out IEnumerable<string>? values))
+            return false;
+
+        foreach (string? raw in values)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            string text = raw.Trim();
+            if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int seconds) && seconds >= 0)
+            {
+                retryAfter = TimeSpan.FromSeconds(seconds);
+                return true;
+            }
+            if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+            {
+                TimeSpan remaining = date - DateTimeOffset.UtcNow;
+                retryAfter = remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>SSE field name — the only field the pump decodes.</summary>

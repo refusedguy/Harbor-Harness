@@ -14,10 +14,12 @@
       (`[EnumeratorCancellation]` at `AnthropicLlmClient.cs:63`, flows into auth + SSE pump)
 - [x] Token-usage reporting on the final step event incl. cache read/creation counts
       (`message_delta` -> `StepFinishEvent(usage)` at `AnthropicLlmClient.cs:404-413`)
+- [x] Centralized retry for 429 / 5xx through the shared `ILlmClient` decorator
+      (`RetryLlmClientDecorator` + `IRetryPolicy` / `RetryOptions`); a server
+      `Retry-After` hint rides on the terminal `ErrorEvent` (#2615)
 
 ## TODO
 
-- [ ] Wire centralized retry for 429 / 5xx (helpers already exist in `Harbor.Application/Resilience/RetryPolicyExtensions.cs`, not yet applied by default to provider calls)
 - [ ] Automatic cache-control breakpoint placement (currently manual on system prompt)
 - [ ] Vision content blocks
 
@@ -29,4 +31,3 @@
 
 1. **P1**: Automatic cache-control breakpoint placement
 2. **P2**: Vision content blocks
-3. **P2**: Decorate `ILlmClient` with the shared retry policy

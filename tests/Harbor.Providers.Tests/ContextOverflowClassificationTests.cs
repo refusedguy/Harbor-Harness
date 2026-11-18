@@ -156,4 +156,69 @@ public class ContextOverflowClassificationTests
         var error = events.OfType<ErrorEvent>().Single();
         await Assert.That(error.Kind).IsEqualTo(ProviderErrorKind.RateLimit);
     }
+
+    /// <summary>
+    ///     #2615: a 429's <c>Retry-After: 30</c> reaches the terminal error
+    ///     event as transport metadata. The event stream itself is unchanged —
+    ///     one error event, same kind and status as before.
+    /// </summary>
+    [Test]
+    public async Task ProviderStream_RetryAfterSeconds_ReachesTheErrorEvent()
+    {
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent("""{"error":{"message":"rate limit reached"}}""", Encoding.UTF8, "application/json")
+            };
+            response.Headers.TryAddWithoutValidation("Retry-After", "30");
+            return response;
+        });
+
+        var client = new OpenAILlmClient(
+            new HttpClient(handler),
+            new OpenAIConfig(),
+            new TestAuthResolver(),
+            NullLogger<OpenAILlmClient>.Instance);
+
+        var events = await StreamCollector.CollectAsync(
+            client.StreamAsync(new LlmRequest("gpt-4o", [LlmUserMessage.Text("hello")], "", [])));
+
+        var error = events.OfType<ErrorEvent>().Single();
+        await Assert.That(error.Kind).IsEqualTo(ProviderErrorKind.RateLimit);
+        await Assert.That(error.StatusCode).IsEqualTo(429);
+        await Assert.That(error.RetryAfter).IsEqualTo(TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>#2615: the HTTP-date form of Retry-After is parsed too.</summary>
+    [Test]
+    public async Task ProviderStream_RetryAfterHttpDate_ReachesTheErrorEvent()
+    {
+        var hintedAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            {
+                Content = new StringContent("overloaded", Encoding.UTF8, "text/plain")
+            };
+            response.Headers.TryAddWithoutValidation("Retry-After", hintedAt.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+            return response;
+        });
+
+        var client = new OpenAILlmClient(
+            new HttpClient(handler),
+            new OpenAIConfig(),
+            new TestAuthResolver(),
+            NullLogger<OpenAILlmClient>.Instance);
+
+        var events = await StreamCollector.CollectAsync(
+            client.StreamAsync(new LlmRequest("gpt-4o", [LlmUserMessage.Text("hello")], "", [])));
+
+        var error = events.OfType<ErrorEvent>().Single();
+        await Assert.That(error.Kind).IsEqualTo(ProviderErrorKind.ServerError);
+        await Assert.That(error.RetryAfter).IsNotNull();
+        TimeSpan remaining = hintedAt - DateTimeOffset.UtcNow;
+        await Assert.That(error.RetryAfter!.Value).IsGreaterThan(remaining - TimeSpan.FromSeconds(5));
+        await Assert.That(error.RetryAfter!.Value).IsLessThan(remaining + TimeSpan.FromSeconds(5));
+    }
 }

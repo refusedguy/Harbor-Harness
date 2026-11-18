@@ -13,10 +13,12 @@
 - [x] Tool-call streaming
 - [x] Cancellation token propagation through all HTTP calls (`OpenAILlmClient.cs:59`, operation-canceled handling at :108)
 - [x] Token-usage reporting on the final step event (`StepFinishEvent(usage)` at `OpenAILlmClient.cs:424`)
+- [x] Centralized retry for 429 / 5xx through the shared `ILlmClient` decorator
+      (`RetryLlmClientDecorator` + `IRetryPolicy` / `RetryOptions`); a server
+      `Retry-After` hint rides on the terminal `ErrorEvent` (#2615)
 
 ## TODO
 
-- [ ] Wire centralized retry for 429 / 5xx (helpers exist in `Harbor.Application/Resilience/RetryPolicyExtensions.cs`)
 - [ ] Vision content blocks
 - [ ] Structured outputs (JSON schema)
 
@@ -29,4 +31,3 @@
 
 1. **P2**: Vision content blocks
 2. **P2**: Structured outputs (JSON schema)
-3. **P2**: Decorate `ILlmClient` with the shared retry policy
