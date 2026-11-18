@@ -140,7 +140,7 @@ condition on it.
 | `changes` | The path filter is not a defect gate. The `gate` job asserts that it ran and succeeded. |
 | `public-api snapshot (Abstractions)` | The old name of the public-API job. Open pull request #1944 renamed it to `public-api freeze` and deleted the second copy of it from `docs.yml`. The name settled on `public-api freeze` after that, so that is the required name. |
 | `coverage` | Report-only by contract, with no thresholds. Open pull request #1923 also moves it off the pull request path. |
-| `test duplication` | The gate runs with `--warn-only`, so it cannot fail and cannot gate anything. |
+| `test duplication` | It blocks in `docs.yml` now; it was advisory (`--warn-only`) when this list was written. It is still not one of the required checks this ruleset transition applies. |
 | `publish`, `publish to GitHub Pages` | Only run on `master` or on tags. |
 | `docs site assembly` | Builds an artifact. It is not a gate. |
 | `test-os (windows-latest)`, `test-os (macos-latest)` | `test-os.yml` only triggers on pull requests to `master`, never on pull requests to `dev`. It is also the single most expensive lane (19.5 runner-minutes) and issue #1787 is moving it to `push` and `schedule`. Requiring it would either hang every pull request or cost the whole budget. |

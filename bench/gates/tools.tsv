@@ -52,7 +52,7 @@ check-result-chains	tools/bin/harbor-gates-linux-x64 check-result-chains --check
 check-ruleset-checks	tools/bin/harbor-gates-linux-x64 check-ruleset-checks --min-rulesets 2 --min-checks 16
 check-shard-balance	tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
 check-string-switch	tools/bin/harbor-gates-linux-x64 check-string-switch --check --min-labels 280
-check-test-dup	tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+check-test-dup	tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json
 check-test-json-reflection	tools/bin/harbor-gates-linux-x64 check-test-json-reflection
 check-test-packages	tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 50 --min-packages 1400
 check-test-projects	tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41

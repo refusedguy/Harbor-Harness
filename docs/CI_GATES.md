@@ -23,8 +23,8 @@ the tree the table was last reconciled against:
 | python tools in `tools/` | 7 files, 8 540 lines |
 | of them, the `check-*.py` family | 4 files, 6 669 lines |
 | workflows that run a python tool | 2: `ci.yml`, `docs.yml` |
-| gates that block a build | 41 |
-| gates that report and let the build pass | 1 (the compiled `check-test-dup`, `--warn-only` while the removal programme runs) |
+| gates that block a build | 42 |
+| gates that report and let the build pass | 0 |
 | controls for compile-time gates | 1 (the compiled `check-tunit-analyzer-gate`) |
 | reporters, helpers, libraries | 10 reporters, 10 helpers, 1 library |
 | tools with a self-test | 52 |
@@ -258,9 +258,10 @@ findings that are not defects.
   tools answers a different question, and each states its question in its
   header so the next author can see the shape of what is already covered.
 - **Require dotnet.** See the reason the gates are python at all.
-- **Claim to be a gate while running advisory.** One gate in this repository
-  is advisory, and the table says so: `check-test-dup.py` runs with
-  `--warn-only` while the duplication removal programme is in flight.
+- **Claim to be a gate while running advisory.** The table records the mode
+  CI actually runs each tool in, and the policy checker fails when a row and
+  its invocation disagree. The duplication gate used to be advisory while
+  its removal programme ran; it blocks now, and the table says so.
 
 ## The gate table
 
@@ -318,7 +319,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 check-ruleset-checks` | compiled: `tools/gates/check-ruleset-checks` | every required status check in a ruleset has a workflow job able to publish it, so a rule cannot block every pull request by demanding a check nobody runs | docs.yml | rulesetchecks, selftest | gate | `--self-test` | — | `--min-rulesets 2 --min-checks 16` |
 | `tools/bin/harbor-gates-linux-x64 check-shard-balance` | compiled: `tools/gates/check-shard-balance` | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance, tree | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
 | `tools/bin/harbor-gates-linux-x64 check-string-switch` | compiled: `tools/gates/check-string-switch` | does a `switch` compare a string literal, and is every ladder that is still there named with a reason | docs.yml | selftest, stringswitch, tree | gate | `--self-test` | `tools/string-switch-exceptions.txt` | `--min-labels 280` |
-| `tools/bin/harbor-gates-linux-x64 check-test-dup` | compiled: `tools/gates/check-test-dup` | a test body is a copy of another test body | docs.yml | selftest, testdup, tree | advisory | `--self-test` | `tools/test-dup-baseline.json` | `--min-files 800 --min-methods 9000` |
+| `tools/bin/harbor-gates-linux-x64 check-test-dup` | compiled: `tools/gates/check-test-dup` | a test body is a copy of another test body | docs.yml | selftest, testdup, tree | gate | `--self-test` | `tools/test-dup-baseline.json` | `--min-files 800 --min-methods 9000` |
 | `tools/bin/harbor-gates-linux-x64 check-test-json-reflection` | compiled: `tools/gates/check-test-json-reflection` | no test serializes through the reflection resolver | docs.yml | reflection-json, selftest, tree | gate | `--self-test` | `tools/test-json-reflection-exceptions.txt` | — |
 | `tools/bin/harbor-gates-linux-x64 check-test-packages` | compiled: `tools/gates/check-test-packages` | which packages a test or sample project may reference, and whether a banned one is among them | ci.yml | build, test-packages | gate | `--self-test` | `tools/test-package-exceptions.txt` | `--min-projects 43 --min-declared 50 --min-packages 1400 --min-output-dirs 40` |
 | `tools/bin/harbor-gates-linux-x64 check-test-projects` | compiled: `tools/gates/check-test-projects` | every test project in the solution is discovered by a CI run | docs.yml | selftest, testprojects, tree | gate | `--self-test` | `tools/test-project-baseline.txt` | `--min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41` |
