@@ -135,7 +135,7 @@ run "check-test-packages (the gate)"          "$PACKAGES" -- check-test-packages
 run "check-test-packages (the report)"        "$PACKAGES" --report -- check-test-packages --report
 run "check-test-packages (the floors)"        "$PACKAGES" --min-projects 43 --min-declared 50 --min-packages 1400 --allow-missing-assets -- check-test-packages --min-projects 43 --min-declared 50 --min-packages 1400 --allow-missing-assets
 run "check-test-dup (the self-test)"          "$DUPTEST" --self-test -- check-test-dup --self-test
-run "check-test-dup (the gate)"               "$DUPTEST" --min-files 800 --min-methods 9000 --warn-only -- check-test-dup --min-files 800 --min-methods 9000 --warn-only
+run "check-test-dup (the gate)"               "$DUPTEST" --min-files 800 --min-methods 9000 -- check-test-dup --min-files 800 --min-methods 9000
 run "check-test-dup (the blocking gate)"      "$DUPTEST" -- check-test-dup
 run "check-test-dup (the report)"             "$DUPTEST" --report -- check-test-dup --report
 run "check-test-projects (the self-test)"     "$PROJECTS" --self-test -- check-test-projects --self-test

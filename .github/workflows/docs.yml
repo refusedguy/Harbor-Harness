@@ -977,18 +977,14 @@ jobs:
       # hand. The artifact is uploaded even when the gate is red — that is
       # exactly when somebody needs it.
       #
-      # `--warn-only` keeps the measurement and stops the blocking until the
-      # removal programme is over: #1808 and its children (#1810, #1815,
-      # #1816, #1821, #1822, #1774, #1776, #1889) MOVE the files the
-      # baseline is keyed on, and the baseline is lowered by one deliberate
-      # `--update` when the last of them lands. The gate now knows a
-      # relocated group (same shape, same copy count, same method names), so
-      # a move is not a finding any more — but the programme is still in
-      # flight, and the gate comes back to blocking with that final
-      # `--update`, not before. The findings are printed as WARN and the job
-      # goes green; the blocking default of the script is unchanged.
+      # The removal programme is over: every child issue of #1808 is closed
+      # and the last slice, #2341, merged in 24b7a499. The gate now runs in
+      # its blocking default: a NEW or GROWN duplicate group fails this job.
+      # The script's `--self-test`, run in the `selftest` job, plants a
+      # duplicate and asserts the gate reports it with exit 1, so this job
+      # cannot go green because it scanned nothing.
       - name: Check the test tree for duplicated bodies
-        run: tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+        run: tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json
       - name: Upload the duplicate-group list
         if: always()
         uses: actions/upload-artifact@v7
@@ -1193,8 +1189,7 @@ jobs:
   # compiles, serializes to a DIFFERENT key, and the assertion checks the
   # wrong field.
   #
-  # The gate is BLOCKING (unlike the duplication measurement above, which is
-  # `--warn-only` while its removal programme is in flight): the exceptions
+  # The gate is BLOCKING, like the duplication gate above: the exceptions
   # file is a ratchet with five rows, and it can only shrink.
   reflection-json:
     name: reflection JSON
