@@ -171,6 +171,7 @@ public static class Program
             "plugin" => await CafPilotVerbs.RunAsync("plugin", tail),
             "skill" => await CafPilotVerbs.RunAsync("skill", tail),
             "prompt" => await CafPilotVerbs.RunAsync("prompt", tail),
+            "tools" => await CafPilotVerbs.RunAsync("tools", tail),
             "auth" => await CafPilotVerbs.RunAsync("auth", tail),
             "config" => await CafPilotVerbs.RunAsync("config", tail),
             "doctor" => await CafPilotVerbs.RunAsync("doctor", tail),

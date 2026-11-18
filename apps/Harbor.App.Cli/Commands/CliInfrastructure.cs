@@ -31,6 +31,14 @@ namespace Harbor.App.Cli.Commands;
 internal static class CliInfrastructure
 {
     /// <summary>
+    ///     Registry snapshot for the <c>tools</c> verb (#2675 item 030). The
+    ///     verb never resolves the container itself; this is the single CLI
+    ///     composition point that already owns that resolution.
+    /// </summary>
+    internal static IReadOnlyList<ToolDescriptor> GetToolDescriptors(IServiceProvider services) =>
+        services.GetRequiredService<IToolRegistry>().GetAllTools();
+
+    /// <summary>
     ///     Composition root for the REPL graph (#63): every ReplRunner
     ///     singleton resolves HERE, once — the runner itself never touches
     ///     the container (except the host provider forwarded to interactive

@@ -80,6 +80,7 @@ internal static class CafPilotVerbs
         app.Add("plugin", CafPluginCommands.Plugin);
         app.Add("skill", CafSkillCommands.Skill);
         app.Add("prompt", CafPromptCommands.Prompt);
+        app.Add("tools", CafToolsCommands.Tools); // #2675 item 030
         app.Add("doctor", CafDoctorCommands.Doctor);
         app.Add("pr guide", CafPrCommands.Guide);
         app.Add("issue", CafIssueCommands.Issue);

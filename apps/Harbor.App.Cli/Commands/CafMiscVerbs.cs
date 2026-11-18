@@ -1,5 +1,6 @@
 using System.Globalization;
 using ConsoleAppFramework;
+using Harbor.App.Cli.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Commands;
@@ -190,6 +191,28 @@ internal static class CafPromptCommands
         if (force)
             flagTail = [..flagTail, "--force"];
         return await new PromptsCommand(Console.Out, Console.Error).ExecuteAsync([..args, ..flagTail]).ConfigureAwait(false);
+    }
+}
+
+/// <summary>
+///     <c>tools</c> verb handler (#2675 item 030): self-describing registry.
+///     The host is built here so <see cref="ToolsCommand" /> stays a pure
+///     string-driven command that tests can call directly.
+/// </summary>
+internal static class CafToolsCommands
+{
+    /// <summary>List registered tools or show one tool's descriptor.</summary>
+    /// <param name="json">Emit machine-readable JSON instead of text.</param>
+    /// <param name="args">Positional tail (subcommand and tool name).</param>
+    public static async Task<int> Tools(
+        bool json = false,
+        [Argument]params string[] args)
+    {
+        string[] tail = json ? [.. args, "--json"] : args;
+        using var host = HostBuilder.Build(tail);
+        return await new ToolsCommand(
+                Console.Out, Console.Error, () => CliInfrastructure.GetToolDescriptors(host.Services))
+            .ExecuteAsync(tail).ConfigureAwait(false);
     }
 }
 
