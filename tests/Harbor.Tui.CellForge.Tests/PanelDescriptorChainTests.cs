@@ -31,6 +31,15 @@ public class PanelDescriptorChainTests
         public object? Build(object state) => "global";
     }
 
+    private sealed class CustomFallbackPanel : IPanelDescriptor
+    {
+        public Type StateType => typeof(object);
+
+        public bool Match(object state) => true;
+
+        public object? Build(object state) => "custom fallback";
+    }
+
     [Test]
     public async Task LocalRule_WinsOverGlobalRule()
     {
@@ -80,10 +89,13 @@ public class PanelDescriptorChainTests
     [Test]
     public async Task CustomFallback_IsTriedAfterEveryOtherRule()
     {
-        var custom = new LocalCounterPanel();
+        var custom = new CustomFallbackPanel();
         var registry = new PanelDescriptorRegistry(custom);
         registry.AddGlobal(new GlobalCounterPanel());
+        var projector = new PanelDescriptorProjector(registry);
 
         await Assert.That(ReferenceEquals(registry.Find(new UnknownState()), custom)).IsTrue();
+        await Assert.That(projector.Project(new CounterState(1))).IsEqualTo("global");
+        await Assert.That(projector.Project(new UnknownState())).IsEqualTo("custom fallback");
     }
 }
