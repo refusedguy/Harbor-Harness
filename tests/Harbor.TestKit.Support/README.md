@@ -37,6 +37,7 @@ consumer needs regardless of which part the type lives in.
 | `TempDirScope.cs`, `EnvScope.cs`, `GitProbe.cs` | The three scopes: a temp directory, an environment variable, a git repository. |
 | `StubHttpMessageHandler.cs` | The HTTP handler double (#1825). |
 | `Exhaustive.cs`, `TestGitQuery.cs`, `TestEventBusMiddleware.cs`, `TestRepoPaths.cs`, `AppConfigDocument.cs` | The rest of the shared helpers. |
+| `DrainableWorker.cs` | The background-work gate for tests: `DrainAsync()` waits for queued AND in-flight items (#2673 A17). |
 
 ## Reproducing a stochastic failure
 
