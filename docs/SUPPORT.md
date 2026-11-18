@@ -18,6 +18,7 @@ duplicate adds noise instead of getting a fix.
 For behavior that may already be described, start with these pages:
 
 - [Troubleshooting](./TROUBLESHOOTING.md) maps symptoms to checks.
+- [FAQ](./FAQ.md) is keyed by the exact error text Harbor prints.
 - [Environment variables](./ENV_VARS.md) lists every variable Harbor reads.
 - [Configuration](./CONFIGURATION.md) explains config precedence.
 - [Plugin development](./PLUGIN_DEVELOPMENT.md) covers loading and compile errors.
