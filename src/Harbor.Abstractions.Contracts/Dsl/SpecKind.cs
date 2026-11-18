@@ -1,9 +1,10 @@
 namespace Harbor.Abstractions.Dsl;
 
 /// <summary>
-///     Component kinds the markup grammar can name. The set follows the
-///     widgets in Harbor.Tui.CellForge/Generic/Widgets plus FilterList, which
-///     lives in Harbor.Tui.CellForge.Engine/Widgets.
+///     Component kinds the markup grammar can name. Most of the set follows
+///     the widgets in Harbor.Tui.CellForge/Generic/Widgets plus FilterList,
+///     which lives in Harbor.Tui.CellForge.Engine/Widgets; the trailing
+///     Row/Column/Overlay entries are layout containers, not widgets.
 /// </summary>
 /// <remarks>
 ///     The parser resolves markup names to these values once. Production
@@ -116,5 +117,17 @@ public enum SpecKind
     Toolbar,
 
     /// <summary>Virtualized list body (VirtualListDelegate).</summary>
-    VirtualList
+    VirtualList,
+
+    /// <summary>Layout container that splits its children along the horizontal
+    /// main axis (maps to FlexSplitNode with SplitDir.Horizontal).</summary>
+    Row,
+
+    /// <summary>Layout container that splits its children along the vertical
+    /// main axis (maps to FlexSplitNode with SplitDir.Vertical).</summary>
+    Column,
+
+    /// <summary>Layout container that stacks every child over the full area
+    /// (maps to ZStackNode).</summary>
+    Overlay
 }

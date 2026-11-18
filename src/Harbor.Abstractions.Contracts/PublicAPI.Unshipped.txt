@@ -282,6 +282,9 @@ Harbor.Abstractions.Dsl.SpecKind.Stepper = 31 -> Harbor.Abstractions.Dsl.SpecKin
 Harbor.Abstractions.Dsl.SpecKind.ToggleSelect = 32 -> Harbor.Abstractions.Dsl.SpecKind
 Harbor.Abstractions.Dsl.SpecKind.Toolbar = 33 -> Harbor.Abstractions.Dsl.SpecKind
 Harbor.Abstractions.Dsl.SpecKind.VirtualList = 34 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Row = 35 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Column = 36 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Overlay = 37 -> Harbor.Abstractions.Dsl.SpecKind
 Harbor.Abstractions.Dsl.SpecNode
 Harbor.Abstractions.Dsl.SpecNode.AddChild(Harbor.Abstractions.Dsl.SpecNode! child) -> void
 Harbor.Abstractions.Dsl.SpecNode.AddOperation(Harbor.Abstractions.Dsl.SpecOp! op) -> void
