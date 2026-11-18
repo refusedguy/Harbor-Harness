@@ -34,9 +34,10 @@ public abstract class ContainerNode : INode
     PrepaintRecord INode.Prepaint(PrepaintContext context, ElementId id) => Prepaint(context, id);
 
     /// <summary>
-    /// Ordered children addressed by index. Overridden by containers whose
-    /// child ids are positional; named-id containers override
-    /// <see cref="Prepaint"/> instead.
+    /// Ordered children addressed by index. Positional containers feed this
+    /// to <see cref="PrepaintForward.Indexed"/>; a container with per-child
+    /// keys overrides <see cref="Prepaint"/> and forwards with a key where
+    /// one was declared.
     /// </summary>
     protected virtual IReadOnlyList<INode> ChildNodes => Array.Empty<INode>();
 
@@ -68,6 +69,7 @@ public abstract class ContainerNode : INode
 public sealed class FlexSplitNode : ContainerNode
 {
     private readonly List<INode> _children = [];
+    private readonly List<string?> _keys = [];
     private readonly List<FlexTrack> _tracks = [];
     private readonly List<Rect> _frames = [];
 
@@ -123,11 +125,40 @@ public sealed class FlexSplitNode : ContainerNode
     /// <inheritdoc />
     protected override IReadOnlyList<INode> ChildNodes => _children;
 
+    /// <summary>
+    /// Forwards with each child's key when one was declared. Unkeyed children
+    /// keep the base positional rule, so existing callers see no change.
+    /// </summary>
+    public override PrepaintRecord Prepaint(PrepaintContext context, ElementId id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        PrepaintForward.Named(context, id, _children, _keys);
+        return PrepaintRecord.Empty;
+    }
+
     /// <summary>Setup-time: appends <paramref name="child"/> with its track.</summary>
     public void Add(INode child, FlexTrack track)
     {
         ArgumentNullException.ThrowIfNull(child);
         _children.Add(child);
+        _keys.Add(null);
+        _tracks.Add(track);
+        _frames.Add(default);
+    }
+
+    /// <summary>
+    /// Setup-time: appends <paramref name="child"/> with a stable
+    /// <paramref name="key"/> and its track. The key becomes a named step in
+    /// the child's <see cref="ElementId"/>, so prepaint records and element
+    /// state stay with the logical child when siblings change position.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="key"/> is empty.</exception>
+    public void Add(INode child, string key, FlexTrack track)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        _children.Add(child);
+        _keys.Add(key);
         _tracks.Add(track);
         _frames.Add(default);
         RefreshTrackSignature();
@@ -169,6 +200,7 @@ public sealed class FlexSplitNode : ContainerNode
         }
 
         _children.RemoveAt(index);
+        _keys.RemoveAt(index);
         _tracks.RemoveAt(index);
         _frames.RemoveAt(index);
         RefreshTrackSignature();

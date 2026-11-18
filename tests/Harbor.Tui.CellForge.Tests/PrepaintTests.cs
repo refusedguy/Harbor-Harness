@@ -189,6 +189,110 @@ public class PrepaintTests
     }
 
     [Test]
+    public async Task KeyedContainer_Reorder_KeepsRecordsBoundToKey()
+    {
+        var context = new EngineCells.PrepaintContext();
+        var a = new TextNode("A", 0, 0);
+        var b = new TextNode("B", 1, 0);
+        var root = new EngineCells.FlexSplitNode(EngineCells.SplitDir.Horizontal);
+        root.Add(a, "alpha", EngineCells.FlexTrack.Fill());
+        root.Add(b, "beta", EngineCells.FlexTrack.Fill());
+
+        // Prepaint directly so the arranged bounds (part of the PrepaintKey)
+        // stay fixed: the only thing that changes between frames is the
+        // children's position in the container.
+        context.BeginFrame();
+        _ = root.Prepaint(context, EngineCells.ElementId.Root);
+        context.EndFrame();
+
+        await Assert.That(a.Events[0]).IsEqualTo("prepaint:/alpha");
+        await Assert.That(b.Events[0]).IsEqualTo("prepaint:/beta");
+        await Assert.That(a.Prepares).IsEqualTo(1);
+        await Assert.That(b.Prepares).IsEqualTo(1);
+
+        // Swap positions; the keys travel with their children.
+        _ = root.Remove(a);
+        _ = root.Remove(b);
+        root.Add(b, "beta", EngineCells.FlexTrack.Fill());
+        root.Add(a, "alpha", EngineCells.FlexTrack.Fill());
+
+        context.BeginFrame();
+        _ = root.Prepaint(context, EngineCells.ElementId.Root);
+        context.EndFrame();
+
+        // Both records are reused under their keys. With positional ids the
+        // same swap forces a reprepare of both children.
+        await Assert.That(a.Prepares).IsEqualTo(1);
+        await Assert.That(b.Prepares).IsEqualTo(1);
+        await Assert.That(context.Hits).IsEqualTo(2);
+        await Assert.That(context.Misses).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task NamedForward_KeyedId_EqualsStackPushAndKeepsState()
+    {
+        var context = new EngineCells.PrepaintContext();
+        var a = new IdProbe();
+        var b = new IdProbe();
+        var stack = new EngineCells.ElementIdStack();
+        stack.Push("alpha");
+        var alphaId = stack.GlobalId;
+        stack.Pop();
+        stack.Push("beta");
+        var betaId = stack.GlobalId;
+
+        EngineCells.PrepaintForward.Named(
+            context,
+            EngineCells.ElementId.Root,
+            [a, b],
+            ["alpha", "beta"]);
+
+        await Assert.That(a.Ids[0]).IsEqualTo(alphaId);
+        await Assert.That(a.Ids[0].PrefixHash).IsEqualTo(alphaId.PrefixHash);
+        await Assert.That(b.Ids[0]).IsEqualTo(betaId);
+        await Assert.That(b.Ids[0].ToString()).IsEqualTo("/beta");
+
+        // State stored under the stack-built id is read back through the id
+        // the named forwarder produced: no regression to #2436.
+        var store = new EngineCells.ElementStateStore();
+        store.BeginFrame();
+        var slot = store.GetOrCreate<Counter>(alphaId);
+        slot.Value = 42;
+        store.EndFrame();
+
+        store.BeginFrame();
+        await Assert.That(store.TryGet<Counter>(a.Ids[0], out var found)).IsTrue();
+        await Assert.That(found!.Value).IsEqualTo(42);
+        store.EndFrame();
+    }
+
+    private sealed class IdProbe : EngineCells.INode
+    {
+        public List<EngineCells.ElementId> Ids { get; } = [];
+
+        public EngineCells.Rect Arranged { get; private set; }
+
+        public EngineCells.Size Measure(EngineCells.Constraints constraints) => new(1, 1);
+
+        public void Arrange(EngineCells.Rect rect) => Arranged = rect;
+
+        public void Paint(EngineCells.ScreenBuffer buffer, EngineCells.Rect clip)
+        {
+        }
+
+        public EngineCells.PrepaintRecord Prepaint(EngineCells.PrepaintContext context, EngineCells.ElementId id)
+        {
+            Ids.Add(id);
+            return EngineCells.PrepaintRecord.Empty;
+        }
+    }
+
+    private sealed class Counter
+    {
+        internal int Value;
+    }
+
+    [Test]
     public async Task NamedOverlayLayerId_KeepsIdentityAcrossZReorder()
     {
         var context = new EngineCells.PrepaintContext();
