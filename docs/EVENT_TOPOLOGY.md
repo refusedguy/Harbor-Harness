@@ -34,7 +34,8 @@ snapshot of subscribers in the publisher's own call stack**.
 ```
 producers (await PublishAsync directly)
   AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:331,489,542,567,582,597,608
-  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,915,1035
+  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,936
+  ToolCallGate .................. src/Harbor.AgentRuntime/Agents/ToolCallGate.cs:191
   CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:275,311,604
   SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:214
   TurnRunner .................... src/Harbor.AgentRuntime/Agents/TurnRunner.cs:256,284,318,329,343,481,801,922,979,1015,1265,1413
