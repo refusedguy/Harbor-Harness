@@ -37,6 +37,9 @@ public class DocumentViewTests
         return false;
     }
 
+    private static bool IsBracketHighlight(Cell c) =>
+        c.Style.Fg == ChatPalette.Accent && (c.Style.Attrs & StyleAttr.Bold) != 0;
+
     [Test]
     public async Task Gold_Markdown_Document_Paints_Heading_And_Inline_Bold()
     {
@@ -209,5 +212,61 @@ public class DocumentViewTests
         var back = TestRender.Buffer(10, 4);
         view.Paint(back, new Rect(0, 0, 10, 4)); // no throw
         await Assert.That(view.TotalRows).IsEqualTo(1);
+    }
+
+    // Issue #2494: the two cells of the cursor's bracket pair are recolored
+    // through the existing PaintLine span pipeline, with no new public API.
+
+    [Test]
+    public async Task Bracket_Cursor_Highlights_Both_Cells_Through_Paint()
+    {
+        var view = new DocumentView();
+        view.SetLines([new DocumentLine([new DocumentSpan("(abc)", CellStyle.Plain)])]);
+        view.Configure(8, 1);
+        view.SetBracketCursor(0, 0);
+
+        var back = TestRender.Buffer(8, 1);
+        view.Paint(back, new Rect(0, 0, 8, 1));
+
+        await Assert.That(IsBracketHighlight(back.Get(0, 0))).IsTrue();
+        await Assert.That(IsBracketHighlight(back.Get(4, 0))).IsTrue();
+        await Assert.That(IsBracketHighlight(back.Get(1, 0))).IsFalse();
+        await Assert.That(IsBracketHighlight(back.Get(2, 0))).IsFalse();
+        await Assert.That(TestRender.Art(back)).IsEqualTo(Gold(8, "(abc)"));
+    }
+
+    [Test]
+    public async Task Bracket_Cursor_On_NonBracket_Leaves_Styles_Untouched()
+    {
+        var view = new DocumentView();
+        view.SetLines([new DocumentLine([new DocumentSpan("(abc)", CellStyle.Plain)])]);
+        view.Configure(8, 1);
+        view.SetBracketCursor(0, 1); // 'a' is not a bracket
+
+        var back = TestRender.Buffer(8, 1);
+        view.Paint(back, new Rect(0, 0, 8, 1));
+
+        await Assert.That(IsBracketHighlight(back.Get(0, 0))).IsFalse();
+        await Assert.That(IsBracketHighlight(back.Get(4, 0))).IsFalse();
+    }
+
+    [Test]
+    public async Task Bracket_Highlight_Follows_The_Document_Row_Under_Scroll()
+    {
+        var view = new DocumentView();
+        view.SetLines([
+            new DocumentLine([new DocumentSpan("one", CellStyle.Plain)]),
+            new DocumentLine([new DocumentSpan("(x)", CellStyle.Plain)]),
+        ]);
+        view.Configure(6, 1);
+        view.ScrollBy(1); // show the second line at y = 0
+        view.SetBracketCursor(1, 0);
+
+        var back = TestRender.Buffer(8, 1);
+        view.Paint(back, new Rect(2, 0, 6, 1)); // nonzero rect.X
+
+        await Assert.That(IsBracketHighlight(back.Get(2, 0))).IsTrue();
+        await Assert.That(IsBracketHighlight(back.Get(4, 0))).IsTrue();
+        await Assert.That(IsBracketHighlight(back.Get(3, 0))).IsFalse();
     }
 }
