@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
@@ -106,7 +107,15 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         ObjectDisposedException.ThrowIf(_disposed, this);
         var sw = Stopwatch.StartNew();
         HttpClient client = _clients.Client;
-        string body = request.GetRawText();
+        // ROP-A ПР.11: serialize the JSON-RPC envelope straight to UTF-8 bytes.
+        // GetRawText() materialized a UTF-16 string that StringContent then
+        // re-encoded to UTF-8, one copy too many on the request path.
+        var bufferWriter = new ArrayBufferWriter<byte>(256);
+        using (var writer = new Utf8JsonWriter(bufferWriter))
+        {
+            request.WriteTo(writer);
+        }
+        byte[] body = bufferWriter.WrittenSpan.ToArray();
         Result<Maybe<string>> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
         if (oauth.IsFailure)
             return Fail<Maybe<JsonElement>>(sw, 0, oauth.Error);
@@ -219,12 +228,15 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     private static Task BackoffAsync(int attempt, CancellationToken cancellationToken)
         => Task.Delay(TransientFailurePolicy.BackoffDelay(attempt), cancellationToken);
 
-    private HttpRequestMessage BuildRequest(string body, Maybe<string> oauthToken)
+    private HttpRequestMessage BuildRequest(byte[] body, Maybe<string> oauthToken)
     {
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            Content = new ByteArrayContent(body),
         };
+        // Same wire header StringContent used to emit, so the bytes and the
+        // media type on the wire stay exactly as they were.
+        httpRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
 
         bool hasAuthorization = false;
         if (_headers is { Count: > 0 })
