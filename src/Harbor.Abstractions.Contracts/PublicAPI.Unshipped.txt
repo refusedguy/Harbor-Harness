@@ -371,3 +371,22 @@ static Harbor.Abstractions.Dsl.RootBuilderOverride.Current.get -> System.Action<
 static Harbor.Abstractions.Dsl.RootBuilderOverride.Current.set -> void
 static Harbor.Abstractions.Dsl.RootBuilderOverride.Install(System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>? builder) -> System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>?
 static Harbor.Abstractions.Models.Identifiers.ToolCallId.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.ToolCallId!>
+Harbor.Abstractions.Models.ServiceUsage
+Harbor.Abstractions.Models.ServiceUsage.<Clone>$() -> Harbor.Abstractions.Models.ServiceUsage!
+Harbor.Abstractions.Models.ServiceUsage.Combine(Harbor.Abstractions.Models.ServiceUsage! other) -> Harbor.Abstractions.Models.ServiceUsage!
+Harbor.Abstractions.Models.ServiceUsage.Equals(Harbor.Abstractions.Models.ServiceUsage? other) -> bool
+Harbor.Abstractions.Models.ServiceUsage.FetchCalls.get -> int
+Harbor.Abstractions.Models.ServiceUsage.FetchTokens.get -> long
+Harbor.Abstractions.Models.ServiceUsage.IsEmpty.get -> bool
+Harbor.Abstractions.Models.ServiceUsage.OcrCalls.get -> int
+Harbor.Abstractions.Models.ServiceUsage.OcrTokens.get -> long
+Harbor.Abstractions.Models.ServiceUsage.SearchCalls.get -> int
+Harbor.Abstractions.Models.ServiceUsage.SearchTokens.get -> long
+Harbor.Abstractions.Models.ServiceUsage.ServiceUsage(int searchCalls = 0, int fetchCalls = 0, int ocrCalls = 0, long searchTokens = 0, long fetchTokens = 0, long ocrTokens = 0) -> void
+Harbor.Abstractions.Models.ServiceUsage.TotalCalls.get -> int
+Harbor.Abstractions.Models.ServiceUsage.TotalTokens.get -> long
+override Harbor.Abstractions.Models.ServiceUsage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ServiceUsage.GetHashCode() -> int
+override Harbor.Abstractions.Models.ServiceUsage.ToString() -> string!
+static Harbor.Abstractions.Models.ServiceUsage.operator !=(Harbor.Abstractions.Models.ServiceUsage? left, Harbor.Abstractions.Models.ServiceUsage? right) -> bool
+static Harbor.Abstractions.Models.ServiceUsage.operator ==(Harbor.Abstractions.Models.ServiceUsage? left, Harbor.Abstractions.Models.ServiceUsage? right) -> bool
