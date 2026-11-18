@@ -7,6 +7,8 @@
 // key legend (#2325) and WhichKeyHelpOverlay keep their own site. No plugin
 // seam, no registry, no new extension axis (#555).
 
+using Harbor.Tui.CellForge.Widgets;
+
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
 /// <summary>
@@ -201,15 +203,13 @@ public sealed class FocusTooltip
             return;
         }
 
-        var border = new CellStyle(ChatPalette.Border);
+        PanelChrome.PaintBorderBox(buffer, rect, BoxStyle.SquareFrame);
         var textStyle = new CellStyle(ChatPalette.Text);
         int inner = rect.Width - 4;
         string text = Fit(_text, inner);
         string pad = new(' ', inner - text.Length);
 
-        buffer.SetText(rect.X, rect.Y, "┌" + new string('─', rect.Width - 2) + "┐", border);
-        buffer.SetText(rect.X, rect.Y + 1, "│ " + text + pad + " │", textStyle);
-        buffer.SetText(rect.X, rect.Y + 2, "└" + new string('─', rect.Width - 2) + "┘", border);
+        buffer.SetText(rect.X + 2, rect.Y + 1, text + pad, textStyle);
     }
 
     private static string Fit(string text, int width)

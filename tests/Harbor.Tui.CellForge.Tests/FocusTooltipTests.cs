@@ -25,6 +25,7 @@ public class FocusTooltipTests
         var router = new EngineInput.FocusRouter();
         var target = new Target("save");
         router.Add(target);
+        router.FocusById("save"); // Add only joins the Tab order; focus is explicit.
         var tip = new FocusTooltip(router, describe ?? (_ => "Save the file"), delay, timeout, clock);
         return (router, target, clock, tip);
     }
