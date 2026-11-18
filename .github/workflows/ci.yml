@@ -288,7 +288,7 @@ jobs:
               # dotnet filter already covers. The instrument is compiled now;
               # its sources are under `tools/gates/`, which the filter below
               # already covers.
-              # NUKE build code, the installer and the native-packaging
+              # Fallout build code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false, skip the build job
               # that compiles it (via ./build.sh), and land unvalidated.
@@ -917,8 +917,8 @@ jobs:
       # `MSBUILDDISABLENODEREUSE=1` is the environment switch MSBuild
       # reads (Microsoft.Build.CommandLine.XMake,
       # ProcessNodeReuseSwitch); dotnet/arcade sets it for the same
-      # reason. The NUKE Compile target ALSO passes `/nodeReuse:false`,
-      # which is the same decision as a switch — the switch wins over the
+      # reason. The Fallout Compile target ALSO passes `/nodeReuse:false`,
+      # which is the same decision as a switch, and the switch wins over the
       # environment variable, so a local `./build.sh Compile` and this
       # job compile the identical graph.
       MSBUILDDISABLENODEREUSE: '1'
@@ -1686,10 +1686,11 @@ jobs:
       # there, so the doc gate covers src/ + apps/ + tools/, which is the
       # shipped surface.
       # Issue #1144 slice B.3 (CI+local parity): this step runs the same
-      # NUKE Compile target developers run locally — same solution, same
-      # configuration, same ContinuousIntegrationBuild property
-      # (CompileTarget carries it). The bootstrap also compiles
-      # build/_build.csproj, so NUKE build-code edits validate here too.
+      # Fallout Compile target developers run locally, with the same solution,
+      # configuration and ContinuousIntegrationBuild property (CompileTarget
+      # carries it). The bootstrap also compiles
+      # build/_build.fallout/_build.fallout.csproj, so Fallout build-code edits
+      # validate here too.
       - name: The zero-test guard can go red (issue #1795)
         shell: bash
         run: |
