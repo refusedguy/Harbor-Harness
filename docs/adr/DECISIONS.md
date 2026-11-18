@@ -1141,3 +1141,21 @@ Decided: код не писать. Влитые пункты не перевыв
 
 - Полный текст и таблица по трём контрактам:
   [ADR-044](ADR-044-tui-ui-primitives-catalog-verdict.md).
+
+## ADR-045: отчёт product-feature-gaps part 2/3 (#2685) — одного общего slice нет
+
+Issue #2685 — self-contained отчёт `product-feature-gaps` part 2/3 с пятнадцатью
+разделами (L/W/D/G/I/E/N/T/R/B/P/O/Q/J/K) и более чем ста независимые concrete
+item. Инвентаризация `origin/dev` (`bbd559c2`) и `gh pr list --search 2685`
+показала три влитых item: D09 per-file scroll в diff viewer (#2784, `68a22232`),
+N07 OSC 777 notification backend (#2876, `e96c2af2`) и T03 property-test на
+секреты в telemetry exports (#2875, `2fdc608d`).
+
+Decided: код не писать. Влитые item не перевыводятся, оставшиеся не
+объединяются в meta-PR и открываются отдельными issue с владельцем и измеримой
+целью. Гейты, пороги, golden и AOT-профиль не меняются. Issue остаётся OPEN как
+источник сравнения; комментарий содержит только хеш коммита ADR. Пересмотр —
+по новому факту: владелец называет конкретный item, потребителя и цель.
+
+- Полный текст, таблица по влитым item и список открытых разделов:
+  [ADR-045](ADR-045-product-feature-gaps-part2-report-verdict.md).
