@@ -15,18 +15,18 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `ff1e2955` plus this branch's commits),
+Measured on this branch (`dev` at `db95d550` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 20 files, 21 297 lines |
-| of them, the `check-*.py` family | 13 files, 17 067 lines |
+| python tools in `tools/` | 7 files, 8 540 lines |
+| of them, the `check-*.py` family | 4 files, 6 669 lines |
 | workflows that run a python tool | 2: `ci.yml`, `docs.yml` |
-| gates that block a build | 35 |
-| gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
-| controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 9 reporters, 9 helpers, 3 libraries |
+| gates that block a build | 41 |
+| gates that report and let the build pass | 1 (the compiled `check-test-dup`, `--warn-only` while the removal programme runs) |
+| controls for compile-time gates | 1 (the compiled `check-tunit-analyzer-gate`) |
+| reporters, helpers, libraries | 10 reporters, 10 helpers, 1 library |
 | tools with a self-test | 52 |
 | tools with a ratchet | 22 |
 | tools with a floor | 31 |
@@ -253,7 +253,7 @@ findings that are not defects.
   in [docs/BENCHMARKS.md](BENCHMARKS.md) with a methodology and a provenance.
   A gate that fails on a slow runner is a gate that gets switched off, and
   then it protects nothing.
-- **Duplicate a gate that already exists.** Each of the ten `check-*.py`
+- **Duplicate a gate that already exists.** Each of the four `check-*.py`
   tools answers a different question, and each states its question in its
   header so the next author can see the shape of what is already covered.
 - **Require dotnet.** See the reason the gates are python at all.
