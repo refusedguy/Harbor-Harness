@@ -15,7 +15,7 @@ namespace Harbor.Plugins.Runtime.Tests;
 /// </summary>
 public sealed class SamplePluginsIntegrationTests
 {
-    /// <summary>The six shipped CS plugin sources with the tools they register.</summary>
+    /// <summary>The seven shipped CS plugin sources with the tools they register.</summary>
     private static readonly (string RelativePath, string PluginName, string ToolName)[] Samples =
     {
         ("samples/plugins-cs/HelloWorldPlugin.cs", "hello-world", "hello"),
@@ -24,6 +24,7 @@ public sealed class SamplePluginsIntegrationTests
         ("samples/plugins/Harbor.Plugin.TodoWrite/TodoWritePlugin.cs", "todowrite", "todo"),
         ("samples/plugins/Harbor.Plugin.GitTools/GitToolsPlugin.cs", "gittools", "git"),
         ("samples/plugins/Harbor.Plugin.FileTree/FileTreePlugin.cs", "filetree", "tree"),
+        ("samples/plugins/Harbor.Plugin.Pomodoro/PomodoroPlugin.cs", "pomodoro", "pomodoro"),
     };
 
     /// <summary>
@@ -31,7 +32,7 @@ public sealed class SamplePluginsIntegrationTests
     ///     lands in the host registry.
     /// </summary>
     [Test]
-    public async Task DiscoverAndLoad_AllShippedSamples_LoadsSixPluginsWithTheirTools()
+    public async Task DiscoverAndLoad_AllShippedSamples_LoadsSevenPluginsWithTheirTools()
     {
         string repoRoot = RepoPaths.Root;
         using var fixture = await PluginTestFixture.CreateAsync(uniqueSuffix: "S").ConfigureAwait(false);
