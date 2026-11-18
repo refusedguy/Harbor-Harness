@@ -62,9 +62,16 @@ public sealed class AuthStore
         return Result.Success(value);
     }
 
+    /// <summary>Build the conventional <c>&lt;PROVIDER&gt;_API_KEY</c> name for an id.</summary>
+    private static string ConventionalEnvName(string providerId) =>
+        providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+
+    private static bool KeyIsSet(string name) =>
+        Environment.GetEnvironmentVariable(name) is { Length: > 0 };
+
     private Result<string> FromConventionalEnv(string providerId)
     {
-        string name = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+        string name = ConventionalEnvName(providerId);
         string? value = Environment.GetEnvironmentVariable(name);
         if (string.IsNullOrEmpty(value))
             return Result.Failure<string>($"{name} not set");
@@ -76,7 +83,7 @@ public sealed class AuthStore
     /// <summary>Build the aggregated help message naming every env var that would work.</summary>
     private string MissingKeyHelp(string providerId)
     {
-        string conventional = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+        string conventional = ConventionalEnvName(providerId);
         var envVars = new List<string> { conventional };
         string? presetName = ProviderPresets.Find(providerId)?.EnvVarName;
         if (presetName is not null && presetName != conventional)
@@ -136,16 +143,36 @@ public sealed class AuthStore
                 static kv => !string.IsNullOrEmpty(kv.Value),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Also check env vars
+            // Presets own their env var names. Derive the provider id from the preset
+            // instead of reverse-parsing the variable name: KILO_API_KEY belongs to
+            // "kilocode", not to a phantom provider called "kilo" (#2560).
+            var presetOwnedEnvVars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ProviderPresets.Preset preset in ProviderPresets.All)
+            {
+                string conventional = ConventionalEnvName(preset.Id);
+                presetOwnedEnvVars.Add(conventional);
+
+                if (preset.EnvVarName is { } presetName)
+                {
+                    presetOwnedEnvVars.Add(presetName);
+                    if (KeyIsSet(presetName)) result[preset.Id] = true;
+                }
+
+                if (KeyIsSet(conventional)) result[preset.Id] = true;
+            }
+
+            // Providers without a preset are still discovered from a conventional
+            // env var, but names already claimed above are skipped so their ids
+            // cannot be invented a second time from the raw variable name.
             foreach (var env in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>())
             {
                 string? key = env.Key?.ToString();
                 if (key is null) continue;
-                if (key.EndsWith("_API_KEY", StringComparison.OrdinalIgnoreCase))
-                {
-                    string pid = key[..^"_API_KEY".Length].ToLowerInvariant().Replace('_', '-');
-                    if (!result.ContainsKey(pid)) result[pid] = env.Value is string s && !string.IsNullOrEmpty(s);
-                }
+                if (!key.EndsWith("_API_KEY", StringComparison.OrdinalIgnoreCase)) continue;
+                if (presetOwnedEnvVars.Contains(key)) continue;
+
+                string pid = key[..^"_API_KEY".Length].ToLowerInvariant().Replace('_', '-');
+                if (!result.ContainsKey(pid)) result[pid] = env.Value is string s && !string.IsNullOrEmpty(s);
             }
 
             return Result.Success<IReadOnlyDictionary<string, bool>>(result);
