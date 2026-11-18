@@ -90,18 +90,91 @@ public sealed record AgentDefinition(
     public const int DefaultRepeatToolThreshold = 3;
 
     /// <summary>
+    ///     Validated construction of an <see cref="AgentDefinition" /> from the
+    ///     raw model and provider strings the built-in factories and the
+    ///     composition root start with.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The record keeps its string fields in this slice (#2576); only
+    ///         the values that reach them are checked. The provider half goes
+    ///         through <see cref="ProviderId.TryCreate" /> and the model half
+    ///         through <see cref="ModelRef.TryParse" />, both inside
+    ///         <see cref="ModelRef.Qualify" />. That is the one API that keeps a
+    ///         bare multi-segment model id (<c>tencent/hy3:free</c>) from being
+    ///         read as a different provider (#678). The provider is normalized
+    ///         to lowercase, so <c>KiloCode</c> and <c>kilocode</c> name one
+    ///         provider at the definition level.
+    ///     </para>
+    ///     <para>
+    ///         A failure is returned, never thrown. Callers that must produce
+    ///         a definition (the built-in factories) surface it through
+    ///         <see cref="RequireValid" />, so an invalid id is rejected when
+    ///         the agent is declared instead of on the first prompt.
+    ///     </para>
+    /// </remarks>
+    /// <param name="name">Stable lowercase identifier of the agent.</param>
+    /// <param name="displayName">Human-readable name shown in the status bar.</param>
+    /// <param name="description">One-line description shown in <c>/agents</c>.</param>
+    /// <param name="model">Model id, bare or already qualified for <paramref name="providerId" />.</param>
+    /// <param name="providerId">Provider id; normalized to lowercase when valid.</param>
+    /// <param name="permission">Permission ruleset applied to every tool call.</param>
+    /// <param name="maxSteps">Hard cap on agent-loop iterations.</param>
+    /// <param name="temperature">Optional sampling temperature override.</param>
+    /// <param name="reasoningEffort">Optional reasoning-effort hint.</param>
+    /// <param name="systemPromptAppend">Optional extra instructions.</param>
+    /// <param name="isSubAgent">Whether this agent is invocable via <c>task</c>.</param>
+    /// <param name="hidden">Whether this agent is hidden from listings.</param>
+    /// <param name="toolTimeoutSeconds">Optional per-tool-call timeout.</param>
+    /// <param name="budget">Optional run budget caps.</param>
+    /// <returns>Success with the validated definition, or a failure describing the invalid id.</returns>
+    public static Result<AgentDefinition> TryCreate(
+        AgentName name,
+        string displayName,
+        string description,
+        string model,
+        string providerId,
+        PermissionRuleset permission,
+        int maxSteps = 50,
+        decimal? temperature = null,
+        ReasoningEffort? reasoningEffort = null,
+        string? systemPromptAppend = null,
+        bool isSubAgent = false,
+        bool hidden = false,
+        int? toolTimeoutSeconds = null,
+        RunBudgetCaps? budget = null)
+        => ModelRef.Qualify(providerId, model)
+            .Map(reference => new AgentDefinition(
+                name, displayName, description,
+                reference.ModelId, reference.ProviderId.Value,
+                permission, maxSteps, temperature, reasoningEffort,
+                systemPromptAppend, isSubAgent, hidden, toolTimeoutSeconds, budget));
+
+    /// <summary>
+    ///     Converts the validated result into the definition the built-in
+    ///     factories promise to return. Invalid input is a declaration bug,
+    ///     so it fails here rather than becoming a "Provider is not
+    ///     registered" error on the first prompt (#2576).
+    /// </summary>
+    private static AgentDefinition RequireValid(string agent, Result<AgentDefinition> candidate)
+        => candidate.Match(
+            definition => definition,
+            error => throw new InvalidOperationException(
+                $"Invalid model or provider for agent '{agent}': {error}"));
+
+    /// <summary>
     ///     Returns the default <c>code</c> agent — full read/write/edit/bash permissions, 50 steps.
     /// </summary>
     /// <param name="model">Model id (without provider prefix).</param>
     /// <param name="providerId">Provider id (e.g. <c>anthropic</c>).</param>
     /// <returns>A ready-to-use <see cref="AgentDefinition" /> for coding tasks.</returns>
-    public static AgentDefinition CodeDefault(string model, string providerId) => new(
+    public static AgentDefinition CodeDefault(string model, string providerId) => RequireValid("code", TryCreate(
         AgentName.Create("code"),
         "Code",
         "Default coding agent. Can read, write, edit files and run commands.",
         model,
         providerId,
-        PermissionRuleset.Default);
+        PermissionRuleset.Default));
 
     /// <summary>
     ///     Returns the default <c>plan</c> agent — read-only exploration plus git/cat, 100 steps.
@@ -140,7 +213,7 @@ public sealed record AgentDefinition(
     ///         sixth shell verb is covered without a written roster.
     ///     </para>
     /// </remarks>
-    public static AgentDefinition PlanDefault(string model, string providerId) => new(
+    public static AgentDefinition PlanDefault(string model, string providerId) => RequireValid("plan", TryCreate(
         AgentName.Create("plan"),
         "Plan",
         "Read-only planning agent. Cannot modify files.",
@@ -173,7 +246,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
-        SystemPromptAppend: "You are in PLAN mode. You can read and explore but cannot modify files. Produce a detailed plan for the user to approve.");
+        systemPromptAppend: "You are in PLAN mode. You can read and explore but cannot modify files. Produce a detailed plan for the user to approve."));
 
     /// <summary>
     ///     Returns the default <c>explore</c> sub-agent — fast read-only codebase explorer, 20 steps.
@@ -181,7 +254,7 @@ public sealed record AgentDefinition(
     /// <param name="model">Model id (without provider prefix).</param>
     /// <param name="providerId">Provider id (e.g. <c>anthropic</c>).</param>
     /// <returns>A ready-to-use sub-agent <see cref="AgentDefinition" /> invocable via the <c>task</c> tool.</returns>
-    public static AgentDefinition ExploreDefault(string model, string providerId) => new(
+    public static AgentDefinition ExploreDefault(string model, string providerId) => RequireValid("explore", TryCreate(
         AgentName.Create("explore"),
         "Explore",
         "Fast read-only codebase explorer.",
@@ -214,8 +287,8 @@ public sealed record AgentDefinition(
             new(WellKnownTools.WebFetch, "*", PermissionAction.Allow)
         }),
         20,
-        IsSubAgent: true,
-        SystemPromptAppend: "You are a fast codebase explorer. Quickly gather information and report back concisely.");
+        isSubAgent: true,
+        systemPromptAppend: "You are a fast codebase explorer. Quickly gather information and report back concisely."));
 
     /// <summary>
     ///     Returns the default <c>ask</c> mode — read-only question-answering, 50 steps.
@@ -242,7 +315,7 @@ public sealed record AgentDefinition(
     ///         and <c>ReadOnlyAgentPermissionRule</c>.
     ///     </para>
     /// </remarks>
-    public static AgentDefinition AskDefault(string model, string providerId) => new(
+    public static AgentDefinition AskDefault(string model, string providerId) => RequireValid("ask", TryCreate(
         AgentName.Create("ask"),
         "Ask",
         "Read-only question-answering agent. Cannot modify files.",
@@ -284,7 +357,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         50,
-        SystemPromptAppend: "You are in ASK mode. Answer questions and explain code. Do not implement changes, do not modify files. When asked to change something, explain how instead.");
+        systemPromptAppend: "You are in ASK mode. Answer questions and explain code. Do not implement changes, do not modify files. When asked to change something, explain how instead."));
 
     /// <summary>
     ///     Returns the default <c>architect</c> mode — read-only software design, 100 steps.
@@ -297,7 +370,7 @@ public sealed record AgentDefinition(
     ///     verbs, denied write category), plus the <c>task</c> tool so the design
     ///     can fan exploration out to read-only sub-agents.
     /// </remarks>
-    public static AgentDefinition ArchitectDefault(string model, string providerId) => new(
+    public static AgentDefinition ArchitectDefault(string model, string providerId) => RequireValid("architect", TryCreate(
         AgentName.Create("architect"),
         "Architect",
         "Read-only software architect. Cannot modify files — produces designs for approval.",
@@ -340,7 +413,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
-        SystemPromptAppend: "You are in ARCHITECT mode. Design before code: explore the codebase, weigh trade-offs, and produce a concrete implementation plan for approval. Do not modify files.");
+        systemPromptAppend: "You are in ARCHITECT mode. Design before code: explore the codebase, weigh trade-offs, and produce a concrete implementation plan for approval. Do not modify files."));
 
     /// <summary>
     ///     Returns the default <c>debug</c> mode — failure diagnosis with approval-gated fixes, 50 steps.
@@ -354,7 +427,7 @@ public sealed record AgentDefinition(
     ///     shell/tool guards derive from. Writes and unlisted shell stay
     ///     <see cref="PermissionAction.Ask" /> — the prompt is the policy.
     /// </remarks>
-    public static AgentDefinition DebugDefault(string model, string providerId) => new(
+    public static AgentDefinition DebugDefault(string model, string providerId) => RequireValid("debug", TryCreate(
         AgentName.Create("debug"),
         "Debug",
         "Diagnostic agent. Reproduces failures, isolates causes, and fixes with approval.",
@@ -405,7 +478,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
         }),
         50,
-        SystemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval.");
+        systemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval."));
 
     /// <summary>
     ///     Returns the default <c>orchestrator</c> mode — work decomposition and delegation, 100 steps.
@@ -421,7 +494,7 @@ public sealed record AgentDefinition(
     ///     write-category Deny shadows any narrower Ask on tie-sort), and the
     ///     description avoids the read-only declaration accordingly.
     /// </remarks>
-    public static AgentDefinition OrchestratorDefault(string model, string providerId) => new(
+    public static AgentDefinition OrchestratorDefault(string model, string providerId) => RequireValid("orchestrator", TryCreate(
         AgentName.Create("orchestrator"),
         "Orchestrator",
         "Coordination agent. Decomposes work and delegates through the task tool.",
@@ -464,7 +537,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
-        SystemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done.");
+        systemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done."));
 
     /// <summary>
     ///     Returns a copy of this agent bound to a different model and provider.
