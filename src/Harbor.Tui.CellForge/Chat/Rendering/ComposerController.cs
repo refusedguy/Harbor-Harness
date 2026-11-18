@@ -190,7 +190,7 @@ public sealed class ComposerController
         _speechToText = speechToText ?? throw new ArgumentNullException(nameof(speechToText));
         _handlers =
         [
-            new DictationHandler(this),
+            new DictationHandler(),
             new EnterHandler(this),
             new CharHandler(this),
             new HistoryHandler(this),
@@ -239,7 +239,7 @@ public sealed class ComposerController
     /// cannot toggle twice. The host performs the async toggle; the state machine
     /// only names the gesture (the same split it uses for Submit/Abort).
     /// </summary>
-    private sealed class DictationHandler(ComposerController owner) : IKeyHandler
+    private sealed class DictationHandler : IKeyHandler
     {
         public bool Matches(in KeyEvent key) =>
             key.EventType == KeyEventType.Press
