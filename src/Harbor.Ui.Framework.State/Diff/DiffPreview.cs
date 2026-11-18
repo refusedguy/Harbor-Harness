@@ -137,10 +137,18 @@ public static class DiffPreview
                     return Maybe.From(new DiffPayload(filePath, pilotPreview, pilotFull));
                 }
 
+                // #97 per-tool-call: SplitLines allocates a List<string>, a
+                // string[] and one string per line. The two GenerateContextDiff
+                // calls below used to each split BOTH texts, so one edit card
+                // paid for four splits. Split once and share the arrays. The
+                // preview and the full diff only read them.
+                string[] oldLines = SplitLines(oldString);
+                string[] newLines = SplitLines(newString);
+
                 return Maybe.From(new DiffPayload(
                     filePath,
-                    GenerateContextDiff(oldString, newString, MaxPreviewLines),
-                    GenerateContextDiff(oldString, newString, MaxFullDiffLines)));
+                    GenerateContextDiff(oldLines, newLines, MaxPreviewLines),
+                    GenerateContextDiff(oldLines, newLines, MaxFullDiffLines)));
             }
         }
         else if (toolName == WellKnownTools.Write)
@@ -184,11 +192,14 @@ public static class DiffPreview
         return UnknownPath;
     }
 
-    private static string GenerateContextDiff(string oldText, string newText, int maxHunkLines)
+    /// <summary>
+    ///     Alignment and rendering over already-split lines (#97). The two
+    ///     budgets for one edit card share the same snapshot, so the split cost
+    ///     is paid once instead of once per budget. The arrays are read-only
+    ///     here: only the local prefix/suffix cursors move.
+    /// </summary>
+    private static string GenerateContextDiff(string[] oldLines, string[] newLines, int maxHunkLines)
     {
-        string[] oldLines = SplitLines(oldText);
-        string[] newLines = SplitLines(newText);
-
         int oLen = oldLines.Length;
         int nLen = newLines.Length;
 
