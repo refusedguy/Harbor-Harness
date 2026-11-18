@@ -81,6 +81,7 @@ internal static class CafPilotVerbs
         app.Add("skill", CafSkillCommands.Skill);
         app.Add("prompt", CafPromptCommands.Prompt);
         app.Add("doctor", CafDoctorCommands.Doctor);
+        app.Add("pr guide", CafPrCommands.Guide);
         app.Add("help", CafHelpCommands.Help);
         app.Add("completions", CafCompletionCommands.Completions);
 #if HARBOR_WITH_DSL_DEV
