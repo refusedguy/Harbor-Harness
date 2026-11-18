@@ -183,6 +183,8 @@ internal static partial class HostBuilder
         // #47/S2: export the event-bus queue-age percentiles to telemetry and
         // to the per-run log (harbor logs --last) every 30s.
         EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
+        // #2674/G2: sample process RSS + CPU into the same meter every 30s.
+        ResourceSampleInterval = ResourceSampler.DefaultSampleInterval,
         // #478: no EventBusMiddlewares — see the CliOptions remarks. The filter
         // registered here carried no allowed types and admitted every event, so
         // dropping it is delivery-neutral; what it stops is a Mandatory sink that

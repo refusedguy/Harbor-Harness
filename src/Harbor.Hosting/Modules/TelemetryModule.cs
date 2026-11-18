@@ -73,6 +73,13 @@ internal static class TelemetryModule
                 ctx.Options.EventBusQueueAgeReportInterval));
         }
 
+        // #2674 G2: one process-resource sampler on the same canonical meter.
+        // Built eagerly so its cadence starts with the host; disposal stops it.
+        services.AddSingleton(new ResourceSampler(
+            MeterMetrics.Instance,
+            ctx.LoggerFactory.CreateLogger<ResourceSampler>(),
+            ctx.Options.ResourceSampleInterval));
+
         AddVisibleExport(services, ctx);
 
         return services;

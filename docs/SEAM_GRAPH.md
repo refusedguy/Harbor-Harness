@@ -128,10 +128,10 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | `ISessionManager` | [`src/Harbor.Ui.Framework.Sessions/Sessions/ISessionManager.cs`](../src/Harbor.Ui.Framework.Sessions/Sessions/ISessionManager.cs) | `SessionManager` / `FakeSessionManager (Harbor.App.Avalonia.Tests)`, `NoSessionsManager`, `StubSessionManager` (+1 more) | 15 | a factory | 0 |
 | `IShellChrome` | [`src/Harbor.Ui.Framework.Abstractions/Navigation/IShellChrome.cs`](../src/Harbor.Ui.Framework.Abstractions/Navigation/IShellChrome.cs) | `AvaloniaShellChrome` | 15 | `AvaloniaShellChrome` | 0 |
 | `IGitQuery` | [`src/Harbor.Abstractions/Git/IGitQuery.cs`](../src/Harbor.Abstractions/Git/IGitQuery.cs) | `ProcessGitQuery` / `TestGitQuery`, `ThrowingGitQuery (Harbor.TestKit.Support)`, `StubGitQuery` (+1 more) | 14 | `ProcessGitQuery`, `ProcessGitQuery` | 0 |
+| `IMetrics` | [`src/Harbor.Diagnostics.Abstractions/TelemetryContracts.cs`](../src/Harbor.Diagnostics.Abstractions/TelemetryContracts.cs) | `NullMetrics (Harbor.Diagnostics.Abstractions)`, `MeterMetrics` / `NullMetrics (Harbor.Architecture.Tests)`, `RecordingMetrics` | 12 | a factory | 2 |
 | `INode` | [`src/Harbor.Tui.CellForge.Engine/Rendering/INode.cs`](../src/Harbor.Tui.CellForge.Engine/Rendering/INode.cs) | `ContainerNode`, `LeafNode` / `SpyNode`, `GlyphNode`, `SparseNode` (+2 more) | 12 | none | 0 |
 | `IPluginSource` | [`src/Harbor.Plugins.Abstractions/IPluginSource.cs`](../src/Harbor.Plugins.Abstractions/IPluginSource.cs) | `CompositePluginSource`, `EmbeddedResourcePluginSource`, `FileSystemPluginSource`, `InMemoryPluginSource`, `TrustingPluginSource` | 9 | none | 5 |
 | `ITuiRendererFactory` | [`src/Harbor.Hosting/Modules/TuiBackendRegistry.cs`](../src/Harbor.Hosting/Modules/TuiBackendRegistry.cs) | `PlainTuiRendererFactory`, `AnsiTuiRendererFactory`, `CellForgeTuiRendererFactory`, `PluginTuiRendererFactory`, `SpectreTuiRendererFactory` (+5 more) | 4 | none | 10 |
-| `IHarborClient` | [`src/Harbor.Ipc.Abstractions/IHarborClient.cs`](../src/Harbor.Ipc.Abstractions/IHarborClient.cs) | `IpcHarborClient`, `InProcessHarborClient` / `FakeHarborClient`, `StubHarborClient` | 11 | a factory, `InProcessHarborClient` | 1 |
 
 ## 3. Three seams in detail
 
