@@ -471,8 +471,9 @@ dragging in model DTOs. Both are Domain and reference each other in one directio
 `Harbor.Abstractions` → `Harbor.Abstractions.Contracts`, never the reverse.
 
 > This subsection used to be headed "Why **two** projects in the Domain layer?" and named
-> `Harbor.Tui.Abstractions` as the second one. That project does not exist — it was a
-> deprecated facade, it has no matrix row, and `src/` has no directory for it any more.
+> `Harbor.Tui.Abstractions` as the second one. That project does not exist — it was
+> renamed to `Harbor.Terminal.Abstractions`, it has no matrix row, and `src/` has no
+> directory for it any more.
 > The Domain layer is six projects deep in the matrix, and §1's diagram lists them. The
 > `-Abstractions`-named projects that are **not** Domain are `Harbor.Terminal.Abstractions`
 > and `Harbor.Desktop.Abstractions` (both Presentation) — corrected in #751. Since #1899 the
@@ -505,9 +506,9 @@ The matrix below is a **coarse-grain summary** of allowed `<ProjectReference>` e
 | **apps/Harbor.App.Cli**                        | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  | —   |
 
 `❌*` Application layer (Core/Application) may not depend on UI vocabulary
-(`Harbor.Tui.Abstractions`) — Core is the agent-harness application layer and must not
+(`Harbor.Terminal.Abstractions`) — Core is the agent-harness application layer and must not
 know about UI vocabulary. If Core needs to expose a hook that the UI cares about,
-declare the contract in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` if it is
+declare the contract in `Harbor.Abstractions` (or `Harbor.Terminal.Abstractions` if it is
 UI-specific), and let the Composition Root (`HostBuilder`) wire the UI-side adapter in.
 Within the Application layer, Core may reference only its siblings
 `Harbor.Application` + `Harbor.Registries` plus Domain
@@ -654,7 +655,7 @@ Concrete implementations of:
 | `apps/Harbor.App.Cli` references everything — it is the Composition Root.                         | (by convention)          |
 | Concrete impl types (`AnthropicLlmClient`, `JsonlSessionStore`, …) are `new`'d only inside `HostBuilder.cs`. | Code review              |
 | `Program.cs` resolves services by interface from DI; it does not `new` Infrastructure types.       | Code review              |
-| New interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only contracts), never in the Application layer. | Code review              |
+| New interfaces go in `Harbor.Abstractions` (or `Harbor.Terminal.Abstractions` for UI-only contracts), never in the Application layer. | Code review              |
 | New value objects / records go in `Harbor.Abstractions.Contracts` (namespace `Harbor.Abstractions.Models`), never in the Application layer.            | Code review              |
 
 ---
@@ -1600,17 +1601,13 @@ nothing, which is the state `IGitQuery` was in.
 
 ### Previously suspected (not a violation)
 
-The previously suspected violation — *"Harbor.Tui.Abstractions references the
-agent-harness assembly via `IAgent`"* — does **not** exist: `IAgent` lives in
+An earlier audit suspected a violation — *"Harbor.Tui.Abstractions references the
+agent-harness assembly via `IAgent`"* — that does **not** exist: `IAgent` lives in
 `Harbor.Abstractions/Agents/IAgent.cs` (Domain), not in `Harbor.Application` or
-`Harbor.Registries`. The
-`Harbor.Tui.Abstractions.csproj` file references only `Harbor.Abstractions`:
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-</ItemGroup>
-```
+`Harbor.Registries`. That suspicion named `Harbor.Tui.Abstractions`, a project that
+has since been renamed to `Harbor.Terminal.Abstractions`; no
+`Harbor.Tui.Abstractions.csproj` exists in the tree today. This was a rename, not a
+deprecated facade kept around for later removal.
 
 ### Template for future violations
 
