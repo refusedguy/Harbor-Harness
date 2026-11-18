@@ -10,9 +10,10 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// Leaf base for nodes whose paint output is prepared ahead of time. Subclasses
 /// implement <see cref="Measure"/>, <see cref="OnPrepaint"/> and a version key;
 /// <see cref="Paint"/> is sealed and replays whatever prepaint recorded.
-/// The version key is the manual dependency signal: automatic accessed-entity
-/// tracking is a separate step (issue #2354), so a caller bumps the key when
-/// state the node reads changes.
+/// The version key is the manual dependency signal. Entity reads recorded via
+/// <see cref="PrepaintContext.MarkRead"/> are also captured on the cached
+/// record: when the host's entity versions change, the context drops the
+/// entry even though this key and the id are unchanged.
 /// </summary>
 public abstract class PrepaintNode : LeafNode, INode
 {

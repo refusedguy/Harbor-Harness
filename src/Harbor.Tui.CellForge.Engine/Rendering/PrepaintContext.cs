@@ -33,6 +33,16 @@ public sealed class PrepaintContext
     /// <summary>Number of live cache entries.</summary>
     public int Count => _entries.Count;
 
+    /// <summary>
+    /// Optional source of entity versions, keyed by the name passed to
+    /// <see cref="MarkRead"/>. When set, <see cref="TryReuse"/> also compares a
+    /// fingerprint of the versions a record read at commit time, so an entity
+    /// changing invalidates every node that read it without a manual key bump.
+    /// The engine owns no entity store, so the host supplies the lookup.
+    /// Render-thread owned, like the rest of this context.
+    /// </summary>
+    internal Func<string, ulong>? EntityVersion { get; set; }
+
     /// <summary>Starts a frame. The scene is kept: cached ranges must stay valid.</summary>
     public void BeginFrame()
     {
@@ -73,11 +83,14 @@ public sealed class PrepaintContext
     }
 
     /// <summary>
-    /// Reuses a record when the id and the caller's version key both match.
+    /// Reuses a record when the id, the caller's version key and the versions
+    /// of every entity the record read still match.
     /// </summary>
     public bool TryReuse(ElementId id, ulong key, out PrepaintRecord record)
     {
-        if (_entries.TryGetValue(id, out var entry) && entry.Key == key)
+        if (_entries.TryGetValue(id, out var entry)
+            && entry.Key == key
+            && entry.EntityFingerprint == EntityFingerprint(entry.Record.ReadEntities))
         {
             record = entry.Record;
             _touched.Add(id);
@@ -92,7 +105,7 @@ public sealed class PrepaintContext
     /// <summary>Stores a freshly prepared record and returns it unchanged.</summary>
     public PrepaintRecord Commit(ElementId id, ulong key, PrepaintRecord record)
     {
-        _entries[id] = new Entry(key, record);
+        _entries[id] = new Entry(key, EntityFingerprint(record.ReadEntities), record);
         _touched.Add(id);
         Misses++;
         return record;
@@ -127,7 +140,34 @@ public sealed class PrepaintContext
         Misses = 0;
     }
 
-    private readonly record struct Entry(ulong Key, PrepaintRecord Record);
+    /// <summary>
+    /// Folds the current version of every read entity into one 64-bit value.
+    /// Zero when there is no provider or no reads, which preserves the old
+    /// key-only reuse for nodes that do not take part in entity tracking.
+    /// </summary>
+    private ulong EntityFingerprint(IReadOnlyList<string>? reads)
+    {
+        var version = EntityVersion;
+        if (version is null || reads is null || reads.Count == 0)
+        {
+            return 0;
+        }
+
+        // FNV-1a over each (entity name, version) pair. Mixing in the name
+        // keeps two unrelated entities with the same numeric version from
+        // cancelling each other out.
+        ulong hash = 14695981039346656037UL;
+        for (int i = 0; i < reads.Count; i++)
+        {
+            hash ^= (ulong)(uint)reads[i].GetHashCode(StringComparison.Ordinal);
+            hash *= 1099511628211UL;
+            hash ^= version(reads[i]);
+            hash *= 1099511628211UL;
+        }
+        return hash;
+    }
+
+    private readonly record struct Entry(ulong Key, ulong EntityFingerprint, PrepaintRecord Record);
 }
 
 /// <summary>

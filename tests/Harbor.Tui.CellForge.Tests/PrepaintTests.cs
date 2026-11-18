@@ -16,12 +16,14 @@ public class PrepaintTests
         private readonly int _x;
         private readonly int _y;
         private readonly string _text;
+        private readonly string _read;
 
-        public TextNode(string text, int x, int y)
+        public TextNode(string text, int x, int y, string read = "text.state")
         {
             _text = text;
             _x = x;
             _y = y;
+            _read = read;
 
             // Each node carries its own content version. Two different nodes
             // that swap indexed paths must not adopt each other's cache entry:
@@ -46,7 +48,7 @@ public class PrepaintTests
         {
             Prepares++;
             Events.Add($"prepaint:{id}");
-            context.MarkRead("text.state");
+            context.MarkRead(_read);
             var mark = context.Scene.Mark();
             context.Scene.SetText(_x, _y, _text, EngineCells.CellStyle.Plain);
             return new EngineCells.PrepaintRecord(
@@ -205,5 +207,51 @@ public class PrepaintTests
         await Assert.That(context.Hits).IsEqualTo(2);
         await Assert.That(toast.Prepares).IsEqualTo(1);
         await Assert.That(dialog.Prepares).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task EntityVersionChange_InvalidatesOnlyTheReader_WhileUnchangedVersionReuses()
+    {
+        var context = new EngineCells.PrepaintContext();
+        var versions = new Dictionary<string, ulong>(StringComparer.Ordinal) { ["shared"] = 1 };
+        context.EntityVersion = name => versions.TryGetValue(name, out var v) ? v : 0;
+
+        var reader = new TextNode("R", 0, 0, "shared");
+        var bystander = new TextNode("B", 1, 0, "unrelated");
+        reader.Version = 7;
+        bystander.Version = 7;
+
+        var root = new EngineCells.FlexSplitNode(EngineCells.SplitDir.Horizontal);
+        root.Add(reader, EngineCells.FlexTrack.Fill());
+        root.Add(bystander, EngineCells.FlexTrack.Fill());
+
+        void Frame() => EngineCells.NodeFrame.Render(
+            root, context, new EngineCells.ScreenBuffer(20, 4), Box, Screen);
+
+        Frame();
+        await Assert.That(reader.Prepares).IsEqualTo(1);
+        await Assert.That(bystander.Prepares).IsEqualTo(1);
+        await Assert.That(context.Misses).IsEqualTo(2);
+
+        // Neither entity changed: both records come back from the cache.
+        Frame();
+        await Assert.That(reader.Prepares).IsEqualTo(1);
+        await Assert.That(bystander.Prepares).IsEqualTo(1);
+        await Assert.That(context.Hits).IsEqualTo(2);
+
+        // Only "shared" changes. Its reader reprepares even though its own
+        // PrepaintKey and id are untouched; the other node still hits.
+        versions["shared"] = 2;
+        Frame();
+        await Assert.That(reader.Prepares).IsEqualTo(2);
+        await Assert.That(bystander.Prepares).IsEqualTo(1);
+        await Assert.That(context.Hits).IsEqualTo(3);
+        await Assert.That(context.Misses).IsEqualTo(3);
+
+        // The new version is the baseline again.
+        Frame();
+        await Assert.That(reader.Prepares).IsEqualTo(2);
+        await Assert.That(context.Hits).IsEqualTo(5);
+        await Assert.That(context.Misses).IsEqualTo(3);
     }
 }
