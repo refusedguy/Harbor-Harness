@@ -99,7 +99,10 @@ public class ElementIdStackTests
         store.BeginFrame();
         await Assert.That(store.TryGet<Counter>(second, out _)).IsFalse();
         store.EndFrame();
-        await Assert.That(store.Count).IsEqualTo(1);
+
+        // The frame touched only the absent slot, so the surviving slot from
+        // frame two was not accessed and EndFrame dropped it as well.
+        await Assert.That(store.Count).IsEqualTo(0);
     }
 
     [Test]
