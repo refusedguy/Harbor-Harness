@@ -56,14 +56,22 @@ internal static class CafAskCommands
     ///     the prompt. An explicit positional prompt takes precedence and the
     ///     link is ignored in that case; nothing is fetched from the URL.
     /// </param>
+    /// <param name="timings">
+    ///     #2675 item 022: print a phase breakdown to stderr. Re-appended to
+    ///     the tail because <see cref="AskVerb.RunAsync" /> owns the flag and
+    ///     strips it before the host is built.
+    /// </param>
     /// <param name="args">Prompt words (joined with spaces, as the manual verb does).</param>
     public static async Task<int> Ask(
         string? script = null,
         string? promptLink = null,
+        bool timings = false,
         [Argument]params string[] args)
     {
         if (args.Length == 0 && CliArgs.ParsePromptLink(promptLink) is { } linked)
             args = [linked];
+        if (timings)
+            args = ["--timings", ..args];
         return await AskVerb.RunAsync(NullLogger.Instance, args, script).ConfigureAwait(false);
     }
 }

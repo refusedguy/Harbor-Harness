@@ -88,6 +88,28 @@ internal static class CliArgs
     }
 
     /// <summary>
+    ///     #2675 item 022: pull the one-shot <c>--timings</c> flag out of the
+    ///     argument list. The flag has no value; unlike <c>--script</c> it
+    ///     never reaches the host builder, only the runner's stderr report.
+    /// </summary>
+    internal static bool ExtractTimingsArg(string[] args, out string[] remaining)
+    {
+        bool timings = false;
+        var remainingList = new List<string>(args.Length);
+        foreach (string a in args)
+        {
+            if (a.Equals("--timings", StringComparison.OrdinalIgnoreCase))
+            {
+                timings = true;
+                continue;
+            }
+            remainingList.Add(a);
+        }
+        remaining = remainingList.ToArray();
+        return timings;
+    }
+
+    /// <summary>
     ///     F14: resolve a shareable prompt deep link into its prompt text. A
     ///     link carries the prompt in its <c>prompt</c> query parameter, e.g.
     ///     <c>https://example.com/new?prompt=Explain%20this+diff</c>. Parsing is
