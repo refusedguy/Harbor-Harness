@@ -176,6 +176,7 @@ public static class Program
             "config" => await CafPilotVerbs.RunAsync("config", tail),
             "doctor" => await CafPilotVerbs.RunAsync("doctor", tail),
             "pr" => await CafPilotVerbs.RunAsync("pr", tail),
+            "project" => await CafPilotVerbs.RunAsync("project", tail), // #2674 H12
             "handoff" => await CafPilotVerbs.RunAsync("handoff", tail),
             "issue" => await CafPilotVerbs.RunAsync("issue", tail),
             "help" or "--help" or "-h" => await CafPilotVerbs.RunAsync("help", tail),
