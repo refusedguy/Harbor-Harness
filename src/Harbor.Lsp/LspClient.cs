@@ -1,7 +1,5 @@
 using System.Buffers;
-using System.Buffers.Text;
 using System.Collections.Concurrent;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
@@ -14,13 +12,16 @@ namespace Harbor.Lsp;
 /// <remarks>
 ///     <para>
 ///         <b>Framing:</b> <c>Content-Length: N\r\n\r\n</c> + N UTF-8 bytes of
-///         one JSON object — the LSP/JSON-RPC base protocol, not NDJSON.
+///         one JSON object — the LSP/JSON-RPC base protocol, not NDJSON. The
+///         byte-level framing lives in <see cref="ILspFrameTransport" />; this
+///         type only builds the JSON-RPC envelope and drives that transport.
 ///     </para>
 ///     <para>
 ///         <b>Demux:</b> the reader loop routes responses by <c>id</c> to
 ///         pending requests and surfaces server notifications
 ///         (<c>textDocument/publishDiagnostics</c>, …) through
-///         <see cref="ServerNotification" />.
+///         <see cref="ServerNotification" />. Correlation stays here; the
+///         transport knows nothing about request ids.
 ///     </para>
 ///     <para>
 ///         <b>AOT:</b> params serialize through <see cref="LspJsonContext"/>
@@ -36,10 +37,8 @@ namespace Harbor.Lsp;
 /// </remarks>
 public sealed class LspClient : IAsyncDisposable
 {
-    private readonly Stream _input;
-    private readonly Stream _output;
+    private readonly ILspFrameTransport _transport;
     private readonly ILogger _logger;
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
     // #1095: pending-request demux is on the LSP hot path — SendRequestAsync
     // registers/unregisters per request, the reader loop looks up per response,
     // Dispose cancels on shutdown. A ConcurrentDictionary keeps all four sites
@@ -48,8 +47,6 @@ public sealed class LspClient : IAsyncDisposable
     // DebouncedPluginWatcher._pending.
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly CancellationTokenSource _lifetimeCts = new();
-    private readonly byte[] _oneByte = new byte[1]; // reused header probe — the read loop is the only reader
-    private readonly byte[] _headerScratch = new byte[32]; // formatted + written under _writeLock, never shared
     private Task? _readLoopTask;
     private int _nextId;
     private int _disposed;
@@ -60,10 +57,20 @@ public sealed class LspClient : IAsyncDisposable
     /// <summary>Raised when the read loop ends (process exited / stream closed).</summary>
     public event EventHandler? Disconnected;
 
+    /// <summary>Convenience constructor for the wire's two streams.</summary>
     public LspClient(Stream input, Stream output, ILogger logger)
+        : this(new LspFrameTransport(input, output), logger)
     {
-        _input = input ?? throw new ArgumentNullException(nameof(input));
-        _output = output ?? throw new ArgumentNullException(nameof(output));
+    }
+
+    /// <summary>
+    ///     Inject a transport (#2613). The framing seam is what lets the
+    ///     client be tested without a process: a fake feeds frames in and
+    ///     records the envelopes written out, while demux stays here.
+    /// </summary>
+    internal LspClient(ILspFrameTransport transport, ILogger logger)
+    {
+        _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -94,7 +101,7 @@ public sealed class LspClient : IAsyncDisposable
     ///         and the reader loop can pick the answer up before this method
     ///         reaches the line that registers the waiter — the answer is
     ///         delivered while the writer is still inside
-    ///         <see cref="WriteFrameAsync" />. Registering afterwards dropped
+    ///         <see cref="ILspFrameTransport.WriteFrameAsync" />. Registering afterwards dropped
     ///         that answer on the floor: the reader found no entry for the id
     ///         and discarded the frame, and the requester then waited for a
     ///         reply that had already been thrown away. The wait was unbounded,
@@ -121,7 +128,7 @@ public sealed class LspClient : IAsyncDisposable
 
         try
         {
-            await WriteFrameAsync(BuildFrame("2.0", id, method, parameters), ct).ConfigureAwait(false);
+            await _transport.WriteFrameAsync(BuildFrame("2.0", id, method, parameters).WrittenMemory, ct).ConfigureAwait(false);
         }
         catch
         {
@@ -143,7 +150,7 @@ public sealed class LspClient : IAsyncDisposable
 
     /// <summary>Sends a notification (no response expected).</summary>
     public Task SendNotificationAsync(string method, object? parameters, CancellationToken ct = default)
-        => WriteFrameAsync(BuildFrame("2.0", null, method, parameters), ct);
+        => _transport.WriteFrameAsync(BuildFrame("2.0", null, method, parameters).WrittenMemory, ct);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -159,7 +166,7 @@ public sealed class LspClient : IAsyncDisposable
         _pending.Clear();
 
         _lifetimeCts.Dispose();
-        _writeLock.Dispose();
+        await _transport.DisposeAsync().ConfigureAwait(false);
     }
 
     // ── Framing ────────────────────────────────────────────────────────────
@@ -215,41 +222,13 @@ public sealed class LspClient : IAsyncDisposable
                 + "serialized without reflection."));
     }
 
-    private async Task WriteFrameAsync(ArrayBufferWriter<byte> payload, CancellationToken ct)
-    {
-        // #180: frame the pooled UTF-8 bytes directly — no string payload,
-        // no re-encode per frame. The header is formatted into scratch space
-        // under the write lock (the only writer), then both parts stream out.
-        // "Content-Length: " (16) + up to 10 digits + "\r\n\r\n" (4) fits 32 bytes.
-        await _writeLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            const int PrefixLength = 16;
-            "Content-Length: "u8.CopyTo(_headerScratch);
-            if (!payload.WrittenCount.TryFormat(_headerScratch.AsSpan(PrefixLength), out int digits))
-                throw new InvalidOperationException("LSP frame is too large to frame.");
-            _headerScratch[PrefixLength + digits] = (byte)'\r';
-            _headerScratch[PrefixLength + digits + 1] = (byte)'\n';
-            _headerScratch[PrefixLength + digits + 2] = (byte)'\r';
-            _headerScratch[PrefixLength + digits + 3] = (byte)'\n';
-
-            await _output.WriteAsync(_headerScratch.AsMemory(0, PrefixLength + digits + 4), ct).ConfigureAwait(false);
-            await _output.WriteAsync(payload.WrittenMemory, ct).ConfigureAwait(false);
-            await _output.FlushAsync(ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
-    }
-
     private async Task ReadLoopAsync(CancellationToken ct)
     {
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                JsonElement? root = await ReadFrameAsync(ct).ConfigureAwait(false);
+                JsonElement? root = await _transport.ReadFrameAsync(ct).ConfigureAwait(false);
                 if (root is null) break;
 
                 HandleFrame(root.Value);
@@ -355,130 +334,6 @@ public sealed class LspClient : IAsyncDisposable
         }
     }
 
-    /// <summary>ASCII whitespace trim for header spans (no byte-span Trim() in BCL).</summary>
-    private static ReadOnlySpan<byte> TrimAsciiWhiteSpace(ReadOnlySpan<byte> span)
-    {
-        int start = 0;
-        while (start < span.Length && (span[start] == (byte)' ' || span[start] == (byte)'\t'))
-            start++;
-        int end = span.Length;
-        while (end > start && (span[end - 1] == (byte)' ' || span[end - 1] == (byte)'\t'))
-            end--;
-        return span[start..end];
-    }
-
-    private async Task<JsonElement?> ReadFrameAsync(CancellationToken ct)
-    {
-        int contentLength = await ReadHeadersAsync(ct).ConfigureAwait(false);
-        byte[] body = ArrayPool<byte>.Shared.Rent(contentLength);
-        try
-        {
-            await ReadExactlyAsync(body, contentLength, ct).ConfigureAwait(false);
-            // Same DOM as JsonDocument.Parse, but through the source-generated
-            // JsonElement info (PERF-002): the element is self-contained, so
-            // no document lifetime is tracked by the read loop. Malformed
-            // bodies still throw JsonException — the loop logs and aborts the
-            // session exactly as before.
-            return JsonSerializer.Deserialize(body.AsSpan(0, contentLength), LspJsonContext.Default.JsonElement);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(body);
-        }
-    }
-
-    private async ValueTask<int> ReadHeadersAsync(CancellationToken ct)
-    {
-        // Header blocks are tiny (~40 bytes): pooled buffer, byte-wise scan
-        // for the \r\n\r\n terminator, Content-Length parsed from the span —
-        // no List<byte>, no header string, no Split (#180).
-        byte[] rented = ArrayPool<byte>.Shared.Rent(64);
-        int count = 0;
-        try
-        {
-            while (true)
-            {
-                int b = await ReadByteAsync(ct).ConfigureAwait(false);
-                if (b < 0) throw new EndOfStreamException("LSP stream ended while reading headers");
-
-                if (count >= rented.Length)
-                {
-                    if (rented.Length >= 16_384)
-                        throw new InvalidOperationException("LSP header block exceeded 16 KB.");
-                    byte[] grown = ArrayPool<byte>.Shared.Rent(rented.Length * 2);
-                    Buffer.BlockCopy(rented, 0, grown, 0, count);
-                    ArrayPool<byte>.Shared.Return(rented);
-                    rented = grown;
-                }
-
-                rented[count++] = (byte)b;
-                if (count >= 4
-                    && rented[count - 4] == (byte)'\r' && rented[count - 3] == (byte)'\n'
-                    && rented[count - 2] == (byte)'\r' && rented[count - 1] == (byte)'\n')
-                {
-                    break;
-                }
-
-                if (count > 16_384)
-                {
-                    throw new InvalidOperationException("LSP header block exceeded 16 KB.");
-                }
-            }
-
-            return ParseContentLength(rented.AsSpan(0, count));
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(rented);
-        }
-    }
-
-    /// <summary>
-    /// Find the <c>Content-Length</c> line (case-insensitive, like the old
-    /// string Split version) and parse its value from the span. An
-    /// unparseable value is ignored in favor of later lines, exactly as
-    /// <c>int.TryParse</c> failing did before.
-    /// </summary>
-    private static int ParseContentLength(ReadOnlySpan<byte> headers)
-    {
-        while (!headers.IsEmpty)
-        {
-            int eol = headers.IndexOf("\r\n"u8);
-            ReadOnlySpan<byte> line = eol < 0 ? headers : headers[..eol];
-            headers = eol < 0 ? default : headers[(eol + 2)..];
-
-            if (line.Length > "Content-Length:".Length
-                && Ascii.EqualsIgnoreCase(line[.."Content-Length:".Length], "Content-Length:"u8))
-            {
-                // int.TryParse accepted an explicit '+' sign; Utf8Parser may
-                // not, so strip it after the whitespace trim it also needed.
-                ReadOnlySpan<byte> value = TrimAsciiWhiteSpace(line["Content-Length:".Length..]);
-                if (value.StartsWith("+"u8))
-                    value = value[1..];
-                if (Utf8Parser.TryParse(value, out int length, out int consumed) && consumed == value.Length)
-                    return length;
-            }
-        }
-
-        throw new FormatException("LSP frame is missing a Content-Length header.");
-    }
-
-    private async ValueTask<int> ReadByteAsync(CancellationToken ct)
-    {
-        int read = await _input.ReadAsync(_oneByte.AsMemory(), ct).ConfigureAwait(false);
-        return read == 0 ? -1 : _oneByte[0];
-    }
-
-    private async ValueTask ReadExactlyAsync(byte[] buffer, int count, CancellationToken ct)
-    {
-        int total = 0;
-        while (total < count)
-        {
-            int read = await _input.ReadAsync(buffer.AsMemory(total, count - total), ct).ConfigureAwait(false);
-            if (read == 0) throw new EndOfStreamException("LSP stream ended mid-frame");
-            total += read;
-        }
-    }
 }
 
 /// <summary>
