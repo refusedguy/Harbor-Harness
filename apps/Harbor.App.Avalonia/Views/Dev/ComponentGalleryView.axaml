@@ -106,6 +106,27 @@
                 </StackPanel>
             </Border>
 
+            <!-- HDS Accordion Demo (K25) — Single closes the open row,
+                 Multiple keeps rows independent. Third row is disabled. -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="Accordion (K25)"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <TextBlock Text="Single — opening one row closes the other"
+                               Classes="Caption" />
+                    <views:Accordion x:Name="SingleAccordion"
+                                     Mode="Single" IsBordered="True" />
+                    <TextBlock Text="Multiple — rows toggle independently"
+                               Classes="Caption" />
+                    <views:Accordion x:Name="MultipleAccordion"
+                                     Mode="Multiple" />
+                </StackPanel>
+            </Border>
+
             <!-- Kbd Demo -->
             <Border Background="{DynamicResource BgPanelElevatedBrush}"
                     CornerRadius="{StaticResource RadiusLg}"

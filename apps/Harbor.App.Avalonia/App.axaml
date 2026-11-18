@@ -30,6 +30,7 @@
         <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsPill.axaml" />
         <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/Tooltip.axaml" />
         <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsFlyout.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/Accordion.axaml" />
         <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/Typography.axaml" />
     </Application.Styles>
 
