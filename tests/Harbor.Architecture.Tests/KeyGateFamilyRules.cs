@@ -332,6 +332,10 @@ public class KeyGateFamilyRules
         // Home/End and digits select a value; no text buffer and Shift is
         // refused, so it is a command site. Read-only refuses keys outright.
         new("Rating", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/Rating.cs"),
+        // Accordion (#2379): multi-section container with a host-owned expanded
+        // set. Navigation and Enter/Space expansion use the strict no-modifier
+        // command gate, so Shift is refused: a command site, not a text buffer.
+        new("Accordion", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/Accordion.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
