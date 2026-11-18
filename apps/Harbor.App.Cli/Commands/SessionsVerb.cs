@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Hosting;
@@ -10,7 +11,8 @@ namespace Harbor.App.Cli.Commands;
 
 /// <summary>
 ///     <c>harbor sessions</c> family: list (default), rename, retitle, export, export-zip, import,
-///     search, usage, revert, checkpoint, checkpoints, rewind, tree, fork. Extracted from <c>Program</c> (#176);
+///     search, usage, revert, checkpoint, checkpoints, rewind, tree, fork, maintenance.
+///     Extracted from <c>Program</c> (#176);
 ///     rename persists a new title via ISessionStore.UpdateAsync,
 ///     export/import round-trip one session through the portable line payload
 ///     built by <c>ISessionPorter</c> (see StorageModule for the backend wiring),
@@ -57,9 +59,11 @@ internal static class SessionsVerb
                 return await RunTreeSessionsAsync();
             case "fork":
                 return await RunForkSessionAsync(logger, args.Skip(1).ToArray());
+            case "maintenance":
+                return await SessionMaintenanceVerb.RunAsync(logger, args.Skip(1).ToArray(), CancellationToken.None).ConfigureAwait(false);
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|retitle|export|export-zip|export-md|export-json|import|search|usage|revert|checkpoint|checkpoints|rewind|tree|fork]
+                                        Usage: harbor sessions [list|rename|retitle|export|export-zip|export-md|export-json|import|search|usage|revert|checkpoint|checkpoints|rewind|tree|fork|maintenance]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions retitle <id>           regenerate a title from the first user message
@@ -79,6 +83,8 @@ internal static class SessionsVerb
                                           sessions rewind <id> <checkpoint-id>  rewind session to the checkpoint (records a trail marker)
                                           sessions tree                   show fork/branch lineage as an indented tree
                                           sessions fork <id> <message-id>            branch a NEW session copying messages up to and including the given one
+                                          sessions maintenance [--older-than-days N] [--keep-recent N] [--apply]
+                                                                          plan stale-session cleanup; dry run unless --apply is passed
                                         """);
                 return 2;
         }
@@ -646,6 +652,83 @@ internal static class SessionsVerb
 }
 
 /// <summary>
+///     <c>harbor sessions maintenance</c> (#2686 K05): plan stale-session
+///     cleanup from a retention policy. Parsing and planning are pure and live
+///     in <see cref="SessionRetentionPlanner"/>; only the store access and the
+///     optional deletion touch IO. The default is a dry run, so a typo cannot
+///     delete sessions.
+/// </summary>
+internal static class SessionMaintenanceVerb
+{
+    /// <summary>Run the maintenance verb with an already-parsed flag tail.</summary>
+    /// <param name="logger">Diagnostic logger.</param>
+    /// <param name="args">Arguments after <c>maintenance</c>.</param>
+    /// <param name="cancellationToken">Cancellation token for store calls.</param>
+    /// <returns>0 on success, 1 on store failure and 2 on bad arguments.</returns>
+    internal static async Task<int> RunAsync(
+        ILogger logger,
+        string[] args,
+        CancellationToken cancellationToken)
+    {
+        Result<SessionMaintenanceArgs> parsed = SessionRetentionPlanner.Parse(args);
+        if (parsed.IsFailure)
+        {
+            Console.Error.WriteLine(parsed.Error);
+            return 2;
+        }
+
+        SessionMaintenanceArgs request = parsed.Value;
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        Result<IReadOnlyList<Session>> listed = await store
+            .ListAsync(ct: cancellationToken)
+            .ConfigureAwait(false);
+        if (listed.IsFailure)
+        {
+            SessionsVerbLog.MaintenanceListFailed(logger, listed.Error);
+            Console.Error.WriteLine($"sessions maintenance: cannot list sessions: {listed.Error}");
+            return 1;
+        }
+
+        Result<SessionRetentionPlan> planned = SessionRetentionPlanner.Build(
+            listed.Value, request.Options, DateTimeOffset.UtcNow);
+        if (planned.IsFailure)
+        {
+            Console.Error.WriteLine(planned.Error);
+            return 2;
+        }
+
+        SessionRetentionPlan plan = planned.Value;
+        Console.Out.Write(plan.Render());
+
+        if (!request.Apply)
+        {
+            Console.Out.WriteLine("Dry run: pass --apply to delete the listed sessions.");
+            return 0;
+        }
+
+        int deleted = 0;
+        foreach (SessionRetentionDecision decision in plan.Delete)
+        {
+            Result result = await store
+                .DeleteAsync(decision.Session.Id, cancellationToken)
+                .ConfigureAwait(false);
+            if (result.IsFailure)
+            {
+                SessionsVerbLog.MaintenanceDeleteFailed(logger, decision.Session.Id, result.Error);
+                Console.Error.WriteLine(
+                    $"sessions maintenance: cannot delete {decision.Session.Id}: {result.Error}");
+                return 1;
+            }
+            deleted++;
+        }
+
+        Console.Out.WriteLine($"Deleted {deleted.ToString(System.Globalization.CultureInfo.InvariantCulture)} session(s).");
+        return 0;
+    }
+}
+
+/// <summary>
 ///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="SessionsVerb" />.
 ///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
 /// </summary>
@@ -689,4 +772,10 @@ internal static partial class SessionsVerbLog
 
     [LoggerMessage(EventId = 13, Level = LogLevel.Error, Message = "Zip export of session {SessionId} failed")]
     public static partial void ExportZipFailed(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "sessions maintenance: list failed: {Error}")]
+    public static partial void MaintenanceListFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "sessions maintenance: delete {SessionId} failed: {Error}")]
+    public static partial void MaintenanceDeleteFailed(ILogger logger, string sessionId, string error);
 }

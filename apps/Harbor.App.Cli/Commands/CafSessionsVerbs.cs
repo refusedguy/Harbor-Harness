@@ -1,3 +1,4 @@
+using System.Globalization;
 using ConsoleAppFramework;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -38,17 +39,44 @@ namespace Harbor.App.Cli.Commands;
 /// </remarks>
 internal static class CafSessionCommands
 {
-    /// <summary>List, rename, export, import, search and rewind sessions.</summary>
+    /// <summary>List, rename, export, import, search, rewind and maintain sessions.</summary>
     /// <param name="session">-s, Restrict 'search' to the session whose id contains this value.</param>
+    /// <param name="olderThanDays">For 'maintenance', delete sessions inactive for more than this many days.</param>
+    /// <param name="keepRecent">For 'maintenance', always keep this many recent sessions.</param>
+    /// <param name="apply">For 'maintenance', actually delete instead of only printing the plan.</param>
     /// <param name="args">Positional tail (subcommand and its arguments).</param>
     public static async Task<int> Sessions(
         string? session = null,
+        int? olderThanDays = null,
+        int? keepRecent = null,
+        bool apply = false,
         [Argument]params string[] args)
     {
         string[] tail = session is null ? args
             : args.Length > 0 && args[0].Equals("search", StringComparison.OrdinalIgnoreCase)
                 ? ["search", ..args.Skip(1), "--session", session]
                 : ["--session", session, ..args];
+
+        // The maintenance flags are typed for CAF so a dash-led token never
+        // fails at the parser. Rebuild them into the manual flag tail only for
+        // maintenance; every other subcommand keeps its existing byte behavior.
+        if (args.Length > 0 && args[0].Equals("maintenance", StringComparison.OrdinalIgnoreCase))
+        {
+            var rebuilt = new List<string>(tail);
+            if (olderThanDays is not null)
+            {
+                rebuilt.Add("--older-than-days");
+                rebuilt.Add(olderThanDays.Value.ToString(CultureInfo.InvariantCulture));
+            }
+            if (keepRecent is not null)
+            {
+                rebuilt.Add("--keep-recent");
+                rebuilt.Add(keepRecent.Value.ToString(CultureInfo.InvariantCulture));
+            }
+            if (apply) rebuilt.Add("--apply");
+            tail = [.. rebuilt];
+        }
+
         return await SessionsVerb.RunAsync(NullLogger.Instance, tail).ConfigureAwait(false);
     }
 }
