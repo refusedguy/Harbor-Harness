@@ -43,7 +43,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///    The one documented addition is excluded from the matrix below
 ///    (Multiline/Approval x Shift|Alt+Enter) because the legacy
 ///    <c>ConsoleKeyInfo</c> cannot express it. Everything else must match.
-/// 2. <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:330</c> types a char only when
+/// 2. <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:347</c> types a char only when
 ///    <c>(mods & (Ctrl|Meta|Alt)) == 0</c>; <c>DiffViewerOverlay.cs:378</c>
 ///    refuses <c>Control|Alt</c> and lets <c>Shift</c> through;
 ///    <c>ApprovalGateView.cs:256</c> refuses any modifier.
@@ -268,7 +268,7 @@ public class DialogKeyParityTests
     [Test]
     public async Task Control_Shift_Char_Still_Types_By_Both_Overloads()
     {
-        // Pins the gate to (Ctrl|Meta|Alt) exactly, as src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:330
+        // Pins the gate to (Ctrl|Meta|Alt) exactly, as src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:347
         // has it — Shift is a case-shaper, not a command modifier. Without this
         // row the rule could be "satisfied" by refusing every modifier, which
         // would break Shift+a in every text field.
