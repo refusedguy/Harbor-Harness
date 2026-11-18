@@ -90,7 +90,13 @@ public sealed class CompactionService(
         return parsed.Value;
     }
 
-    private ResolvedSecondary? _resolvedSecondary;
+    /// <summary>
+    ///     Cached secondary resolution, shared by concurrent compactions on
+    ///     this singleton. The volatile barrier stops a reader from seeing a
+    ///     reference published before its fields are visible. Two callers may
+    ///     still resolve the same model on a cold cache, which is harmless.
+    /// </summary>
+    private volatile ResolvedSecondary? _resolvedSecondary;
 
     /// <summary>
     ///     The sessions whose compaction is running RIGHT NOW (#1767).
@@ -140,6 +146,12 @@ public sealed class CompactionService(
                     .ToResult($"model '{secondaryRef.ModelId}' is not in provider '{secondaryRef.ProviderId}' catalog")
                     .Map(model => new ResolvedSecondary(client, model))))
             .ConfigureAwait(false);
+
+        ResolvedSecondary? published = _resolvedSecondary;
+        if (published is not null)
+        {
+            return published;
+        }
 
         ResolvedSecondary? resolved = outcome
             .Tap(r => _resolvedSecondary = r)
