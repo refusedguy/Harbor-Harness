@@ -18,6 +18,8 @@ split. Each registry implements an interface from `Harbor.Abstractions`.
       (`Tools/CompositeToolRegistry.cs:4`)
 - [x] Bus middleware: `SamplingMiddleware`, `TypeFilterMiddleware` (`Events/`)
 - [x] `InMemoryMcpRegistry` - in-memory MCP server registry
+- [x] Resolve the ToolRegistry frozen/concurrent duplication via a single `IToolSource`
+      read path (§OOP-005, `f99106a3`)
 - [x] Lock-free scaling for hot paths
 
 ## TODO
@@ -28,11 +30,6 @@ split. Each registry implements an interface from `Harbor.Abstractions`.
 
 ## Known issues
 
-- `ToolRegistry` maintains a dual read path (frozen snapshot vs concurrent
-  fallback) that duplicates logic across `GetAllTools` / `ResolveTools` /
-  `GetTool`; the fix is a composite delegating to a single `IToolSource` —
-  flagged in code as `TODO(principles)[OCP, ROP]`
-  (`Tools/ToolRegistry.cs:25`, см. аудит §OOP-005).
 - `InMemoryMcpRegistry` cannot actually invoke MCP servers - production hosts must swap in a real client.
 - Registry mutations require a re-freeze; for plugin-loaded tools, this happens once at startup. Hot-reload not yet wired.
 
@@ -40,8 +37,7 @@ split. Each registry implements an interface from `Harbor.Abstractions`.
 
 1. **P1**: Real MCP registry (stdio JSON-RPC client)
 2. **P1**: Hot-reload (re-freeze FrozenDictionary on plugin load)
-3. **P2**: Resolve the ToolRegistry frozen/concurrent duplication (§OOP-005)
-4. **P2**: Concurrent stress tests
+3. **P2**: Concurrent stress tests
 
 ## See also
 
