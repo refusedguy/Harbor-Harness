@@ -84,7 +84,7 @@ public sealed class LogsCommand : ICommand
             case "--clean" or "-c":
                 return await CleanAsync(ct).ConfigureAwait(false);
             case "--spans" or "-s":
-                return PrintSpans(args, ct);
+                return await PrintSpans(args, ct).ConfigureAwait(false);
             default:
                 _error.WriteLine($"Unknown subcommand: {args[0]}");
                 PrintUsage();
