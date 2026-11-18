@@ -177,6 +177,14 @@ public sealed class CellForgePilot : IAsyncDisposable
     public IReadOnlyList<AgentEvent> SeenEvents => Bus.Events;
 
     /// <summary>
+    ///     Diagnostic left by the last <see cref="WaitForEventAsync{TEvent}" />
+    ///     that timed out. Mirrors the headless Avalonia driver's
+    ///     <c>LastWaitDiagnostic</c> so an assertion can say WHICH event was
+    ///     missing and what arrived instead, via <c>.Because(...)</c> (#2704 E04).
+    /// </summary>
+    public string? LastWaitDiagnostic { get; private set; }
+
+    /// <summary>
     /// Wait until a matching event was fed (checks the already-seen first, so
     /// an event that already arrived resolves without any delay — the textual
     /// "deterministic all-processed instead of sleep" rule).
@@ -187,6 +195,7 @@ public sealed class CellForgePilot : IAsyncDisposable
         CancellationToken ct = default)
         where TEvent : AgentEvent
     {
+        bool hadPredicate = predicate is not null;
         predicate ??= _ => true;
         TimeSpan deadline = timeout ?? TimeSpan.FromSeconds(5);
         var sw = Stopwatch.StartNew();
@@ -199,9 +208,46 @@ public sealed class CellForgePilot : IAsyncDisposable
             }
 
             if (sw.Elapsed >= deadline)
-                throw new TimeoutException($"pilot never saw {typeof(TEvent).Name} within {deadline}.");
+            {
+                LastWaitDiagnostic = BuildWaitDiagnostic<TEvent>(hadPredicate, deadline, sw.Elapsed);
+                throw new TimeoutException(LastWaitDiagnostic);
+            }
+
             await Task.Delay(10, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    ///     Name the missing event, the wait that missed it, and the events
+    ///     that DID arrive. A bare <c>Assert.True() failed</c> cannot tell a
+    ///     never-published event from a predicate that rejected everything.
+    /// </summary>
+    private string BuildWaitDiagnostic<TEvent>(bool hadPredicate, TimeSpan deadline, TimeSpan elapsed)
+    {
+        var events = Bus.Events.ToArray();
+        var sb = new StringBuilder();
+        sb.Append($"CellForgePilot.WaitForEventAsync<{typeof(TEvent).Name}> timed out after ");
+        sb.Append($"{elapsed.TotalMilliseconds:0} ms (limit {deadline.TotalMilliseconds:0} ms, ");
+        sb.Append($"predicate {(hadPredicate ? "supplied" : "none")}). ");
+
+        if (events.Length == 0)
+        {
+            sb.Append("No events were published on the bus. ");
+        }
+        else
+        {
+            var observed = events
+                .GroupBy(e => e.GetType().Name)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => $"{g.Key} x{g.Count()}");
+            sb.Append($"Observed {events.Length} event(s): {string.Join(", ", observed)}. ");
+        }
+
+        sb.Append($"Bus has {Bus.UnpublishedEventCount} unpublished event(s). ");
+        sb.Append("Feed the expected event with PublishAsync before waiting, tighten the predicate, ");
+        sb.Append("or register a Hook before publishing.");
+        return sb.ToString();
     }
 
     // -- frame reads --
