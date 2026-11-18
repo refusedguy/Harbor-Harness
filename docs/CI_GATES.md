@@ -47,9 +47,10 @@ The policy was written against a base that had already moved, and the rebased
 tree carried python tools the first draft of the table did not know about
 (`check-reference-trimmer.py` and `msbuild-evaluation-cost.py` on the first
 move, `check-dup-jscpd.py`, `check-no-test-sdk.py` and
-`run-e2e-avalonia-shards.py` on the second). The checker named each of them
-on its first run against the new base, which is the whole argument for having
-it.
+`run-e2e-avalonia-shards.py` on the second). Those .py files are gone now:
+the gates live in `tools/bin/harbor-gates-linux-x64`. The checker named each
+of them on its first run against the new base, which is the whole argument
+for having it.
 
 The second move also found something worse: a squash that took the wrong side
 of a conflict in `ci.yml` had dropped TWO gate jobs. The `reference-trimmer`

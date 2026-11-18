@@ -1,7 +1,7 @@
 # reference-trimmer-baseline - the unused references the tree produces, as
 # measured by ReferenceTrimmer 3.5.13, and the reason each one is still there.
 #
-# OWNER: issue #1853. Read by tools/check-reference-trimmer.py on every PR.
+# OWNER: issue #1853. Read by tools/bin/harbor-gates-linux-x64 check-reference-trimmer on every PR.
 #
 # THIS IS A RATCHET, NOT A TARGET. The gate passes only when the set of
 # findings the tree produces is exactly the set written here:
@@ -17,7 +17,7 @@
 #
 #   <rule> | <subject> | <reason> | <owner>
 #
-#   rule     One of the rules tools/check-reference-trimmer.py produces:
+#   rule     One of the rules tools/bin/harbor-gates-linux-x64 check-reference-trimmer produces:
 #              RT0001  a bare <Reference> the compiler never uses.
 #              RT0002  a <ProjectReference> the compiler never uses.
 #              RT0003  a <PackageReference> the compiler never uses.
@@ -32,8 +32,8 @@
 # - WHAT IS NOT HERE, AND WHY ---------------------------------------------
 #
 # Nothing is dropped by scope any more. The gate used to exclude the five
-# projects whose <PackageReference> set tools/check-abstractions-contract.py
-# answers for - src/Harbor.Abstractions, src/Harbor.Abstractions.Contracts,
+# projects whose <PackageReference> set the compiled check-abstractions-contract
+# gate answers for - src/Harbor.Abstractions, src/Harbor.Abstractions.Contracts,
 # src/Harbor.Extensions, src/Harbor.Application and src/Harbor.PolicyConfig.
 # That left their <ProjectReference> edges unchecked, because the sibling
 # gate only asks about PackageReference versus non-BCL usings. The whole
@@ -45,8 +45,8 @@
 # Microsoft.NET.Test.Sdk is a separate matter, and the answer is measured
 # rather than assumed: ReferenceTrimmer SKIPS every package that ships a
 # build/ folder, and Microsoft.NET.Test.Sdk ships one, so RT0003 never named
-# it. The 16 projects that carry it are therefore outside this gate's
-# reach, and the decision to remove it belongs to issue #1893.
+# it. The 16 projects that carried it were outside this gate's reach; issue
+# #1893 is closed and the package is gone from all 16 and the central pin.
 #
 # - THE TWO ROWS THAT WERE CLOSED ----------------------------------------
 #
