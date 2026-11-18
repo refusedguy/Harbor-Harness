@@ -83,6 +83,8 @@ internal static class CafPilotVerbs
         app.Add("doctor", CafDoctorCommands.Doctor);
         app.Add("pr guide", CafPrCommands.Guide);
         app.Add("issue", CafIssueCommands.Issue);
+        app.Add("pr list", CafPrForgeCommands.List);
+        app.Add("pr view", CafPrForgeCommands.View);
         app.Add("help", CafHelpCommands.Help);
         app.Add("completions", CafCompletionCommands.Completions);
 #if HARBOR_WITH_DSL_DEV
