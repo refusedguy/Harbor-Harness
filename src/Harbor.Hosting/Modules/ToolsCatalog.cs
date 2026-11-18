@@ -3,6 +3,7 @@ using Harbor.Application.Configuration;
 using Harbor.Tools.Builtin;
 using Harbor.Tools.Mcp;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -28,9 +29,26 @@ internal static class ToolsCatalog
         string defaultModel = ctx.Options.ModelSource == HarborAgentModelSource.CommonConfig
             ? ResolveDefaultModelFromCommon(ctx.Common)
             : ctx.Harbor.EffectiveModel;
-        string[] parts = defaultModel.Split('/', 2);
-        string providerId = parts[0];
-        string modelId = parts.Length > 1 ? parts[1] : defaultModel;
+
+        // #2576: the composition root is the boundary where a free-text model
+        // becomes the defaults of all seven agents. A qualified model goes
+        // through ModelRef.TryParse, so ProviderId.TryCreate normalizes the
+        // provider before any definition is declared. A bare id (no slash)
+        // keeps the legacy split; AgentDefinition.TryCreate in every factory
+        // below is the final validation for both shapes.
+        string providerId;
+        string modelId;
+        if (ModelRef.TryParse(defaultModel) is { IsSuccess: true, Value: var reference })
+        {
+            providerId = reference.ProviderId.Value;
+            modelId = reference.ModelId;
+        }
+        else
+        {
+            string[] parts = defaultModel.Split('/', 2);
+            providerId = parts[0];
+            modelId = parts.Length > 1 ? parts[1] : defaultModel;
+        }
 
         // #1118: the home config's `maxSteps` is the step budget of the runs
         // this configuration starts. It is projected HERE — where the agents
