@@ -1168,6 +1168,18 @@ Restart Harbor. The `.cs` drop-in is compiled at startup and the `echo` tool app
 
 ---
 
+## Showcase: Pomodoro plugin one-minute install
+
+The [Pomodoro sample plugin](../samples/plugins/Harbor.Plugin.Pomodoro/README.md) is a dependency-free `IToolPlugin` that registers one `pomodoro` focus-timer tool. It runs out-of-proc: the separate host compiles the `.cs` drop-in and serves the tool over MCP stdio, so the AOT CLI never loads Roslyn. It uses the existing tool axis only, with no new extension axis (#555 freeze). Install it in one command:
+
+```bash
+bash samples/plugins/Harbor.Plugin.Pomodoro/install.sh
+```
+
+Restart Harbor. The `pomodoro` tool appears in `/plugins`. Ask the agent to call it with `{"action": "start", "minutes": 25, "label": "deep work"}`, then `{"action": "status"}` and `{"action": "stop"}`. The installer copies `PomodoroPlugin.cs` into `~/.harbor/plugins/pomodoro.cs` (override with `HARBOR_PLUGINS_DIR`).
+
+---
+
 ## Gotchas
 
 ### `using Harbor.Abstractions.Models.Identifiers`

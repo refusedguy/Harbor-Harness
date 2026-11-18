@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Plugin.Pomodoro</PackageId>
+    <Description>Sample Harbor plugin, a dependency-free out-of-proc focus timer tool (plugin showcase, #1434).</Description>
+    <PackageTags>harbor;plugin;pomodoro;focus;timer;sample</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <PackageReference Include="Microsoft.Extensions.Logging"/>
+  </ItemGroup>
+
+</Project>
