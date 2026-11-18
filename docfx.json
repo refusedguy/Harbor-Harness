@@ -27,7 +27,7 @@
         "files": ["src/**/README.md"]
       },
       {
-        "files": ["api/*.md"]
+        "files": ["api/*.yml", "api/*.md"]
       }
     ],
     "resource": [],

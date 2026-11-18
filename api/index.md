@@ -1,10 +1,11 @@
 # Harbor API reference
 
 > **Status:** landing page for the DocFX API section (issue #431, slice D2).
-> The generated member pages (`api/*.yml`) are produced by `docfx build` from
-> the metadata lane in `docfx.json` — CI-proven by the `docfx-build` lane in
-> `.github/workflows/docs-site.yml` (slice D4). This page names the surface
-> the lane covers and points at the hand-written sources.
+> The generated member pages (`api/*.yml`) are produced by the `docfx metadata`
+> step from the metadata lane in `docfx.json`, then rendered by `docfx build`.
+> Both run in the `docfx-build` lane of `.github/workflows/docs-site.yml`, which
+> also asserts that metadata produced at least one member page. This page names
+> the surface the lane covers and points at the hand-written sources.
 
 ## Covered assemblies
 
@@ -31,6 +32,9 @@ The matching hand-written guides live under `docs/` — start with
 
 ## Tool choice
 
-Why DocFX and not a markdown-only generator, what this slice wires, and what
-stays open (full `docfx build`, XML-doc coverage gate, Pages URL):
-[ADR-017](../docs/adr/ADR-017-docs-site-docfx.md).
+Why DocFX and not a markdown-only generator, and what the original slices wired:
+[ADR-017](../docs/adr/ADR-017-docs-site-docfx.md). The ADR is a dated record;
+the full `docfx metadata` + `docfx build` lane it lists as future work is now
+live in `.github/workflows/docs-site.yml`. The only open acceptance items are
+the Pages URL (owner enables Pages and sets `HARBOR_PAGES_ENABLED`) and the
+README link that follows the first green deploy.

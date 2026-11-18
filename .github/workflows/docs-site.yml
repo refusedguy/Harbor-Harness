@@ -1,33 +1,35 @@
-# Harbor docs site — full `docfx build` with generated API pages.
+# Harbor docs site — full DocFX build WITH generated API reference pages.
 #
-# WHY THIS FILE EXISTS (issue #431, slice D4)
+# WHY THIS FILE EXISTS (issue #431, slice D4 + API-page completion)
 #
 #   `docs.yml` validates the `docfx.json` manifest and assembles a static
 #   `_site` with stdlib python only — deliberately dotnet-free (ADR-017), so
 #   docs-only PRs get a signal in ~30s. That lane never invokes the docfx
-#   binary: the metadata lane (`Harbor.Abstractions` +
-#   `Harbor.Abstractions.Contracts` into `api/`) is validated for shape
-#   (srcs exist, dest stays `api`) but the generated member pages
-#   (`api/*.yml`) are never produced. A manifest that `docfx build` itself
-#   rejects would stay green there.
+#   binary and cannot produce the generated member pages (`api/*.yml`): the
+#   metadata lane is only checked for shape there (srcs exist, dest stays
+#   `api`, `api/*.yml` still declared in build.content).
 #
-#   This workflow asks the one question the static lane cannot: does the
-#   full `docfx build` — metadata over the two contract assemblies plus the
-#   markdown content — succeed. Pattern matches the proven lane in
-#   `contrib/external/ConsoleEx/.github/workflows/docs.yml`
-#   (`dotnet tool install -g docfx`, then `docfx` on the manifest).
+#   DocFX's `docfx build` does NOT run the metadata stage — only the root
+#   `docfx` command runs both. A bare `docfx build` over this manifest would
+#   render the markdown but leave the API section empty, green. This workflow
+#   asks the question the static lane cannot: does `docfx metadata` generate
+#   member pages from the two contract assemblies' XML docs, and does
+#   `docfx build` then render them together with the markdown into `_site`?
 #
 # WHAT RUNS HERE
 #
 #   docfx-build  setup .NET 10 (the tree's TargetFramework), install the
-#             docfx global tool, run `docfx build docfx.json`, upload the
-#             resulting `_site` as `harbor-docs-site-docfx` (7 days, no
-#             secrets, `contents: read` only).
+#             docfx global tool, run `docfx metadata docfx.json`, assert the
+#             generated `api/*.yml` set is non-empty, run
+#             `docfx build docfx.json`, upload `_site` as
+#             `harbor-docs-site-docfx` (7 days, no secrets, `contents: read`).
 #
+#   The non-vacuity assert is the point: metadata that produces no pages must
+#   go red, not quietly ship a site with an empty API section (the #509 shape).
 #   docfx logs warnings but exits non-zero only on errors, so this job is
 #   green on warnings and red on a broken manifest, a moved metadata src,
-#   or a metadata crash — exactly the failures the static lane cannot see.
-#   No `--warningsAsErrors`: the XML-doc coverage ratchet is the
+#   a restore/metadata crash, or an empty generated page set. No
+#   `--warningsAsErrors`: the XML-doc coverage ratchet is the
 #   `check-xml-doc-coverage` gate in `docs.yml`, not this build.
 #
 # NOT here (deliberately)
@@ -38,12 +40,18 @@
 #   - README link to the published URL lands after the first green Pages
 #     deploy, not here: there is still no live URL to link to.
 #
-# TRIGGER SCOPE IS NARROW ON PURPOSE. The metadata reads the two contract
+# TRIGGER SCOPE: SITE INPUTS ONLY. The metadata reads the two contract
 # assemblies, but their sources are already gated by the XML-doc coverage
 # gate in `docs.yml` on every .cs touch; running an SDK restore + metadata
 # build on each product PR would tax every unrelated change for a signal
-# the static lane plus that gate already give. This lane runs when the site inputs move:
-# the manifest, its nav, the API landing, or this file itself.
+# the static lane plus that gate already give. This lane runs whenever an
+# input to `docfx build docfx.json` moves: the manifest, its nav, the API
+# landing, this file itself, AND the markdown content the manifest publishes
+# (`docs/**/*.md`, `README.md`, `src/**/README.md`). The last group matters:
+# `docs.yml`'s `site` job assembles a static `_site` with stdlib python and
+# never invokes docfx, so a markdown shape docfx rejects (bad front-matter,
+# broken xref) would pass there and go unseen here. Keep these paths in sync
+# with `docfx.json`'s `build.content` globs.
 name: docs-site
 
 on:
@@ -52,12 +60,18 @@ on:
     paths:
       - 'docfx.json'
       - 'docs/toc.yml'
+      - 'docs/**/*.md'
+      - 'README.md'
+      - 'src/**/README.md'
       - 'api/**'
       - '.github/workflows/docs-site.yml'
   pull_request:
     paths:
       - 'docfx.json'
       - 'docs/toc.yml'
+      - 'docs/**/*.md'
+      - 'README.md'
+      - 'src/**/README.md'
       - 'api/**'
       - '.github/workflows/docs-site.yml'
   workflow_dispatch:
@@ -85,6 +99,20 @@ jobs:
         run: |
           dotnet tool install -g docfx
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+      - name: Generate API metadata from XML docs
+        run: docfx metadata docfx.json
+      - name: Prove the metadata lane produced API pages
+        run: |
+          python3 - <<'EOF'
+          import glob, os
+          # api/*.yml is generated at build time and gitignored; a green job
+          # with no member pages is the #509 shape — green by never scanning.
+          # Require at least one generated namespace/type page beyond toc.yml.
+          pages = [p for p in glob.glob('api/*.yml')
+                   if os.path.basename(p) != 'toc.yml']
+          assert pages, 'docfx metadata produced no api/*.yml member pages'
+          print(f'OK: {len(pages)} generated API yml pages')
+          EOF
       - name: Full docfx build (metadata + content)
         run: docfx build docfx.json
       - name: Upload docfx _site artifact (no secrets)
