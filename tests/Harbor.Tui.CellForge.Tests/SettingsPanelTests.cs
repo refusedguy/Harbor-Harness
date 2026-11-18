@@ -121,6 +121,20 @@ public class SettingsPanelTests
         await Assert.That(panel.Index).IsEqualTo(0);
     }
 
+    [Test]
+    public async Task Rows_ShowTheirOwnValues_NotTheCursorValue()
+    {
+        var values = Values();
+        var panel = Panel(e => values[e.Id], (e, v) => values[e.Id] = v, null, GeneralPage());
+        var buffer = TestRender.Buffer(24, 6);
+
+        panel.Paint(buffer, new Rect(0, 0, 24, 6));
+
+        await Assert.That(ScreenFixtures.Row(buffer, 2, 24).TrimEnd()).IsEqualTo("> Theme: dark");
+        await Assert.That(ScreenFixtures.Row(buffer, 3, 24).TrimEnd()).IsEqualTo("  Font: 14");
+        await Assert.That(ScreenFixtures.Row(buffer, 5, 24).TrimEnd()).IsEqualTo("  Bell: [ ]");
+    }
+
     // ----------------------------------------------------------- activation --
 
     [Test]
