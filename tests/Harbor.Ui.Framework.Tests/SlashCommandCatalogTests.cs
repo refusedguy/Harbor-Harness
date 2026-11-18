@@ -37,6 +37,36 @@ public class SlashCommandCatalogTests
     }
 
     /// <summary>
+    /// #2686 Q06: the registry carries provenance. Every shipped command is a
+    /// builtin and reports the matching lowercase label, so a help surface can
+    /// tell builtins from provider- or skill-sourced commands without a second list.
+    /// </summary>
+    [Test]
+    public async Task EveryBuiltinEntry_CarriesBuiltinSource()
+    {
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            await Assert.That(def.Source).IsEqualTo(CommandSource.Builtin);
+            await Assert.That(def.SourceLabel).IsEqualTo("builtin");
+        }
+    }
+
+    /// <summary>
+    /// Source is data on the definition, not a hardcoded label in one surface:
+    /// a provider- or skill-contributed command keeps its own provenance.
+    /// </summary>
+    [Test]
+    public async Task ProviderAndSkillSources_HaveDistinctLabels()
+    {
+        var provider = new SlashCommandDefinition("p", "provider command", [], Source: CommandSource.Provider);
+        var skill = new SlashCommandDefinition("s", "skill command", [], Source: CommandSource.Skill);
+
+        await Assert.That(provider.SourceLabel).IsEqualTo("provider");
+        await Assert.That(skill.SourceLabel).IsEqualTo("skill");
+        await Assert.That(provider.SourceLabel).IsNotEqualTo(skill.SourceLabel);
+    }
+
+    /// <summary>
     /// Names and aliases share one lookup, so a duplicate would silently shadow a command.
     /// The catalog throws on construction; this pins that the shipped set is duplicate-free.
     /// </summary>
