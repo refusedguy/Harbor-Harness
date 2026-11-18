@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace Harbor.Providers.Ollama;
@@ -24,13 +25,7 @@ internal sealed record EmulatedToolCall(string ToolName, string ArgumentsJson);
 ///     allowed to execute. No reflection and no per-line <c>JsonDocument</c>, so
 ///     the path stays NativeAOT-safe.
 /// </remarks>
-internal interface ILegacyToolCallParser
-{
-    IReadOnlyList<EmulatedToolCall> Parse(string? text);
-}
-
-/// <inheritdoc cref="ILegacyToolCallParser" />
-internal sealed class LegacyToolCallParser : ILegacyToolCallParser
+internal sealed class LegacyToolCallParser
 {
     private const string CommandFence = "```";
     private const string CommandPrefix = "$ ";
@@ -89,7 +84,8 @@ internal sealed class LegacyToolCallParser : ILegacyToolCallParser
     private static string Arguments(string key, string value)
     {
         var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer))
+        var options = new JsonWriterOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        using (var writer = new Utf8JsonWriter(buffer, options))
         {
             writer.WriteStartObject();
             writer.WriteString(key, value);

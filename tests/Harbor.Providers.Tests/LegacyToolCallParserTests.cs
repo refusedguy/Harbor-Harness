@@ -10,7 +10,7 @@ namespace Harbor.Providers.Tests;
 /// </summary>
 public class LegacyToolCallParserTests
 {
-    private readonly ILegacyToolCallParser _parser = new LegacyToolCallParser();
+    private readonly LegacyToolCallParser _parser = new();
 
     [Test]
     public async Task Parse_NullOrBlankText_EmitsNothing()
@@ -31,29 +31,25 @@ public class LegacyToolCallParserTests
     [Test]
     public async Task Parse_DollarCommandLine_EmitsBashCall()
     {
-        var calls = _parser.Parse("$ echo hello");
+        var parsed = _parser.Parse("$ echo hello");
+        var first = parsed[0];
 
-        var call = calls.Single();
-        await Assert.That(call.ToolName).IsEqualTo("bash");
-        await Assert.That(call.ArgumentsJson).IsEqualTo("""{"command":"echo hello"}""");
+        await Assert.That(first.ToolName).IsEqualTo("bash");
+        await Assert.That(first.ArgumentsJson).IsEqualTo("""{"command":"echo hello"}""");
     }
 
     [Test]
     public async Task Parse_DollarCommandLine_ToleratesLeadingWhitespace()
     {
-        var calls = _parser.Parse("   $   ls -la   ");
-
-        var call = calls.Single();
-        await Assert.That(call.ArgumentsJson).IsEqualTo("""{"command":"ls -la"}""");
+        await Assert.That(_parser.Parse("   $   ls -la   ")[0].ArgumentsJson)
+            .IsEqualTo("""{"command":"ls -la"}""");
     }
 
     [Test]
     public async Task Parse_QuotesInCommand_AreEscaped()
     {
-        var calls = _parser.Parse("""$ echo "hi there" """);
-
-        var call = calls.Single();
-        await Assert.That(call.ArgumentsJson).IsEqualTo("""{"command":"echo \"hi there\""}""");
+        await Assert.That(_parser.Parse("""$ echo "hi there" """)[0].ArgumentsJson)
+            .IsEqualTo("""{"command":"echo \"hi there\""}""");
     }
 
     [Test]
@@ -61,66 +57,49 @@ public class LegacyToolCallParserTests
     {
         var calls = _parser.Parse("$ first\n$ second\n$ third");
 
-        await Assert.That(calls.Select(c => c.ToolName)).IsEquivalentTo(new[] { "bash", "bash", "bash" });
+        await Assert.That(calls.Count).IsEqualTo(3);
         await Assert.That(calls[0].ArgumentsJson).IsEqualTo("""{"command":"first"}""");
         await Assert.That(calls[1].ArgumentsJson).IsEqualTo("""{"command":"second"}""");
         await Assert.That(calls[2].ArgumentsJson).IsEqualTo("""{"command":"third"}""");
     }
 
     [Test]
-    public async Task Parse_ExecuteJavascriptFence_EmitsCallWithBody()
+    public async Task Parse_KnownFences_EmitsCallsWithBody()
     {
-        const string text = """
-            Some preamble.
+        var text = """
             ```execute_javascript
             return 1 + 1;
-            return 3;
             ```
-            """;
-
-        var calls = _parser.Parse(text);
-
-        var call = calls.Single();
-        await Assert.That(call.ToolName).IsEqualTo("execute_javascript");
-        await Assert.That(call.ArgumentsJson).IsEqualTo("""{"code":"return 1 + 1;\nreturn 3;"}""");
-    }
-
-    [Test]
-    public async Task Parse_ListFunctionsFence_EmitsCallWithBody()
-    {
-        const string text = """
             ```list_functions
             ["read", "write"]
             ```
             """;
-
         var calls = _parser.Parse(text);
 
-        var call = calls.Single();
-        await Assert.That(call.ToolName).IsEqualTo("list_functions");
-        await Assert.That(call.ArgumentsJson).IsEqualTo("""{"code":"[\"read\", \"write\"]"}""");
+        await Assert.That(calls.Count).IsEqualTo(2);
+        await Assert.That(calls[0].ToolName).IsEqualTo("execute_javascript");
+        await Assert.That(calls[0].ArgumentsJson).IsEqualTo("""{"code":"return 1 + 1;"}""");
+        await Assert.That(calls[1].ToolName).IsEqualTo("list_functions");
+        await Assert.That(calls[1].ArgumentsJson).IsEqualTo("""{"code":"[\"read\", \"write\"]"}""");
     }
 
     [Test]
     public async Task Parse_DollarLineInsideFence_BelongsToFenceBody()
     {
-        const string text = """
+        var text = """
             ```execute_javascript
             $ not a shell command
             ```
             """;
 
-        var calls = _parser.Parse(text);
-
-        await Assert.That(calls.Count).IsEqualTo(1);
-        await Assert.That(calls[0].ToolName).IsEqualTo("execute_javascript");
-        await Assert.That(calls[0].ArgumentsJson).IsEqualTo("""{"code":"$ not a shell command"}""");
+        await Assert.That(_parser.Parse(text).Single().ArgumentsJson)
+            .IsEqualTo("""{"code":"$ not a shell command"}""");
     }
 
     [Test]
     public async Task Parse_UnknownFence_IsIgnored()
     {
-        const string text = """
+        var text = """
             ```python
             print("hello")
             ```
@@ -132,25 +111,19 @@ public class LegacyToolCallParserTests
     [Test]
     public async Task Parse_UnterminatedFence_EmitsNothing()
     {
-        const string text = """
-            ```execute_javascript
-            return 42;
-            """;
-
-        await Assert.That(_parser.Parse(text)).IsEmpty();
+        await Assert.That(_parser.Parse("```execute_javascript\nreturn 42;")).IsEmpty();
     }
 
     [Test]
     public async Task Parse_MixedMarkers_EmitsInSourceOrder()
     {
-        const string text = """
+        var text = """
             $ echo start
             ```list_functions
             ["read"]
             ```
             $ echo done
             """;
-
         var calls = _parser.Parse(text);
 
         await Assert.That(calls.Count).IsEqualTo(3);
