@@ -415,7 +415,7 @@ internal sealed class CellForgeReplRunner(
         {
             // No editor value in the message: a path can carry a secret.
             Bridge.AppendSystemLine("external editor: unavailable (redirected stdin or could not start)");
-            _broadDamageNextFrame = true;
+            _replStore.DamageAll();
             _wake.Writer.TryWrite(null);
         }
     }
@@ -433,7 +433,7 @@ internal sealed class CellForgeReplRunner(
         await Backend.WriteAsync(ReplLifecycle.Utf8(SeqEnterAltScreen), ct).ConfigureAwait(false);
         ScreenSession.Front.BlankAll();
         ScreenSession.DamageAll();
-        _broadDamageNextFrame = true;
+        _replStore.DamageAll();
         _frameDirtySeq++;
         _wake.Writer.TryWrite(null);
     }
