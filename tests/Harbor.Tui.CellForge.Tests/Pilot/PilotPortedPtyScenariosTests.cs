@@ -65,6 +65,10 @@ public sealed class PilotPortedPtyScenariosTests
         await Assert.That(frame).Contains("Привет из mock!");
         await Assert.That(frame).Contains("idle");
         await Assert.That(pilot.SeenEvents.OfType<MessageEndEvent>().Count()).IsEqualTo(1);
+
+        // #2704 E03: the events this scenario fed are not just present, they
+        // form a possible agent run (no End without its Start).
+        EventTranscriptAssert.AssertWellFormed(pilot.SeenEvents);
     }
 
     /// <summary>
@@ -101,6 +105,10 @@ public sealed class PilotPortedPtyScenariosTests
         await Assert.That(pilot.SeenEvents.OfType<ToolExecutionStartEvent>().Count()).IsEqualTo(1);
         await Assert.That(pilot.SeenEvents.OfType<ToolExecutionEndEvent>().Single().Result.Output)
             .Contains("pty-probe-line-alpha-423");
+
+        // #2704 E03: the tool pair is correlated by ToolCallId, and no End was
+        // published before its Start.
+        EventTranscriptAssert.AssertWellFormed(pilot.SeenEvents);
     }
 
     /// <summary>
@@ -138,5 +146,8 @@ public sealed class PilotPortedPtyScenariosTests
         await Assert.That(frame).Contains("Diff (context):");
         await Assert.That(frame).Contains("probe-edit-done-1057");
         await Assert.That(frame).Contains("idle");
+
+        // #2704 E03: the whole edited-turn transcript is structurally valid.
+        EventTranscriptAssert.AssertWellFormed(pilot.SeenEvents);
     }
 }
