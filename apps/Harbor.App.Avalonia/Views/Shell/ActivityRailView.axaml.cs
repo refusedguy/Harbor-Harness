@@ -31,6 +31,9 @@ public partial class ActivityRailView : UserControl
     private ILogger<ActivityRailView>? _logger;
     private ILogger<ActivityRailView> Logger => _logger ??= ShellLocator.Of(this).Get<ILogger<ActivityRailView>>();
 
+    private IFloatingTerminals? _terminals;
+    private IFloatingTerminals Terminals => _terminals ??= ShellLocator.Of(this).Get<IFloatingTerminals>();
+
     public ActivityRailView()
     {
         InitializeComponent();
@@ -246,6 +249,41 @@ public partial class ActivityRailView : UserControl
             // No clipboard in headless CI — the copy is a no-op, not a crash.
         }
     }
+
+    // #2682 Z22: open a terminal pane rooted at the right-clicked row. A
+    // directory row targets itself; a file row targets its parent. The service
+    // owns the window and marshals to the UI thread, so this handler only has
+    // to resolve the directory and hand it over.
+    private void OpenInTerminal_Click(object? sender, RoutedEventArgs e)
+    {
+        FileTreeNode? node = _contextNode;
+        _contextNode = null;
+        if (node is null) return;
+
+        string root = DataContext is MainViewModel vm ? vm.ProjectRootPath : string.Empty;
+
+        string directory;
+        try
+        {
+            directory = FileTreeTerminalTarget.Directory(node, root);
+        }
+        catch (Exception ex)
+        {
+            ActivityRailViewLog.TerminalTargetFailed(Logger, ex, node.FullPath);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(directory)) return;
+
+        try
+        {
+            Terminals.ShowPane(directory);
+        }
+        catch (Exception ex)
+        {
+            ActivityRailViewLog.TerminalOpenFailed(Logger, ex, directory);
+        }
+    }
 }
 
 /// <summary>
@@ -367,4 +405,10 @@ internal static partial class ActivityRailViewLog
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to format a copy-path reference for: {Path}")]
     public static partial void CopyPathFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Failed to resolve terminal directory for: {Path}")]
+    public static partial void TerminalTargetFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to open a terminal at: {Directory}")]
+    public static partial void TerminalOpenFailed(ILogger logger, Exception ex, string directory);
 }
