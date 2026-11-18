@@ -97,6 +97,11 @@ internal interface IForgeClient
     Task<Result<ForgePullRequest?>> GetPullRequestAsync(
         int number,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Read the check and merge state used by the PR watch policy (#2686 J01).</summary>
+    Task<Result<ForgePullRequestStatus>> GetStatusAsync(
+        int number,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>The first <see cref="IForgeClient"/> adapter, backed by the GitHub CLI.</summary>
@@ -133,6 +138,32 @@ internal sealed class GitHubForgeClient : IForgeClient
             ["pr", "view", number.ToString(CultureInfo.InvariantCulture), "--json", "number,title,state,url"],
             ForgeProjection.BuildOne,
             cancellationToken);
+    }
+
+    public Task<Result<ForgePullRequestStatus>> GetStatusAsync(
+        int number,
+        CancellationToken cancellationToken = default)
+    {
+        if (number <= 0)
+        {
+            return Task.FromResult(Result.Failure<ForgePullRequestStatus>(
+                "pull-request number must be positive."));
+        }
+
+        return RunAndParseAsync(
+            [
+                "pr", "view", number.ToString(CultureInfo.InvariantCulture),
+                "--json", "number,mergeable,mergeStateStatus,statusCheckRollup",
+            ],
+            cancellationToken);
+    }
+
+    private static async Task<Result<ForgePullRequestStatus>> RunAndParseAsync(
+        IReadOnlyList<string> args,
+        CancellationToken cancellationToken)
+    {
+        Result<string> json = await GhProcessRunner.RunAsync(args, cancellationToken).ConfigureAwait(false);
+        return json.Bind(PullRequestWatchProjection.Parse);
     }
 
     private static async Task<Result<T>> RunAndProjectAsync<T>(
