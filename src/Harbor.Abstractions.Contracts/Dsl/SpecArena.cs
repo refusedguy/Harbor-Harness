@@ -23,9 +23,17 @@ public sealed class SpecArena
     /// <summary>Creates a node and records it in this arena.</summary>
     /// <param name="kind">Component kind.</param>
     /// <param name="sourceLine">Line in the markup file, one-based.</param>
-    public SpecNode CreateNode(SpecKind kind, int sourceLine)
+    /// <remarks>The source column is unknown and recorded as 1.</remarks>
+    public SpecNode CreateNode(SpecKind kind, int sourceLine) =>
+        CreateNode(kind, sourceLine, 1);
+
+    /// <summary>Creates a node with a 1-based source span and records it in this arena.</summary>
+    /// <param name="kind">Component kind.</param>
+    /// <param name="sourceLine">Line in the markup file, one-based.</param>
+    /// <param name="sourceColumn">Column of the kind identifier, one-based.</param>
+    public SpecNode CreateNode(SpecKind kind, int sourceLine, int sourceColumn)
     {
-        var node = new SpecNode(kind, sourceLine);
+        var node = new SpecNode(kind, sourceLine, sourceColumn);
         _nodes.Add(node);
         return node;
     }
@@ -49,4 +57,11 @@ public sealed class SpecArena
         node.MarkParented();
         _roots.Add(node);
     }
+
+    /// <summary>
+    ///     Renders every root in source order as one deterministic text tree.
+    ///     The output depends only on the IR, so it can be committed as a
+    ///     snapshot without starting a renderer.
+    /// </summary>
+    public string DebugTree() => SpecTreeDumper.DebugTree(this);
 }

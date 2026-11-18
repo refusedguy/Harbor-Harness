@@ -79,7 +79,11 @@ public static class MarkupParser
                 }
 
                 levels[^1].Node.AddOperation(
-                    new SpecOp(operationTokens[0].Text, ArgumentsFrom(operationTokens, 1)));
+                    new SpecOp(
+                        operationTokens[0].Text,
+                        ArgumentsFrom(operationTokens, 1),
+                        lineNumber,
+                        indent + 2));
                 continue;
             }
 
@@ -103,9 +107,10 @@ public static class MarkupParser
                 continue;
             }
 
-            var node = arena.CreateNode(kind, lineNumber);
+            var node = arena.CreateNode(kind, lineNumber, indent + 1);
             if (tokens.Count > 1)
-                node.AddOperation(new SpecOp(NewOperation, ArgumentsFrom(tokens, 1)));
+                node.AddOperation(
+                    new SpecOp(NewOperation, ArgumentsFrom(tokens, 1), lineNumber, indent + 1));
 
             if (levels.Count > 0)
                 levels[^1].Node.AddChild(node);
