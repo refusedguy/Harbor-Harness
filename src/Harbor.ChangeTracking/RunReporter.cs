@@ -318,23 +318,10 @@ public static class RunReporter
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
         {
-            DeleteQuiet(tmp);
+            FileCleanup.QuietDelete(tmp);
             return Result.Failure<string>($"Cannot write report for run '{runId}': {ex.Message}");
         }
         return Result.Success(path);
-    }
-
-    private static void DeleteQuiet(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-        {
-            _ = ex;
-        }
     }
 
     private static bool BytesEqual(byte[] a, byte[] b)

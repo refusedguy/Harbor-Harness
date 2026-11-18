@@ -286,7 +286,7 @@ public sealed class OwnerReport
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
         {
-            DeleteQuiet(tmp);
+            FileCleanup.QuietDelete(tmp);
             return Result.Failure<string>($"Cannot write owner report for run '{runId}': {ex.Message}");
         }
         return Result.Success(path);
@@ -403,19 +403,6 @@ public sealed class OwnerReport
         {
             int len = Math.Min(width, word.Length - at);
             sb.Append(contIndent).Append(word, at, len).AppendLine();
-        }
-    }
-
-    private static void DeleteQuiet(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-        {
-            _ = ex;
         }
     }
 
