@@ -354,11 +354,11 @@ public class MarkupGeneratorAdditionalTextTests
                 text "b"
             """;
         var run = RunText(markup, "Fixtures/Keyed.harbor-ui");
+        var buildRoot = Source(run, ".BuildRoot.g.cs");
 
         await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
-        var source = Source(run, ".BuildRoot.g.cs");
-        await Assert.That(source).Contains("n0.Add(n1, \"alpha\",");
-        await Assert.That(source).Contains("n0.Add(n2, global::Harbor.Tui.CellForge.Rendering.FlexTrack.Fill());");
+        await Assert.That(buildRoot).Contains("n0.Add(n1, \"alpha\", global::Harbor.Tui.CellForge.Rendering.FlexTrack.Fill());");
+        await Assert.That(buildRoot).Contains("n0.Add(n2, global::Harbor.Tui.CellForge.Rendering.FlexTrack.Fill());");
     }
 
     private static GeneratorDriverRunResult Run(AdditionalText file, AnalyzerConfigOptionsProvider options)
