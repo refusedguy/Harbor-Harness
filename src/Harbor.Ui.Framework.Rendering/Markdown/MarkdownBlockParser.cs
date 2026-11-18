@@ -48,6 +48,15 @@ internal enum LineKind : byte
 }
 
 /// <summary>
+/// Explicit resume key for the incremental block parser (#2630). It holds the
+/// source-relative offset of the last, still-unclosed line and that line's
+/// classification at parse time. Every line before <see cref="Anchor"/> is
+/// newline-terminated, so it can never change as text streams in. Only the
+/// anchored line can be reclassified by a later push.
+/// </summary>
+internal readonly record struct MdParseKey(int Anchor, LineKind Kind);
+
+/// <summary>
 /// Context-free line-oriented parser over the simplified CE-3 dialect:
 /// fenced code blocks, ATX headings, «- »/«1. » lists, GFM pipe tables,
 /// «$$» display math and blank-line separated paragraphs. A paragraph/list
@@ -74,6 +83,52 @@ internal static class MarkdownBlockParser
     {
         blocks.Clear();
         ParseCore(source, blocks);
+    }
+
+    /// <summary>Builds the resume key for the last line of <paramref name="source"/>.</summary>
+    internal static MdParseKey KeyFor(ReadOnlySpan<char> source)
+    {
+        int nl = source.LastIndexOf('\n');
+        int anchor = nl < 0 ? 0 : nl + 1;
+        return new MdParseKey(anchor, Classify(source.Slice(anchor).TrimStart(' ')));
+    }
+
+    /// <summary>
+    /// Extends a cached parse in place when the only change since the last
+    /// parse is more text on the same unterminated line (#2630). Lines before
+    /// the anchor are immutable, and a push cannot turn a previously
+    /// terminated line back into an open one, so the earlier blocks and their
+    /// freeze boundaries still hold. Returns <see langword="false"/> when a
+    /// new line completes or the anchored line changes class, as when «`»
+    /// grows into «```». The caller must then do a full <see cref="ParseInto"/>.
+    /// </summary>
+    internal static bool TryResume(ReadOnlySpan<char> source, MdParseKey key, List<MdBlock> blocks)
+    {
+        if ((uint)key.Anchor > (uint)source.Length)
+        {
+            return false;
+        }
+
+        var anchored = source.Slice(key.Anchor);
+        if (anchored.IndexOf('\n') >= 0 || Classify(anchored.TrimStart(' ')) != key.Kind)
+        {
+            return false;
+        }
+
+        if (blocks.Count > 0)
+        {
+            int last = blocks.Count - 1;
+            MdBlock b = blocks[last];
+            if (!b.Complete)
+            {
+                // A full parse would run the open block to EOF. Complete
+                // blocks (and blank trailing lines, which the parser skips)
+                // stay untouched. Extending those would shift freeze points.
+                blocks[last] = new MdBlock(b.Kind, b.Start, source.Length, false, b.Level);
+            }
+        }
+
+        return true;
     }
 
     private static void ParseCore(ReadOnlySpan<char> source, List<MdBlock> blocks)

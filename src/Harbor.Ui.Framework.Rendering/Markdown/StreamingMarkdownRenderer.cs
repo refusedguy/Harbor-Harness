@@ -23,7 +23,10 @@ public readonly record struct MdCheckpoint(int OutputLines, int SourceChars);
 /// rather than its whole length;</item>
 /// <item>a repeat call at an unchanged (width, source, completion) triple
 /// returns immediately — that is the Measure-then-Paint pair every single
-/// frame issues.</item>
+/// frame issues;</item>
+/// <item>the block parse resumes from the keyed unclosed line, so growing a
+/// long open paragraph re-scans only that line rather than the whole block
+/// (#2630).</item>
 /// </list>
 ///
 /// Main invariant, pinned by tests: token-by-token pushes produce styled
@@ -53,6 +56,15 @@ public sealed class StreamingMarkdownRenderer
 
     /// <summary>Reused block-parse buffer — one per renderer, cleared per parse.</summary>
     private readonly List<MdBlock> _blocksScratch = new(8);
+
+    /// <summary>
+    /// Resume state for the incremental block parse (#2630). Valid only while
+    /// the tail still starts at <see cref="_resumeTailBase"/> and the anchored
+    /// (unclosed) line keeps its classification. Width changes and completion
+    /// invalidate it.
+    /// </summary>
+    private int _resumeTailBase = -1;
+    private MdParseKey _resumeKey;
 
     /// <summary>Source offset the cached tail prefix starts at.</summary>
     private int _tailBase = -1;
@@ -177,6 +189,9 @@ public sealed class StreamingMarkdownRenderer
             _heldHighSurrogate = default;
         }
 
+        // Completion makes the whole tail immutable and freezes it wholesale;
+        // the incremental key from the live parse no longer describes it.
+        _resumeTailBase = -1;
         _complete = true;
     }
 
@@ -230,6 +245,9 @@ public sealed class StreamingMarkdownRenderer
             _frozenSourceChars = 0;
             _lastPaintedChars = -1;
             InvalidateTailPrefix();
+            // Width reset _frozenSourceChars to 0: a stale key could still
+            // match a tail base of 0 and skip the counted full parse.
+            _resumeTailBase = -1;
             rebuiltAll = true;
         }
 
@@ -247,22 +265,32 @@ public sealed class StreamingMarkdownRenderer
         int tailBase = _frozenSourceChars;
         var tail = source.Slice(tailBase);
 
-        // #409 parse stage. This is the only production caller of
-        // MarkdownBlockParser.ParseInto, which is what makes "MarkdownParses ==
-        // 0 on the store path" a falsifiable claim (DefaultUiProjector never
-        // reaches this type) rather than a tautology about this file.
-        UiStageCounters.CountMarkdownParse();
+        // #409 parse stage. A full ParseInto is the only production caller,
+        // which is what makes "MarkdownParses == 0 on the store path" a
+        // falsifiable claim (DefaultUiProjector never reaches this type).
+        // #2630. When only the still-unclosed line grew, resume the cached
+        // parse. Re-scanning every line of one huge open paragraph on every
+        // frame kept this stage O(N) in CPU, even though allocation was
+        // already O(delta). The key is the anchor of that line plus its
+        // classification, so a reclassification or a newly completed line
+        // falls back to the full scan.
+        bool resumed = _resumeTailBase == tailBase
+            && MarkdownBlockParser.TryResume(tail, _resumeKey, _blocksScratch);
+        if (!resumed)
+        {
+            UiStageCounters.CountMarkdownParse();
+            MarkdownBlockParser.ParseInto(tail, _blocksScratch);
+            _resumeKey = MarkdownBlockParser.KeyFor(tail);
+            _resumeTailBase = tailBase;
+        }
+        // On the resumed path _blocksScratch already holds the blocks, with
+        // the open block extended to the new EOF.
 
-        // TODO(principles)[PERF, low]: this scan is O(lines in the open block)
-        // per frame, so a single huge paragraph is still O(N) CPU (now
-        // allocation-free) rather than O(delta). It cannot be cached across
-        // frames without making the parser resumable: a trailing unterminated
-        // line can change its classification as more text arrives («`» is
-        // Text, «```» is a FenceOpen), so any resume point would have to
-        // re-scan that line anyway. Measured as noise against the allocation
-        // win; revisit only with a profiler-backed profile above the frame
-        // budget.
-        MarkdownBlockParser.ParseInto(tail, _blocksScratch);
+        // Residual cost on the resume path is one Classify of the anchored
+        // line (O(chars in that line), still allocation-free). Further
+        // narrowing it needs a profiler-backed profile above the frame budget.
+        // The original finding measured this stage as noise next to the #463
+        // allocation win, so no speculative prefix fingerprinting here.
 
         int frozenInThisTail = 0;
         bool frozeAny = false;

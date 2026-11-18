@@ -190,6 +190,74 @@ public class StreamingMarkdownTests
     }
 
     [Test]
+    public async Task TryResume_ExtendsOpenBlock_MatchesFullParse()
+    {
+        // #2630. One huge open paragraph, grown on its last line only. The
+        // resumed block list must equal a full re-parse, field for field.
+        string prefix = "first line of an open paragraph\nsecond line still open\nthird line growing";
+        var blocks = MarkdownBlockParser.Parse(prefix);
+        var key = MarkdownBlockParser.KeyFor(prefix.AsSpan());
+        string grown = prefix + " with more text on the same line";
+
+        await Assert.That(MarkdownBlockParser.TryResume(grown.AsSpan(), key, blocks)).IsTrue();
+
+        var full = MarkdownBlockParser.Parse(grown);
+        await Assert.That(blocks.Count).IsEqualTo(full.Count);
+        for (int i = 0; i < full.Count; i++)
+        {
+            await Assert.That(blocks[i].Kind).IsEqualTo(full[i].Kind);
+            await Assert.That(blocks[i].Start).IsEqualTo(full[i].Start);
+            await Assert.That(blocks[i].End).IsEqualTo(full[i].End);
+            await Assert.That(blocks[i].Complete).IsEqualTo(full[i].Complete);
+            await Assert.That(blocks[i].Level).IsEqualTo(full[i].Level);
+        }
+    }
+
+    [Test]
+    public async Task TryResume_FallsBack_OnReclassificationOrCompletedLine()
+    {
+        // «`» is Text and «```» is FenceOpen. A change of class on the
+        // anchored line can restructure earlier blocks, so reject the key.
+        const string src = "para\n`";
+        var key = MarkdownBlockParser.KeyFor(src.AsSpan());
+
+        var sameClass = MarkdownBlockParser.Parse(src);
+        await Assert.That(MarkdownBlockParser.TryResume("para\n``".AsSpan(), key, sameClass)).IsTrue();
+
+        var reclassified = MarkdownBlockParser.Parse(src);
+        await Assert.That(MarkdownBlockParser.TryResume("para\n```".AsSpan(), key, reclassified)).IsFalse();
+
+        var completed = MarkdownBlockParser.Parse(src);
+        await Assert.That(MarkdownBlockParser.TryResume("para\n`\n".AsSpan(), key, completed)).IsFalse();
+    }
+
+    [Test]
+    public async Task MultiLineOpenParagraph_StreamedTokenByToken_MatchesOneShot()
+    {
+        // The #2630 hot shape has no blank terminator, so the whole paragraph
+        // stays open. It used to be re-scanned in full on every frame.
+        const string source = "line one of a long open paragraph\nline two of the same paragraph\nline three without any blank separator\n";
+
+        var oneShot = new StreamingMarkdownRenderer();
+        oneShot.Push(source);
+        oneShot.Complete();
+        _ = oneShot.RenderTail(24);
+
+        var streamed = new StreamingMarkdownRenderer();
+        foreach (var chunk in Chunks(source))
+        {
+            streamed.Push(chunk);
+            _ = streamed.RenderTail(24);
+        }
+
+        streamed.Complete();
+        _ = streamed.RenderTail(24);
+
+        await Assert.That(MarkdownFixtures.Flatten(streamed.GetLines()))
+            .IsEquivalentTo(MarkdownFixtures.Flatten(oneShot.GetLines()));
+    }
+
+    [Test]
     public async Task Complete_FreezesTrailingPartial()
     {
         var r = new StreamingMarkdownRenderer();

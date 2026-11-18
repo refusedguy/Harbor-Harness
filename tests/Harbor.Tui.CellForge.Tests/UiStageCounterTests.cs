@@ -176,6 +176,66 @@ public class UiStageCounterTests
     }
 
     /// <summary>
+    ///     #2630. The resume key is used by the renderer, not just by the
+    ///     parser in isolation. Growing one unterminated line 50 times must
+    ///     produce exactly one full <c>ParseInto</c>; the other 50 renders
+    ///     extend the cached open block instead of re-scanning it. The exact
+    ///     count (not "greater than zero") is what makes this falsifiable.
+    /// </summary>
+    [Test]
+    public async Task MarkdownParse_ResumeSkipsFullParses_OnSameUnclosedLine()
+    {
+        var snap = Counted(() =>
+        {
+            var renderer = new StreamingMarkdownRenderer();
+            renderer.Push("a paragraph that grows one token at a time");
+            _ = renderer.RenderTail(60); // full parse, anchors the key
+
+            for (int i = 0; i < 50; i++)
+            {
+                renderer.Push(" more");
+                _ = renderer.RenderTail(60); // resumed, no ParseInto
+            }
+        });
+
+        await Assert.That(snap.MarkdownParses)
+            .IsEqualTo(1)
+            .Because("only the first render parses; every later push extends the same unclosed line, so TryResume replaces the full scan");
+        await Assert.That(snap.Materializations)
+            .IsEqualTo(51)
+            .Because("each changed source length still materializes; only the parse stage is skipped");
+    }
+
+    /// <summary>
+    ///     Positive control for the resume count above: a completed line and a
+    ///     reclassified line both invalidate the key. Without these fallbacks
+    ///     a stuck-at-1 counter would also satisfy the test above.
+    /// </summary>
+    [Test]
+    public async Task MarkdownParse_ResumeStops_OnNewLineAndReclassification()
+    {
+        var snap = Counted(() =>
+        {
+            var renderer = new StreamingMarkdownRenderer();
+            renderer.Push("abc");
+            _ = renderer.RenderTail(60); // parse 1
+
+            renderer.Push(" def");
+            _ = renderer.RenderTail(60); // resumed
+
+            renderer.Push("\n");
+            _ = renderer.RenderTail(60); // a line completed -> parse 2
+
+            renderer.Push("```");
+            _ = renderer.RenderTail(60); // Blank -> FenceOpen reclassification -> parse 3
+        });
+
+        await Assert.That(snap.MarkdownParses)
+            .IsEqualTo(3)
+            .Because("a new line and a reclassified anchored line each force a fresh full parse, while the intermediate same-line push resumes");
+    }
+
+    /// <summary>
     ///     The memo guard, pinned in the direction that catches the specific
     ///     placement mistake this slice could have shipped. The renderer class
     ///     doc states that a frame issues <c>RenderTail</c> twice — Measure then
