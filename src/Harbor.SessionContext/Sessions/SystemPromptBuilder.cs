@@ -14,7 +14,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
 
     private const string DefaultBasePrompt = """
                                              You are Harbor, a coding agent. Solve tasks with tools. Be precise and minimal.
-                                             Rules: read before edit; small targeted diffs; verify after change; prefer dedicated tools over bash.
+                                             Rules: read before edit; small targeted diffs; verify after change; prefer dedicated tools over bash. One task per session: when the task changes, start a new session instead of mixing unrelated work.
                                              """;
 
     private const string ToolUsePolicy = """
