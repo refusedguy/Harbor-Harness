@@ -31,12 +31,15 @@ public class ForeignSessionImportTests
 
         var user = (UserMessage)parsed.Value.Messages[0];
         await Assert.That(user.Content).IsEqualTo("hello");
-        await Assert.That(user.Model).IsEqualTo("claude-sonnet");
+        // Claude user records carry no model of their own, so the importer
+        // stamps the source id; the assistant record below carries the real one.
+        await Assert.That(user.Model).IsEqualTo(ForeignSessionImport.Claude);
         await Assert.That(user.Agent).IsEqualTo("code");
         await Assert.That(user.SessionId).IsEqualTo(SessionId);
         await Assert.That(user.CreatedAt.Year).IsEqualTo(2026);
 
         var assistant = (AssistantMessage)parsed.Value.Messages[1];
+        await Assert.That(assistant.Model).IsEqualTo("claude-sonnet");
         await Assert.That(assistant.Parts.Count).IsEqualTo(1);
         await Assert.That(((TextPart)assistant.Parts[0]).Text).IsEqualTo("hi there");
         await Assert.That(assistant.StopReason).IsEqualTo(StopReason.Stop);
