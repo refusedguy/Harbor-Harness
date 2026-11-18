@@ -116,15 +116,15 @@ public sealed class QueryHistory
             return; // prefix already fixed for this navigation session
         }
 
-        string prefix = (currentQuery ?? string.Empty).Trim();
-        if (prefix.Length == 0)
+        string scope = (currentQuery ?? string.Empty).Trim();
+        if (scope.Length == 0)
         {
             return; // history navigation needs a typed prefix
         }
 
         _typedQuery = currentQuery;
         _matches = _entries
-            .Where(e => e.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Where(e => e.StartsWith(scope, StringComparison.OrdinalIgnoreCase))
             .ToList();
         _matches.Reverse(); // most recently used first
     }
