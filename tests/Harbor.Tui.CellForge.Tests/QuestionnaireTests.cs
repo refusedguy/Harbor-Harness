@@ -19,16 +19,9 @@ public class QuestionnaireTests
         new QuestionnaireStep("detail", "Detail", null, ["Short", "Long"], Required: true),
     ]);
 
-    private static string[] Lines(Questionnaire questionnaire, int width = Width)
-    {
-        int height = questionnaire.DesiredHeight;
-        var buffer = TestRender.Buffer(width, height);
-        questionnaire.Paint(buffer, new Rect(0, 0, width, height));
-        return TestRender.Art(buffer).Split('\n')
-            .Select(line => line.TrimEnd())
-            .Take(height)
-            .ToArray();
-    }
+    private static string[] Lines(Questionnaire questionnaire, int width = Width) =>
+        ScreenFixtures.PaintedLines(questionnaire.DesiredHeight, width,
+            buffer => questionnaire.Paint(buffer, new Rect(0, 0, width, questionnaire.DesiredHeight)));
 
     private static string Bar(int width, int filled) => new string('█', filled) + new string('░', width - filled);
 

@@ -83,6 +83,17 @@ internal static class ScreenFixtures
         return buffer;
     }
 
+    /// <summary>Paints into a buffer and reads the trimmed art rows back.</summary>
+    internal static string[] PaintedLines(int height, int width, Action<ScreenBuffer> paint)
+    {
+        var buffer = TestRender.Buffer(width, height);
+        paint(buffer);
+        return TestRender.Art(buffer).Split('\n')
+            .Select(line => line.TrimEnd())
+            .Take(height)
+            .ToArray();
+    }
+
     /// <summary>A buffer painted from whole rows, sized to the widest line.</summary>
     internal static ScreenBuffer BufferFromLines(string[] lines)
     {
