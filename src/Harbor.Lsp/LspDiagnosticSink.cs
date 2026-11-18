@@ -38,8 +38,8 @@ internal sealed class LspDiagnosticSink
         _logger = logger;
     }
 
-    /// <summary>Raised with the file path when a server re-publishes diagnostics.</summary>
-    public event EventHandler<string>? Published;
+    /// <summary>Raised when a server re-publishes diagnostics (payload: the file path).</summary>
+    public event EventHandler<LspDiagnosticsChangedEventArgs>? Published;
 
     /// <summary>Diagnostics last published for the file (a snapshot, never the live list).</summary>
     public IReadOnlyList<LspDiagnostic> GetDiagnostics(string filePath) =>
@@ -76,7 +76,7 @@ internal sealed class LspDiagnosticSink
             }
 
             _diagnostics[filePath] = list;
-            Published?.Invoke(this, filePath);
+            Published?.Invoke(this, new LspDiagnosticsChangedEventArgs(filePath));
         }
         catch (JsonException ex)
         {

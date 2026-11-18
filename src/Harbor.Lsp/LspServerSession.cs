@@ -448,8 +448,8 @@ public sealed class LspServerSession : IAsyncDisposable
     ///     Relay the sink's publication as the session's public event. The
     ///     sender stays this session, not the internal helper.
     /// </summary>
-    private void OnDiagnosticsPublished(object? sender, string filePath) =>
-        DiagnosticsChanged?.Invoke(this, new LspDiagnosticsChangedEventArgs(filePath));
+    private void OnDiagnosticsPublished(object? sender, LspDiagnosticsChangedEventArgs args) =>
+        DiagnosticsChanged?.Invoke(this, args);
 
     /// <summary>
     ///     Normalize a definition payload: the first usable location wins,

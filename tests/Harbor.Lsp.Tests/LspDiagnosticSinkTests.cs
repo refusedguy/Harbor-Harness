@@ -23,7 +23,7 @@ public class LspDiagnosticSinkTests
     {
         var sink = new LspDiagnosticSink("my-ls", NullLogger.Instance);
         string? raisedFor = null;
-        sink.Published += (_, path) => raisedFor = path;
+        sink.Published += (_, args) => raisedFor = args.FilePath;
 
         string expectedPath = LspServerSession.FromUri("file:///tmp/a.ts");
         bool handled = sink.HandleNotification(Publish("""
