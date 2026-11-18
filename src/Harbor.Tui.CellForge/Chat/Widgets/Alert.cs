@@ -58,6 +58,9 @@ public sealed class Alert
     /// <summary>The message to show.</summary>
     public string Message => Notification.Message;
 
+    /// <summary>The presentation row the shared table names for this severity.</summary>
+    public ToastPresentation Presentation => Notification.Presentation;
+
     /// <summary>The glyph the shared presentation table names for this severity.</summary>
     public char Glyph => Notification.Glyph;
 
