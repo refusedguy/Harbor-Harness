@@ -164,16 +164,20 @@ public class ViewInflationTests
         // The old combo still offered "sqlite", so saving that choice made the
         // next startup throw "Unknown HARBOR_STORAGE: 'sqlite'". Pin the actual
         // ComboBoxItem set on the inflated view, not the AXAML source text.
-        Views.SettingsView? view = await AvaloniaSession.RunAsync(() => new Views.SettingsView());
+        // Every Avalonia object access must stay inside the headless dispatch:
+        // the session is closed when RunAsync returns, and a StyledElement is
+        // thread-affine. Hand back the plain option strings, not the combo.
+        string[] options = await AvaloniaSession.RunAsync(() =>
+        {
+            var view = new Views.SettingsView();
+            ComboBox combo = view.GetLogicalDescendants().OfType<ComboBox>()
+                .First(c => AutomationProperties.GetName(c) == "Storage backend");
+            return combo.Items!
+                .OfType<ComboBoxItem>()
+                .Select(item => item.Content?.ToString() ?? string.Empty)
+                .ToArray();
+        });
 
-        ComboBox? combo = view?.GetLogicalDescendants().OfType<ComboBox>()
-            .FirstOrDefault(c => AutomationProperties.GetName(c) == "Storage backend");
-        await Assert.That(combo).IsNotNull();
-
-        string[] options = combo!.Items!
-            .OfType<ComboBoxItem>()
-            .Select(item => item.Content?.ToString() ?? string.Empty)
-            .ToArray();
         await Assert.That(options).IsEquivalentTo(new[] { "memory", "jsonl" });
         await Assert.That(options.Contains("sqlite", StringComparer.Ordinal)).IsFalse();
     }
