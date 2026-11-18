@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Abstractions.Speech;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Rendering;
