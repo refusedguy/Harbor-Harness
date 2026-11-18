@@ -204,7 +204,7 @@ var treeGates = []treeGate{
 	{
 		name:  "check-test-dup",
 		needs: "the tree",
-		args:  []string{"--min-files", "800", "--min-methods", "9000", "--json-out", "test-dup-groups.json", "--warn-only"},
+		args:  []string{"--min-files", "800", "--min-methods", "9000", "--json-out", "test-dup-groups.json"},
 	},
 	{
 		name:  "check-test-json-reflection",
