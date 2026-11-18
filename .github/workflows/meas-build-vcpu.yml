@@ -51,13 +51,13 @@ name: meas-build-vcpu
 #      global-property lookup. Measured here: the property arm is
 #      indistinguishable from the baseline (wall ratio 1.08), and the switch
 #      arm is too (1.01). The property in the repository's own
-#      `build/_build/Targets/CompileTarget.cs` is a no-op for the same
+#      `build/_build.fallout/Targets/CompileTarget.cs` is a no-op for the same
 #      reason.
 #   2. The architecture gate has to be OUT of a compile-phase measurement,
 #      or SUBTRACTED from it: it is 29..39 % of the wall (79..154 s of a
 #      253..409 s build) and it is a single process, so it is serial in
 #      every arm. This harness keeps the gate ON (it measures the shape the
-#      NUKE Compile target runs) and subtracts it in the "ratio without the
+#      orchestrator's Compile target runs) and subtracts it in the "ratio without the
 #      gate" column; the nightly job switches it off, which is the right
 #      shape for a compile-phase measurement.
 #
@@ -199,7 +199,7 @@ jobs:
           #    only MSBuild's own command line carries: `-p:MaxCpuCount=0` is
           #    a property, and the property appears in no MSBuild target and
           #    in no global-property lookup, so it does nothing at all.
-          #    This arm is the command the NUKE Compile target runs after
+          #    This arm is the command the orchestrator's Compile target runs after
           #    #2111: the same build, the real switches, and NO graph build
           #    yet — so it is the control for arm F.
           - label: e-msbuild-r1
@@ -236,8 +236,8 @@ jobs:
           #        every project is then evaluated in a graph node and the
           #        analyzers run again.
           #
-          #    So the switch is NOT in the NUKE Compile target
-          #    (build/_build/Targets/CompileTarget.cs). The arm stays, so
+          #    So the switch is NOT in the orchestrator's Compile target
+          #    (build/_build.fallout/Targets/CompileTarget.cs). The arm stays, so
           #    the number can be re-read when the tree's shape changes.
           - label: f-graph-r1
             cmd: >-

@@ -55,7 +55,7 @@ SpectreTui, TerminalGui, Termina, RazorConsole, Sixel), desktop apps
 (Wpf / Maui / Blazor) and the scripting stack (SharpTS/Jint) live under `contrib/`
 and are **not** listed in `Harbor.slnx`. They are built by `contrib/Contrib.slnx`
 or pulled into the CLI build: `Harbor.Hosting` compiles the alternative renderers in
-only when built with `HarborWithSpectreTui=true` (NUKE/distro builds, or
+only when built with `HarborWithSpectreTui=true` (distro builds, or
 `-p:HarborWithSpectreTui=true` on the command line; Sixel is not in that set and never
 joins the CLI build) — plain `dotnet build` / `dotnet run` does NOT include them,
 so `HARBOR_TUI=spectre*|terminal-gui|termina|razor` falls back to `plain` there. Pass `-p:HarborWithSpectreTui=false`
@@ -77,8 +77,8 @@ Platform notes: `Harbor.App.Wpf` needs the Windows Desktop workload,
 Other CLI feature flags exclude categories of project references:
 `-p:HarborWithPlugins=false` (removes the Roslyn plugin loader),
 `-p:HarborWithAllProviders=false` (keeps only Ollama); `HARBOR_MINIMAL=true`
-is the legacy shorthand forcing all of them off. The NUKE build
-(`build/_build/`) exposes these as command-line flags.
+is the legacy shorthand forcing all of them off. The build orchestrator
+(`build/_build.fallout/`) exposes these as command-line flags.
 
 ### Renderer selection (build-time, slice A of #1144)
 
@@ -434,7 +434,7 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet build -c Release --warnaserror
       # NOTE: per-project test invocations as plain executables — one process
-      # per project, matching ci.yml. Use the NUKE build or loop over tests/*/.
+      # per project, matching ci.yml. Use the build orchestrator or loop over tests/*/.
       - run: for t in tests/Harbor.*.Tests; do dotnet run --project "$t" -c Release --no-build -- --minimum-expected-tests 1; done
 
   publish:

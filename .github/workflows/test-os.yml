@@ -142,7 +142,7 @@ jobs:
               - 'tools/gates/test-measurements/**'
               # The skipped-test report (issue #1795) — same #618 argument.
               - 'tools/gates/test-skips/**'
-              # NUKE build code, the installer and the native-packaging
+              # Build orchestrator code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false and land unvalidated.
               - 'build/**'

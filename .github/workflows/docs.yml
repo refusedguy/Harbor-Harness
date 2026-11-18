@@ -121,8 +121,8 @@ on:
       # that carries them and the CI lists that name them, so a PR that
       # touches any of the three has to run it: a new test project (its
       # .csproj and the solution entry that goes with it), a change to a CI
-      # list, a change to the gate or to its baseline, and the NUKE `Test`
-      # target whose exclusions the census reads. The gate is compiled now;
+      # list, a change to the gate or to its baseline, and the orchestrator's
+      # `Test` target whose exclusions the census reads. The gate is compiled now;
       # its sources are under `tools/gates/`, which the trigger below
       # already covers.
       - 'tests/**/*.csproj'
@@ -137,7 +137,7 @@ on:
       - '.github/workflows/ci.yml'
       - '.github/workflows/test-os.yml'
       - 'tools/test-project-baseline.txt'
-      - 'build/_build/Targets/TestTarget.cs'
+      - 'build/_build.fallout/Targets/TestTarget.cs'
       # #1575. The string-switch gate reads `src/` and `apps/`, and compares
       # the result against its committed exceptions file, so a PR that edits
       # the gate or the exceptions must run it, and so must a PR that edits
@@ -1079,7 +1079,7 @@ jobs:
   # run in CI?
   #
   # The shard lists in ci.yml are hand-written. There are six of them across
-  # two workflow files, plus a derived list in the NUKE `Test` target, and
+  # two workflow files, plus a derived list in the orchestrator's `Test` target, and
   # nothing compared them against the tree.
   #
   # The obvious question has the wrong answer, and the repository says so:
@@ -1250,7 +1250,7 @@ jobs:
   # run in CI?
   #
   # The shard lists in ci.yml are hand-written. There are six of them across
-  # two workflow files, plus a derived list in the NUKE `Test` target, and
+  # two workflow files, plus a derived list in the orchestrator's `Test` target, and
   # nothing compared them against the tree.
   #
   # The obvious question has the wrong answer, and the repository says so:

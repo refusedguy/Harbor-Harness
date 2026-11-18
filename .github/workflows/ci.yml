@@ -777,7 +777,7 @@ jobs:
       # the compile's own "Time Elapsed"):
       #
       #   the build job          430 s wall
-      #     of which the compile 270.5 s (NUKE's own "Compile: done
+      #     of which the compile 270.5 s (the orchestrator's own "Compile: done
       #                          (270548 ms)")
       #     of which the arch-gate Exec  87.9 s (14:10:04.64 -> 14:11:32.4)
       #   the `arch` shard        117 s wall — the SAME 1118 rules again
@@ -827,8 +827,8 @@ jobs:
       # only the EXECUTION moves to the shard. The property is read by
       # MSBuild, and an environment variable of the same name IS an MSBuild
       # property (Directory.Build.props only defaults it when it is empty),
-      # so it reaches the `dotnet build` that NUKE runs without touching
-      # build/_build. To put the gate back on, delete this env block: the
+      # so it reaches the `dotnet build` the orchestrator runs without touching
+      # build/_build.fallout. To put the gate back on, delete this env block: the
       # value is the only thing that turns it off.
       HarborArchGate: 'false'
       # The NuGet global-packages folder is PINNED (#1927). The restored
@@ -1440,16 +1440,16 @@ jobs:
       #
       # `HarborReferenceTrimmer` is an ENVIRONMENT variable, and MSBuild reads
       # an environment variable as a property, so it reaches BOTH the restore
-      # NUKE runs first and the build itself. The restore matters: the
+      # orchestrator runs first and the build itself. The restore matters: the
       # analyzer package has to be in the assets file before the compiler can
       # load it, and a restore without the property would write an assets
       # file the build does not agree with.
       #
       # `HARBOR_WARNING_LOG` names the file MSBuild's file logger writes the
-      # compiler's warnings to (see build/_build/Targets/CompileTarget.cs).
+      # compiler's warnings to (see build/_build.fallout/Targets/CompileTarget.cs).
       # Without it there is no file logger at all, so the ordinary local
       # build writes nothing.
-      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
+      - name: Build solution via Fallout (Release, zero warnings, docs, deterministic)
         id: compile
         env:
           HarborReferenceTrimmer: 'true'
@@ -1761,7 +1761,7 @@ jobs:
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
 
       # Slice B.1/B.2 proof without new jobs: shell syntax of the installer
-      # + .deb builder, and the NUKE target catalog still 1:1 with
+      # + .deb builder, and the Fallout target catalog still 1:1 with
       # reflection (TargetCatalog.Verify fails the list run on drift).
       - name: Validate installer scripts + build catalog
         run: |
@@ -2528,7 +2528,7 @@ jobs:
       #     compatibility/sdk/10.0/dotnet-package-list-restore). The restore
       #     was 3.6 s of the 42 s ("All projects are up-to-date for
       #     restore") and the assets it produces are already on disk: the
-      #     NUKE Compile target restored the solution 370 s earlier.
+      #     orchestrator's Compile target restored the solution 370 s earlier.
       #   * the path filter — the scan is SKIPPED unless the dependency graph
       #     changed (needs.changes.outputs.deps). The remaining 36.5 s is
       #     not the restore: it is the NuGet advisory API round trip, which
@@ -3472,8 +3472,8 @@ jobs:
           # therefore never reaches Harbor.Hosting (only global -p properties
           # flow to ProjectReferences), so no `dotnet`-built CLI — JIT or AOT —
           # registers them. JsonProviderDiscovery skips their JSON files for
-          # the same reason (they are served by the factories). Only a NUKE
-          # build, which sets the flag globally, carries them. First measured
+          # the same reason (they are served by the factories). Only an
+          # orchestrator build, which sets the flag globally, carries them. First measured
           # on the #1055 slice-3 branch (11 ids, no anthropic/openai); asserting
           # them here would gate on a build this recipe cannot produce.
           # Under the stripped recipe even ollama would legitimately disappear —

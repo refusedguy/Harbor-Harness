@@ -13,7 +13,7 @@ one for your workflow.
 > `CellForge.Engine/` (`cellforge`, legacy-алиас `consoleex`) и
 > `src/Harbor.Tui.Notifications/` (не скомпонован в CLI). Рендереры семейства Spectre +
 > TerminalGui/Termina/RazorConsole живут в `contrib/tui/` и комплируются только когда
-> `Harbor.Hosting` собран с `HarborWithSpectreTui=true` (NUKE/distro-сборки либо
+> `Harbor.Hosting` собран с `HarborWithSpectreTui=true` (distro-сборки либо
 > `-p:HarborWithSpectreTui=true`; см. `src/Harbor.Hosting/Harbor.Hosting.csproj:169-176`).
 > Обычный `dotnet build` / `dotnet run` их НЕ включает: живые id — `ansi`, `plain`,
 > `cellforge`; `spectre`/`fullscreen`/`spectre-tui`/`terminal-gui`/`termina`/`razor`
