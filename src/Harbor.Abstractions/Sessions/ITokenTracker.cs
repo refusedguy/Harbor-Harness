@@ -2,8 +2,21 @@ using Harbor.Abstractions.Models;
 
 namespace Harbor.Abstractions.Sessions;
 
+/// <summary>
+///     Tracks token usage and estimates how much of a model's context window a
+///     session has consumed.
+/// </summary>
+/// <remarks>
+///     The tracker is the input to compaction: <see cref="ShouldCompact" />
+///     decides whether the history fits, and <see cref="GetStats" /> reports the
+///     totals published to the session.
+/// </remarks>
 public interface ITokenTracker
 {
+    /// <summary>
+    ///     Records the usage reported by one completed LLM call.
+    /// </summary>
+    /// <param name="usage">The usage figures returned by the provider.</param>
     void RecordTurnUsage(Usage usage);
 
     /// <summary>
@@ -39,11 +52,43 @@ public interface ITokenTracker
     {
     }
 
+    /// <summary>Estimates the token count of a piece of text.</summary>
+    /// <param name="text">The text to estimate.</param>
+    /// <returns>The estimated token count.</returns>
     int Estimate(string text);
+
+    /// <summary>Estimates the token count of one message, including its framing.</summary>
+    /// <param name="message">The message to estimate.</param>
+    /// <returns>The estimated token count.</returns>
     int EstimateMessage(AgentMessage message);
+
+    /// <summary>Estimates the token count of a whole message history.</summary>
+    /// <param name="messages">The messages to estimate, in order.</param>
+    /// <returns>The estimated token count.</returns>
     int EstimateTokens(IReadOnlyList<AgentMessage> messages);
+
+    /// <summary>
+    ///     Decides whether the history is close enough to the model's context
+    ///     window that compaction should run.
+    /// </summary>
+    /// <param name="messages">The current history.</param>
+    /// <param name="model">The model whose window bounds the history.</param>
+    /// <returns>True when compaction is due.</returns>
     bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model);
+
+    /// <summary>The accumulated usage totals for the session.</summary>
+    /// <returns>The current token statistics.</returns>
     TokenStats GetStats();
 }
 
+/// <summary>
+///     Accumulated token usage for a session, split by the model's usage
+///     categories. The cache and reasoning fields are null when the provider
+///     does not report them.
+/// </summary>
+/// <param name="TotalInputTokens">Total prompt tokens sent to the model.</param>
+/// <param name="TotalOutputTokens">Total completion tokens received from the model.</param>
+/// <param name="TotalReasoningTokens">Reasoning tokens, when the provider reports them.</param>
+/// <param name="TotalCacheReadTokens">Tokens read from the prompt cache, when reported.</param>
+/// <param name="TotalCacheWriteTokens">Tokens written to the prompt cache, when reported.</param>
 public sealed record TokenStats(int TotalInputTokens, int TotalOutputTokens, int? TotalReasoningTokens, int? TotalCacheReadTokens, int? TotalCacheWriteTokens);

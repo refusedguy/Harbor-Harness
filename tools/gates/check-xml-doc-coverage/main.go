@@ -24,9 +24,19 @@ import (
 
 // scope is the frozen surface the gate reads.
 //
-// The scope is CONTRACTS ONLY: the frozen data surface is
-// Harbor.Abstractions.Contracts, the layer every other assembly points at.
-var scope = []string{"src/Harbor.Abstractions.Contracts"}
+// Both contract roots are in scope (#431, slice D6). Criterion 5 of the issue
+// says "frozen contract assemblies" in the plural, and the DocFX metadata lane
+// (ADR-017) publishes an API reference for Harbor.Abstractions as well as for
+// Harbor.Abstractions.Contracts. The old CONTRACTS-ONLY scope was deliberate —
+// the frozen data surface every other assembly points at — but it left half
+// of that published surface unguarded. CS1591 stays in NoWarn in both
+// assemblies, so a silent gap in either ships silently. The gate now reads
+// both; the suppression list is additive and the floors ratchet with the
+// larger surface.
+var scope = []string{
+	"src/Harbor.Abstractions.Contracts",
+	"src/Harbor.Abstractions",
+}
 
 // suppressed is file-relative-path :: member-name -> why no XML doc (yet).
 //
@@ -49,6 +59,16 @@ var suppressed = map[string]string{
 	"src/Harbor.Abstractions.Contracts/Models/Session.cs::StopReasonJsonConverter":                 "mechanical JsonConverter, documented via StopReasonTable",
 	"src/Harbor.Abstractions.Contracts/Permissions/PatternRegexCache.cs::BoundedPatternRegexCache": "default-arg ctor, semantic stated on DefaultCapacity",
 	"src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs::RegexCacheProvider":       "test seam passthrough, field doc above applies",
+	// The next five are not public members. They are statements inside the
+	// multi-line bodies of two default interface methods in ISessionStore.
+	// The line matcher has no body awareness and treats a statement with a
+	// parameter list as an implicitly-public interface member; the enclosing
+	// methods (AppendMessagesBatchAsync, CheckpointAsync) carry full XML docs.
+	"src/Harbor.Abstractions/Sessions/ISessionStore.cs::for":        "statement in AppendMessagesBatchAsync default body; enclosing method carries the XML doc",
+	"src/Harbor.Abstractions/Sessions/ISessionStore.cs::appended":   "statement in AppendMessagesBatchAsync default body; enclosing method carries the XML doc",
+	"src/Harbor.Abstractions/Sessions/ISessionStore.cs::if":         "statement in AppendMessagesBatchAsync default body; enclosing method carries the XML doc",
+	"src/Harbor.Abstractions/Sessions/ISessionStore.cs::Success":    "statement in AppendMessagesBatchAsync default body; enclosing method carries the XML doc",
+	"src/Harbor.Abstractions/Sessions/ISessionStore.cs::FromResult": "statement in CheckpointAsync default body; enclosing method carries the XML doc",
 }
 
 // typeKind is the kind of a type declaration.
@@ -175,7 +195,7 @@ func Run(args []string) int {
 	}
 
 	findings, total, documented, coverage, suppressedCount := runGate(repo, minMembers, minDocumented, minCoverage)
-	fmt.Printf("compared %d public members (%d documented, %d suppressed, coverage %.1f%%) against the XML-doc gate in src/Harbor.Abstractions.Contracts\n",
+	fmt.Printf("compared %d public members (%d documented, %d suppressed, coverage %.1f%%) against the XML-doc gate in src/Harbor.Abstractions.Contracts and src/Harbor.Abstractions\n",
 		total, documented, suppressedCount, coverage*100)
 	for _, item := range findings {
 		fmt.Printf("FAIL %s:%d: %s\n", item.path, item.line, item.text)
