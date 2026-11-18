@@ -190,6 +190,7 @@ public class DevReloadPipelineTests
         pipeline.Initialize(new FileStamp(1, 10));
         var published = pipeline.Current;
         source.Set(V2);
+        pipeline.Poll(new FileStamp(2, 11), T0);
 
         using (gate.EnterFrame())
         {
