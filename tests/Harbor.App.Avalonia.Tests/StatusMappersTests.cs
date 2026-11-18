@@ -286,17 +286,21 @@ public class StatusMappersTests
 
     // ── TimeAgo ────────────────────────────────────────────────────
 
-    [Test]
-    public async Task TimeAgo_Null_ReturnsEmpty() => await Assert.That(StatusMappers.TimeAgo(null)).IsEqualTo(string.Empty);
+    // Fixed reference instant: the mapper is pure, so the label depends on
+    // (utc, now) alone, never on the wall clock at test time (#2633).
+    private static readonly DateTime TimeAgoNow = new(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
 
     [Test]
-    public async Task TimeAgo_MinValue_ReturnsEmpty() => await Assert.That(StatusMappers.TimeAgo(DateTime.MinValue)).IsEqualTo(string.Empty);
+    public async Task TimeAgo_Null_ReturnsEmpty() => await Assert.That(StatusMappers.TimeAgo(null, TimeAgoNow)).IsEqualTo(string.Empty);
+
+    [Test]
+    public async Task TimeAgo_MinValue_ReturnsEmpty() => await Assert.That(StatusMappers.TimeAgo(DateTime.MinValue, TimeAgoNow)).IsEqualTo(string.Empty);
 
     [Test]
     public async Task TimeAgo_JustNow_ReturnsJustNow()
     {
-        var recent = DateTime.UtcNow.AddSeconds(5);
-        await Assert.That(StatusMappers.TimeAgo(recent)).IsEqualTo("just now");
+        var recent = TimeAgoNow.AddSeconds(5);
+        await Assert.That(StatusMappers.TimeAgo(recent, TimeAgoNow)).IsEqualTo("just now");
     }
 
     // The offset is in minutes so it stays an attribute constant: 120 minutes
@@ -308,8 +312,26 @@ public class StatusMappersTests
     [Arguments(4320, "3d ago", DisplayName = "TimeAgo_ThreeDaysAgo_Returns3dAgo")]
     public async Task TimeAgo_PastInstant_ReturnsRelativeLabel(int minutesAgo, string expectedLabel)
     {
-        var past = DateTime.UtcNow.AddMinutes(-minutesAgo);
-        await Assert.That(StatusMappers.TimeAgo(past)).IsEqualTo(expectedLabel);
+        var past = TimeAgoNow.AddMinutes(-minutesAgo);
+        await Assert.That(StatusMappers.TimeAgo(past, TimeAgoNow)).IsEqualTo(expectedLabel);
+    }
+
+    [Test]
+    public async Task TimeAgo_SameInputs_AlwaysSameLabel()
+    {
+        var utc = TimeAgoNow.AddMinutes(-5);
+        var first = StatusMappers.TimeAgo(utc, TimeAgoNow);
+        var second = StatusMappers.TimeAgo(utc, TimeAgoNow);
+        await Assert.That(first).IsEqualTo("5m ago");
+        await Assert.That(second).IsEqualTo(first);
+    }
+
+    [Test]
+    public async Task TimeAgo_DifferentNow_ChangesLabel()
+    {
+        var utc = TimeAgoNow;
+        await Assert.That(StatusMappers.TimeAgo(utc, TimeAgoNow.AddSeconds(10))).IsEqualTo("just now");
+        await Assert.That(StatusMappers.TimeAgo(utc, TimeAgoNow.AddMinutes(5))).IsEqualTo("5m ago");
     }
 
     // ── TokensToCompact ────────────────────────────────────────────

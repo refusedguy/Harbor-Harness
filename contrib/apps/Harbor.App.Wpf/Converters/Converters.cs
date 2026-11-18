@@ -87,8 +87,8 @@ public sealed class TimeAgoConverter : IValueConverter
     {
         return value switch
         {
-            DateTime dt => StatusMappers.TimeAgo(dt.ToUniversalTime()),
-            DateTimeOffset dto => StatusMappers.TimeAgo(dto.UtcDateTime),
+            DateTime dt => StatusMappers.TimeAgo(dt.ToUniversalTime(), DateTime.UtcNow),
+            DateTimeOffset dto => StatusMappers.TimeAgo(dto.UtcDateTime, DateTime.UtcNow),
             _ => string.Empty
         };
     }

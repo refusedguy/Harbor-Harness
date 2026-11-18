@@ -42,6 +42,15 @@ public sealed record ChatLineViewModel(ChatRole Role, string Text)
     public DateTime? TimestampUtc { get; init; }
 
     /// <summary>
+    ///     Reference instant captured when this line is projected, used by
+    ///     <see cref="TimestampText" />. Capturing it here (rather than reading
+    ///     the clock inside the getter) ties the relative label to the state
+    ///     transition that produced the line, so re-rendering the same snapshot
+    ///     cannot change its text (#2633).
+    /// </summary>
+    private readonly DateTime _nowUtc = DateTime.UtcNow;
+
+    /// <summary>
     ///     The brush resource key for this role's color. Resolved by the
     ///     platform's <c>BrushKeyConverter</c>-equivalent at bind time.
     /// </summary>
@@ -85,7 +94,7 @@ public sealed record ChatLineViewModel(ChatRole Role, string Text)
     public string TimestampText =>
         TimestampUtc is null
             ? string.Empty
-            : StatusMappers.TimeAgo(TimestampUtc.Value);
+            : StatusMappers.TimeAgo(TimestampUtc.Value, _nowUtc);
 
     /// <summary>
     ///     Optional short preview of <see cref="Text" />, truncated to 80
