@@ -12,16 +12,22 @@ namespace Harbor.Ui.Framework.Diagnostics;
 ///     </para>
 ///     <para>
 ///         <b>Thread safety:</b> all public methods take a single
-///         <see cref="object" /> lock. The buffer is small (1000 entries by default)
-///         and writes are O(1) amortized (we reuse the underlying array via a
-///         <see cref="Queue{T}" />, evicting the head when full).
+///         <see cref="object" /> lock. Entries live in a fixed-size array with
+///         a moving head, so writes are O(1) and <see cref="GetRecent" /> copies
+///         only the requested tail in O(take), not the whole buffer.
 ///     </para>
 /// </remarks>
 public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
 {
     /// <summary>Default ring-buffer capacity. Trade-off: enough history for post-mortem, bounded memory.</summary>
     public const int DefaultCapacity = 1000;
-    private readonly Queue<DiagnosticEntry> _entries = new(DefaultCapacity);
+
+    // Ring buffer: _head is the oldest slot, _count the live entry count.
+    // A wrapped write advances the head, so the newest entry always occupies
+    // (_head + _count - 1) % Capacity.
+    private readonly DiagnosticEntry?[] _buffer;
+    private int _head;
+    private int _count;
 
     private readonly object _gate = new();
 
@@ -35,6 +41,7 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
         if (capacity <= 0)
             capacity = DefaultCapacity;
         Capacity = capacity;
+        _buffer = new DiagnosticEntry?[capacity];
     }
 
     /// <summary>Current entry count (mainly for diagnostics / tests).</summary>
@@ -44,7 +51,7 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
         {
             lock (_gate)
             {
-                return _entries.Count;
+                return _count;
             }
         }
     }
@@ -66,10 +73,16 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
         var entry = new DiagnosticEntry(DateTimeOffset.UtcNow, level, category, message);
         lock (_gate)
         {
-            _entries.Enqueue(entry);
-            while (_entries.Count > Capacity)
+            if (_count == Capacity)
             {
-                _entries.Dequeue();
+                // Full: overwrite the oldest slot and move the head forward.
+                _buffer[_head] = entry;
+                _head = (_head + 1) % Capacity;
+            }
+            else
+            {
+                _buffer[(_head + _count) % Capacity] = entry;
+                _count++;
             }
         }
     }
@@ -81,22 +94,19 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
             return Array.Empty<DiagnosticEntry>();
 
         // Per-paint path: the logs panel rebuilds every frame asking for at
-        // most ~50 rows out of a 1000-entry ring, so copy only the requested
-        // tail under the gate — never the whole buffer plus a re-slice.
+        // most ~50 rows out of a 1000-entry ring. Read the tail by index
+        // instead of walking all Capacity entries under the gate.
         // Oldest-first within the window, as before.
         lock (_gate)
         {
-            if (_entries.Count == 0)
+            if (_count == 0)
                 return Array.Empty<DiagnosticEntry>();
-            int take = Math.Min(max, _entries.Count);
-            int skip = _entries.Count - take;
+            int take = Math.Min(max, _count);
+            int start = (_head + _count - take) % Capacity;
             var result = new DiagnosticEntry[take];
-            int i = 0;
-            int j = 0;
-            foreach (var entry in _entries)
+            for (int i = 0; i < take; i++)
             {
-                if (i++ >= skip)
-                    result[j++] = entry;
+                result[i] = _buffer[(start + i) % Capacity]!;
             }
 
             return result;
@@ -108,7 +118,9 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
     {
         lock (_gate)
         {
-            _entries.Clear();
+            Array.Clear(_buffer);
+            _head = 0;
+            _count = 0;
         }
     }
 }
