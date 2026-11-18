@@ -255,6 +255,59 @@ public class McpRemoteTransportTests
         await Assert.That(response!.Value.GetProperty("result").GetProperty("ok").GetBoolean()).IsTrue();
     }
 
+    /// <summary>
+    ///     #2611: the span walk feeds SseEventReader the same line sequence the
+    ///     old string.Split produced. CRLF terminators, keep-alive comments, an
+    ///     earlier frame for another id and data joined across several lines
+    ///     all have to leave the matching frame intact.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_SseResponse_CrlfKeepAliveAndMultiLineData_Parsed()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.SseResponseBody =
+            ": keep-alive\r\n"
+            + "\r\n"
+            + "event: message\r\n"
+            + "data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"skip\":true}}\r\n"
+            + "\r\n"
+            + "event: message\r\n"
+            + "data: {\"jsonrpc\":\"2.0\",\"id\":7,\r\n"
+            + "data: \"result\":{\"ok\":true}}\r\n"
+            + "\r\n";
+
+        await using var transport = new McpHttpTransport(server.Url);
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{}}""");
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+        JsonElement? response = roundTrip.Value.GetValueOrDefault();
+
+        await Assert.That(roundTrip.IsSuccess).IsTrue();
+        await Assert.That(response).IsNotNull();
+        await Assert.That(response!.Value.GetProperty("id").GetInt32()).IsEqualTo(7);
+        await Assert.That(response.Value.GetProperty("result").GetProperty("ok").GetBoolean()).IsTrue();
+    }
+
+    /// <summary>
+    ///     #2611: a body that stops after its data line never closes the event.
+    ///     The span walk must not conjure the terminating blank line that
+    ///     string.Split never produced for this body.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_SseResponse_WithoutTerminatingBlankLine_ReturnsFailure()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.SseResponseBody =
+            "event: message\n"
+            + "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"ok\":true}}";
+
+        await using var transport = new McpHttpTransport(server.Url);
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{}}""");
+        Result<Maybe<JsonElement>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("no matching JSON-RPC frame");
+    }
+
     // ---------- Legacy HTTP + SSE ----------
 
     [Test]
