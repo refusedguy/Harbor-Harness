@@ -252,9 +252,17 @@ public sealed class DiffViewerOverlay
     public const int MinWidth = 20;
     public const int MinHeight = 6;
     private const int ChromeRows = 4;
+    private const string NoFilePath = "(diff)";
+
+    // #2685 D09: scroll position belongs to the file being viewed, not to one
+    // Show call. The overlay is a single long-lived instance, so a dictionary
+    // here is enough; the cap keeps a long session from retaining scroll state
+    // for thousands of files it will never show again.
+    private const int MaxTrackedScrollFiles = 64;
 
     private readonly List<DiffViewerHunk> _hunks = new();
     private readonly List<string> _preamble = new();
+    private readonly Dictionary<string, int> _scrollTopByFile = new(StringComparer.Ordinal);
     private int _selectedHunk;
     private int _scroll;
     private int _lastRows;
@@ -264,7 +272,7 @@ public sealed class DiffViewerOverlay
     public bool Visible { get; private set; }
 
     /// <summary>File path shown in the header (display only).</summary>
-    public string FilePath { get; private set; } = "(diff)";
+    public string FilePath { get; private set; } = NoFilePath;
 
     /// <summary>Parsed hunks in diff order.</summary>
     public IReadOnlyList<DiffViewerHunk> Hunks => _hunks;
@@ -285,22 +293,43 @@ public sealed class DiffViewerOverlay
     public int ScrollOffset => _scroll;
 
     /// <summary>
-    /// Shows the viewer with a unified diff. Resets hunk selection and scroll;
-    /// <see cref="Mode"/> and <see cref="Wrap"/> are user prefs and persist.
+    /// Shows the viewer with a unified diff. Hunk selection always restarts at
+    /// the first hunk; the body scroll is restored for a file this overlay has
+    /// shown before (#2685 D09). <see cref="Mode"/> and <see cref="Wrap"/> are
+    /// user prefs and persist.
     /// </summary>
     public void Show(string? filePath, string diffText)
     {
-        FilePath = string.IsNullOrWhiteSpace(filePath) ? "(diff)" : filePath;
+        RememberScroll();
+        FilePath = string.IsNullOrWhiteSpace(filePath) ? NoFilePath : filePath;
         Parse(diffText ?? string.Empty);
         _selectedHunk = 0;
-        _scroll = 0;
+        _scroll = FilePath == NoFilePath ? 0 : _scrollTopByFile.GetValueOrDefault(FilePath);
         Visible = true;
     }
 
     /// <summary>Closes the viewer (overlay-local dismissal).</summary>
     public void Hide()
     {
+        RememberScroll();
         Visible = false;
+    }
+
+    /// <summary>
+    ///     Remember the current body row for the current file. Called before
+    ///     either kind of switch: <see cref="Show"/> moving to another file and
+    ///     <see cref="Hide"/> dismissing the overlay.
+    /// </summary>
+    private void RememberScroll()
+    {
+        if (!Visible || FilePath == NoFilePath)
+            return;
+
+        // A fresh file in a full dictionary drops the oldest batch rather than
+        // leaking one entry per file for the life of the process.
+        if (!_scrollTopByFile.ContainsKey(FilePath) && _scrollTopByFile.Count >= MaxTrackedScrollFiles)
+            _scrollTopByFile.Clear();
+        _scrollTopByFile[FilePath] = _scroll;
     }
 
     /// <summary>Moves selection to the next hunk (clamped).</summary>
