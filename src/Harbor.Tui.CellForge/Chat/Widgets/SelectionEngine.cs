@@ -18,9 +18,20 @@ public sealed class SelectionEngine
 {
     private (int X, int Y)? _anchor;
     private (int X, int Y)? _extent;
+    private AutoScrollZones _autoScroll;
 
     /// <summary>True while a selection is being tracked (press seen, release pending).</summary>
     public bool IsActive => _anchor is not null;
+
+    /// <summary>
+    /// Enables edge auto-scroll for drags inside <paramref name="viewport"/>.
+    /// Without this call drags use their raw coordinates (issue #2493).
+    /// </summary>
+    public void ConfigureAutoScroll(Harbor.Tui.CellForge.Rendering.Rect viewport, int lines) =>
+        _autoScroll = new AutoScrollZones(viewport, lines);
+
+    /// <summary>Disables edge auto-scroll; subsequent drags use raw coordinates.</summary>
+    public void DisableAutoScroll() => _autoScroll = default;
 
     /// <summary>Left press starts a selection — true when claimed; other buttons pass through.</summary>
     public bool OnPress(int x, int y, MouseButton button)
@@ -35,13 +46,22 @@ public sealed class SelectionEngine
         return true;
     }
 
-    /// <summary>Drag extends the active selection; no-op otherwise.</summary>
+    /// <summary>
+    /// Drag extends the active selection; no-op otherwise. When the pointer
+    /// sits in an edge band, the viewport is shifted by one row and the anchor
+    /// follows the original cell up or down, so the visible region keeps
+    /// growing while the pointer stays at the edge (issue #2493).
+    /// </summary>
     public void OnDrag(int x, int y)
     {
-        if (_anchor is not null)
+        if (_anchor is not { } anchor)
         {
-            _extent = (x, y);
+            return;
         }
+
+        int shift = _autoScroll.ShiftFor(x, y);
+        _anchor = (anchor.X, anchor.Y - shift);
+        _extent = (x, y);
     }
 
     /// <summary>
