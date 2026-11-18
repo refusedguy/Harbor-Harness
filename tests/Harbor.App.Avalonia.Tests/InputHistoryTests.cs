@@ -7,12 +7,12 @@
 
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.Services;
+using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
@@ -24,34 +24,6 @@ namespace Harbor.App.Avalonia.Tests;
 
 public class InputHistoryTests
 {
-    private sealed class FakeSessionManager : ISessionManager
-    {
-        public Session? Active { get; set; }
-        public SessionContext? ActiveContext { get; set; }
-        public SessionContext? GetContext(string sessionId) => null;
-        public SessionStatus GetStatus(string sessionId) => SessionStatus.Idle;
-        public void SetStatus(string sessionId, SessionStatus status) { }
-        public void NotifyMessageCount(string sessionId, int count) { }
-        public GitSessionInfo GetGitInfo(string sessionId) => new(null, false, 0, null);
-        public void RefreshGitInfo(string sessionId, string directory) { }
-        public Task EnsureDefaultSessionAsync() => Task.CompletedTask;
-        public Task RebindFromCommonConfigAsync() => Task.CompletedTask;
-        public Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null,
-            string? modelId = null, string? workingDirectory = null) => Task.FromResult(Result.Failure<Session>("unused"));
-        public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
-        public Task<bool> OpenPanelSessionAsync(string sessionId) => OpenSessionAsync(sessionId);
-        public Task<Result<Session>> BranchActiveAsync() => Task.FromResult(Result.Failure<Session>("unused"));
-        public Task<bool> DeleteSessionAsync(string sessionId) => Task.FromResult(true);
-        public Task<bool> RenameSessionAsync(string sessionId, string newTitle) => Task.FromResult(true);
-        public event Action<string, SessionStatus>? StatusChanged;
-        public event Action<string, int>? MessageCountChanged;
-        public string? GetDirectory(string sessionId) => null;
-        public string? GetStatusText(string sessionId) => null;
-        public string? GetBranch(string sessionId) => null;
-        public bool GetIsDirty(string sessionId) => false;
-        public bool? GetIsSubagent(string sessionId) => null;
-    }
-
     private sealed class FakeAgentRunner : IAgentRunner
     {
         public CancellationToken AbortToken => CancellationToken.None;
@@ -75,7 +47,7 @@ public class InputHistoryTests
         return new ChatViewModel(
             store,
             new TuiEffectHost(new FakeAgentRunner(), store),
-            new FakeSessionManager(),
+            new NoSessionsManager(),
             new FakeSessionStore(),
             new TestDispatcherAdapter(),
             new FakeLogger<ChatViewModel>(),
