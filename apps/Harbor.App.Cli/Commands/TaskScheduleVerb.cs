@@ -274,17 +274,17 @@ internal sealed class CronExpression
                 return Result.Failure($"cron {fieldName}: empty range.");
 
             Result<(int Start, int End)> range = ParseRange(body, min, max, fieldName);
-            Result applied = range.Bind(r =>
+            Result<bool> applied = range.Bind(r =>
             {
                 if (r.Start < min || r.End > max || r.Start > r.End)
-                    return Result.Failure($"cron {fieldName}: value outside {min}..{max}.");
+                    return Result.Failure<bool>($"cron {fieldName}: value outside {min}..{max}.");
 
                 for (int value = r.Start; value <= r.End; value += step)
                 {
                     int normalized = normalizeSeven && value == 7 ? 0 : value;
                     target[normalized - min] = true;
                 }
-                return Result.Success();
+                return Result.Success(true);
             });
             if (applied.IsFailure)
                 return applied.ConvertFailure();
