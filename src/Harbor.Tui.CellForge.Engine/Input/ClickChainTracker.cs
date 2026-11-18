@@ -1,7 +1,7 @@
 namespace Harbor.Tui.CellForge.Input;
 
 /// <summary>How many clicks form the current chain.</summary>
-internal enum ClickChain : byte
+public enum ClickChain : byte
 {
     Single = 1,
     Double = 2,

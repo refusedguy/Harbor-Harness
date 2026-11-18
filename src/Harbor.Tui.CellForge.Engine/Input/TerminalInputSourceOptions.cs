@@ -19,5 +19,12 @@ public sealed class TerminalInputSourceOptions
 
     public int ReadBufferSize { get; init; } = 4096;
 
+    /// <summary>
+    /// Clock for consumer-side click-chain timing (#2539). The source feeds
+    /// every clean <c>Click</c> event through the shared recognizer, so tests
+    /// can drive the 500 ms window without a real timer.
+    /// </summary>
+    public TimeProvider TimeProvider { get; init; } = System.TimeProvider.System;
+
     public static TerminalInputSourceOptions Default { get; } = new();
 }

@@ -166,6 +166,77 @@ public class TerminalInputSourceTests
         await Assert.That(sb.ToString()).IsEqualTo(payload);
     }
 
+    // ── #2539: click-chain recognition on the real input path ──────────────
+    // The bytes below are what a terminal sends for one clean left click on
+    // cell (5,8): SGR press then SGR release. The test drives the production
+    // TerminalInputSource → parser → event channel path; it never touches the
+    // tracker directly. Time comes from ManualTimeProvider, so the 500 ms
+    // window is exercised without a sleep.
+
+    private static readonly byte[] OneClick = "\u001B[<0;6;9M\u001B[<0;6;9m"u8.ToArray();
+
+    [Test]
+    [Timeout(30_000)]
+    public async Task RealMouseInput_TwoClicksInWindow_AreDouble_ThirdIsTriple(CancellationToken cancellationToken)
+    {
+        var clock = new ManualTimeProvider();
+        using var stream = new PulsedStream();
+        using var source = new TerminalInputSource(stream, new TerminalInputSourceOptions
+        {
+            EscFlushTimeout = TimeSpan.Zero,
+            PasteAbortTimeout = TimeSpan.Zero,
+            TimeProvider = clock,
+        });
+
+        _ = source.RunAsync(cancellationToken);
+
+        stream.Push(OneClick);
+        await ReadClickAsync(source.Events, cancellationToken);
+        await Assert.That(source.LastClickChain).IsEqualTo(EngineInput.ClickChain.Single);
+
+        clock.AdvanceMs(499);
+        stream.Push(OneClick);
+        await ReadClickAsync(source.Events, cancellationToken);
+        await Assert.That(source.LastClickChain).IsEqualTo(EngineInput.ClickChain.Double)
+            .Because("two clean clicks inside the 500 ms window must form a double click");
+
+        clock.AdvanceMs(499);
+        stream.Push(OneClick);
+        await ReadClickAsync(source.Events, cancellationToken);
+        await Assert.That(source.LastClickChain).IsEqualTo(EngineInput.ClickChain.Triple);
+    }
+
+    [Test]
+    [Timeout(30_000)]
+    public async Task RealMouseInput_At500MsBoundary_StartsNewChain(CancellationToken cancellationToken)
+    {
+        var clock = new ManualTimeProvider();
+        using var stream = new PulsedStream();
+        using var source = new TerminalInputSource(stream, new TerminalInputSourceOptions
+        {
+            EscFlushTimeout = TimeSpan.Zero,
+            PasteAbortTimeout = TimeSpan.Zero,
+            TimeProvider = clock,
+        });
+
+        _ = source.RunAsync(cancellationToken);
+
+        stream.Push(OneClick);
+        await ReadClickAsync(source.Events, cancellationToken);
+        await Assert.That(source.LastClickChain).IsEqualTo(EngineInput.ClickChain.Single);
+
+        clock.Advance(TimeSpan.FromMilliseconds(500));
+        stream.Push(OneClick);
+        await ReadClickAsync(source.Events, cancellationToken);
+        await Assert.That(source.LastClickChain).IsEqualTo(EngineInput.ClickChain.Single)
+            .Because("a click exactly at the window boundary starts a fresh chain");
+
+        clock.AdvanceMs(1);
+        stream.Push(OneClick);
+        await ReadClickAsync(source.Events, cancellationToken);
+        await Assert.That(source.LastClickChain).IsEqualTo(EngineInput.ClickChain.Double);
+    }
+
     [Test]
     [Timeout(30_000)]
     public async Task Double_Start_Is_Rejected(CancellationToken cancellationToken)
@@ -190,6 +261,19 @@ public class TerminalInputSourceTests
         await Assert.That(await reader.WaitToReadAsync(ct)).IsTrue();
         await Assert.That(reader.TryRead(out var evt)).IsTrue();
         return evt;
+    }
+
+    /// <summary>Reads past the press so the next observation is the clean click.</summary>
+    private static async Task ReadClickAsync(System.Threading.Channels.ChannelReader<InputEvent> reader, CancellationToken ct)
+    {
+        while (true)
+        {
+            InputEvent evt = await ReadOne(reader, ct);
+            if (evt.Kind == InputEventKind.Mouse && evt.Mouse.Type == MouseEventType.Click)
+            {
+                return;
+            }
+        }
     }
 
     /// <summary>In-memory stream whose reads block until chunks are pushed —

@@ -27,12 +27,22 @@ public sealed class TerminalInputSource : IDisposable
     private readonly Stream _stdin;
     private readonly TerminalInputSourceOptions _options;
     private readonly Channel<InputEvent> _channel;
+    private readonly ClickChainTracker _clickChains;
 
     /// <summary>The parser feeding this source. Exposed so capability probing
     /// (phase 1) can intercept CapabilityEvents before UI dispatch.</summary>
     public EscapeSequenceParser Parser { get; } = new();
 
     public ChannelReader<InputEvent> Events => _channel.Reader;
+
+    /// <summary>
+    /// Chain position of the most recent clean click that passed through this
+    /// source (#2539). Written on the reader thread before the click is
+    /// published to <see cref="Events"/>, so a consumer that has read the click
+    /// sees the chain already settled. Pure observation: no event, no widget,
+    /// and no change to the events a click produces.
+    /// </summary>
+    public ClickChain LastClickChain { get; private set; }
 
     private CancellationTokenSource? _cts;
     private Task? _runTask;
@@ -50,6 +60,7 @@ public sealed class TerminalInputSource : IDisposable
     {
         _stdin = stdin ?? throw new ArgumentNullException(nameof(stdin));
         _options = options ?? TerminalInputSourceOptions.Default;
+        _clickChains = new ClickChainTracker(_options.TimeProvider);
         _channel = Channel.CreateUnbounded<InputEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
@@ -268,6 +279,14 @@ public sealed class TerminalInputSource : IDisposable
     {
         while (Parser.TryTakeEvent(out var evt))
         {
+            // #2539: every clean click from the live input path goes through
+            // one central recognizer. The recognizer observes only; the event
+            // is still published unchanged to every existing consumer.
+            if (evt.Kind == InputEventKind.Mouse && evt.Mouse.Type == MouseEventType.Click)
+            {
+                LastClickChain = _clickChains.Register(evt.Mouse);
+            }
+
             _channel.Writer.TryWrite(evt);
         }
     }
