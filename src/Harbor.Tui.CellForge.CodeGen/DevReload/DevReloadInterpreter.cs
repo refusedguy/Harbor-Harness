@@ -280,7 +280,7 @@ public sealed class DevReloadInterpreter
             var oldStyle = StyleProperties(oldNode);
             var newStyle = StyleProperties(newNode);
             if (!StylesEqual(oldStyle, newStyle))
-                queue.Enqueue(MutationCommand.SetStyle(id, newStyle ?? MutationStyle.Empty));
+                queue.Enqueue(MutationCommand.SetStyle(id, MutationStyle.Create(newStyle ?? [])));
         }
 
         return queue.Drain();
