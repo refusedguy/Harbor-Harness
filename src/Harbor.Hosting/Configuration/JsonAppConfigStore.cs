@@ -239,12 +239,13 @@ internal sealed class ImmutableStringListConverter : JsonConverter<ImmutableList
             }
             // Direct token reads replace the former generic
             // JsonSerializer.Deserialize<string>(ref reader, options).
-            list.Add(reader.TokenType switch
+            string? value = reader.TokenType switch
             {
-                JsonTokenType.String => reader.GetString()!,
-                JsonTokenType.Null => null!,
+                JsonTokenType.String => reader.GetString(),
+                JsonTokenType.Null => null,
                 var other => throw new JsonException($"Expected String token in ImmutableList<string>, got {other}.")
-            });
+            };
+            list.Add(value!);
         }
         return list.ToImmutableList();
     }
