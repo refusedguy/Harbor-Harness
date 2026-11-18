@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
@@ -228,6 +229,50 @@ public sealed record CompactionSummary(
         }
     }
 
+    // A name → enum table keeps the dispatch data-driven instead of a
+    // string-dispatched switch (the repo's check-string-switch gate).
+    private enum SummaryField
+    {
+        UserIntent,
+        TechnicalConcepts,
+        Files,
+        ErrorsAndFixes,
+        ProblemSolving,
+        UserMessages,
+        PendingTasks,
+        CurrentWork,
+        NextStep,
+        Extra
+    }
+
+    private static readonly Dictionary<string, SummaryField> FieldByName = new(StringComparer.Ordinal)
+    {
+        ["userintent"] = SummaryField.UserIntent,
+        ["technicalconcepts"] = SummaryField.TechnicalConcepts,
+        ["files"] = SummaryField.Files,
+        ["errorsandfixes"] = SummaryField.ErrorsAndFixes,
+        ["problemsolving"] = SummaryField.ProblemSolving,
+        ["usermessages"] = SummaryField.UserMessages,
+        ["pendingtasks"] = SummaryField.PendingTasks,
+        ["currentwork"] = SummaryField.CurrentWork,
+        ["nextstep"] = SummaryField.NextStep
+    };
+
+    private enum FileField
+    {
+        Path,
+        Summary,
+        KeyCode,
+        Other
+    }
+
+    private static readonly Dictionary<string, FileField> FileFieldByName = new(StringComparer.Ordinal)
+    {
+        ["path"] = FileField.Path,
+        ["summary"] = FileField.Summary,
+        ["keycode"] = FileField.KeyCode
+    };
+
     private static bool TryParseObject(string json, [NotNullWhen(true)] out ParsedFields? fields)
     {
         fields = null;
@@ -253,17 +298,20 @@ public sealed record CompactionSummary(
 
                 // Accept both goose's snake_case and a camelCase variant.
                 string key = name.Replace("_", string.Empty).ToLowerInvariant();
-                switch (key)
+                SummaryField field = FieldByName.TryGetValue(key, out SummaryField mapped)
+                    ? mapped
+                    : SummaryField.Extra;
+                switch (field)
                 {
-                    case "userintent": ReadStringList(ref reader, parsed.UserIntent); break;
-                    case "technicalconcepts": ReadStringList(ref reader, parsed.TechnicalConcepts); break;
-                    case "files": ReadFileList(ref reader, parsed.Files); break;
-                    case "errorsandfixes": ReadStringList(ref reader, parsed.ErrorsAndFixes); break;
-                    case "problemsolving": ReadStringList(ref reader, parsed.ProblemSolving); break;
-                    case "usermessages": ReadStringList(ref reader, parsed.UserMessages); break;
-                    case "pendingtasks": ReadStringList(ref reader, parsed.PendingTasks); break;
-                    case "currentwork": parsed.CurrentWork = ReadOptionalString(ref reader); break;
-                    case "nextstep": parsed.NextStep = ReadOptionalString(ref reader); break;
+                    case SummaryField.UserIntent: ReadStringList(ref reader, parsed.UserIntent); break;
+                    case SummaryField.TechnicalConcepts: ReadStringList(ref reader, parsed.TechnicalConcepts); break;
+                    case SummaryField.Files: ReadFileList(ref reader, parsed.Files); break;
+                    case SummaryField.ErrorsAndFixes: ReadStringList(ref reader, parsed.ErrorsAndFixes); break;
+                    case SummaryField.ProblemSolving: ReadStringList(ref reader, parsed.ProblemSolving); break;
+                    case SummaryField.UserMessages: ReadStringList(ref reader, parsed.UserMessages); break;
+                    case SummaryField.PendingTasks: ReadStringList(ref reader, parsed.PendingTasks); break;
+                    case SummaryField.CurrentWork: parsed.CurrentWork = ReadOptionalString(ref reader); break;
+                    case SummaryField.NextStep: parsed.NextStep = ReadOptionalString(ref reader); break;
                     default:
                         using (JsonDocument doc = JsonDocument.ParseValue(ref reader))
                         {
@@ -331,11 +379,15 @@ public sealed record CompactionSummary(
             if (reader.TokenType != JsonTokenType.PropertyName) continue;
             string name = reader.GetString() ?? string.Empty;
             if (!reader.Read()) break;
-            switch (name.Replace("_", string.Empty).ToLowerInvariant())
+            FileField fileField = FileFieldByName.TryGetValue(
+                name.Replace("_", string.Empty).ToLowerInvariant(), out FileField mapped)
+                ? mapped
+                : FileField.Other;
+            switch (fileField)
             {
-                case "path": path = StringifyValue(ref reader); break;
-                case "summary": summary = StringifyValue(ref reader); break;
-                case "keycode":
+                case FileField.Path: path = StringifyValue(ref reader); break;
+                case FileField.Summary: summary = StringifyValue(ref reader); break;
+                case FileField.KeyCode:
                     string code = StringifyValue(ref reader);
                     keyCode = code.Trim().Length == 0 ? null : code;
                     break;
@@ -370,7 +422,9 @@ public sealed record CompactionSummary(
             case JsonTokenType.False:
                 return "false";
             case JsonTokenType.Number:
-                return reader.GetRawText();
+                return reader.HasValueSequence
+                    ? Encoding.UTF8.GetString(reader.ValueSequence.ToArray())
+                    : Encoding.UTF8.GetString(reader.ValueSpan);
             case JsonTokenType.StartObject:
             {
                 var parts = new List<string>();
