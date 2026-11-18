@@ -1,4 +1,6 @@
 using System.Text;
+using Harbor.Abstractions.Extensions;
+
 namespace Harbor.Terminal.Abstractions.Rendering;
 /// <summary>
 ///     Renders a <see cref="GfmTable" /> to a plain Unicode-grid of display
@@ -53,23 +55,35 @@ public static class GfmTableFormatter
                 ShrinkToFit(widths, maxWidth - decor);
         }
 
-        var outp = new List<string>(table.Rows.Count + 4);
-        outp.Add(HRule(widths, Tl, Tr, X));
-        outp.Add(DataRow(table.Headers, widths, table.Alignments));
-        outp.Add(HRule(widths, Lt, Rt, X));
-        foreach (var row in table.Rows)
-            outp.Add(DataRow(row, widths, table.Alignments));
-        outp.Add(HRule(widths, Bl, Br, X));
+        // One buffer for the whole call: every helper builds its row in place and
+        // materializes only the string that goes into the result list.
+        int rowCapacity = widths.Sum() + 3 * cols + 1; // borders + padding
+        var pooled = StringBuilderPool.Rent(rowCapacity);
+        try
+        {
+            StringBuilder sb = pooled.Builder;
+            var outp = new List<string>(table.Rows.Count + 4);
+            outp.Add(HRule(sb, widths, Tl, Tr, X));
+            outp.Add(DataRow(sb, table.Headers, widths, table.Alignments));
+            outp.Add(HRule(sb, widths, Lt, Rt, X));
+            foreach (var row in table.Rows)
+                outp.Add(DataRow(sb, row, widths, table.Alignments));
+            outp.Add(HRule(sb, widths, Bl, Br, X));
 
-        // Never emit a row wider than the panel; wrap would kill the grid.
-        if (maxWidth > 0)
-            for (int k = 0; k < outp.Count; k++)
-            {
-                if (DispWidth(outp[k]) > maxWidth)
-                    outp[k] = HardTruncate(outp[k], maxWidth);
-            }
+            // Never emit a row wider than the panel; wrap would kill the grid.
+            if (maxWidth > 0)
+                for (int k = 0; k < outp.Count; k++)
+                {
+                    if (DispWidth(outp[k]) > maxWidth)
+                        outp[k] = HardTruncate(sb, outp[k], maxWidth);
+                }
 
-        return outp;
+            return outp;
+        }
+        finally
+        {
+            pooled.Dispose();
+        }
     }
 
     private static int CellWidth(string cell)
@@ -101,9 +115,9 @@ public static class GfmTableFormatter
         }
     }
 
-    private static string HRule(int[] widths, char left, char right, char mid)
+    private static string HRule(StringBuilder sb, int[] widths, char left, char right, char mid)
     {
-        var sb = new StringBuilder();
+        sb.Clear();
         sb.Append(left);
         for (int c = 0; c < widths.Length; c++)
         {
@@ -114,33 +128,41 @@ public static class GfmTableFormatter
     }
 
     private static string DataRow(
+        StringBuilder sb,
         IReadOnlyList<string> cells, int[] widths, IReadOnlyList<GfmAlign> aligns)
     {
-        var sb = new StringBuilder();
+        sb.Clear();
         sb.Append(V).Append(' ');
         for (int c = 0; c < widths.Length; c++)
         {
             string text = c < cells.Count ? cells[c] : string.Empty;
-            sb.Append(FormatCell(text, widths[c], c < aligns.Count ? aligns[c] : GfmAlign.Left));
+            FormatCell(sb, text, widths[c], c < aligns.Count ? aligns[c] : GfmAlign.Left);
             sb.Append(c < widths.Length - 1 ? " " + V + " " : " " + V);
         }
         return sb.ToString();
     }
 
-    private static string FormatCell(string text, int width, GfmAlign align)
+    private static void FormatCell(StringBuilder sb, string text, int width, GfmAlign align)
     {
-        int dw = DispWidth(text);
-        if (dw > width)
-            text = HardTruncate(text, width);
-        int pad = width - DispWidth(text);
-        if (pad <= 0)
-            return text;
-        return align switch
+        int prefixLen = text.Length;
+        int used = DispWidth(text);
+        if (used > width)
+            prefixLen = TruncatedPrefixLength(text, width, out used);
+
+        int pad = Math.Max(0, width - used);
+        int left = align switch
         {
-            GfmAlign.Right => new string(' ', pad) + text,
-            GfmAlign.Center => new string(' ', pad / 2) + text + new string(' ', pad - pad / 2),
-            _ => text + new string(' ', pad)
+            GfmAlign.Right => pad,
+            GfmAlign.Center => pad / 2,
+            _ => 0
         };
+
+        sb.Append(' ', left);
+        if (prefixLen == text.Length)
+            sb.Append(text);
+        else
+            sb.Append(text, 0, prefixLen).Append('…');
+        sb.Append(' ', pad - left);
     }
 
     /// <summary>
@@ -173,20 +195,33 @@ public static class GfmTableFormatter
                c >= 0xFFE0 && c <= 0xFFE6;
     }
 
-    private static string HardTruncate(string text, int width)
+    /// <summary>
+    ///     Length of the prefix that fits in <paramref name="width" /> minus the
+    ///     ellipsis. <paramref name="resultWidth" /> is the final display width
+    ///     including the ellipsis, so the caller can pad without a string alloc.
+    /// </summary>
+    private static int TruncatedPrefixLength(string text, int width, out int resultWidth)
     {
-        // Cut to fit `width` display columns, appending an ellipsis.
-        var sb = new StringBuilder();
         int w = 0;
+        int len = 0;
         foreach (char ch in text)
         {
             int cw = IsWide(ch) ? 2 : 1;
             if (w + cw > width - 1) // leave room for the ellipsis
                 break;
-            sb.Append(ch);
             w += cw;
+            len++;
         }
-        sb.Append('…');
+        resultWidth = w + 1;
+        return len;
+    }
+
+    private static string HardTruncate(StringBuilder sb, string text, int width)
+    {
+        // Cut to fit `width` display columns, appending an ellipsis.
+        sb.Clear();
+        int len = TruncatedPrefixLength(text, width, out _);
+        sb.Append(text, 0, len).Append('…');
         return sb.ToString();
     }
 }
