@@ -279,7 +279,7 @@ public static class ChangeSetFreezer
     /// </summary>
     /// <param name="runIdValue">Run id (validated like everywhere else: no path separators).</param>
     public static Result<FrozenChangeSet> TryLoad(string? runIdValue) =>
-        ValidateRunId(runIdValue).Bind(runId =>
+        RunIdValidation.ValidateRunId(runIdValue).Bind(runId =>
         {
             string runDir = WorkspacePaths.Default.RunDir(runId);
             string patchPath = Path.Combine(runDir, "change.patch");
@@ -974,15 +974,6 @@ public static class ChangeSetFreezer
         if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int n) && n >= 0)
             return n;
         return null;
-    }
-
-    private static Result<string> ValidateRunId(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Result.Failure<string>("Run ID cannot be empty.");
-        if (value != Path.GetFileName(value) || value is "." or "..")
-            return Result.Failure<string>($"Invalid run id '{value}': path separators are not allowed.");
-        return Result.Success(value);
     }
 
     private static void DeleteQuiet(string path)

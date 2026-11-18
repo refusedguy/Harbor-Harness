@@ -193,7 +193,7 @@ public static class CheckRunner
             return Result.Failure<CheckReport>(
                 $"Check run refused: frozen base {baseRevision} does not match worktree base {workspace.BaseRevision} — a mismatch is a failure, not a warning.");
 
-        Result<string> runId = ValidateRunId(workspace.RunId.Value);
+        Result<string> runId = RunIdValidation.ValidateRunId(workspace.RunId.Value);
         if (runId.IsFailure)
             return runId.ConvertFailure<CheckReport>();
 
@@ -248,7 +248,7 @@ public static class CheckRunner
     /// <param name="runIdValue">Run id (validated like everywhere else: no path separators).</param>
     public static Result<CheckReport> TryLoad(string? runIdValue)
     {
-        Result<string> id = ValidateRunId(runIdValue);
+        Result<string> id = RunIdValidation.ValidateRunId(runIdValue);
         if (id.IsFailure)
             return id.ConvertFailure<CheckReport>();
         string runId = id.Value;
@@ -620,15 +620,6 @@ public static class CheckRunner
         if (spec.OutputCapBytes <= 0)
             return Result.Failure<string>($"Check '{spec.Name}': OutputCapBytes must be positive (got {spec.OutputCapBytes}).");
         return Result.Success(spec.Name);
-    }
-
-    private static Result<string> ValidateRunId(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Result.Failure<string>("Run ID cannot be empty.");
-        if (value != Path.GetFileName(value) || value is "." or "..")
-            return Result.Failure<string>($"Invalid run id '{value}': path separators are not allowed.");
-        return Result.Success(value);
     }
 
     private static IReadOnlyList<string> ApplyEnvironment(ProcessStartInfo psi, IReadOnlyList<string> passthrough)

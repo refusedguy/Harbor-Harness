@@ -255,7 +255,7 @@ public sealed class OwnerReport
     {
         if (report is null)
             return Result.Failure<string>("Owner report must not be null.");
-        Result<string> id = ValidateRunId(report.RunId.Value);
+        Result<string> id = RunIdValidation.ValidateRunId(report.RunId.Value);
         if (id.IsFailure)
             return id.ConvertFailure<string>();
         string runId = id.Value;
@@ -302,7 +302,7 @@ public sealed class OwnerReport
     /// <returns>The persisted report text, or a failure naming why not.</returns>
     public static Result<string> TryLoad(string? runIdValue)
     {
-        Result<string> id = ValidateRunId(runIdValue);
+        Result<string> id = RunIdValidation.ValidateRunId(runIdValue);
         if (id.IsFailure)
             return id.ConvertFailure<string>();
         string runId = id.Value;
@@ -404,15 +404,6 @@ public sealed class OwnerReport
             int len = Math.Min(width, word.Length - at);
             sb.Append(contIndent).Append(word, at, len).AppendLine();
         }
-    }
-
-    private static Result<string> ValidateRunId(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Result.Failure<string>("Run ID cannot be empty.");
-        if (value != Path.GetFileName(value) || value is "." or "..")
-            return Result.Failure<string>($"Invalid run id '{value}': path separators are not allowed.");
-        return Result.Success(value);
     }
 
     private static void DeleteQuiet(string path)
