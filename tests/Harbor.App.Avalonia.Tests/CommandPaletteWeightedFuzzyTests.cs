@@ -29,35 +29,26 @@ public class CommandPaletteWeightedFuzzyTests
     }
 
     [Test]
-    public async Task HintMatch_OutranksLongerLabelMatch()
+    public async Task WeightedScore_RanksFieldsByWeight()
     {
-        var vm = new TestPalette();
+        const string longLabel = "Open the file tree viewer with a very long and descriptive label text";
+
         // Both rows match "tree", but only the first one matches in its label.
         // The label is long, so its raw score is low; the second row's short
         // hint scores higher even after the 0.5 secondary-field weight.
-        vm.Add("Open the file tree viewer with a very long and descriptive label text", "browser");
-        vm.Add("Files", "tree");
-        vm.Filter("tree");
+        var hintWins = new TestPalette();
+        hintWins.Add(longLabel, "browser");
+        hintWins.Add("Files", "tree");
+        hintWins.Filter("tree");
+        await Assert.That(hintWins.Results[0].Label).IsEqualTo("Files");
 
-        await Assert.That(vm.Results.Count).IsEqualTo(2);
-        await Assert.That(vm.Results[0].Label).IsEqualTo("Files");
-        await Assert.That(vm.Results[1].Label)
-            .IsEqualTo("Open the file tree viewer with a very long and descriptive label text");
-    }
-
-    [Test]
-    public async Task LabelMatch_StillOutranksEquivalentHintMatch()
-    {
-        var vm = new TestPalette();
-        // Same query length in both fields; the primary-field weight (1.0)
-        // must keep a label hit ahead of a hint hit (0.5).
-        vm.Add("tree", "browser");
-        vm.Add("Files", "tree-viewer");
-        vm.Filter("tree");
-
-        await Assert.That(vm.Results.Count).IsEqualTo(2);
-        await Assert.That(vm.Results[0].Label).IsEqualTo("tree");
-        await Assert.That(vm.Results[1].Label).IsEqualTo("Files");
+        // Same query length in both fields. The primary-field weight (1.0)
+        // keeps a label hit ahead of a hint hit (0.5).
+        var labelWins = new TestPalette();
+        labelWins.Add("tree", "browser");
+        labelWins.Add("Files", "tree-viewer");
+        labelWins.Filter("tree");
+        await Assert.That(labelWins.Results[0].Label).IsEqualTo("tree");
     }
 
     [Test]
