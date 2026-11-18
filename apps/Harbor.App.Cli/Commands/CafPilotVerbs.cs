@@ -88,6 +88,9 @@ internal static class CafPilotVerbs
         app.Add("dsl check", DslDevCommands.Check);
         app.Add("dsl types", DslDevCommands.Types);
         app.Add("dsl reload", DslDevCommands.Reload);
+        // #2437: the dev-log producer and its reader, behind the same flag.
+        app.Add("dsl watch", DslDevCommands.Watch);
+        app.Add("dsl devlog", DslDevCommands.Devlog);
         // #2438: headless automation protocol (getTree, clock, testId).
         app.Add("dsl automation", DslAutomationCommands.Automation);
 #endif

@@ -36,6 +36,7 @@ namespace Harbor.Tui.CellForge.CodeGen.DevReload;
 public sealed class DevReloadInterpreter
 {
     private readonly Dictionary<int, ElementSessionState> _sessions = [];
+    private DevLogChannel? _log;
     private MutationBatchApplier _applier;
     private MarkupParseResult _current;
     private string _signature;
@@ -77,6 +78,14 @@ public sealed class DevReloadInterpreter
         error = string.Empty;
         return true;
     }
+
+    /// <summary>
+    ///     Attaches the DEV-only diagnostic channel (#2437). The channel is
+    ///     optional and never reaches a renderer: a reload writes one record
+    ///     with its outcome, revision and reason, and nothing else.
+    /// </summary>
+    /// <param name="log">Channel to write to, or null to keep logging off.</param>
+    public void AttachLog(DevLogChannel? log) => _log = log;
 
     /// <summary>Revision of the live element tree.</summary>
     public int Revision => _applier.Revision;
@@ -125,6 +134,17 @@ public sealed class DevReloadInterpreter
     ///     all session state untouched.
     /// </summary>
     public ReloadResult Reload(string markup)
+    {
+        var result = ReloadCore(markup);
+        string checksum = result.SourceChecksum.Length <= 8
+            ? result.SourceChecksum
+            : result.SourceChecksum[..8];
+        _log?.Write("interpreter",
+            $"{result.Outcome} rev={result.Revision} root={result.LiveRootId} checksum={checksum}: {result.Reason}");
+        return result;
+    }
+
+    private ReloadResult ReloadCore(string markup)
     {
         var normalized = StripComments(markup ?? string.Empty);
         var fresh = MarkupParser.Parse(normalized);

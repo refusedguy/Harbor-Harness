@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using Harbor.Tui.CellForge.CodeGen.DevReload;
 
@@ -231,5 +232,87 @@ public class DevReloadInterpreterTests
         await Assert.That(result.Revision).IsEqualTo(revision);
         await Assert.That(interpreter.TextOf(1)).IsEqualTo("hello");
         await Assert.That(interpreter.SessionOf(1)?.ScrollOffset).IsEqualTo(9);
+    }
+
+    // ── 5. Dev log channel: diagnostics never go through the renderer ────
+
+    [Test]
+    public async Task Reload_WritesOneDecisionToTheDevLogChannelAndItsSink()
+    {
+        var lines = new List<string>();
+        var channel = new DevLogChannel(lines.Add);
+        var interpreter = Interpreter();
+        interpreter.AttachLog(channel);
+
+        var result = interpreter.Reload("""
+            panel "main":
+                .text "hello world"
+                .height 10
+                text "done"
+            """);
+
+        var records = channel.Read();
+        await Assert.That(records.Count).IsEqualTo(1);
+        await Assert.That(records[0].Source).IsEqualTo("interpreter");
+        await Assert.That(records[0].Message).Contains(result.Outcome.ToString());
+
+        var parsed = DevLogChannel.ParseLines(lines, 10);
+        await Assert.That(parsed.Count).IsEqualTo(1);
+        await Assert.That(parsed[0].Message).IsEqualTo(records[0].Message);
+        await Assert.That(parsed[0].At.ToUnixTimeMilliseconds()).IsEqualTo(records[0].At.ToUnixTimeMilliseconds());
+    }
+
+    [Test]
+    public async Task DevLogChannel_BoundedTailReturnsTheNewestRecords()
+    {
+        var channel = new DevLogChannel(capacity: 2);
+
+        channel.Write("watcher", "first");
+        channel.Write("interpreter", "second");
+        channel.Write("watcher", "third");
+
+        var records = channel.Read();
+        await Assert.That(records.Count).IsEqualTo(2);
+        await Assert.That(records[0].Message).IsEqualTo("second");
+        await Assert.That(records[1].Message).IsEqualTo("third");
+        await Assert.That(DevLogChannel.ParseLines(Array.Empty<string>(), 5).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task DevFileWatcher_LogsDetectionAndAppliedReloadToTheChannel()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "harbor-devwatch-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(directory, "sample.harbor-ui");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(path, BaseMarkup);
+            DateTime stamp = File.GetLastWriteTimeUtc(path);
+
+            var channel = new DevLogChannel();
+            var interpreter = Interpreter();
+            interpreter.AttachLog(channel);
+            var source = new DevMarkupFileSource(() => stamp, () => File.ReadAllText(path));
+            using var watcher = new DslDevFileWatcher(
+                source, interpreter, channel, pollInterval: TimeSpan.Zero, debounce: TimeSpan.Zero);
+
+            watcher.Poll();
+            await Assert.That(channel.Read().Count).IsEqualTo(0);
+
+            File.WriteAllText(path, BaseMarkup.Replace("hello", "changed", StringComparison.Ordinal));
+            stamp = stamp.AddSeconds(2);
+            watcher.Poll(); // detects the edit, starts the debounce window
+            watcher.Poll(); // applies one reload
+
+            var messages = channel.Read(10).Select(entry => $"[{entry.Source}] {entry.Message}").ToArray();
+            await Assert.That(messages.Any(message => message.Contains("[watcher] change detected"))).IsTrue();
+            await Assert.That(messages.Any(message => message.Contains("[interpreter] Patched"))).IsTrue();
+            await Assert.That(messages.Any(message => message.Contains("[watcher] applied Patched"))).IsTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 }

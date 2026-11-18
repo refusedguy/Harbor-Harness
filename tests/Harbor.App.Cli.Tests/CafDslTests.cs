@@ -128,6 +128,40 @@ public class CafDslTests : CafVerbTestBase
     }
 
     /// <summary>
+    ///     #2437: the reader command is a separate process-facing verb. It
+    ///     parses the channel file directly; no CellForge host is started, so
+    ///     nothing can paint these lines into a cell grid.
+    /// </summary>
+    [Test]
+    public async Task DslDevlog_ReadsTheChannelFileInASeparateCommand()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "harbor-caf-devlog-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(directory, "dsl.jsonl");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(path,
+                "{\"ms\":1763462400000,\"source\":\"interpreter\",\"message\":\"Patched rev=2\"}\n"
+                + "a torn line\n"
+                + "{\"ms\":1763462401000,\"source\":\"watcher\",\"message\":\"applied Patched\"}\n");
+
+            var (exit, output, error) = await RunCafAsync(
+                "dsl", ["devlog", "--devlog", path, "--count", "5"]);
+
+            await Assert.That(exit).IsEqualTo(0);
+            await Assert.That(error).IsEmpty();
+            await Assert.That(output).Contains("Patched rev=2");
+            await Assert.That(output).Contains("applied Patched");
+            await Assert.That(output.Contains("torn line", StringComparison.Ordinal)).IsFalse();
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>
     ///     Mirrors the parser's name normalisation in the test so the emitted
     ///     schema is checked against every declared kind, not a hand-picked few.
     /// </summary>

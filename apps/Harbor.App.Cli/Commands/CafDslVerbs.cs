@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using ConsoleAppFramework;
 using Harbor.Abstractions.Dsl;
 using Harbor.Tui.CellForge.CodeGen;
@@ -23,6 +24,26 @@ namespace Harbor.App.Cli.Commands;
 /// </remarks>
 internal static class DslDevCommands
 {
+    private static string DefaultDevLogPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".harbor", "dev", "dsl-devlog.jsonl");
+
+    /// <summary>
+    ///     The analyzer assembly owns the channel logic but no file IO. The
+    ///     dev CLI supplies the append callback and the reader reads the same
+    ///     JSONL file in its own process.
+    /// </summary>
+    private static DevLogChannel CreateDevLog(string? devlog, out string path)
+    {
+        string resolved = string.IsNullOrWhiteSpace(devlog) ? DefaultDevLogPath : devlog!;
+        path = resolved;
+        string? directory = Path.GetDirectoryName(resolved);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        return new DevLogChannel(line => File.AppendAllText(resolved, line + "\n"));
+    }
+
     /// <summary>Parses one markup file and reports its syntax diagnostics.</summary>
     /// <param name="file">Path to a .harbor-ui file.</param>
     /// <param name="printIr">Print the parsed IR as a debug tree.</param>
@@ -76,11 +97,18 @@ internal static class DslDevCommands
             }
         }
 
+        // #2437: the reload decision also goes to the dev-only channel, which
+        // no renderer subscribes to. The console lines below belong to this
+        // standalone command; the channel is the input for `dsl devlog`.
+        var channel = CreateDevLog(null, out _);
         if (!DevReloadInterpreter.TryCreate(File.ReadAllText(files[0]), out var interpreter, out var error))
         {
+            channel.Write("interpreter", "initial parse rejected: " + error);
             Console.Error.WriteLine("dsl reload: " + error);
             return 1;
         }
+
+        interpreter!.AttachLog(channel);
 
         Console.Out.WriteLine(
             $"initial: template={interpreter!.TemplateSignature} root={interpreter.LiveRootId} revision={interpreter.Revision}");
@@ -92,6 +120,78 @@ internal static class DslDevCommands
         Console.Out.WriteLine(
             $"live: root={result.LiveRootId} revision={result.Revision} preserved=[{string.Join(",", result.PreservedElementIds)}]");
         return result.Outcome == ReloadOutcome.Rejected ? 1 : 0;
+    }
+
+    /// <summary>
+    ///     #2437: reads the dev-only diagnostic channel in a separate command.
+    ///     No CellForge host, event bus or renderer is started, so a live cell
+    ///     grid cannot be overwritten by these lines.
+    /// </summary>
+    /// <param name="devlog">Channel file; defaults to the per-user Harbor dev path.</param>
+    /// <param name="count">How many recent records to print.</param>
+    public static int Devlog(string? devlog = null, int count = 50)
+    {
+        string path = string.IsNullOrWhiteSpace(devlog) ? DefaultDevLogPath : devlog!;
+        var lines = File.Exists(path) ? File.ReadLines(path) : Array.Empty<string>();
+        var entries = DevLogChannel.ParseLines(lines, count);
+        if (entries.Count == 0)
+        {
+            Console.Out.WriteLine($"devlog: no records in {path}");
+            return 0;
+        }
+
+        foreach (var entry in entries)
+            Console.Out.WriteLine($"{entry.At:O} [{entry.Source}] {entry.Message}");
+        return 0;
+    }
+
+    /// <summary>
+    ///     #2437: polls a markup file and sends every observation to the dev
+    ///     channel only. There is deliberately no console or renderer output:
+    ///     `dsl devlog` is the reader, in its own process.
+    /// </summary>
+    /// <param name="file">Path to a .harbor-ui file.</param>
+    /// <param name="devlog">Channel file; defaults to the per-user Harbor dev path.</param>
+    public static async Task<int> Watch([Argument] string file, string? devlog = null)
+    {
+        if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+        {
+            Console.Error.WriteLine("dsl watch: a .harbor-ui file is required.");
+            return 1;
+        }
+
+        var channel = CreateDevLog(devlog, out _);
+        if (!DevReloadInterpreter.TryCreate(File.ReadAllText(file), out var interpreter, out var error))
+        {
+            channel.Write("watcher", "initial parse rejected: " + error);
+            Console.Error.WriteLine("dsl watch: " + error);
+            return 1;
+        }
+
+        interpreter!.AttachLog(channel);
+        channel.Write("watcher", $"watching {file}");
+
+        var source = new DevMarkupFileSource(
+            () => File.Exists(file) ? File.GetLastWriteTimeUtc(file) : DateTime.MinValue,
+            () => File.ReadAllText(file));
+        using var watcher = new DslDevFileWatcher(source, interpreter, channel);
+        using var cts = new CancellationTokenSource();
+        ConsoleCancelEventHandler onCancel = (_, args) =>
+        {
+            args.Cancel = true;
+            cts.Cancel();
+        };
+        Console.CancelKeyPress += onCancel;
+        try
+        {
+            await watcher.RunUntilCancelledAsync(cts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            Console.CancelKeyPress -= onCancel;
+        }
+
+        return 0;
     }
 
     /// <summary>Prints the component table as a JSON schema or C# enum.</summary>
