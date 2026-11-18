@@ -11,9 +11,10 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
 ///     Micro-control component E2E tests — the small reusable pills the shell
-///     is built from: <c>Kbd</c> (keyboard-hint chip) and
-///     <c>StatusBadge</c> (dot + label). Each test hosts the control in its
-///     own window, following the <c>StandaloneControlsTests</c> pattern.
+///     is built from: <c>Kbd</c> (keyboard-hint chip), <c>StatusBadge</c>
+///     (dot + label) and <c>ChatBubble</c> (role pill + message row). Each
+///     test hosts the control in its own window, following the
+///     <c>StandaloneControlsTests</c> pattern.
 /// </summary>
 [NotInParallel("e2e-framework")]
 public sealed class MicroControlsTests : ComponentTestBase
@@ -133,5 +134,43 @@ public sealed class MicroControlsTests : ComponentTestBase
         }
 
         await CaptureAsync("micro-statusbadge").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     ChatBubble renders its role pill, body text and optional timestamp
+    ///     from the control's bound properties. Deterministic content-verification
+    ///     leg for the chat-row surface (issue #415): fully hermetic, no
+    ///     provider, no network, no child process.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    [Category("Component")]
+    public async Task ChatBubble_Inflates_ShowsRoleTextAndTimestamp()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        var bubble = UI(() => new ChatBubble
+        {
+            RoleLabel = "assistant",
+            Text = "Hermetic component answer",
+            BrushKey = "ChatAssistantBrush",
+            Timestamp = "12:34"
+        });
+        var window = ShowHost(bubble, 420, 120);
+        try
+        {
+            foreach (var label in new[] { "assistant", "Hermetic component answer", "12:34" })
+            {
+                var shown = await Driver.WaitForTextInWindowAsync(
+                    window, label, TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                await Assert.That(shown).IsTrue().Because(Driver.LastWaitDiagnostic);
+            }
+        }
+        finally
+        {
+            CloseHost(window);
+        }
+
+        await CaptureAsync("micro-chatbubble").ConfigureAwait(false);
     }
 }
