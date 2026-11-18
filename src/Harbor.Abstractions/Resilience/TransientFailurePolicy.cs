@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 
 namespace Harbor.Abstractions.Resilience;
@@ -65,15 +66,16 @@ namespace Harbor.Abstractions.Resilience;
 ///         where the BCL returned that type, which is most of them.
 ///     </para>
 ///     <para>
-///         <b>What is deliberately not here:</b> HTTP status classification
-///         (408 / 429 / 5xx) and <c>Retry-After</c> parsing. Those belong to the
-///         Application-layer policy, which is the only place that sees a
-///         response object rather than a thrown exception. The transports
-///         classify their own status codes inline at the call site and hand only
-///         the exception-shaped failures here. The
-///         <c>StatusCode: null</c> constraint is that boundary stated as a
-///         pattern: a status-*bearing* failure is an answer the server gave, and
-///         retrying one is the Application layer's call — never this set's.
+///         <b>What is deliberately not here:</b> <c>Retry-After</c> parsing and
+///         the LLM path's status policy. <see cref="IsTransientStatus" /> owns
+///         only the small set a remote-MCP transport retries while the response
+///         is still in hand (5xx and 408); 429 is deliberately terminal on that
+///         path while <c>RetryPolicy.HttpClassifier</c> answers "transient" for
+///         it on the LLM path. That split is a decision, not drift. The
+///         <c>StatusCode: null</c> constraint on <see cref="ShouldRetry" /> is
+///         the other half of the boundary: a status-*bearing* thrown failure is
+///         an answer the server gave, so this set does not retry it — a response
+///         object is classified by <see cref="IsTransientStatus" /> instead.
 ///     </para>
 /// </remarks>
 public static class TransientFailurePolicy
@@ -140,6 +142,25 @@ public static class TransientFailurePolicy
         return error is IOException or TimeoutException or SocketException
             || error is HttpRequestException { StatusCode: null };
     }
+
+    /// <summary>
+    ///     Whether a refused HTTP response is a blip the remote-MCP transports
+    ///     should retry: every 5xx and <see cref="HttpStatusCode.RequestTimeout" />
+    ///     (408). Everything else, 429 included, is an answer rather than an
+    ///     outage and costs exactly one attempt (#714).
+    /// </summary>
+    /// <param name="status">The status while the response is still in hand.</param>
+    /// <remarks>
+    ///     This is the status-shaped half of the retry verdict (#2599). The two
+    ///     remote transports used to carry byte-identical private copies and
+    ///     <c>TransportRetryOwnershipRules</c> could only hold the copies to each
+    ///     other. The verdict now has one home here, beside the exception-shaped
+    ///     half in <see cref="ShouldRetry" />; each transport's declared
+    ///     <c>IsTransientStatus</c> is a one-line forwarder the ownership rule can
+    ///     still call to prove the two agree.
+    /// </remarks>
+    public static bool IsTransientStatus(HttpStatusCode status)
+        => (int)status >= 500 || status == HttpStatusCode.RequestTimeout;
 
     /// <summary>
     ///     Exponential backoff for the retry that follows the failure of attempt
