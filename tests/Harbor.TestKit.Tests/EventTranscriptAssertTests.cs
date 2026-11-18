@@ -106,7 +106,7 @@ public class EventTranscriptAssertTests
         await Assert.That(thrown.Message).Contains("ToolExecutionEnd for 'tc1'");
     }
 
-    private enum Malformed
+    public enum Malformed
     {
         BareToolEnd,
         SecondToolEnd,

@@ -39,12 +39,24 @@ namespace Harbor.TestKit;
 /// </remarks>
 public sealed class EventTranscriptException : Exception
 {
+    /// <summary>Creates an exception with no recorded violations.</summary>
+    public EventTranscriptException()
+        : base("Agent-event transcript is not well formed.") { }
+
+    /// <summary>Creates an exception with a caller-supplied message.</summary>
+    public EventTranscriptException(string message)
+        : base(message) { }
+
+    /// <summary>Creates an exception with a caller-supplied message and cause.</summary>
+    public EventTranscriptException(string message, Exception innerException)
+        : base(message, innerException) { }
+
     /// <summary>Creates an exception carrying the full list of violations.</summary>
     public EventTranscriptException(IReadOnlyList<string> violations)
         : base(Describe(violations)) => Violations = violations;
 
     /// <summary>The structural violations, in transcript order.</summary>
-    public IReadOnlyList<string> Violations { get; }
+    public IReadOnlyList<string> Violations { get; } = [];
 
     private static string Describe(IReadOnlyList<string> violations)
     {
