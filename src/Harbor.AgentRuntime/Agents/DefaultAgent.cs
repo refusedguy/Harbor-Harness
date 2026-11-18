@@ -22,12 +22,50 @@ public sealed class DefaultAgent : IAgent
     private volatile bool _disposed;
 
     /// <summary>
+    ///     Guards the lifecycle handoff between <see cref="Dispose" /> and run
+    ///     entry. Held only for the few instructions that publish or read
+    ///     <see cref="_activeRunExit" /> — including the zero-timeout gate
+    ///     acquire — never across an await or a blocking wait, so it cannot
+    ///     deadlock with <see cref="_runGate" /> (#2585).
+    /// </summary>
+    private readonly object _lifecycleLock = new();
+
+    /// <summary>
+    ///     Signalled at the very end of an in-flight run, AFTER
+    ///     <see cref="_runGate" /> has been released. The run-completion source
+    ///     is set earlier, inside the try block, so waiting on that alone could
+    ///     still race the gate's <c>Release()</c> in the outer finally.
+    ///     <see cref="Dispose" /> waits on this before touching the primitives.
+    /// </summary>
+    private TaskCompletionSource? _activeRunExit;
+
+    /// <summary>
+    ///     The same exit signal carried on the run's execution context. A
+    ///     listener that disposes the agent from inside its own run is detected
+    ///     this way and gets deferred teardown instead of waiting on itself.
+    /// </summary>
+    private readonly AsyncLocal<TaskCompletionSource?> _runFlowExit = new();
+
+    /// <summary>
+    ///     Set once under <see cref="_lifecycleLock" /> when disposal starts;
+    ///     no new run may enter the gate after it.
+    /// </summary>
+    private volatile bool _disposeStarted;
+
+    /// <summary>Set by the first caller that actually tears the primitives down.</summary>
+    private int _resourcesReleased;
+
+    /// <summary>Maximum time <see cref="Dispose" /> gives an aborted run to leave the gate.</summary>
+    private static readonly TimeSpan DisposeDrainTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     ///     Mutual exclusion for <see cref="PromptAsync" /> entry. The previous
     ///     check-then-act <c>State?.IsRunning == true</c> guard was not
     ///     synchronized, so two concurrent calls could both pass it and start
-    ///     overlapping runs on the same session. <see cref="SemaphoreSlim.WaitAsync(TimeSpan, CancellationToken)" />
-    ///     with a zero timeout performs a single atomic acquire attempt: the
-    ///     losing caller fails fast with a "busy" failure instead of racing.
+    ///     overlapping runs on the same session. A zero-timeout acquire
+    ///     (<see cref="SemaphoreSlim.Wait(TimeSpan)" /> under the lifecycle
+    ///     lock) performs a single atomic attempt: the losing caller fails fast
+    ///     with a "busy" failure instead of racing.
     /// </summary>
     private readonly SemaphoreSlim _runGate = new(1, 1);
     private readonly ISessionStore _sessionStore;
@@ -226,7 +264,35 @@ public sealed class DefaultAgent : IAgent
     ///     this after sweeping pending gates, and direct callers use it when
     ///     no coordinator is available.
     /// </summary>
-    public void RequestAbort() => Volatile.Read(ref _abortSource).Cancel();
+    public void RequestAbort()
+    {
+        // #2585: after disposal starts the source belongs to the teardown path;
+        // an external abort must not cancel a source another thread is disposing.
+        if (_disposeStarted)
+        {
+            return;
+        }
+
+        AbortForDispose();
+    }
+
+    /// <summary>
+    ///     Cancel the current abort source from the disposal path. The catch is
+    ///     the racing-dispose case: a concurrent <c>Dispose</c> may already have
+    ///     torn the source down, and cancellation must not turn shutdown into an
+    ///     <see cref="ObjectDisposedException" />.
+    /// </summary>
+    private void AbortForDispose()
+    {
+        try
+        {
+            Volatile.Read(ref _abortSource).Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed by a racing teardown; nothing left to cancel.
+        }
+    }
 
     /// <summary>
     ///     Recreate the internal abort source if (and only if) the current
@@ -241,6 +307,14 @@ public sealed class DefaultAgent : IAgent
     /// </summary>
     public void ResetAbortSource()
     {
+        // #2585: once disposal starts the source is pinned for teardown. A swap
+        // here would dispose the source an in-flight run is linked to and leave
+        // the fresh one as the one Dispose tears down.
+        if (_disposeStarted)
+        {
+            return;
+        }
+
         // Only swap if the current source is already cancelled — otherwise
         // we'd blow away the cancellation token the in-flight PromptAsync is
         // linked to. The CAS below makes the read→swap→dispose sequence
@@ -412,15 +486,40 @@ public sealed class DefaultAgent : IAgent
 
         AgentState state = bound.Value;
 
+        var runExit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         bool acquired;
         try
         {
-            // Zero-timeout acquire: a single atomic attempt — never blocks.
-            acquired = await _runGate.WaitAsync(TimeSpan.Zero, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
+            // #2585: the zero-timeout acquire and the publication of the exit
+            // signal are one step under the lifecycle lock. Dispose claims that
+            // same lock, so it can never see "no run" while this caller already
+            // holds the gate but has not published its exit yet.
+            lock (_lifecycleLock)
+            {
+                if (_disposeStarted)
+                {
+                    return Result.Failure("Agent has been disposed.");
+                }
+
+                acquired = _runGate.Wait(TimeSpan.Zero);
+                if (acquired)
+                {
+                    _activeRunExit = runExit;
+                    _runFlowExit.Value = runExit;
+                }
+            }
         }
         catch (OperationCanceledException)
         {
             return Result.Failure("Agent was cancelled.");
+        }
+        catch (ObjectDisposedException)
+        {
+            // A Dispose that completed while we were entering. There is no run
+            // to join any more, so answer with a Result rather than an exception.
+            return Result.Failure("Agent has been disposed.");
         }
 
         if (!acquired)
@@ -553,7 +652,26 @@ public sealed class DefaultAgent : IAgent
             // #91: unbind before releasing the gate — a ResetAbortSource racing
             // the release must see the idle marker, never a stale generation.
             Volatile.Write(ref _activeRunAbortGeneration, -1);
-            _runGate.Release();
+            try
+            {
+                _runGate.Release();
+            }
+            finally
+            {
+                // #2585: signal exit only after the gate is free. A Dispose
+                // waiting on this task must never dispose the gate while some
+                // run's finally is still about to call Release().
+                lock (_lifecycleLock)
+                {
+                    if (ReferenceEquals(_activeRunExit, runExit))
+                    {
+                        _activeRunExit = null;
+                    }
+                }
+
+                _runFlowExit.Value = null;
+                runExit.TrySetResult();
+            }
         }
     }
 
@@ -624,16 +742,86 @@ public sealed class DefaultAgent : IAgent
     }
 
     /// <summary>
-    ///     Release all resources held by this agent: abort source, run gate, steering
-    ///     channel. Listener delivery stops here too — the wrappers check the disposed
-    ///     flag before they call the caller's callback.
+    ///     Stop listener delivery and release the agent's synchronization
+    ///     primitives: abort source, run gate, steering channel.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #1561: the agent no longer owns a bus subscription of its own, so
+    ///         <see cref="_disposed" /> is what stops delivery. It replaces the
+    ///         disposed forwarding subscription the hand-rolled listener registry
+    ///         was fed by.
+    ///     </para>
+    ///     <para>
+    ///         #2585: <see cref="IDisposable" /> is synchronous, so a run that is
+    ///         still inside <see cref="PromptAsync" /> cannot be awaited here. A
+    ///         bounded wait after <see cref="RequestAbort" /> gives a cooperative
+    ///         run a chance to leave the gate; if it has not, teardown is deferred
+    ///         until its exit signal fires. Disposing the gate or the CTS while the
+    ///         run still holds them made the run's <c>finally { Release() }</c>
+    ///         throw <see cref="ObjectDisposedException" /> and could strand
+    ///         <see cref="WaitForIdleAsync" /> waiters. A dispose issued from the
+    ///         run's own execution context always defers, so it cannot wait on
+    ///         itself.
+    ///     </para>
+    /// </remarks>
     public void Dispose()
     {
-        // #1561: the agent no longer owns a bus subscription of its own, so the flag is
-        // what stops delivery. It replaces the disposed forwarding subscription the
-        // hand-rolled listener registry was fed by.
         _disposed = true;
+
+        Task? runExit;
+        bool reentrant;
+        lock (_lifecycleLock)
+        {
+            // A second Dispose only needs to know teardown has been arranged;
+            // the first caller either completed it or registered the deferred
+            // continuation.
+            if (_disposeStarted)
+            {
+                return;
+            }
+
+            _disposeStarted = true;
+            runExit = _activeRunExit?.Task;
+            reentrant = _activeRunExit is not null
+                        && ReferenceEquals(_runFlowExit.Value, _activeRunExit);
+        }
+
+        if (runExit is null)
+        {
+            ReleaseResources();
+            return;
+        }
+
+        AbortForDispose();
+
+        if (!reentrant && runExit.Wait(DisposeDrainTimeout))
+        {
+            ReleaseResources();
+            return;
+        }
+
+        // Still inside the gate (or called from its own flow). Do NOT touch the
+        // primitives now; release them when the run actually leaves.
+        _ = runExit.ContinueWith(
+            static (_, state) => ((DefaultAgent)state!).ReleaseResources(),
+            this,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
+    ///     Tear down the primitives exactly once, whether called from
+    ///     <see cref="Dispose" /> directly or from the deferred continuation.
+    /// </summary>
+    private void ReleaseResources()
+    {
+        if (Interlocked.Exchange(ref _resourcesReleased, 1) != 0)
+        {
+            return;
+        }
+
         _abortSource.Dispose();
         _runGate.Dispose();
         _steering.Complete();

@@ -56,7 +56,7 @@ InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.
         │ same event reference to every subscriber in the snapshot, in subscription order
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
-  DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303
+  DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:374-378
   DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106,107
   EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
   InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
@@ -134,7 +134,7 @@ the list is now complete because there is nothing left off it.
 | RPC client frame queue, bounded 4096, `DropOldest` | `src/Harbor.Ipc.Client/Protocol/MessagePackRpcClient.cs:36-41` | wire frames arriving from the server; not a bus subscriber |
 | In-process client queue, bounded 1024, `DropOldest` | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:97-102` | latest-events-visible TUI semantics |
 | CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:92`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:179`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:294` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
-| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-18` (held by `DefaultAgent.cs:34`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:179` | agent steering messages, unrelated to the bus |
+| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-18` (held by `DefaultAgent.cs:72`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:179` | agent steering messages, unrelated to the bus |
 | Provider LLM stream channels | `src/Harbor.Providers.*/…LlmClient.cs` | raw LLM deltas before they become `MessageUpdateEvent`s |
 
 ## 2. Who updates the store
@@ -276,7 +276,7 @@ is the subscriber's business, and the live branches are:
   subscribers. Pre-existing test: `EventBusTests.FailingSubscriber_DoesNotBlockOthers`.
 - **An agent listener that throws is logged and KEPT** — `IAgent.Subscribe` wraps
   the caller's callback so the exception never reaches the bus
-  (`DefaultAgent.cs:316-334`); the bus would otherwise evict the subscriber, which
+  (`DefaultAgent.cs:390-410`); the bus would otherwise evict the subscriber, which
   would silently unsubscribe a listener that had one bad day. The agent's
   listeners are the one place where the bus's eviction rule does not apply.
   Tested: `AgentListenerFanOutTests.ThrowingListener_IsLoggedAndSkipped_AndStaysSubscribed`.
@@ -309,9 +309,9 @@ is the subscriber's business, and the live branches are:
   (process-lifetime, never disposed — acceptable, bus is process-lifetime too).
 - `DefaultAgent` holds no bus subscription of its own (#1561). `IAgent.Subscribe`
   hands the caller a bus subscription, so the CALLER owns its disposal
-  (`DefaultAgent.cs:300-303`); disposing the agent stops delivery without
+  (`DefaultAgent.cs:374-378`); disposing the agent stops delivery without
   touching the bus — the listener wrapper checks the agent's disposed flag
-  before it calls the callback (`DefaultAgent.cs:631-640`).
+  before it calls the callback (`DefaultAgent.cs:768-812`).
 - Unsubscribing mid-publish does not affect the in-flight snapshot (the
   publisher iterates its own `ImmutableArray` copy). Tested:
   `EventTopologySemanticsTests.Unsubscribe_StopsFutureEvents_IdempotentDispose`.

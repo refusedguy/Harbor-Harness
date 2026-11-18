@@ -80,4 +80,122 @@ public sealed class WaitForIdleFaultTests
                 + "so the fault path must too — a waiter holds a non-generic Task and cannot observe "
                 + "a Result value, it must simply see idle.");
     }
+
+    // #2585: Dispose must not tear down the gate or the abort CTS while a run
+    // still holds them. The three cases below cover a cooperative run, a run
+    // that ignores the abort, and a Dispose issued from inside the run itself.
+
+    /// <summary>Loop that parks until the abort token is cancelled, then reports the cancel.</summary>
+    private sealed class AbortAwareLoop : IAgentLoop
+    {
+        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        {
+            var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using CancellationTokenRegistration registration = ct.Register(() => released.TrySetResult());
+            await released.Task.ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            return Result.Success();
+        }
+    }
+
+    /// <summary>Loop that ignores the abort token entirely and only leaves on its own gate.</summary>
+    private sealed class StubbornLoop(TaskCompletionSource<Result> gate) : IAgentLoop
+    {
+        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+            => gate.Task;
+    }
+
+    /// <summary>Loop that disposes the agent from inside its own run flow.</summary>
+    private sealed class SelfDisposingLoop : IAgentLoop
+    {
+        public DefaultAgent? Agent { get; set; }
+
+        public Exception? DisposeError { get; private set; }
+
+        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        {
+            try
+            {
+                Agent!.Dispose();
+            }
+            catch (Exception ex)
+            {
+                DisposeError = ex;
+            }
+
+            return Task.FromResult(Result.Success());
+        }
+    }
+
+    private static Session NewDisposeSession() =>
+        Session.Create("/tmp/harbor-dispose-live-run-tests", "code", "test", "test-model");
+
+    private static DefaultAgent NewDisposeAgent(Session session, IAgentLoop loop) =>
+        new(new FakeSessionStore(session), loop, new FakeEventBus(), NullLogger<DefaultAgent>.Instance);
+
+    [Test]
+    public async Task Dispose_WhileCooperativeRunIsActive_AbortsAndUnblocksIdleWaiters()
+    {
+        Session session = NewDisposeSession();
+        DefaultAgent agent = NewDisposeAgent(session, new AbortAwareLoop());
+        agent.Initialize(session, TestAgents.AllowAll());
+
+        Task<Result> prompt = agent.PromptAsync("work");
+        await Assert.That(await AsyncWaits.WaitUntilAsync(() => agent.IsRunning())).IsTrue()
+            .Because("Dispose must be exercised while the run holds the gate, not before it starts.");
+
+        Task idle = agent.WaitForIdleAsync();
+
+        // The bounded wait lives on another thread so the test is not
+        // serialized behind the drain timeout.
+        await Task.Run(agent.Dispose).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Result result = await prompt.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.That(result.IsFailure).IsTrue()
+            .Because("Dispose aborts the run at its next safe boundary.");
+        await Assert.That(result.Error).DoesNotContain("ObjectDisposedException")
+            .Because("No synchronization primitive may be torn down under the live run (#2585).");
+
+        await idle.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.That(agent.IsRunning()).IsFalse();
+    }
+
+    [Test]
+    public async Task Dispose_WhileUncooperativeRunIsActive_DefersGateTeardown()
+    {
+        Session session = NewDisposeSession();
+        var gate = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using DefaultAgent agent = NewDisposeAgent(session, new StubbornLoop(gate));
+        agent.Initialize(session, TestAgents.AllowAll());
+
+        Task<Result> prompt = agent.PromptAsync("work");
+        await Assert.That(await AsyncWaits.WaitUntilAsync(() => agent.IsRunning())).IsTrue();
+
+        // This run never observes the abort. Dispose must time out its drain,
+        // leave the gate intact and arrange cleanup for when the run leaves.
+        agent.Dispose();
+
+        gate.TrySetResult(Result.Success());
+        Result result = await prompt.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.That(result).IsSuccessful()
+            .Because("Releasing a still-live gate after Dispose must not throw ObjectDisposedException (#2585).");
+        await Assert.That(agent.IsRunning()).IsFalse();
+    }
+
+    [Test]
+    public async Task Dispose_CalledFromInsideTheRun_DefersWithoutWaitingOnItself()
+    {
+        Session session = NewDisposeSession();
+        var loop = new SelfDisposingLoop();
+        using DefaultAgent agent = NewDisposeAgent(session, loop);
+        loop.Agent = agent;
+        agent.Initialize(session, TestAgents.AllowAll());
+
+        Result result = await agent.PromptAsync("work").WaitAsync(TimeSpan.FromSeconds(10));
+
+        await Assert.That(loop.DisposeError).IsNull()
+            .Because("A listener or loop disposing its own agent must not take an ObjectDisposedException (#2585).");
+        await Assert.That(result).IsSuccessful()
+            .Because("The run must be able to finish after a reentrant Dispose instead of deadlocking on its exit signal.");
+    }
 }
