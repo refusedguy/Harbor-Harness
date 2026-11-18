@@ -1,17 +1,22 @@
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 
-namespace Harbor.Tui.CellForge;
+namespace Harbor.Terminal.Abstractions;
 
 /// <summary>
-///     Single owner of a renderer's standard input (#2639). One dedicated pump
-///     is the only caller of <see cref="Console.ReadLine"/>. Tests inject their
+///     Single owner of a renderer's standard input (#2639, #2640). One dedicated
+///     pump is the only caller of <see cref="Console.ReadLine"/>. Tests inject their
 ///     own reader. Lines reach consumers through an unbounded channel.
 ///     Cancelling one <see cref="ReadLineAsync"/> abandons only that consumer's
 ///     wait, never the reader itself, so the line the user types next reaches
 ///     the following caller instead of being stolen by an orphaned reader.
 /// </summary>
-internal sealed class StdinLineSource : IDisposable
+/// <remarks>
+///     Shared by the CellForge and AnsiPlain renderers so both honour the
+///     <see cref="ITuiRenderer.ReadLineAsync"/> cancellation contract with one
+///     implementation instead of two copies (#2640).
+/// </remarks>
+public sealed class StdinLineSource : IDisposable
 {
     private readonly Func<string?> _readLine;
     private readonly Channel<string?> _lines = Channel.CreateUnbounded<string?>(

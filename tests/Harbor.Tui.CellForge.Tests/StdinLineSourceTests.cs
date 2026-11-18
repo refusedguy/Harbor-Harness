@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
+using Harbor.Terminal.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
