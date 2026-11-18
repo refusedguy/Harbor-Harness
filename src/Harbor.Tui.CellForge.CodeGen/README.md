@@ -5,7 +5,7 @@ Build-time Roslyn component for the CellForge markup DSL (issue #2424). It sits 
 ## Public API
 
 - `MarkupGenerator` is the `[Generator]` entry point with one member, `Initialize(IncrementalGeneratorInitializationContext)`.
-- `PanelDescriptorGenerator` is the second `[Generator]`. It reports `HUI002` on a class that implements `IPanelDescriptor` without declaring a `StateType` property.
+- `PanelDescriptorGenerator` is the second `[Generator]`. It reports `HUI006` on a class that implements `IPanelDescriptor` without declaring a `StateType` property.
 - `MarkupParser.Parse(string)` reads `.harbor-ui` text into a `MarkupParseResult`. The result carries a `SpecArena`, an optional `state:` type, and a list of `MarkupDiagnostic` values with line and column.
 - `MarkupParseResult` and `MarkupDiagnostic` are the value types returned by the parser.
 - `TypedBindingsEmitter` resolves `{Binding ...}` paths against the state type through Roslyn symbols and emits typed delegates.

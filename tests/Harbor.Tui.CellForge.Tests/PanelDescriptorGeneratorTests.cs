@@ -43,7 +43,7 @@ public class PanelDescriptorGeneratorTests
     }
 
     [Test]
-    public async Task Descriptor_WithoutStateType_ReportsHui002()
+    public async Task Descriptor_WithoutStateType_ReportsHui006()
     {
         const string source = """
             using Dsl;
@@ -62,7 +62,7 @@ public class PanelDescriptorGeneratorTests
     }
 
     [Test]
-    public async Task Descriptor_StateTypeOnlyOnBase_ReportsHui002()
+    public async Task Descriptor_StateTypeOnlyOnBase_ReportsHui006()
     {
         const string source = """
             using System;

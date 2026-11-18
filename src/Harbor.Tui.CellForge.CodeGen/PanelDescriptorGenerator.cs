@@ -23,7 +23,7 @@ namespace Harbor.Tui.CellForge.CodeGen;
 public sealed class PanelDescriptorGenerator : IIncrementalGenerator
 {
     /// <summary>Diagnostic id for a descriptor without a declared state type.</summary>
-    public const string MissingStateTypeDiagnosticId = "HUI002";
+    public const string MissingStateTypeDiagnosticId = "HUI006";
 
     private const string DescriptorInterface = "IPanelDescriptor";
     private const string StateTypeProperty = "StateType";
