@@ -227,10 +227,23 @@ internal static class SqliteMappers
         /// </summary>
         public override ContentPart? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
+            // #2624: a direct single-part read still needs its own DOM. The message
+            // read path does not. ContentPartListJsonConverter parses the whole
+            // Parts array into one document and hands each element to DecodePart.
             using var doc = JsonDocument.ParseValue(ref reader);
-            var el = doc.RootElement;
+            return DecodePart(doc.RootElement);
+        }
 
-            if (!MessagePartAdapter.TryScanPartFields(el, legacyCasing: true, out var scan))
+        /// <summary>
+        ///     Decode one part element. The scan, the tag → type factory and the
+        ///     refusal text are the shared adapter's; only the transport wording
+        ///     ("row") is this converter's. Factored out of <see cref="Read" /> so
+        ///     the list converter can decode every element of a single array
+        ///     document (#2624) without a per-element <see cref="JsonDocument" />.
+        /// </summary>
+        internal static ContentPart DecodePart(JsonElement element)
+        {
+            if (!MessagePartAdapter.TryScanPartFields(element, legacyCasing: true, out var scan))
             {
                 throw new JsonException(MessagePartAdapter.FormatRefusal(
                     new MessagePartAdapter.PartRefusal(
