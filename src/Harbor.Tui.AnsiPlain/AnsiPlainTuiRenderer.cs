@@ -46,7 +46,12 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         _store = store ?? new UiStore();
         _writer = writer;
         _ownsWriter = ownsWriter;
-        Context = new AnsiPlainRenderContext(writer, strategy);
+        Context = new AnsiPlainRenderContext(
+            writer,
+            strategy,
+            static () => Console.WindowWidth,
+            static () => Console.WindowHeight,
+            logger);
         RegisterEventHandlers();
     }
 
@@ -332,6 +337,7 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
     private readonly TextWriter _writer;
     private readonly Func<int> _width;
     private readonly Func<int> _height;
+    private readonly ILogger? _logger;
 
     public AnsiPlainRenderContext(TextWriter writer, IEscapeCodeStrategy strategy)
         : this(writer, strategy, static () => Console.WindowWidth, static () => Console.WindowHeight)
@@ -343,10 +349,26 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
         IEscapeCodeStrategy strategy,
         Func<int> width,
         Func<int> height)
+        : this(writer, strategy, width, height, null)
+    {
+    }
+
+    /// <summary>
+    ///     Internal logging seam. The public constructors stay unchanged (public
+    ///     API freeze); the renderer passes its logger so a failed console-size
+    ///     probe is no longer a bare fallback to 80×24.
+    /// </summary>
+    internal AnsiPlainRenderContext(
+        TextWriter writer,
+        IEscapeCodeStrategy strategy,
+        Func<int> width,
+        Func<int> height,
+        ILogger? logger)
     {
         _writer = writer;
         _width = width;
         _height = height;
+        _logger = logger;
         Strategy = strategy;
     }
 
@@ -360,8 +382,15 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
             {
                 return _width();
             }
-            catch
+            catch (Exception ex)
             {
+                // Hot path (read per frame): never log above Trace, and only
+                // after the level guard so a healthy terminal pays no cost.
+                if (_logger is { } logger && logger.IsEnabled(LogLevel.Trace))
+                {
+                    AnsiPlainRenderContextLog.ConsoleSizeUnavailable(logger, ex, "Width", 80);
+                }
+
                 return 80;
             }
         }
@@ -375,8 +404,13 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
             {
                 return _height();
             }
-            catch
+            catch (Exception ex)
             {
+                if (_logger is { } logger && logger.IsEnabled(LogLevel.Trace))
+                {
+                    AnsiPlainRenderContextLog.ConsoleSizeUnavailable(logger, ex, "Height", 24);
+                }
+
                 return 24;
             }
         }
@@ -422,4 +456,16 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
     public void ExitAlternateScreen() => _writer.Write(Strategy.ExitAlternateScreen);
 
     public void Flush() => _writer.Flush();
+}
+
+/// <summary>
+///     SG: BCL <c>[LoggerMessage]</c> delegates for
+///     <see cref="AnsiPlainRenderContext" />. Trace only: the size properties
+///     are read on the frame path, so callers guard with
+///     <c>IsEnabled(LogLevel.Trace)</c>.
+/// </summary>
+internal static partial class AnsiPlainRenderContextLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Trace, Message = "Console {Dimension} probe failed; using fallback {Fallback}")]
+    public static partial void ConsoleSizeUnavailable(ILogger logger, Exception ex, string dimension, int fallback);
 }
