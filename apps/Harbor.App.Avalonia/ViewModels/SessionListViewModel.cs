@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Sessions;
+using Harbor.Desktop.Shared.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,15 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </summary>
 public sealed partial class SessionListViewModel : ObservableObject
 {
+    /// <summary>
+    ///     G25: the sidebar's search is fuzzy, not a substring probe. Reuse the
+    ///     desktop's single subsequence matcher (<see cref="FuzzySearchService" />)
+    ///     rather than growing a second one here. The command palette already
+    ///     inherits the same scoring model. Stateless, so one shared instance is
+    ///     safe across view-model instances.
+    /// </summary>
+    private static readonly FuzzySearchService SessionFuzzy = new();
+
     private readonly ISessionManager _sessionManager;
     private readonly IDispatcherAdapter _dispatcher;
     private readonly IDialogService _dialogs;
@@ -126,6 +136,30 @@ public sealed partial class SessionListViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    ///     Filter and rank sessions for the sidebar. G25: a blank query keeps
+    ///     the store order; otherwise each session is scored against its title
+    ///     and agent with the shared fuzzy matcher, and only positive matches
+    ///     survive, best score first. Kept as a pure static helper so the
+    ///     observable behaviour is testable without booting the view-model.
+    /// </summary>
+    internal static IReadOnlyList<Session> FilterSessions(IEnumerable<Session> sessions, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return sessions.ToList();
+        }
+
+        return sessions
+            .Select(s => (Session: s, Score: Math.Max(
+                SessionFuzzy.Score(s.Title, query),
+                SessionFuzzy.Score(s.Agent, query))))
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
+            .Select(x => x.Session)
+            .ToList();
+    }
+
     /// <summary>Reload the session list from the store.</summary>
     [RelayCommand]
     private async Task RefreshAsync()
@@ -138,10 +172,7 @@ public sealed partial class SessionListViewModel : ObservableObject
                 SessionListViewModelLog.ListSessionsFailed(_logger, result.Error);
                 return;
             }
-            var filtered = string.IsNullOrWhiteSpace(SearchText)
-                ? result.Value
-                : result.Value.Where(s => s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                                          || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
+            var filtered = FilterSessions(result.Value, SearchText);
             _dispatcher.Post(() =>
             {
                 Sessions.Clear();
