@@ -132,6 +132,34 @@ public class CompositionPilotTests
         await Assert.That(pilot.NodeText("left")).IsEqualTo("B");
     }
 
+    [Test]
+    public async Task FindById_UsesInjectedWidgetIdRegistry_AsSingleSourceOfTruth()
+    {
+        var left = new LabelNode("LEFT");
+        var center = new LabelNode("CENTER");
+        var right = new LabelNode("RIGHT");
+        var registry = new EngineCells.WidgetIdRegistry();
+        var pilot = new CompositionPilot(
+            () => BuildComposition(left, center, right), Cols, Rows, registry);
+
+        // pilot.Register writes into the injected registry.
+        pilot.Register("left", left);
+        await Assert.That(registry.Count).IsEqualTo(1);
+        await Assert.That(registry.QueryOne("left")).IsSameReferenceAs((EngineCells.INode)left);
+
+        // An entry created directly in the registry is visible through the
+        // pilot. If FindById were still backed by a private map this would be
+        // null: proof the registry is a live consumer, not just a declared type
+        // with its own unit tests (#2546).
+        var injected = new LabelNode("INJECTED");
+        registry.Register("injected", injected);
+        await Assert.That(pilot.FindById("injected")).IsSameReferenceAs((EngineCells.INode)injected);
+        await Assert.That(registry.Count).IsEqualTo(2);
+
+        // The registry's exact, case-sensitive id contract is observable here.
+        await Assert.That(pilot.FindById("Injected")).IsNull();
+    }
+
     /// <summary>A plain label whose text can change between frames.</summary>
     private sealed class MutableLabel(string text) : EngineCells.PrepaintNode
     {
