@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
@@ -105,6 +106,77 @@ public class DanglingToolCall1751Tests
 
     private static TestSessionContext NewSession() =>
         new(Session.Create("/tmp/harbor-1751-dangling", "code", "test", "test-model"));
+
+    /// <summary>
+    ///     #2549: a dispatcher that emits no result for the calls it was given.
+    ///     The assistant message still carries the tool_use, so every terminal
+    ///     exit after tool execution has a genuine unanswered call to close.
+    /// </summary>
+    private sealed class DroppingToolDispatcher : IToolDispatcher
+    {
+        public int Calls { get; private set; }
+
+        public Task<ToolResultMessage> ExecuteAsync(
+            IReadOnlyList<ToolCallPart> toolCalls,
+            ISessionContext session,
+            AssistantMessage partial,
+            AgentDefinition agent,
+            CancellationToken ct,
+            TimeSpan? toolExecutionTimeout = null)
+        {
+            Calls++;
+            return Task.FromResult(new ToolResultMessage(
+                $"dropped-{Calls}",
+                session.Session.Id,
+                DateTimeOffset.UtcNow,
+                Array.Empty<ToolResultEntry>()));
+        }
+    }
+
+    /// <summary>
+    ///     A loop with the injected dispatcher; everything else matches
+    ///     <see cref="LoopWithClock" />.
+    /// </summary>
+    private static AgentLoop LoopWithDispatcher(
+        ScriptedLlmClient client,
+        FakeEventBus bus,
+        IToolDispatcher dispatcher,
+        AgentDefinition agent)
+    {
+        var agents = new FakeAgentRegistry(agent);
+        return new AgentLoop(
+            new FakeProviderRegistry(client),
+            new FakeToolRegistry(),
+            agents,
+            new StubSystemPromptBuilder(),
+            new FakeCompactionService(),
+            new FakeTokenTracker(),
+            new RetryPolicy(new ManualTimeProvider(fireTimerOnCreate: true)),
+            bus,
+            new PermissionService(agents, NullLogger<PermissionService>.Instance),
+            new MessageConverter(),
+            NullLogger<AgentLoop>.Instance,
+            toolDispatcher: dispatcher);
+    }
+
+    /// <summary>
+    ///     A script that asks for one tool and stamps the given finish reason.
+    /// </summary>
+    private static ScriptedLlmClient ToolCallThen(string finishReason) => new(
+    [
+        TestEvents.ToolCallStart(),
+        TestEvents.ToolCallDelta(),
+        TestEvents.StepFinish(finishReason: finishReason, usage: new Usage(3, 4)),
+    ]);
+
+    /// <summary>
+    ///     The closure for a call the runtime knows never started, wherever it
+    ///     was written in the transcript.
+    /// </summary>
+    private static List<ToolResultMessage> NotStartedClosures(IReadOnlyList<AgentMessage> messages) =>
+        messages.OfType<ToolResultMessage>()
+            .Where(m => m.Results.Any(r => r.Output.Contains(UnresolvedToolCall.NotStartedCode)))
+            .ToList();
 
     /// <summary>
     ///     The tool calls of the transcript that no result answers — the
@@ -318,6 +390,134 @@ public class DanglingToolCall1751Tests
         // #1569: see the note on the sibling site — the provider wire type
         // keeps the plain boolean spelling.
         await Assert.That(closure.IsError).IsFalse();
+    }
+
+    // -----------------------------------------------------------------
+    // #2549 — ONE terminal path for every stop reason
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    ///     Every terminal stop reason closes a tool call the dispatcher left
+    ///     unanswered. Before #2549 only degraded, cancel and aborted had a
+    ///     closure copy; a tool_use / stop / length / content_filter turn that
+    ///     reached the dispatcher with a dropped result kept a dangling
+    ///     tool_use in the transcript.
+    /// </summary>
+    [Test]
+    // tool_use / content_filter keep running after execution, so the step
+    // ceiling is what ends them; stop / length end the run on the terminal
+    // stop reason itself. Together they cover both post-execution exits.
+    [Arguments("tool_use", true)]
+    [Arguments("content_filter", true)]
+    [Arguments("stop", false)]
+    [Arguments("length", false)]
+    public async Task EveryTerminalStopReason_ClosesAToolCallTheDispatcherDropped(
+        string finishReason, bool oneStep)
+    {
+        var client = ToolCallThen(finishReason);
+        var bus = new FakeEventBus();
+        var dispatcher = new DroppingToolDispatcher();
+        var agent = oneStep ? TestAgents.AllowAll() with { MaxSteps = 1 } : TestAgents.AllowAll();
+        var loop = LoopWithDispatcher(client, bus, dispatcher, agent);
+        var session = NewSession();
+
+        await loop.RunAsync(session, agent);
+
+        await Assert.That(dispatcher.Calls).IsEqualTo(1);
+        await Assert.That(DanglingToolCallIds(session.Messages)).IsEmpty().Because(
+            "a provider 400 on the next turn is what a tool_use without a tool_result costs");
+
+        List<ToolResultMessage> closures = NotStartedClosures(session.Messages);
+        await Assert.That(closures.Count).IsEqualTo(1).Because(
+            "the one terminal path closes a dropped call whatever the stop reason");
+        await Assert.That(closures[0].Results.Single().ToolCallId).IsEqualTo("call-1");
+
+        // The closure names the call BEFORE TurnEnd, and the run's terminal
+        // event still follows it — the event sequence is unchanged.
+        int toolEnd = bus.Events.FindIndex(e => e is ToolExecutionEndEvent);
+        int turnEnd = bus.Events.FindIndex(e => e is TurnEndEvent);
+        int agentEnd = bus.Events.FindIndex(e => e is AgentEndEvent);
+        await Assert.That(toolEnd).IsGreaterThan(-1);
+        await Assert.That(turnEnd).IsGreaterThan(toolEnd);
+        await Assert.That(agentEnd).IsGreaterThan(turnEnd);
+
+        var turnEndEvent = bus.Events.OfType<TurnEndEvent>().Single();
+        await Assert.That(turnEndEvent.ToolResults.Count).IsEqualTo(2).Because(
+            "the empty result the dispatcher returned and the synthesized closure are both carried");
+        await Assert.That(turnEndEvent.ToolResults.SelectMany(m => m.Results)
+                .Any(r => r.ToolCallId == "call-1")).IsTrue();
+    }
+
+    /// <summary>
+    ///     The next model request must carry the RUNTIME's closure, not the
+    ///     message converter's conservative repair. The two use different
+    ///     codes: NotStarted says the call never ran and may be retried;
+    ///     OutcomeUnknown would tell the model the opposite.
+    /// </summary>
+    [Test]
+    public async Task DroppedCall_IsPairedBeforeTheNextProviderRequest()
+    {
+        var client = new ScriptedLlmClient(
+        [
+            TestEvents.ToolCallStart(),
+            TestEvents.ToolCallDelta(),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(3, 4)),
+        ],
+        [
+            TestEvents.TextDelta(delta: "done"),
+            TestEvents.StepFinish(1, usage: new Usage(1, 1)),
+        ]);
+        var bus = new FakeEventBus();
+        var dispatcher = new DroppingToolDispatcher();
+        var agent = TestAgents.AllowAll();
+        var loop = LoopWithDispatcher(client, bus, dispatcher, agent);
+        var session = NewSession();
+
+        var result = await loop.RunAsync(session, agent);
+
+        await Assert.That(result).IsSuccessful();
+        await Assert.That(client.Requests.Count).IsEqualTo(2);
+        var wireResults = client.Requests[1].Messages.OfType<LlmToolResultMessage>().ToList();
+        await Assert.That(wireResults.Count).IsEqualTo(1);
+        await Assert.That(wireResults[0].ToolCallId).IsEqualTo("call-1");
+        await Assert.That(wireResults[0].Output).Contains(UnresolvedToolCall.NotStartedCode).Because(
+            "the turn runner's closure is persisted before the next request; " +
+            "the converter's OutcomeUnknown repair must never be the one the provider sees");
+        await Assert.That(DanglingToolCallIds(session.Messages)).IsEmpty();
+    }
+
+    /// <summary>
+    ///     A normal run must NOT gain a second result for a call that already
+    ///     has one. The answer-aware terminal path subtracts the dispatcher's
+    ///     ids before closing, so a duplicate tool_result is never written.
+    /// </summary>
+    [Test]
+    public async Task PairedRun_GainsNoDuplicateClosure()
+    {
+        var client = new ScriptedLlmClient(
+        [
+            TestEvents.ToolCallStart(),
+            TestEvents.ToolCallDelta(),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(3, 4)),
+        ],
+        [
+            TestEvents.TextDelta(delta: "done"),
+            TestEvents.StepFinish(1, usage: new Usage(1, 1)),
+        ]);
+        var bus = new FakeEventBus();
+        var counter = new CountingTool();
+        var loop = LoopWithClock(client, bus, new FakeToolRegistry(counter));
+        var session = NewSession();
+
+        await loop.RunAsync(session, TestAgents.AllowAll());
+
+        await Assert.That(counter.Executions).IsEqualTo(1);
+        await Assert.That(DanglingToolCallIds(session.Messages)).IsEmpty();
+        var results = session.Messages.OfType<ToolResultMessage>().ToList();
+        await Assert.That(results.Count).IsEqualTo(1).Because(
+            "an answered call is excluded from the terminal path's closure");
+        await Assert.That(results[0].Results.Single().IsError).IsFalse();
+        await Assert.That(NotStartedClosures(session.Messages)).IsEmpty();
     }
 
 }
