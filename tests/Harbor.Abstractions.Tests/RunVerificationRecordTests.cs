@@ -31,6 +31,7 @@
 
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 
 namespace Harbor.Abstractions.Tests;
 
@@ -46,14 +47,7 @@ public class RunVerificationRecordTests
     private static readonly DateTimeOffset Sealed = new(2026, 10, 2, 9, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan Took = TimeSpan.FromSeconds(12);
 
-    private static WorkspaceContract Contract(string baseRevision = Pinned) => new(
-        RepoRoot: "/proj",
-        BaseRevision: baseRevision,
-        BaseBranch: "dev",
-        TrackedDirt: [],
-        UntrackedPresent: false,
-        Isolation: WorkspaceIsolation.Copy,
-        Limits: new WorkspaceLimits());
+    private static WorkspaceContract Contract(string baseRevision = Pinned) => TestContracts.Workspace(baseRevision);
 
     private static RunCheck Pass(string revision = Pinned) =>
         RunCheck.Passed("dotnet run --project tests/X", 0, revision, Env, Took);
