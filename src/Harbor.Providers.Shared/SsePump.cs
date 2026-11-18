@@ -26,27 +26,34 @@ namespace Harbor.Providers.Internal;
 internal static class ProviderPayload
 {
     /// <summary>
-    ///     First text block of a user message, or empty. Non-text blocks
-    ///     (images) are dropped — loudly: until <c>image_url</c> support lands,
-    ///     silently sending an empty prompt is worse than a warning.
+    ///     First non-empty text block of a message, or empty. One pass both
+    ///     picks the text and notices dropped non-text blocks; the drop warning
+    ///     fires at most once per message, AFTER the whole list was scanned,
+    ///     so a block behind a text block is reported too. Until
+    ///     <c>image_url</c> support lands, silently sending an empty prompt is
+    ///     worse than a warning.
     /// </summary>
     public static string FirstTextOrEmpty(IReadOnlyList<LlmContentBlock> content, ILogger logger, string providerId)
     {
+        string first = "";
+        bool dropWarned = false;
         for (int i = 0; i < content.Count; i++)
         {
-            if (content[i] is not LlmTextBlock)
+            if (content[i] is LlmTextBlock text)
+            {
+                if (text.Text.Length > 0 && first.Length == 0)
+                {
+                    first = text.Text;
+                }
+            }
+            else if (!dropWarned)
             {
                 SsePumpLog.DroppingNonTextContent(logger, providerId);
-                break;
+                dropWarned = true;
             }
         }
 
-        foreach (var block in content)
-        {
-            if (block is LlmTextBlock { Text: { Length: > 0 } text })
-                return text;
-        }
-        return "";
+        return first;
     }
 }
 
