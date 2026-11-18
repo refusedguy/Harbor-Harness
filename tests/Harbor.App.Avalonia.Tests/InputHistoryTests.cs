@@ -13,7 +13,6 @@ using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
@@ -62,12 +61,6 @@ public class InputHistoryTests
         public void ResetAbortSource() { }
     }
 
-    private sealed class FakeToastService : IToastService
-    {
-        public event EventHandler<ToastNotification>? ToastAdded;
-        public void Show(string message, ToastKind kind = ToastKind.Info) { }
-    }
-
     private sealed class FakeLogger<T> : ILogger<T>, ILogger
     {
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
@@ -86,7 +79,7 @@ public class InputHistoryTests
             new FakeSessionStore(),
             new TestDispatcherAdapter(),
             new FakeLogger<ChatViewModel>(),
-            new FakeToastService(),
+            new SilentToastService(),
             new UiRenderEngine(new DefaultUiProjector(), new AvaloniaUiViewport(), new ChatStreamingPresenter()));
     }
 
