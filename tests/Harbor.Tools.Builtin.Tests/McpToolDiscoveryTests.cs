@@ -65,6 +65,42 @@ public class McpToolDiscoveryTests
     }
 
     [Test]
+    public async Task RegisterAsync_AppOnlyTools_AreHiddenFromTheModelCatalog()
+    {
+        // MCP Apps spec (2026-01-26): _meta.ui.visibility is an array of
+        // "model"/"app". Absent -> visible to both; present without "model" ->
+        // app-only and must never reach the LLM. This mirrors goose-agent's
+        // is_tool_visible_to_model.
+        var mcp = new FakeMcpRegistry(["ui"]);
+        mcp.Handler = (_, method, _) => method == "tools/list"
+            ? Result.Success("""
+            {"result":{"tools":[
+              {"name":"plain"},
+              {"name":"model_only","_meta":{"ui":{"visibility":["model"]}}},
+              {"name":"app_only","_meta":{"ui":{"visibility":["app"]}}},
+              {"name":"both","_meta":{"ui":{"visibility":["app","model"]}}},
+              {"name":"empty","_meta":{"ui":{"visibility":[]}}},
+              {"name":"malformed","_meta":{"ui":{"visibility":"model"}}}
+            ]}}
+            """)
+            : Result.Failure<string>("unexpected method");
+        var tools = new ToolRegistry();
+        var agents = new AgentRegistry();
+        agents.Register(AgentDefinition.CodeDefault("model", "provider"));
+
+        int added = await McpToolDiscovery.RegisterAsync(
+            mcp, tools, agents, NullLoggerFactory.Instance, NullLogger.Instance);
+
+        // Only the three model-visible tools enter the registry. The exact count
+        // plus the three positive names prove the app-only ones were dropped.
+        await Assert.That(added).IsEqualTo(3);
+        var names = tools.GetAllTools().Select(t => t.Name.Value).ToArray();
+        await Assert.That(names).Contains("mcp_ui_plain");
+        await Assert.That(names).Contains("mcp_ui_model_only");
+        await Assert.That(names).Contains("mcp_ui_both");
+    }
+
+    [Test]
     public async Task RegisterAsync_FollowsNextCursor_SoALaterPageIsNotSilentlyDropped()
     {
         // #2228: tools/list is paginated. A single un-cursored call would see
