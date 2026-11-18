@@ -14,6 +14,7 @@ public sealed class SpecNode
 {
     private readonly List<SpecOp> _operations = [];
     private readonly List<SpecNode> _children = [];
+    private string? _id;
     private bool _claimed;
 
     /// <summary>Creates a node for a kind and a 1-based source line.</summary>
@@ -44,6 +45,13 @@ public sealed class SpecNode
     /// <summary>Column of the kind identifier in the markup file, one-based.</summary>
     public int SourceColumn { get; }
 
+    /// <summary>
+    /// Stable identity declared with <c>.id "name"</c>, or null when the node
+    /// is addressed by its position. The runtime turns this into a named
+    /// <c>ElementId</c> step so state survives sibling reorders.
+    /// </summary>
+    public string? Id => _id;
+
     /// <summary>Recorded operations in source order.</summary>
     public IReadOnlyList<SpecOp> Operations => _operations;
 
@@ -66,6 +74,22 @@ public sealed class SpecNode
             throw Reuse("cannot receive an operation after it was claimed");
 
         _operations.Add(op);
+    }
+
+    /// <summary>
+    /// Sets the stable identity of this node. A node is single-use: an id
+    /// cannot be assigned after it was claimed.
+    /// </summary>
+    /// <param name="id">Non-empty identity declared in markup.</param>
+    /// <exception cref="SpecNodeReuseException">The node was already claimed.</exception>
+    public void SetId(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+            throw new ArgumentException("An id must not be empty.", nameof(id));
+        if (_claimed)
+            throw Reuse("cannot receive an id after it was claimed");
+
+        _id = id;
     }
 
     /// <summary>Attaches a child node to this node.</summary>

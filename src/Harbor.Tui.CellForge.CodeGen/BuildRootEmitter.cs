@@ -75,6 +75,9 @@ internal static class BuildRootEmitter
             $"    internal const int RootCount = {Number(parse.Arena.Roots.Count)};",
             $"    internal const int SequenceCount = {Number(CountSequences(parse.Arena))};",
             $"    internal const string SourceChecksum = {Literal(checksum)};",
+            // #2517: ids from .id operations reach the generated class through
+            // SpecNode.Id, so a consumer can map a parsed node to a stable key.
+            $"    internal static readonly string[] NodeIds = [{IdList(parse.Arena)}];",
         };
 
         // #2431: a comment per node and operation carries its 1-based source
@@ -181,6 +184,19 @@ internal static class BuildRootEmitter
         }
 
         return string.Empty;
+    }
+
+    /// <summary>Quoted ids from the arena, in node order, for the generated class.</summary>
+    private static string IdList(SpecArena arena)
+    {
+        var ids = new List<string>();
+        foreach (var node in arena.Nodes)
+        {
+            if (node.Id is not null)
+                ids.Add(Literal(node.Id));
+        }
+
+        return string.Join(", ", ids);
     }
 
     internal static string Literal(string value) => EmittedCSharp.StringLiteral(value);

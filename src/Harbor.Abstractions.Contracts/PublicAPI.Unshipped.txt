@@ -291,9 +291,11 @@ Harbor.Abstractions.Dsl.SpecNode.AddOperation(Harbor.Abstractions.Dsl.SpecOp! op
 Harbor.Abstractions.Dsl.SpecNode.Children.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecNode!>!
 Harbor.Abstractions.Dsl.SpecNode.Claim() -> void
 Harbor.Abstractions.Dsl.SpecNode.DebugTree() -> string!
+Harbor.Abstractions.Dsl.SpecNode.Id.get -> string?
 Harbor.Abstractions.Dsl.SpecNode.IsClaimed.get -> bool
 Harbor.Abstractions.Dsl.SpecNode.Kind.get -> Harbor.Abstractions.Dsl.SpecKind
 Harbor.Abstractions.Dsl.SpecNode.Operations.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecOp!>!
+Harbor.Abstractions.Dsl.SpecNode.SetId(string! id) -> void
 Harbor.Abstractions.Dsl.SpecNode.SourceColumn.get -> int
 Harbor.Abstractions.Dsl.SpecNode.SourceLine.get -> int
 Harbor.Abstractions.Dsl.SpecNode.SpecNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine) -> void

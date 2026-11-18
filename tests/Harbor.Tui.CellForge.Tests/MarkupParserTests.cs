@@ -50,6 +50,36 @@ public class MarkupParserTests
     }
 
     [Test]
+    public async Task Parse_IdOperation_SetsStableNodeId()
+    {
+        const string markup = """
+            panel "main":
+                .id "files-panel"
+                text "x":
+                    .id "row-1"
+            """;
+
+        var result = MarkupParser.Parse(markup);
+
+        await Assert.That(result.IsValid).IsTrue();
+        var root = result.Arena.Roots[0];
+        await Assert.That(root.Id).IsEqualTo("files-panel");
+        await Assert.That(result.Arena.Nodes[1].Id).IsEqualTo("row-1");
+        // .id is still a regular operation in the IR stream.
+        await Assert.That(root.Operations.Any(o => o.Name == "id" && o.Arguments[0].Text == "files-panel")).IsTrue();
+    }
+
+    [Test]
+    public async Task Parse_InvalidId_ReportsDiagnostic()
+    {
+        var result = MarkupParser.Parse("panel \"main\":\n    .id 17\n");
+
+        await Assert.That(result.IsValid).IsFalse();
+        await Assert.That(result.Diagnostics[0].Message).Contains(".id needs one quoted name");
+        await Assert.That(result.Arena.Roots[0].Id).IsNull();
+    }
+
+    [Test]
     public async Task Parse_EveryDeclaredKind_ResolvesFromSnakeAndPascalNames()
     {
         foreach (var kind in Enum.GetValues<SpecKind>())

@@ -332,6 +332,35 @@ public class MarkupGeneratorAdditionalTextTests
         await Assert.That(source).Contains($"{render}FlexTrack.Percent(0.5f)");
     }
 
+    [Test]
+    public async Task Generator_EmitsNodeIdsFromMarkup()
+    {
+        const string markup = "panel \"main\":\n    .id \"files-panel\"\n";
+        var run = RunText(markup, "Fixtures/Ids.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var source = Source(run, ".Declarations.g.cs");
+        await Assert.That(source).Contains("NodeIds");
+        await Assert.That(source).Contains("\"files-panel\"");
+    }
+
+    [Test]
+    public async Task Generator_KeyedChild_UsesNamedAddOverload()
+    {
+        const string markup = """
+            row "main":
+                text "a":
+                    .id "alpha"
+                text "b"
+            """;
+        var run = RunText(markup, "Fixtures/Keyed.harbor-ui");
+        var buildRoot = Source(run, ".BuildRoot.g.cs");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        await Assert.That(buildRoot).Contains("n0.Add(n1, \"alpha\", global::Harbor.Tui.CellForge.Rendering.FlexTrack.Fill());");
+        await Assert.That(buildRoot).Contains("n0.Add(n2, global::Harbor.Tui.CellForge.Rendering.FlexTrack.Fill());");
+    }
+
     private static GeneratorDriverRunResult Run(AdditionalText file, AnalyzerConfigOptionsProvider options)
     {
         var compilation = CSharpCompilation.Create("MarkupWiring");
