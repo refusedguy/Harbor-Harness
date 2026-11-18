@@ -206,7 +206,7 @@ public sealed class ExecutionNodeProjection
         if (_activeRunId is null || _rootNodeId is null)
             return;
 
-        if (_turnNodes.TryGetValue(evt.TurnIndex, out ExecutionNodeId previous))
+        if (_turnNodes.TryGetValue(evt.TurnIndex, out ExecutionNodeId? previous) && previous is not null)
         {
             Finish(previous, evt.Timestamp, ExecutionNodeState.Completed);
         }
@@ -239,7 +239,7 @@ public sealed class ExecutionNodeProjection
 
     private void EndTool(ToolExecutionEndEvent evt)
     {
-        if (!_toolNodes.TryGetValue(evt.ToolCallId, out ExecutionNodeId id))
+        if (!_toolNodes.TryGetValue(evt.ToolCallId, out ExecutionNodeId? id) || id is null)
             return;
 
         Finish(id, evt.Timestamp, evt.IsError ? ExecutionNodeState.Failed : ExecutionNodeState.Completed);
