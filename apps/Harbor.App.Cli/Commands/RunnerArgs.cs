@@ -42,39 +42,50 @@ internal static class RunnerArgs
         string? id = null;
         string? directory = null;
         string? envFile = null;
+        string? failure = null;
         var remaining = new List<string>(args.Length);
 
         for (int i = 0; i < args.Length; i++)
         {
             string arg = args[i];
-            if (!TryMatch(arg, "--runner-id", out string? inlineId))
+            FlagMatch match = Match(arg, "--runner-id");
+            string flag = "--runner-id";
+            if (!match.IsMatch)
             {
-                if (!TryMatch(arg, "--runner-dir", out string? inlineDirectory))
-                {
-                    if (!TryMatch(arg, "--amp-env", out string? inlineEnvFile))
-                    {
-                        remaining.Add(arg);
-                        continue;
-                    }
-
-                    var envResult = ResolveValue(args, ref i, "--amp-env", inlineEnvFile);
-                    if (envResult.IsFailure) return Result.Failure<RunnerInvocation>(envResult.Error);
-                    envFile = envResult.Value;
-                    continue;
-                }
-
-                var dirResult = ResolveValue(args, ref i, "--runner-dir", inlineDirectory);
-                if (dirResult.IsFailure) return Result.Failure<RunnerInvocation>(dirResult.Error);
-                directory = dirResult.Value;
+                match = Match(arg, "--runner-dir");
+                flag = "--runner-dir";
+            }
+            if (!match.IsMatch)
+            {
+                match = Match(arg, "--amp-env");
+                flag = "--amp-env";
+            }
+            if (!match.IsMatch)
+            {
+                remaining.Add(arg);
                 continue;
             }
 
-            var idResult = ResolveValue(args, ref i, "--runner-id", inlineId);
-            if (idResult.IsFailure) return Result.Failure<RunnerInvocation>(idResult.Error);
-            id = idResult.Value;
+            (bool ok, string value, string? error) = TakeValue(args, ref i, match, flag);
+            if (!ok)
+            {
+                failure ??= error;
+                continue;
+            }
+
+            if (flag == "--runner-id") id = value;
+            else if (flag == "--runner-dir") directory = value;
+            else envFile = value;
         }
 
-        return new RunnerInvocation(id, directory, envFile, remaining);
+        if (failure is not null)
+            return Result.Failure<RunnerInvocation>(failure);
+
+        return Normalize(id, "--runner-id", false)
+            .Bind(normalizedId => Normalize(directory, "--runner-dir", true)
+                .Bind(normalizedDirectory => Normalize(envFile, "--amp-env", true)
+                    .Map(normalizedEnvFile =>
+                        new RunnerInvocation(normalizedId, normalizedDirectory, normalizedEnvFile, remaining))));
     }
 
     /// <summary>
@@ -83,7 +94,7 @@ internal static class RunnerArgs
     ///     all inherit the overlaid values. File values win over values already
     ///     present in the process environment.
     /// </summary>
-    internal static Result Apply(RunnerInvocation invocation)
+    internal static Result<IReadOnlyList<KeyValuePair<string, string>>> Apply(RunnerInvocation invocation)
     {
         ArgumentNullException.ThrowIfNull(invocation);
 
@@ -97,33 +108,15 @@ internal static class RunnerArgs
         }
 
         if (invocation.EnvFile is null)
-            return Result.Success();
+            return Result.Success<IReadOnlyList<KeyValuePair<string, string>>>(
+                Array.Empty<KeyValuePair<string, string>>());
 
-        if (!File.Exists(invocation.EnvFile))
-            return Result.Failure($"--amp-env: file not found: '{invocation.EnvFile}'.");
-
-        string content;
-        try
+        return ReadEnvFile(invocation.EnvFile).Map(pairs =>
         {
-            content = File.ReadAllText(invocation.EnvFile);
-        }
-        catch (IOException ex)
-        {
-            return Result.Failure($"--amp-env: cannot read '{invocation.EnvFile}': {ex.Message}");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Result.Failure($"--amp-env: cannot read '{invocation.EnvFile}': {ex.Message}");
-        }
-
-        var parsed = ParseEnvFile(content);
-        if (parsed.IsFailure)
-            return Result.Failure($"--amp-env '{invocation.EnvFile}': {parsed.Error}");
-
-        for (int i = 0; i < parsed.Value.Count; i++)
-            Environment.SetEnvironmentVariable(parsed.Value[i].Key, parsed.Value[i].Value);
-
-        return Result.Success();
+            for (int i = 0; i < pairs.Count; i++)
+                Environment.SetEnvironmentVariable(pairs[i].Key, pairs[i].Value);
+            return pairs;
+        });
     }
 
     /// <summary>
@@ -170,51 +163,81 @@ internal static class RunnerArgs
         return result;
     }
 
-    private static bool TryMatch(string arg, string flag, out string? inlineValue)
+    private static Result<IReadOnlyList<KeyValuePair<string, string>>> ReadEnvFile(string path)
     {
-        if (arg.Equals(flag, StringComparison.OrdinalIgnoreCase))
+        if (!File.Exists(path))
+            return Result.Failure<IReadOnlyList<KeyValuePair<string, string>>>(
+                $"--amp-env: file not found: '{path}'.");
+
+        string content;
+        try
         {
-            inlineValue = null;
-            return true;
+            content = File.ReadAllText(path);
+        }
+        catch (IOException ex)
+        {
+            return Result.Failure<IReadOnlyList<KeyValuePair<string, string>>>(
+                $"--amp-env: cannot read '{path}': {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Result.Failure<IReadOnlyList<KeyValuePair<string, string>>>(
+                $"--amp-env: cannot read '{path}': {ex.Message}");
         }
 
-        if (arg.StartsWith(flag + "=", StringComparison.OrdinalIgnoreCase))
-        {
-            inlineValue = arg[(flag.Length + 1)..];
-            return true;
-        }
-
-        inlineValue = null;
-        return false;
+        return ParseEnvFile(content).MapError(error => $"--amp-env '{path}': {error}");
     }
 
-    private static Result<string> ResolveValue(string[] args, ref int index, string flag, string? inlineValue)
+    private static Result<string?> Normalize(string? value, string flag, bool normalizePath)
     {
-        string? value = inlineValue;
         if (value is null)
-        {
-            if (index + 1 >= args.Length)
-                return Result.Failure<string>($"{flag} requires a value.");
-            value = args[++index];
-        }
-
+            return Result.Success<string?>(null);
         if (value.Length == 0)
-            return Result.Failure<string>($"{flag} requires a non-empty value.");
+            return Result.Failure<string?>($"{flag} requires a non-empty value.");
         if (value.Length > MaxValueLength)
-            return Result.Failure<string>($"{flag} value exceeds {MaxValueLength} characters.");
+            return Result.Failure<string?>($"{flag} value exceeds {MaxValueLength} characters.");
         foreach (char c in value)
         {
             if (char.IsControl(c))
-                return Result.Failure<string>($"{flag} value contains a control character.");
+                return Result.Failure<string?>($"{flag} value contains a control character.");
         }
 
-        if (flag.Equals("--amp-env", StringComparison.OrdinalIgnoreCase) ||
-            flag.Equals("--runner-dir", StringComparison.OrdinalIgnoreCase))
+        if (!normalizePath)
+            return Result.Success<string?>(value);
+
+        try
         {
-            value = Path.GetFullPath(value);
+            return Result.Success<string?>(Path.GetFullPath(value));
         }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return Result.Failure<string?>($"{flag} is not a valid path: {ex.Message}");
+        }
+    }
 
-        return value;
+    private static FlagMatch Match(string arg, string flag)
+    {
+        if (arg.Equals(flag, StringComparison.OrdinalIgnoreCase))
+            return new FlagMatch(true, false, string.Empty);
+
+        string prefix = flag + "=";
+        if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return new FlagMatch(true, true, arg[prefix.Length..]);
+
+        return new FlagMatch(false, false, string.Empty);
+    }
+
+    private static (bool Ok, string Value, string? Error) TakeValue(
+        string[] args, ref int index, FlagMatch match, string flag)
+    {
+        if (match.HasInlineValue)
+            return (true, match.InlineValue, null);
+
+        if (index + 1 >= args.Length)
+            return (false, string.Empty, $"{flag} requires a value.");
+
+        index++;
+        return (true, args[index], null);
     }
 
     private static bool IsValidKey(string key)
@@ -228,4 +251,6 @@ internal static class RunnerArgs
         }
         return true;
     }
+
+    private readonly record struct FlagMatch(bool IsMatch, bool HasInlineValue, string InlineValue);
 }

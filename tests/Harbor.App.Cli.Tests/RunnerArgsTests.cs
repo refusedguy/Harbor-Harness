@@ -7,7 +7,10 @@ namespace Harbor.App.Cli.Tests;
 ///     dispatch, and the dotenv overlay is parsed without touching the process
 ///     environment. Parsing is pure; only <see cref="RunnerArgs.Apply" /> writes
 ///     environment variables, and the one test that calls it restores them.
+///     The bare <see cref="NotInParallelAttribute" /> is load-bearing: that write
+///     mutates a process-wide dictionary shared by every class in the project.
 /// </summary>
+[NotInParallel]
 public class RunnerArgsTests
 {
     [Test]
