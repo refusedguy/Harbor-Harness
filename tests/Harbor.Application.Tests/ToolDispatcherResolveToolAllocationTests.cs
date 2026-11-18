@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
@@ -22,6 +21,11 @@ namespace Harbor.Application.Tests;
 ///     tool call of every turn. The imperative form keeps both failure texts
 ///     and the same success instance while allocating only the one
 ///     <see cref="ToolName"/> record the parse already needed.
+///     <para>
+///         Uses TestKit's existing <see cref="CountingTool"/> rather than a
+///         new test-local ITool implementation: the seam-graph gate counts
+///         implementers, and a new one would make SEAM_GRAPH.md stale.
+///     </para>
 /// </summary>
 public class ToolDispatcherResolveToolAllocationTests
 {
@@ -43,23 +47,6 @@ public class ToolDispatcherResolveToolAllocationTests
             GetRulesetValue = PermissionRuleset.Empty;
             SaveAsyncResult = Result.Success();
         }
-    }
-
-    private sealed class NoopTool : ITool
-    {
-        public ToolName Name { get; } = ToolName.Create("noop");
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-        public string DisplayName => "noop";
-        public string Description => "ResolveTool gate harness tool.";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken ct = default) =>
-            Task.FromResult(ToolResult.Success("ok"));
     }
 
     /// <summary>
@@ -117,10 +104,10 @@ public class ToolDispatcherResolveToolAllocationTests
     [Test]
     public async Task ResolveTool_ValidName_ReturnsTheRegisteredInstance()
     {
-        var tool = new NoopTool();
+        var tool = new CountingTool();
         var dispatcher = NewDispatcher(new StubRegistry(tool));
 
-        Result<ITool> resolved = dispatcher.ResolveTool("noop");
+        Result<ITool> resolved = dispatcher.ResolveTool("counter");
 
         await Assert.That(resolved.IsSuccess).IsTrue();
         await Assert.That(ReferenceEquals(resolved.Value, tool)).IsTrue();
@@ -130,7 +117,7 @@ public class ToolDispatcherResolveToolAllocationTests
     public async Task ResolveTool_InvalidName_ErrorTextIsUnchanged()
     {
         const string raw = "Bad Name!";
-        var dispatcher = NewDispatcher(new StubRegistry(new NoopTool()));
+        var dispatcher = NewDispatcher(new StubRegistry(new CountingTool()));
 
         Result<ITool> resolved = dispatcher.ResolveTool(raw);
 
@@ -147,7 +134,7 @@ public class ToolDispatcherResolveToolAllocationTests
     [Test]
     public async Task ResolveTool_EmptyName_ErrorTextIsUnchanged()
     {
-        var dispatcher = NewDispatcher(new StubRegistry(new NoopTool()));
+        var dispatcher = NewDispatcher(new StubRegistry(new CountingTool()));
 
         Result<ITool> resolved = dispatcher.ResolveTool("");
 
@@ -158,26 +145,25 @@ public class ToolDispatcherResolveToolAllocationTests
     [Test]
     public async Task ResolveTool_UnknownTool_UsesAvailableToolsDiagnostic()
     {
-        var dispatcher = NewDispatcher(new StubRegistry(new NoopTool(), known: false));
+        var dispatcher = NewDispatcher(new StubRegistry(new CountingTool(), known: false));
 
-        Result<ITool> resolved = dispatcher.ResolveTool("noop");
+        Result<ITool> resolved = dispatcher.ResolveTool("counter");
 
         await Assert.That(resolved.IsFailure).IsTrue();
-        await Assert.That(resolved.Error).IsEqualTo("Unknown tool: 'noop'. Available: noop");
+        await Assert.That(resolved.Error).IsEqualTo("Unknown tool: 'counter'. Available: counter");
     }
 
     [Test]
     [NotInParallel]
     public async Task ResolveTool_SuccessPath_DropsTheCapturingClosures()
     {
-        var tool = new NoopTool();
-        var registry = new StubRegistry(tool);
+        var registry = new StubRegistry(new CountingTool());
         var dispatcher = NewDispatcher(registry);
 
         // The delegate is built once outside the window; invoking it does not
         // allocate. GetTool returns a cached Result<T> struct.
-        Func<Result<ITool>> current = () => dispatcher.ResolveTool("noop");
-        Func<Result<ITool>> old = () => OldResolveChain(registry, "noop");
+        Func<Result<ITool>> current = () => dispatcher.ResolveTool("counter");
+        Func<Result<ITool>> old = () => OldResolveChain(registry, "counter");
 
         double currentBytes = AllocatedPerCall(current);
         double oldBytes = AllocatedPerCall(old);
