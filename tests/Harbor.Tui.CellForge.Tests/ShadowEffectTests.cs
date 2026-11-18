@@ -1,6 +1,7 @@
 // #2696 item 12: the shadow post effect must be a pure per-cell transform,
 // must respect the dialog/split of the shifted rect, and must compose with the
 // existing fixed-slot pipeline without changing its bookkeeping.
+using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
