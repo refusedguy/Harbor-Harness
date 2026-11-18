@@ -1,0 +1,5 @@
+# golden: alert-inline
+## art (20x3)
+█  ✗ disk full      
+█                   
+█                   
