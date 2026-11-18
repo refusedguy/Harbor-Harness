@@ -51,7 +51,7 @@ public sealed class DropdownButton : IFocusTarget
     /// <inheritdoc />
     public string Id { get; }
 
-    /// <inheritdoc />
+    /// <summary>True while the host's focus router has this button.</summary>
     public bool Focused { get; private set; }
 
     /// <summary>Visible button text.</summary>
