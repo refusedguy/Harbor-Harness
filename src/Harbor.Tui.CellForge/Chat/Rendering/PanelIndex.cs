@@ -1,3 +1,5 @@
+namespace Harbor.Tui.CellForge.Rendering;
+
 /// <summary>
 /// Named panel registry behind <see cref="LayoutTree"/>. Owns every id-keyed
 /// operation (lookup, registration, replacement, removal) so identity has one
