@@ -78,7 +78,9 @@ public sealed class McpOAuthHandler : IDisposable
         _server = server;
         _serverUrl = serverUrl;
         _config = config;
-        _cache = cache ?? new McpOAuthTokenCache();
+        // The cache writes on this handler's behalf, so it logs through the
+        // same logger — a failed token write must not vanish from the log.
+        _cache = cache ?? new McpOAuthTokenCache(logger: logger);
 
         // One client, built once. The default is the plain client the old
         // per-call factory produced, with the same defaults (no custom handler,
@@ -177,7 +179,14 @@ public sealed class McpOAuthHandler : IDisposable
             return Result.Failure<Maybe<string>>($"MCP OAuth refresh failed for '{_server}': {result.Error}");
         }
 
-        _cache.Save(_server, result.Value);
+        // A fresh token we cannot persist is a failure, not a success: the
+        // caller would otherwise hand out a token that disappears on restart
+        // with no trace of why. The cache already logged the exception.
+        Result saved = _cache.Save(_server, result.Value);
+        if (saved.IsFailure)
+            return saved.ConvertFailure<Maybe<string>>()
+                .MapError(e => $"MCP OAuth refresh for '{_server}' succeeded but the token could not be cached: {e}");
+
         return Result.Success(Maybe<string>.From(result.Value.AccessToken));
     }
 
@@ -254,7 +263,10 @@ public sealed class McpOAuthHandler : IDisposable
             if (exchanged.IsFailure)
                 return Result.Failure<string>($"OAuth code exchange failed: {exchanged.Error}");
 
-            _cache.Save(_server, exchanged.Value);
+            Result saved = _cache.Save(_server, exchanged.Value);
+            if (saved.IsFailure)
+                return saved.ConvertFailure<string>();
+
             return Result.Success($"Logged in to MCP server '{_server}' (token cached, expires {exchanged.Value.ExpiresAtUtc:u}).");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -267,8 +279,11 @@ public sealed class McpOAuthHandler : IDisposable
         }
     }
 
-    /// <summary>Drop cached tokens (logout).</summary>
-    public void Logout() => _cache.Clear(_server);
+    /// <summary>
+    ///     Drop cached tokens (logout). A failed delete is reported as a
+    ///     <see cref="Result" /> failure instead of a silent no-op.
+    /// </summary>
+    public Result Logout() => _cache.Clear(_server);
 
     /// <summary>
     ///     Dispose the client this handler speaks over.
