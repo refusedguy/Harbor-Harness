@@ -1,9 +1,7 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using ConsoleAppFramework;
-using Harbor.Tools.Builtin;
 
 namespace Harbor.App.Cli.Commands;
 
@@ -23,8 +21,6 @@ internal static class CafPrCommands
 /// </summary>
 internal static class PrGuideRunner
 {
-    private static readonly TimeSpan GhTimeout = TimeSpan.FromSeconds(60);
-
     internal static async Task<int> RunAsync(string? pullRequest, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(pullRequest)
@@ -53,69 +49,12 @@ internal static class PrGuideRunner
         return 0;
     }
 
-    private static async Task<Result<string>> FetchDiffAsync(int number, CancellationToken cancellationToken)
-    {
-        var processes = new SystemProcessProxy();
-        var spec = new ProcessSpec
-        {
-            FileName = "gh",
-            Arguments = ["pr", "diff", "--unified=0", number.ToString(CultureInfo.InvariantCulture)],
-            WorkingDirectory = Environment.CurrentDirectory
-        };
-
-        Result<IProcessHandle> started = processes.Start(spec);
-        if (started.IsFailure) return started.ConvertFailure<string>();
-        using IProcessHandle handle = started.Value;
-
-        var stdout = new StringBuilder();
-        var stderr = new StringBuilder();
-        var stdoutEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var stderrEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        handle.StdoutLine += (_, e) =>
-        {
-            if (e.Line is null) stdoutEof.TrySetResult();
-            else stdout.AppendLine(e.Line);
-        };
-        handle.StderrLine += (_, e) =>
-        {
-            if (e.Line is null) stderrEof.TrySetResult();
-            else stderr.AppendLine(e.Line);
-        };
-        handle.BeginReading();
-
-        try
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(GhTimeout);
-            await handle.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            await Task.WhenAll(stdoutEof.Task, stderrEof.Task)
-                .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            if (!handle.HasExited) handle.KillTree();
-            return Result.Failure<string>("'gh pr diff' timed out.");
-        }
-        catch (TimeoutException)
-        {
-            if (!handle.HasExited) handle.KillTree();
-            return Result.Failure<string>("'gh pr diff' output did not drain within the time limit.");
-        }
-
-        if (handle.ExitCode != 0)
-        {
-            string detail = stderr.ToString().Trim();
-            return Result.Failure<string>(string.IsNullOrEmpty(detail)
-                ? $"'gh pr diff' exited with {handle.ExitCode}."
-                : detail);
-        }
-
-        return stdout.Length == 0
-            ? Result.Failure<string>("'gh pr diff' returned no output. Check that gh is installed and authenticated.")
-            : Result.Success(stdout.ToString());
-    }
+    private static Task<Result<string>> FetchDiffAsync(int number, CancellationToken cancellationToken) =>
+        // H8 moved the drained process seam into the shared runner so this verb
+        // and `harbor issue` cannot diverge on timeout/kill/drain behaviour.
+        GhProcessRunner.RunAsync(
+            ["pr", "diff", "--unified=0", number.ToString(CultureInfo.InvariantCulture)],
+            cancellationToken);
 
     private static void Print(IReadOnlyList<PrGuideEntry> entries)
     {
