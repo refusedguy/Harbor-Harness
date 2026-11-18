@@ -75,9 +75,13 @@ internal sealed class SessionsCommand : IReplCommand
     private static async Task RegenerateTitleAsync(IReplHost host, CancellationToken ct)
     {
         host.Palette.Hide();
-        // The wide-host reads live in SessionTitleService, whose measured
-        // consumer shape already includes them (FatInterfaceShapeRatchet).
-        await SessionTitleService.RegenerateForHostAsync(host, ct).ConfigureAwait(false);
+        // The ProviderRegistry/SessionModel reads live in SessionTitleService,
+        // whose measured consumer shape already includes them (FatInterfaceShapeRatchet).
+        var result = await SessionTitleService.RegenerateForHostAsync(host, ct).ConfigureAwait(false);
+        host.Bridge.AppendSystemLine(result.IsSuccess
+            ? $"✎ новое название: {result.Value}"
+            : $"! не удалось обновить название: {result.Error}");
+        host.WakeUp();
     }
 
     /// <summary>

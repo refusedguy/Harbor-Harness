@@ -30,21 +30,15 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
     ///     (issue #2684 S06). Kept here, next to the one-shot auto-title, so
     ///     both paths share the host surface already measured for this file.
     /// </summary>
-    public static async Task RegenerateForHostAsync(IReplHost host, CancellationToken ct)
+    public static Task<Result<string>> RegenerateForHostAsync(IReplHost host, CancellationToken ct)
     {
         if (host.SessionStore is not { } store)
         {
-            host.Bridge.AppendSystemLine("✎ недоступно: хост без хранилища сессий");
-            host.WakeUp();
-            return;
+            return Task.FromResult(Result.Failure<string>("хост без хранилища сессий"));
         }
 
-        var result = await SessionTitleRegenerator.RegenerateAsync(
-            store, host.ProviderRegistry, host.SessionModel.Id, ct).ConfigureAwait(false);
-        host.Bridge.AppendSystemLine(result.IsSuccess
-            ? $"✎ новое название: {result.Value}"
-            : $"! не удалось обновить название: {result.Error}");
-        host.WakeUp();
+        return SessionTitleRegenerator.RegenerateAsync(
+            store, host.ProviderRegistry, host.SessionModel.Id, ct);
     }
 
     public async Task MaybeAutoTitleAsync(CancellationToken ct)
