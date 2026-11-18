@@ -129,10 +129,9 @@ public class TypedBindingsGeneratorTests
         (_, GeneratorRunResult generator) = Run(markup, StateSource);
 
         await Assert.That(generator.Diagnostics.Length).IsEqualTo(1);
-        Diagnostic diagnostic = generator.Diagnostics[0];
-        await Assert.That(diagnostic.Id).IsEqualTo("HUI005");
-        await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Error);
-        await Assert.That(diagnostic.GetMessage()).Contains("ReadOnly");
+        await Assert.That(generator.Diagnostics[0].Id).IsEqualTo("HUI005");
+        await Assert.That(generator.Diagnostics[0].Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(generator.Diagnostics[0].GetMessage()).Contains("ReadOnly");
         await Assert.That(HasBindingsSource(generator)).IsFalse();
     }
 
