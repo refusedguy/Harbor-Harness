@@ -62,10 +62,10 @@ public class TypedBindingsGeneratorTests
         await Assert.That(generator.Diagnostics.Length).IsEqualTo(0);
         string source = BindingsSource(generator);
         await Assert.That(source).Contains("internal const string StateType = \"Sample.CounterState\"");
-        await Assert.That(source).Contains("Func<global::Sample.CounterState, ");
+        await Assert.That(source).Contains("Func<global::Sample.CounterState, int>");
         await Assert.That(source).Contains("s.Count");
         await Assert.That(source).Contains("s.User.Name");
-        await Assert.That(source).Contains("Action<global::Sample.CounterState, ");
+        await Assert.That(source).Contains("Action<global::Sample.CounterState, string>");
         await Assert.That(source).Contains("s.Title = v");
         await Assert.That(source).DoesNotContain("GetType");
         await Assert.That(source).DoesNotContain("GetProperty");
