@@ -1260,3 +1260,24 @@ E10, E14, E15, F8, F11), остальные — target design `[spec]` или м
 
 - Полный текст, таблица по влитым item и список нереализованных:
   [ADR-050](ADR-050-t3code-features-part1-report-verdict.md).
+
+## ADR-051: отчёт demo-gifs-metrics (#2691) — нового slice нет
+
+Issue #2691 — self-contained отчёт `demo-gifs-metrics`, переоткрытый после того,
+как в `dev` влился только один его slice. Инвентаризация `origin/dev`
+(`46414368`) через `git merge-base --is-ancestor` подтвердила два влитых slice:
+измеренная форма четырёх GIF (#2787, `b186262c`) и пути к скомпилированному
+`demo-repro` gate в лентах и `toolchain.lock` (#2879, `70409353`). Грейп
+`demo_repro.py` по дереву пуст.
+
+Decided: код не писать. Остальные пункты отчёта делятся на owner-decision
+(снижение fps, фиксация размера, ANSI-лента, `--scene all`, состояния вне демо),
+owner action (ре-базелинг манифеста через `gh workflow run demo.yml -f
+record_baseline=true`) и уже отклонённый PR-time A/B verdict. Диагнозы отчёта
+зафиксированы в `docs/DEMO_GIFS.md`. Гейты, пороги, `baseline.json`, ленты и
+`assets/demo/*.gif` не меняются. Issue остаётся OPEN как отчёт; комментарий
+содержит только хеш slice-коммита. Пересмотр — по новому факту: владелец
+выполняет ре-базелинг или заказывает ANSI-ленту отдельным issue.
+
+- Полный текст, таблица по пунктам отчёта и условия пересмотра:
+  [ADR-051](ADR-051-demo-gifs-metrics-report-verdict.md).
