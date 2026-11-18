@@ -41,20 +41,25 @@ public static class JsonArgs
             ? el.GetBoolean()
             : null;
 
-    /// <summary>Required string: Failure "Missing or empty '&lt;name&gt;'." when absent/empty.</summary>
+    /// <summary>
+    ///     Required string: Failure "Missing or empty '&lt;name&gt;'." when absent/empty.
+    ///     A thin wrapper over <see cref="JsonArgValidator.RequiredNonEmptyString" />,
+    ///     the canonical required-argument reader: the empty-but-not-blank rule and
+    ///     this method's message are preserved verbatim.
+    /// </summary>
     public static Result<string> RequireString(JsonElement args, string name)
     {
-        string? value = GetString(args, name);
-        return Result.SuccessIf(!string.IsNullOrEmpty(value), $"Missing or empty '{name}'.")
-            .Map(() => value!);
+        return JsonArgValidator.RequiredNonEmptyString(args, name, $"Missing or empty '{name}'.");
     }
 
-    /// <summary>Required int: Failure when absent/not a number.</summary>
+    /// <summary>
+    ///     Required int: Failure when absent/not a number. A thin wrapper over
+    ///     <see cref="JsonArgValidator.RequiredInt" />, the canonical required-argument
+    ///     reader, preserving this method's message.
+    /// </summary>
     public static Result<int> RequireInt(JsonElement args, string name)
     {
-        int? value = GetInt(args, name);
-        return Result.SuccessIf(value.HasValue, $"Missing or non-numeric '{name}'.")
-            .Map(() => value!.Value);
+        return JsonArgValidator.RequiredInt(args, name, $"Missing or non-numeric '{name}'.");
     }
 
     /// <summary>

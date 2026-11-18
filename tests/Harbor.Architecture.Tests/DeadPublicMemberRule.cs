@@ -1055,14 +1055,6 @@ public sealed class DeadPublicMemberRule
             + "is a second spelling of a build flag.",
             "https://github.com/refusedguy/Harbor-Harness/issues/1879"),
         new(
-            "Harbor.Abstractions.Tools.JsonArgs",
-            "RequireInt",
-            "A public helper with no caller: the sibling RequireString has "
-            + "them, and no tool in the tree asks for a required integer. It is kept because it is the "
-            + "documented pair of RequireString, and the pair is what a new tool would reach for — but "
-            + "nothing reaches for it yet.",
-            "https://github.com/refusedguy/Harbor-Harness/issues/1879"),
-        new(
             "Harbor.Plugins.Abstractions.PluginScript",
             "CapabilityDirective",
             "The parser that reads the directive hardcodes the spelling "
