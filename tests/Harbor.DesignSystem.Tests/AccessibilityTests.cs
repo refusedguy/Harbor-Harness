@@ -171,4 +171,38 @@ public class AccessibilityTests
         await Assert.That(mocha < Accessibility.TextAaRatio).IsTrue()
             .Because($"MochaOverlay0 on MochaBase = {mocha:F2} is not body-text tier");
     }
+
+    /// <summary>
+    ///     G77: the Avalonia desktop ships six HDS palettes (the catalog in
+    ///     <c>HdsThemeCatalog.PaletteNames</c>). The two Avalonia checks above
+    ///     pin only Catppuccin Mocha (dark) and Latte (light); four shipped
+    ///     palettes had no automated contrast contract at all. Pin the
+    ///     body-text / background pair of all six so a token edit that drops
+    ///     any palette below AA fails CI. Hex literals are the resolved values
+    ///     of each palette's <c>TextBrush</c> and <c>AppBackgroundBrush</c> in
+    ///     <c>Themes/Hds/&lt;Name&gt;.axaml</c> (inline or via StaticResource).
+    /// </summary>
+    [Test]
+    public async Task Avalonia_AllSixHdsPalettes_BodyText_ClearsAA()
+    {
+        (string Name, string Text, string Background)[] palettes =
+        [
+            ("CatppuccinMocha", "#CDD6F4", "#1E1E2E"),
+            ("HarborDesignTokens", "#B3B9C5", "#0A0E14"),
+            ("Lumen", "#2B2B2B", "#FFFDF7"),
+            ("Mono", "#E5E5E5", "#0A0A0A"),
+            ("Paper", "#2B2B2B", "#FCFCFA"),
+            ("Vapor", "#E8E8FF", "#0D002B"),
+        ];
+
+        await Assert.That(palettes.Length).IsEqualTo(6)
+            .Because("all six HDS palettes must be covered; that is the point of the guard");
+
+        foreach (var (name, text, background) in palettes)
+        {
+            double ratio = Accessibility.ContrastRatio(Hex(text), Hex(background));
+            await Assert.That(ratio).IsGreaterThanOrEqualTo(Accessibility.TextAaRatio)
+                .Because($"{name} TextBrush on AppBackgroundBrush = {ratio:F2}");
+        }
+    }
 }
