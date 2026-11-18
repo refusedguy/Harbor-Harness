@@ -1260,3 +1260,27 @@ E10, E14, E15, F8, F11), остальные — target design `[spec]` или м
 
 - Полный текст, таблица по влитым item и список нереализованных:
   [ADR-050](ADR-050-t3code-features-part1-report-verdict.md).
+
+## ADR-051: отчёт demo-gifs-metrics (#2691) — нового slice нет
+
+Issue #2691 — self-contained отчёт `demo-gifs-metrics`: аудит четырёх demo GIF,
+метрик записи и процедуры из `docs/DEMO_GIFS.md`, `demo.yml`, `demo/*.tape` и
+`demo/toolchain.lock`. Инвентаризация `origin/dev` (`46414368`), комментарии
+issue и `git grep` показали, что обе правки влиты: базовый slice (#2787, merge
+`b186262c`) и замена устаревших путей `tools/demo_repro.py` на
+`tools/gates/demo-repro/` в tapes и toolchain.lock (#2879, merge `70409353`).
+`git grep -n 'demo_repro' origin/dev -- docs/DEMO_GIFS.md demo/` возвращает
+пусто.
+
+Decided: код не писать. FPS ровно 12 и размер 0,919 MiB укладываются в лимиты
+гейта; аудит констатирует отсутствие дефекта. Покрытие всех 4 слотов и трёх
+сценариев полное; ANSI, `--scene all` и состояния вне демо-команды в корпусе не
+предусмотрены. Stale manifest и красный drift gate лечатся действием владельца
+`gh workflow run demo.yml -f record_baseline=true`, а не кодом. Гейты, пороги,
+golden и AOT-профиль не меняются. Issue остаётся OPEN как источник сравнения;
+комментарий содержит только хеш коммита ADR. Пересмотр — по новому факту:
+владелец называет конкретный отсутствующий контракт, потребителя и измеримую
+цель.
+
+- Полный текст, таблица по двум влитым правкам и выводы аудита:
+  [ADR-051](ADR-051-demo-gifs-metrics-report-verdict.md).
