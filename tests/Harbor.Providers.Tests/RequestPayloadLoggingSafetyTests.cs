@@ -1,4 +1,4 @@
-using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
