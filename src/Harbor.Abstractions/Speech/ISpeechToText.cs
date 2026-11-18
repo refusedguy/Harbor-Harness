@@ -18,6 +18,8 @@
 ///     onto the host's input thread: the composer buffer is not thread-safe.
 /// </para>
 /// </remarks>
+namespace Harbor.Abstractions.Speech;
+
 public interface ISpeechToText
 {
     /// <summary>
