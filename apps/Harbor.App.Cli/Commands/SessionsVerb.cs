@@ -8,7 +8,7 @@ namespace Harbor.App.Cli.Commands;
 
 /// <summary>
 ///     <c>harbor sessions</c> family: list (default), rename, export, export-zip, import,
-///     search, revert, checkpoint, checkpoints, rewind, tree, fork. Extracted from <c>Program</c> (#176);
+///     search, usage, revert, checkpoint, checkpoints, rewind, tree, fork. Extracted from <c>Program</c> (#176);
 ///     rename persists a new title via ISessionStore.UpdateAsync,
 ///     export/import round-trip one session through the portable line payload
 ///     built by <c>ISessionPorter</c> (see StorageModule for the backend wiring),
@@ -39,6 +39,8 @@ internal static class SessionsVerb
                 return await RunImportSessionAsync(logger, args.Skip(1).ToArray());
             case "search":
                 return await RunSearchSessionsAsync(args.Skip(1).ToArray());
+            case "usage":
+                return await RunUsageSessionAsync(args.Skip(1).ToArray());
             case "revert":
                 return await RunRevertSessionAsync(logger, args.Skip(1).ToArray());
             case "checkpoint":
@@ -53,7 +55,7 @@ internal static class SessionsVerb
                 return await RunForkSessionAsync(logger, args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|export-zip|export-md|export-json|import|search|revert|checkpoint|checkpoints|rewind|tree|fork]
+                                        Usage: harbor sessions [list|rename|export|export-zip|export-md|export-json|import|search|usage|revert|checkpoint|checkpoints|rewind|tree|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
@@ -63,6 +65,7 @@ internal static class SessionsVerb
                                           sessions export-json <id> [file] export session as a JSON document (default: harbor-session-<id>.json)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
+                                          sessions usage <id>                        report session cost and token usage
                                           sessions revert <id> <message-id>          rewind session to the given message
                                           sessions checkpoint <id> <message-id> [label]  mark a checkpoint over the message
                                           sessions checkpoints <id>             list checkpoints (and rewind trail) of the session
@@ -305,6 +308,25 @@ internal static class SessionsVerb
         using var host = HostBuilder.Build();
         var store = host.Services.GetRequiredService<ISessionStore>();
         return await SessionSearchRunner.RunAsync(Console.Out, Console.Error, store, string.Join(' ', rest), sessionFilter)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions usage &lt;session-id&gt;</c> — per-session cost and
+    ///     token usage from <see cref="ISessionStore.GetStatsAsync" />; the core
+    ///     lives in <see cref="SessionUsageRunner" /> (read-only).
+    /// </summary>
+    internal static async Task<int> RunUsageSessionAsync(string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions usage <session-id>");
+            return 2;
+        }
+
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        return await SessionUsageRunner.RunAsync(Console.Out, Console.Error, store, args[0])
             .ConfigureAwait(false);
     }
 
