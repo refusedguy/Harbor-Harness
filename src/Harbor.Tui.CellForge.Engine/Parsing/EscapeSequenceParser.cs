@@ -414,6 +414,14 @@ public sealed class EscapeSequenceParser
             (byte)'Q' => KeyCode.F2,
             (byte)'R' => KeyCode.F3,
             (byte)'S' => KeyCode.F4,
+            // Application keypad mode (DECKPAM). Only the operator/Enter
+            // finals are unambiguous here: xterm sends keypad digits as
+            // CSI A/B/C/D/H/F and the decimal as CSI 3 ~, which collide with
+            // arrows and Delete. Naming those needs the kitty disambiguate
+            // flag (see KittyKeyDecoder), so they stay with their CSI route.
+            (byte)'M' => KeyCode.KeypadEnter,
+            (byte)'k' => KeyCode.KeypadPlus,
+            (byte)'m' => KeyCode.KeypadMinus,
             _ => KeyCode.None,
         };
 

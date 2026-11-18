@@ -51,6 +51,21 @@ public class GoldenLegacyKeyTests
     }
 
     [Test]
+    [Arguments("\u001BOM", EngineInput.KeyCode.KeypadEnter)]  // DECKPAM Enter
+    [Arguments("\u001BOk", EngineInput.KeyCode.KeypadPlus)]   // DECKPAM add
+    [Arguments("\u001BOm", EngineInput.KeyCode.KeypadMinus)]  // DECKPAM subtract
+    public async Task Ss3_Application_Keypad_Decodes_To_Keypad_Keys(string input, EngineInput.KeyCode expected)
+    {
+        // Digits/decimal are intentionally absent: in application keypad mode
+        // xterm sends them as CSI A/B/C/D/H/F and CSI 3 ~, which collide with
+        // arrows and Delete. Only the kitty protocol can name those reliably.
+        var events = T.Feed(_parser, input);
+
+        await Assert.That(events.Length).IsEqualTo(1);
+        await A.IsKey(events[0], expected);
+    }
+
+    [Test]
     [Arguments(1, 5, EngineInput.KeyCode.Up, EngineInput.KeyModifiers.Ctrl)]  // 5−1 = bit2 = Ctrl (xterm legacy order!)
     [Arguments(1, 3, EngineInput.KeyCode.Up, EngineInput.KeyModifiers.Alt)]   // 3−1 = bit1 = Alt
     [Arguments(1, 7, EngineInput.KeyCode.Up, EngineInput.KeyModifiers.Alt | EngineInput.KeyModifiers.Ctrl)]
