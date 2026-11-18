@@ -116,7 +116,7 @@ public partial class Accordion : UserControl
         {
             ApplyExpansion(AccordionRules.Normalize(_expanded, Mode));
         }
-        else if (change.Property is IsBorderedProperty or IsDisabledProperty)
+        else if (change.Property == IsBorderedProperty || change.Property == IsDisabledProperty)
         {
             ApplyRowState();
         }
