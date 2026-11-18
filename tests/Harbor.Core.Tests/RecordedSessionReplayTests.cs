@@ -73,7 +73,13 @@ public class RecordedSessionReplayTests
         agents.Register(AgentDefinition.CodeDefault("test-model", "test"));
 
         var bus = new InMemoryEventBus();
-        var permissions = new PermissionService(agents, NullLogger<PermissionService>.Instance);
+        // Use the registry's derived policies, as the host does. The replay tool
+        // declares Opaque (it returns recorded text, it does not read a file), so
+        // the builtin path guard for the name "read" must not apply to it.
+        var permissions = new PermissionService(
+            agents,
+            NullLogger<PermissionService>.Instance,
+            safetyPolicies: () => tools.SafetyPolicies);
         var loop = new AgentLoop(
             providers,
             tools,
