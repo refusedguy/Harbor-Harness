@@ -25,7 +25,29 @@ namespace Harbor.Abstractions.Events;
 [JsonDerivedType(typeof(PluginBlockedEvent), "plugin_blocked")]
 public abstract record AgentEvent
 {
+    /// <summary>
+    ///     Version of the event shape carried by every event in this hierarchy.
+    ///     Bump when a semantically new field or a breaking shape change lands,
+    ///     so a consumer reading an older stream can tell what it is looking at.
+    /// </summary>
+    public const int CurrentSchemaVersion = 1;
+
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    ///     Schema version of this particular event. Defaults to
+    ///     <see cref="CurrentSchemaVersion" />; a producer replaying an older
+    ///     event can override it to the version the event was created with.
+    /// </summary>
+    public int SchemaVersion { get; init; } = CurrentSchemaVersion;
+
+    /// <summary>
+    ///     Whether this event is a journaled replay fact rather than a live
+    ///     semantic event. Consumers that replay history use this to tell a
+    ///     reconstructed event from one emitted by the running agent; both
+    ///     shapes stay in the same union so no event type has to be duplicated.
+    /// </summary>
+    public bool IsJournaled { get; init; }
 }
 
 public sealed record AgentStartEvent(
