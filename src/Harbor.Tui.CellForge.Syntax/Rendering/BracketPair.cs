@@ -64,11 +64,11 @@ internal static class BracketPair
         return BracketPairResult.None;
     }
 
-    private static (int Row, int Col)? Scan(IReadOnlyList<string> lines, int row, int col, char start, bool forward)
+    private static (int Row, int Col)? Scan(IReadOnlyList<string> lines, int row, int col, char startBracket, bool forward)
     {
         // Entry 0 is the bracket under the cursor; it is the last one popped.
         var stack = new List<(int Row, int Col, char Bracket)>(8);
-        stack.Add((row, col, start));
+        stack.Add((row, col, startBracket));
 
         for (int r = row; r >= 0 && r < lines.Count; r += forward ? 1 : -1)
         {
