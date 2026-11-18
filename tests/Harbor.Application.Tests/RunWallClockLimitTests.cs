@@ -15,6 +15,7 @@ using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using TUnit.Assertions;
 
@@ -52,6 +53,16 @@ namespace Harbor.Application.Tests;
 ///         <see cref="RunAsync_CancelledRunWithTimeoutConfigured_LimitIsNull" />
 ///         pins it to null on the cancel path — so the timeout stamp is produced
 ///         by the budget and not by the fact of ending (#591).
+///     </para>
+///     <para>
+///         <b>Mid-stream (#403).</b> The deadline is a token linked to the
+///         caller's, so an in-flight turn is interrupted rather than left to
+///         run past the budget. <see cref="RunAsync_MidStreamTimeout_InterruptsToolViaTokenAndStampsLimit" />
+///         proves the tool observes cancellation on that token and still gets
+///         a limit; <see cref="RunAsync_MidStreamUserCancel_StaysCancelledAndNeverBecomesTimeout" />
+///         proves the same interruption from the caller's token stays a
+///         cancel. Both use a clock whose timers move only when the test
+///         advances them.
 ///     </para>
 /// </remarks>
 public class RunWallClockLimitTests
@@ -106,15 +117,7 @@ public class RunWallClockLimitTests
         new(Session.Create("/tmp/harbor-wall-clock-limit-tests", "code", "test", "test-model"));
 
     /// <summary>A provider that never stops asking for tools, so only a budget can end the run.</summary>
-    private static ScriptedLlmClient AlwaysCallsATool() => new(
-    [
-        new LlmEvent[]
-        {
-            TestEvents.ToolCallStart(toolName: "clock"),
-            TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
-            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
-        }
-    ]);
+    private static ScriptedLlmClient AlwaysCallsATool() => AlwaysCalls("clock");
 
     private static AgentLoop Loop(
         ILlmClient client,
@@ -226,5 +229,144 @@ public class RunWallClockLimitTests
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Cancelled).IsTrue();
         await Assert.That(end.Limit).IsNull();
+    }
+
+    /// <summary>A provider that keeps asking for one named tool, so only a limit ends the run.</summary>
+    private static ScriptedLlmClient AlwaysCalls(string toolName) => new(
+    [
+        new LlmEvent[]
+        {
+            TestEvents.ToolCallStart(toolName: toolName),
+            TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
+        }
+    ]);
+
+    /// <summary>
+    ///     A tool that blocks until the token handed to it is cancelled. The
+    ///     point is the observation: a deadline that interrupted the run must
+    ///     reach the in-flight work through the token, not through an exception
+    ///     thrown by a timer on some other thread.
+    /// </summary>
+    private sealed class BlockingTool : FakeToolBase
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ObservedCancellation { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool CompletedNormally { get; private set; }
+
+        public BlockingTool()
+        {
+            Name = ToolName.Create("block");
+            DisplayName = "Block";
+            Description = "Blocks until its cancellation token fires.";
+        }
+
+        public override async Task<ToolResult> ExecuteAsync(
+            JsonElement args,
+            ToolContext context,
+            CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                ObservedCancellation.TrySetResult();
+                throw;
+            }
+
+            CompletedNormally = true;
+            return ToolResult.Success("done");
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_MidStreamTimeout_InterruptsToolViaTokenAndStampsLimit()
+    {
+        // The budget elapses while turn 1 is inside the tool. Advancing the
+        // virtual clock fires the deadline on the injected TimeProvider, which
+        // cancels the linked token the loop handed to the tool. No wall-clock
+        // sleep and no elapsed-time tolerance: the assertion counts the
+        // cancellation the tool observed.
+        var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch, fireTimerOnAdvance: true);
+        var tool = new BlockingTool();
+        var client = AlwaysCalls("block");
+        var bus = new FakeEventBus();
+        var agent = Agent(maxSteps: 50);
+        var loop = Loop(client, tool, bus, agent, clock, TimeSpan.FromMinutes(10));
+
+        Task<Result> run = loop.RunAsync(NewSession(), agent);
+        await tool.Started.Task;
+        clock.Advance(TimeSpan.FromHours(1));
+        // The wait is a hang guard for a broken implementation, not a timing
+        // assertion: the verdict comes from the tool and the terminal event.
+        Result result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await tool.ObservedCancellation.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Assert.That(tool.CompletedNormally).IsFalse();
+        await Assert.That(result).IsSuccessful();
+        var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Limit).IsEqualTo(RunLimitKind.Timeout);
+        await Assert.That(end.Cancelled).IsFalse();
+        await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
+        // Cleanup: the deadline's timer is released on the limit exit.
+        await Assert.That(clock.ActiveTimerCount).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task RunAsync_MidStreamUserCancel_StaysCancelledAndNeverBecomesTimeout()
+    {
+        // Same in-flight shape as the timeout test, but the caller's token is
+        // the one that fires and the clock never moves. If the linked deadline
+        // had merged the two causes, this run would come back as a limit.
+        var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch, fireTimerOnAdvance: true);
+        var tool = new BlockingTool();
+        var client = AlwaysCalls("block");
+        var bus = new FakeEventBus();
+        var agent = Agent(maxSteps: 50);
+        var loop = Loop(client, tool, bus, agent, clock, TimeSpan.FromMinutes(10));
+        using var cts = new CancellationTokenSource();
+
+        Task<Result> run = loop.RunAsync(NewSession(), agent, cts.Token);
+        await tool.Started.Task;
+        cts.Cancel();
+        Result result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await tool.ObservedCancellation.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Assert.That(result).IsFailed();
+        var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Cancelled).IsTrue();
+        await Assert.That(end.Limit).IsNull();
+        await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
+        await Assert.That(clock.ActiveTimerCount).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task RunAsync_ClockMovesButStaysUnderBudget_StepCapStillWins()
+    {
+        // Both limits are armed and the clock does move. The step cap is still
+        // the reason: three one-minute turns stay inside a ten-minute budget,
+        // so the two first-class limits remain distinguishable when both are
+        // configured and neither is idle.
+        var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch, fireTimerOnAdvance: true);
+        var tool = new ClockAdvancingTool(clock, TimeSpan.FromMinutes(1));
+        var client = AlwaysCallsATool();
+        var bus = new FakeEventBus();
+        var agent = Agent(maxSteps: 3);
+        var loop = Loop(client, tool, bus, agent, clock, TimeSpan.FromMinutes(10));
+
+        var result = await loop.RunAsync(NewSession(), agent);
+
+        await Assert.That(result).IsSuccessful();
+        await Assert.That(client.StreamCalls).IsEqualTo(3);
+        await Assert.That(tool.Executions).IsEqualTo(3);
+        var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Limit).IsEqualTo(RunLimitKind.MaxSteps);
+        await Assert.That(end.Limit).IsNotEqualTo(RunLimitKind.Timeout);
+        await Assert.That(end.Cancelled).IsFalse();
     }
 }
