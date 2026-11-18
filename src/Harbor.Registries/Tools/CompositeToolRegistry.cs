@@ -99,17 +99,15 @@ public sealed class CompositeToolRegistry : IToolRegistry
             foreach (var descriptor in source.GetAllTools())
             {
                 var result = source.GetTool(descriptor.Name);
-                if (!result.IsSuccess)
+                if (result.IsSuccess)
                 {
-                    continue;
-                }
+                    if (!seen.Add(result.Value.Name))
+                    {
+                        continue;
+                    }
 
-                if (!seen.Add(result.Value.Name))
-                {
-                    continue;
+                    builder.Add(result.Value);
                 }
-
-                builder.Add(result.Value);
             }
         }
 

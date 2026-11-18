@@ -293,11 +293,13 @@ public class ToolRegistrySnapshotTests
         var shared = ToolName.Create("shared_tool");
         var liveTool = live.GetTool(shared);
         var frozenTool = frozen.GetTool(shared);
+        var firstTool = first.GetTool(shared);
 
         await Assert.That(liveTool.IsSuccess).IsTrue();
         await Assert.That(frozenTool.IsSuccess).IsTrue();
+        await Assert.That(firstTool.IsSuccess).IsTrue();
         await Assert.That(ReferenceEquals(liveTool.Value, frozenTool.Value)).IsTrue();
-        await Assert.That(ReferenceEquals(liveTool.Value, first.GetTool(shared).Value)).IsTrue();
+        await Assert.That(ReferenceEquals(liveTool.Value, firstTool.Value)).IsTrue();
 
         await AssertSameNames(live.GetAllTools(), "shared_tool", "only_first", "only_second");
         await AssertSameNames(frozen.GetAllTools(), "shared_tool", "only_first", "only_second");
