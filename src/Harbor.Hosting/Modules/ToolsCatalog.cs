@@ -338,6 +338,14 @@ internal static class ToolsCatalog
                 ToolsCatalogLog.McpToolsRegistered(ctx.Logger, discovered);
         }
 
+        // #2675 item 041: amp.tools.disable parity. One process variable
+        // decides which registered tools are removed before the registry is
+        // frozen, so the model never sees a disabled tool and the dispatcher
+        // cannot execute one. With no variable set this is a strict no-op.
+        int disabled = ToolDisablePolicy.FromEnvironment().Apply(registry);
+        if (disabled > 0)
+            ToolsCatalogLog.ToolsDisabled(ctx.Logger, disabled);
+
         registry.Freeze();
         ToolsCatalogLog.ToolsRegistered(ctx.Logger, registry.GetAllTools().Count);
         return registry;
@@ -364,4 +372,7 @@ internal static partial class ToolsCatalogLog
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Registered {Count} MCP tools discovered via tools/list")]
     public static partial void McpToolsRegistered(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Disabled {Count} tools by tool-disable policy")]
+    public static partial void ToolsDisabled(ILogger logger, int count);
 }
