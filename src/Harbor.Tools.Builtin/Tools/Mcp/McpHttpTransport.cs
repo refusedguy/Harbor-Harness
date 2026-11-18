@@ -64,8 +64,13 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
     private readonly McpHttpClientFactory _clients;
+
+    // One transport instance is cached and reused for many overlapping calls
+    // (McpRegistry.ServerEntry). Both fields cross those call boundaries, so
+    // they are accessed through Volatile/Interlocked rather than as plain
+    // fields: the session id is first-writer-wins, disposal is one-shot.
     private string? _sessionId;
-    private bool _disposed;
+    private int _disposed;
 
     public McpHttpTransport(
         Uri endpoint,
@@ -103,7 +108,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         int? expectedId = null,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         var sw = Stopwatch.StartNew();
         HttpClient client = _clients.Client;
         string body = request.GetRawText();
@@ -185,12 +190,11 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
     public ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return ValueTask.CompletedTask;
         }
 
-        _disposed = true;
         _clients.Dispose();
         return ValueTask.CompletedTask;
     }
@@ -243,9 +247,10 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken.Value);
         }
 
-        if (_sessionId is not null)
+        string? sessionId = Volatile.Read(ref _sessionId);
+        if (sessionId is not null)
         {
-            httpRequest.Headers.TryAddWithoutValidation("Mcp-Session-Id", _sessionId);
+            httpRequest.Headers.TryAddWithoutValidation("Mcp-Session-Id", sessionId);
         }
 
         return httpRequest;
@@ -253,12 +258,22 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
     private void CaptureSession(HttpResponseMessage response)
     {
-        if (_sessionId is null
-            && response.Headers.TryGetValues("Mcp-Session-Id", out IEnumerable<string>? values)
-            && values.FirstOrDefault() is { Length: > 0 } sessionId)
+        if (Volatile.Read(ref _sessionId) is not null)
+            return;
+        if (!response.Headers.TryGetValues("Mcp-Session-Id", out IEnumerable<string>? values))
+            return;
+
+        string? announced = values.FirstOrDefault();
+        if (announced is null || announced.Length == 0)
+            return;
+
+        // Two initialize calls may answer at the same time. Only the first
+        // captured id wins; a later answer must not replace it mid-burst and
+        // send subsequent requests to a different session.
+        if (Interlocked.CompareExchange(ref _sessionId, announced, null) is null
+            && _logger is not null)
         {
-            _sessionId = sessionId;
-            if (_logger is not null) McpHttpTransportLog.SessionCaptured(_logger, sessionId);
+            McpHttpTransportLog.SessionCaptured(_logger, announced);
         }
     }
 
