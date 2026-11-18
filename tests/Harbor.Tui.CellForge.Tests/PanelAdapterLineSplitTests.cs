@@ -56,7 +56,7 @@ public class PanelAdapterLineSplitTests
     {
         var lines = new LinkedList<string>();
         lines.AddLast("a");
-        lines.AddLast(null!);
+        lines.AddLast((string)null!);
         lines.AddLast("b");
 
         await Assert.That(Shape(lines)).IsEqualTo("3:a||b");
