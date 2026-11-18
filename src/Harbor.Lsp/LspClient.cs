@@ -189,19 +189,30 @@ public sealed class LspClient : IAsyncDisposable
         return buffer;
     }
 
-    /// <summary>Source-generated serialization for known param DTOs; raw JsonElement passes through.</summary>
+    /// <summary>
+    ///     Serializes a param object through the AOT-safe source-generated
+    ///     <see cref="LspJsonContext"/>. The concrete type is resolved at run time
+    ///     through the context, so adding a new LSP param DTO needs only a
+    ///     <c>[JsonSerializable]</c> registration there. This client never grows
+    ///     another switch arm (OCP). A raw <see cref="JsonElement"/> passes through
+    ///     byte for byte, preserving the caller's original JSON.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     The param type is not registered in <see cref="LspJsonContext"/>.
+    /// </exception>
     private static string JsonSerializeParams(object parameters)
     {
-        return parameters switch
-        {
-            JsonElement element => element.GetRawText(),
-            LspWire.InitializeParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.InitializeParams),
-            LspWire.DidOpenTextDocumentParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.DidOpenTextDocumentParams),
-            LspWire.DidChangeTextDocumentParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.DidChangeTextDocumentParams),
-            LspWire.DidCloseTextDocumentParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.DidCloseTextDocumentParams),
-            LspWire.PositionParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.PositionParams),
-            _ => throw new InvalidOperationException($"No source-generated serializer for {parameters.GetType().Name}."),
-        };
+        if (parameters is JsonElement element)
+            return element.GetRawText();
+
+        Type type = parameters.GetType();
+        return JsonSerializer.Serialize(
+            parameters,
+            LspJsonContext.Default.GetTypeInfo(type)
+            ?? throw new InvalidOperationException(
+                $"LSP param type {type.Name} is not registered in {nameof(LspJsonContext)}. "
+                + "Add a [JsonSerializable] for it. An unregistered type cannot be "
+                + "serialized without reflection."));
     }
 
     private async Task WriteFrameAsync(ArrayBufferWriter<byte> payload, CancellationToken ct)
