@@ -66,6 +66,23 @@ public class NavigableChangeBlocksTests
     }
 
     [Test]
+    public async Task Replace_WithEmptyCollection_ClearsBothSidesAndAnchors()
+    {
+        var state = new NavigableChangeBlocks();
+        state.Replace([Block("a", "first", Line(1, "one"), Line(2, "two"))]);
+        state.MoveLine(BlockSide.Left, 1);
+        state.SetAnchor(BlockSide.Left);
+
+        await Assert.That(state.Replace(Array.Empty<ChangeBlock>())).IsTrue();
+        await Assert.That(state.Blocks).IsEmpty();
+        await Assert.That(state.BlockIndex(BlockSide.Left)).IsEqualTo(0);
+        await Assert.That(state.LineCursor(BlockSide.Left)).IsEqualTo(0);
+        await Assert.That(state.Anchor(BlockSide.Left)).IsNull();
+        await Assert.That(state.SelectedRange(BlockSide.Left).IsEmpty).IsTrue();
+        await Assert.That(state.Transfer().HasValue).IsFalse();
+    }
+
+    [Test]
     public async Task MoveBlock_ClearsAnchorAndLeavesOtherSideAlone()
     {
         var state = new NavigableChangeBlocks();
