@@ -80,7 +80,9 @@ public class LspFrameTransportTests
         await fromServer.WriteAsync(Encoding.ASCII.GetBytes("Content-Type: application/vscode-jsonrpc\r\n\r\n"), CancellationToken.None);
 
         await Assert.ThrowsAsync<FormatException>(async () =>
-            await transport.ReadFrameAsync(CancellationToken.None));
+        {
+            await transport.ReadFrameAsync(CancellationToken.None);
+        });
     }
 
     [Test]
@@ -93,7 +95,9 @@ public class LspFrameTransportTests
         await fromServer.WriteAsync(frame, CancellationToken.None);
 
         await Assert.ThrowsAsync<JsonException>(async () =>
-            await transport.ReadFrameAsync(CancellationToken.None));
+        {
+            await transport.ReadFrameAsync(CancellationToken.None);
+        });
     }
 }
 
