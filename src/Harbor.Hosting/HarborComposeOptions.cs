@@ -92,6 +92,13 @@ public sealed class HarborComposeOptions
     /// </summary>
     public TimeSpan? EventBusQueueAgeReportInterval { get; init; }
 
+    /// <summary>
+    ///     Process-resource sampling cadence (#2674 G2). <see langword="null" />
+    ///     leaves the sampler inert unless a host calls <c>Report()</c> itself;
+    ///     the CLI/desktop presets set <see cref="ResourceSampler.DefaultSampleInterval" />.
+    /// </summary>
+    public TimeSpan? ResourceSampleInterval { get; init; }
+
     /// <summary>Override for config.json location; defaults to &lt;HarborDir&gt;/config.json.</summary>
     public string? ConfigPath { get; init; }
 
@@ -179,6 +186,7 @@ public sealed class HarborComposeOptions
         DefaultStorageBackend = "jsonl",
         EventBusScrollback = 1000,
         EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
+        ResourceSampleInterval = ResourceSampler.DefaultSampleInterval,
     };
 
     /// <summary>Desktop preset: memory storage by default, no middlewares, no scrollback override.</summary>
@@ -186,6 +194,7 @@ public sealed class HarborComposeOptions
     {
         DefaultStorageBackend = "memory",
         EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
+        ResourceSampleInterval = ResourceSampler.DefaultSampleInterval,
     };
 
     private static string DefaultHarborDir() => Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome();

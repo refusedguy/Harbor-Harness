@@ -108,6 +108,10 @@ public static class TelemetryTagNames
     public const string EventBusPublishCount = "eventbus.publish.count";
     public const string DispatchQuantile = "dispatch.quantile";
 
+    // Process resource gauges (#2674 G2) — sampled by ResourceSampler.
+    public const string ProcessWorkingSetBytes = "process.memory.working.set.bytes";
+    public const string ProcessCpuUtilizationPercent = "process.cpu.utilization.percent";
+
     // The visible export sink (TelemetryTextExporter) — its own counters live
     // on the same canonical meter, so an external collector sees the export's
     // health next to the telemetry it exported. The prefix is what keeps the
