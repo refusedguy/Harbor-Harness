@@ -44,6 +44,10 @@ internal static class BuildRootEmitter
         "    /// <summary>Opens a node; <c>sequence</c> keys its frame.</summary>",
         "    void Begin(int sequence);",
         "",
+        // #2438: the declared .id is a test locator carried by the real tree.
+        "    /// <summary>Attaches the declared test locator to a node frame.</summary>",
+        "    void TestId(int sequence, string testId);",
+        "",
         "    /// <summary>Writes text; <c>sequence</c> keys its frame.</summary>",
         "    void Text(int sequence, string text);",
         "",
@@ -141,6 +145,11 @@ internal static class BuildRootEmitter
     {
         var begin = sequence++;
         body.Add($"        root.Begin({Number(begin)}); // {node.Kind}, line {Number(node.SourceLine)}");
+
+        // #2438: a declared .id reaches the automation protocol as testId
+        // through this call, so the locator lives in BuildRoot itself.
+        if (node.Id is not null)
+            body.Add($"        root.TestId({Number(begin)}, {Literal(node.Id)}); // testId, line {Number(node.SourceLine)}");
 
         if (node.Kind == SpecKind.Text)
         {
