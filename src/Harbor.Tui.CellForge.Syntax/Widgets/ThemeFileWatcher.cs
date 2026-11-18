@@ -47,6 +47,18 @@ public sealed class ThemeFileWatcher : IDisposable
     private readonly Action<HarborTheme>? _onApplied;
     private readonly Action<string>? _onError;
     private readonly Timer _timer;
+
+    /// <summary>
+    ///     One owner for the three coupled fields below. <see cref="Poll" /> (timer
+    ///     thread) and <see cref="TryUpdateVariables" /> (input/render thread) both
+    ///     mutate <c>_lastWriteUtc</c>, <c>LastApplied</c> and
+    ///     <c>_lastVariableSlots</c>; without a common lock a reader could see the
+    ///     theme from one write and the slot table from the other. Callbacks run
+    ///     outside this lock: the host's apply hook wakes the render loop and may
+    ///     call back into this watcher.
+    /// </summary>
+    private readonly object _gate = new();
+
     private DateTime _lastWriteUtc;
 
     /// <summary>
@@ -87,30 +99,44 @@ public sealed class ThemeFileWatcher : IDisposable
     /// <summary>One poll cycle — exposed for deterministic testing.</summary>
     public void Poll()
     {
+        HarborTheme? applied = null;
+        string? error = null;
         try
         {
-            if (!_store.TryGetLastWriteUtc(_path, out var stamp))
+            lock (_gate)
             {
-                return;
+                if (!_store.TryGetLastWriteUtc(_path, out var stamp))
+                {
+                    return;
+                }
+
+                if (stamp == _lastWriteUtc)
+                {
+                    return;
+                }
+
+                _lastWriteUtc = stamp;
+                ThemeParseResult result = _store.LoadFile(_path);
+                if (result.IsSuccess)
+                {
+                    LastApplied = Maybe.From(result.Theme);
+                    _lastVariableSlots = result.VariableSlots;
+                    TerminalColorPalette.Apply(result.Theme);
+                    applied = result.Theme;
+                }
+                else
+                {
+                    error = result.Error;
+                }
             }
 
-            if (stamp == _lastWriteUtc)
+            if (applied is not null)
             {
-                return;
+                _onApplied?.Invoke(applied);
             }
-
-            _lastWriteUtc = stamp;
-            ThemeParseResult result = _store.LoadFile(_path);
-            if (result.IsSuccess)
+            if (error is not null)
             {
-                LastApplied = Maybe.From(result.Theme);
-                _lastVariableSlots = result.VariableSlots;
-                TerminalColorPalette.Apply(result.Theme);
-                _onApplied?.Invoke(result.Theme);
-            }
-            else
-            {
-                _onError?.Invoke(result.Error);
+                _onError?.Invoke(error);
             }
         }
         catch (Exception ex)
@@ -133,21 +159,31 @@ public sealed class ThemeFileWatcher : IDisposable
     public bool TryUpdateVariables(IReadOnlyDictionary<string, string> variables)
     {
         Ensure.NotNull(variables);
-        if (LastApplied.HasNoValue)
+        HarborTheme? toApply = null;
+        string rebindError = string.Empty;
+        lock (_gate)
         {
-            return false;
+            if (LastApplied.HasNoValue)
+            {
+                return false;
+            }
+
+            if (ThemeJson.TryRebind(LastApplied.Value, _lastVariableSlots, variables, out var patched, out rebindError))
+            {
+                LastApplied = Maybe.From(patched);
+                TerminalColorPalette.Apply(patched);
+                toApply = patched;
+            }
         }
 
-        if (!ThemeJson.TryRebind(LastApplied.Value, _lastVariableSlots, variables, out var patched, out var error))
+        if (toApply is not null)
         {
-            _onError?.Invoke(error);
-            return false;
+            _onApplied?.Invoke(toApply);
+            return true;
         }
 
-        LastApplied = Maybe.From(patched);
-        TerminalColorPalette.Apply(patched);
-        _onApplied?.Invoke(patched);
-        return true;
+        _onError?.Invoke(rebindError);
+        return false;
     }
 
     public void Dispose() => _timer.Dispose();
