@@ -37,7 +37,7 @@ at commit `b1239b7b`, not a claim about future work.
 | P02 | Two-pane explorer with cross-pane actions | open, this slice |
 | P03 | Sortable table with sticky header | widget shipped |
 | P04 | Time-series graph or sparkline | widget shipped as CellChart |
-| P05 | Navigable diff with change blocks | open |
+| P05 | Navigable diff with change blocks | state primitive shipped |
 | P06 | Key legend and status line | engine and overlay support shipped |
 | P07 | Modal command palette with history | view shipped |
 | P08 | Copy mode with visible selection and OSC52 | widget shipped |
@@ -50,8 +50,8 @@ at commit `b1239b7b`, not a claim about future work.
 | P15 | Inline image with capability negotiation | engine support shipped |
 
 Three items were open when this catalog was written: P02, P05 and P13. P02 was
-implemented in #2884 as `TwoPaneState`, and P13 was later implemented as
-`FacetedHistoryState`. P05 remains the one open contract in this report.
+implemented in #2884 as `TwoPaneState`, P13 as `FacetedHistoryState`, and P05
+as `NavigableChangeBlocks` in this slice.
 
 ## The primitive
 
@@ -187,6 +187,20 @@ A pull request that implements P02 should satisfy all of the following:
 - No application domain type appears in the primitive's public surface.
 - The two-pane gallery seeds keep painting, so the change does not break the
   existing golden frames.
+
+## P05: navigable change blocks (shipped)
+
+P05 is implemented as
+[`NavigableChangeBlocks.cs`](../src/Harbor.Tui.CellForge.Engine/Rendering/NavigableChangeBlocks.cs).
+The primitive never names a hunk, a stage or a diff: the caller supplies
+prepared `ChangeBlock` records (identity, label and numbered lines), and the
+state owns only two sides, one active side, a block index, a line cursor and an
+optional selection anchor per side. Moving or selecting on one side never
+changes the other. `SelectedRange` is a normalized half-open range, so the
+caller gets either the single cursor line or an anchored range. `Rows()` is a
+pure projection for a clip and `Paint()` writes both sides to a
+`ScreenBuffer`; a transfer is reported as a `BlockTransfer` value, so no git or
+application type enters the primitive's public surface.
 
 ## P13: faceted history (shipped)
 
