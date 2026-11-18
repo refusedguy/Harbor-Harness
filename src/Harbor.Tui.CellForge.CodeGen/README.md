@@ -35,6 +35,7 @@ panel "main":
 - A node line starts with a kind, followed by optional arguments and an optional trailing `:`. The arguments are recorded as a `new` operation.
 - Kind names ignore case, underscores and dashes, so `filter_list`, `filter-list` and `FilterList` resolve to `SpecKind.FilterList`.
 - An operation line starts with `.`, then a name and optional arguments. It attaches to the nearest enclosing node.
+- `.id "name"` sets `SpecNode.Id`, a stable identity that becomes a named `ElementId` step at runtime. A keyed child keeps its prepaint record and element state when siblings are reordered.
 - Arguments are quoted strings, numbers, `true`/`false` or bare names. The parser classifies each one as a `SpecValueKind`.
 - Syntax errors become `MarkupDiagnostic` values with a 1-based line and column. The generator forwards them as `HZ0001` compiler errors with a location in the `.harbor-ui` file. A document that has diagnostics produces no generated source, so no empty `BuildRoot` is emitted or cached.
 - The generated declarations carry a SHA-256 `SourceChecksum` of the source text so dev mode can reject stale output, plus a comment per node and operation with its 1-based line and column from the IR.

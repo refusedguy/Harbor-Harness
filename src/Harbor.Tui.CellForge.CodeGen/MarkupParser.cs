@@ -102,12 +102,24 @@ public static class MarkupParser
                     continue;
                 }
 
-                levels[^1].Node.AddOperation(
-                    new SpecOp(
-                        operationTokens[0].Text,
-                        ArgumentsFrom(operationTokens, 1),
-                        lineNumber,
-                        indent + 2));
+                var name = operationTokens[0].Text;
+                var arguments = ArgumentsFrom(operationTokens, 1);
+                var target = levels[^1].Node;
+                if (string.Equals(name, "id", StringComparison.Ordinal))
+                {
+                    if (arguments.Length == 1
+                        && arguments[0].Kind == SpecValueKind.String
+                        && arguments[0].Text.Length > 0)
+                    {
+                        target.SetId(arguments[0].Text);
+                    }
+                    else
+                    {
+                        Add(diagnostics, lineNumber, indent + 2, ".id needs one quoted name.");
+                    }
+                }
+
+                target.AddOperation(new SpecOp(name, arguments, lineNumber, indent + 2));
                 continue;
             }
 

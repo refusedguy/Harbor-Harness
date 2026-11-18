@@ -96,7 +96,14 @@ internal static class SpecLayoutEmitter
                 var childVariable = EmitNode(child, body, ref next);
                 var add = new StringBuilder(Indent).Append(variable).Append(".Add(").Append(childVariable);
                 if (!overlay)
+                {
+                    // #2517: a declared id becomes the named key of the child,
+                    // so its prepaint record and state survive a reorder.
+                    if (child.Id is not null)
+                        add.Append(", ").Append(Literal(child.Id));
                     add.Append(", ").Append(FindTrack(child));
+                }
+
                 add.Append(");");
                 body.Add(add.ToString());
             }
@@ -126,6 +133,27 @@ internal static class SpecLayoutEmitter
         }
 
         return Render + "FlexTrack.Fill()";
+    }
+
+    private static string Literal(string value)
+    {
+        var text = new StringBuilder(value.Length + 2);
+        text.Append('"');
+        foreach (var c in value)
+        {
+            switch (c)
+            {
+                case '\\': text.Append("\\\\"); break;
+                case '"': text.Append("\\\""); break;
+                case '\n': text.Append("\\n"); break;
+                case '\r': text.Append("\\r"); break;
+                case '\t': text.Append("\\t"); break;
+                default: text.Append(c); break;
+            }
+        }
+
+        text.Append('"');
+        return text.ToString();
     }
 
     private static int FindInt(SpecNode node, string name, int fallback)
