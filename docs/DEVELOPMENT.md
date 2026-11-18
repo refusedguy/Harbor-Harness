@@ -206,6 +206,40 @@ exist, `git push`, and watch the `internal links` job fail on the PR.
 > still be the only thing linting markdown. The two workflows are meant to
 > coexist.
 
+### One lane, batched (issue #1068)
+
+The markdown checks are a single batch lane, not a slot per product area.
+`docs.yml` is that lane. Since `87626512` its `pull_request` trigger carries no
+`paths:` filter, so every pull request publishes the full set of required
+checks and a docs change reaches a gate without waiting for a product PR. The
+gates are batched by capability: the `tree` job runs every tree gate in one
+`harbor-gates all` command, and the three markdown gates (`check-md-links`,
+`md-lint`, `check-doc-cites`) each scan the whole tree. No workflow outside
+`docs.yml` runs a markdown check; the full `docfx build` sits in
+`docs-site.yml` behind a narrow site-input trigger. That split is SDK-free
+static checks versus an SDK build, not one product versus another. The
+recorded design is in [docs/CI_GATES.md](./CI_GATES.md).
+
+A docs-only PR goes through this lane on its own. `ci.yml` keeps `**.md` and
+`docs/**` in its `push` `paths-ignore`, and its heavy jobs are behind a paths
+filter, so a paragraph fix never rebuilds the solution; `docs.yml` returns the
+verdict in ~30 s with no .NET SDK. Do not delete those entries from `ci.yml`
+to "fix" a docs PR. That would rebuild the whole solution for a typo.
+
+Batch the edits: collect the docs that belong together and land them in one PR
+on this lane. Do not spend product slots on docs piecemeal, and do not split a
+single docs change across product PRs. The one exception is a doc touch inside
+a product PR that is at most ~15 lines and describes what that same PR did,
+such as an `AGENTS.md` counter, a `BENCHMARKS.md` row the PR measured, or the
+README of the project it changed. Anything larger gets its own PR, linked to
+the matching slice in #1068.
+
+The link and lint gates here are the compiled `harbor-gates check-md-links`
+and `harbor-gates md-lint`, successors of the old `tools/check-md-links.py`
+and `tools/md-lint.py`. Each has a `--self-test` step that plants a broken
+link or a malformed document and requires the gate to fail, so the lane cannot
+go green by scanning nothing.
+
 ### Local squash-merges
 
 A pull request that touches `.github/workflows/` cannot be merged through the
