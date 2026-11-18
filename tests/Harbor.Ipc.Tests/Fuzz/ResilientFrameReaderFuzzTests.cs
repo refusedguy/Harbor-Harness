@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Harbor.Ipc.Protocol;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests.Fuzz;
 
@@ -43,7 +44,11 @@ public class ResilientFrameReaderFuzzTests
     {
         AssertReaderAvailable();
         object? reader = ResilientFrameReaderProbe.CreateReader();
-        var rng = new Random(20260823);
+        // #2705 T03: the seed is a run parameter, not a literal buried in the
+        // test. It is echoed into the assertions so a failure names the exact
+        // input sequence needed to replay it.
+        int seed = TestSeeds.Values(20260823)[0];
+        var rng = new Random(seed);
 
         for (int i = 0; i < 25; i++)
         {
@@ -59,7 +64,8 @@ public class ResilientFrameReaderFuzzTests
 
             var probe = await ResilientFrameReaderProbe.ReadAsync(reader, ms);
 
-            await Assert.That(probe.Outcome).IsEqualTo(ResilientFrameReaderProbe.UndecodableFrame);
+            await Assert.That(probe.Outcome).IsEqualTo(ResilientFrameReaderProbe.UndecodableFrame)
+                .Because($"seed {seed}, case {i}: a fuzz failure must name the seed that replayed it");
             await Assert.That(probe.RequestId).IsNull();
             await Assert.That(probe.ErrorText).IsNotNull();
             await Assert.That(ms.Position).IsEqualTo(total);
@@ -76,7 +82,8 @@ public class ResilientFrameReaderFuzzTests
     {
         AssertReaderAvailable();
         object? reader = ResilientFrameReaderProbe.CreateReader();
-        var rng = new Random(424242);
+        int seed = TestSeeds.Values(424242)[0];
+        var rng = new Random(seed);
         string[] allowed = [ResilientFrameReaderProbe.UndecodableFrame, ResilientFrameReaderProbe.Request];
 
         for (int i = 0; i < 50; i++)
@@ -92,7 +99,8 @@ public class ResilientFrameReaderFuzzTests
 
             var probe = await ResilientFrameReaderProbe.ReadAsync(reader, ms);
 
-            await Assert.That(allowed).Contains(probe.Outcome);
+            await Assert.That(allowed).Contains(probe.Outcome)
+                .Because($"seed {seed}, case {i}: a fuzz failure must name the seed that replayed it");
             if (probe.Outcome == ResilientFrameReaderProbe.UndecodableFrame)
                 await Assert.That(probe.ErrorText).IsNotNull();
             else

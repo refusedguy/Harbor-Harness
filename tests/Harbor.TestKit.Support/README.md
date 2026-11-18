@@ -33,9 +33,25 @@ consumer needs regardless of which part the type lives in.
 | `TestEvents.cs`, `TestMessages.cs` | The event and message builders (#1821, #1816). |
 | `TestArgs.cs`, `TestToolArgs.cs`, `TestJson.cs`, `TestJsonContext.cs` | The shared argument and JSON helpers. |
 | `CapturingLogger.cs`, `EmptyServiceProvider.cs`, `ManualTimeProvider.cs` | The logging, container and clock doubles. |
+| `TestSeeds.cs` | The single seed source for stochastic tests, overridable from the environment. |
 | `TempDirScope.cs`, `EnvScope.cs`, `GitProbe.cs` | The three scopes: a temp directory, an environment variable, a git repository. |
 | `StubHttpMessageHandler.cs` | The HTTP handler double (#1825). |
 | `Exhaustive.cs`, `TestGitQuery.cs`, `TestEventBusMiddleware.cs`, `TestRepoPaths.cs`, `AppConfigDocument.cs` | The rest of the shared helpers. |
+
+## Reproducing a stochastic failure
+
+`TestSeeds.Values(defaults)` is the one place a fuzz, property or data-driven
+test reads its seeds. With no override it returns the defaults the test always
+used. `HARBOR_TEST_SEED` narrows a run to that one seed, and
+`HARBOR_TEST_ITERATIONS` walks forward from it:
+
+```
+HARBOR_TEST_SEED=99 dotnet run --project tests/Harbor.Tui.CellForge.Tests -c Release --no-build -- --treenode-filter "/*/*/DiffEngineFuzzTests/*"
+HARBOR_TEST_ITERATIONS=20 dotnet run --project tests/Harbor.Ipc.Tests -c Release --no-build -- --treenode-filter "/*/*/ResilientFrameReaderFuzzTests/*"
+```
+
+Both fuzz suites put the resolved seed in their failure message, so a red run
+can be replayed without guessing which input failed.
 
 ## Where a double belongs
 
