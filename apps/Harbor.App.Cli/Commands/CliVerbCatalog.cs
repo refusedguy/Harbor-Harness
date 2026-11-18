@@ -31,6 +31,7 @@ internal static class CliVerbCatalog
         "models",
         "sessions",
         "prompt",
+        "tools",
         "mcp",
         "serve",
         "tui",
