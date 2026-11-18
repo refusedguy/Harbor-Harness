@@ -395,3 +395,6 @@ Harbor.Abstractions.Sessions.ISessionOperationEventStore.AppendOperationEventAsy
 Harbor.Abstractions.Sessions.ISessionOperationEventStore.GetOperationEventsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionOperationEvent!>!>>!
 Harbor.Abstractions.Sessions.ISessionStore.AppendMessagesBatchAsync(string! sessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
 Harbor.Abstractions.Sessions.ISessionContext.OperationEvents.get -> Harbor.Abstractions.Sessions.ISessionOperationEventStore?
+Harbor.Abstractions.Speech.ISpeechToText
+Harbor.Abstractions.Speech.ISpeechToText.IsAvailable.get -> bool
+Harbor.Abstractions.Speech.ISpeechToText.StartAsync(System.Action<string!>! onPartial, System.Action<string!>! onFinal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!

@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
+using Harbor.Abstractions.Speech;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Harbor.App.Cli.Repl;
@@ -72,6 +73,10 @@ internal static class CellForgeModule
             ProbeInitialRows(),
             sizeSource: ReadTerminalSize));
 
+        // #2541: STT starts as an offline placeholder (no microphone, no model).
+        // A real backend replaces THIS registration only; the composer and the
+        // Ctrl+D route stay untouched.
+        services.AddSingleton<ISpeechToText>(new OfflineSpeechToText());
         services.AddSingleton<ComposerController>();
         services.AddSingleton<StatusViewModel>();
 
