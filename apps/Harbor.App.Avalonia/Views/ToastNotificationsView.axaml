@@ -50,6 +50,17 @@
                                        FontSize="11" FontWeight="SemiBold"
                                        VerticalAlignment="Center"
                                        Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}" />
+                            <!-- #2681 G48: explicit dismiss, in addition to the 4s timer.
+                                 CommandParameter is the ToastNotification itself; the
+                                 parent UserControl inherits MainViewModel as DataContext. -->
+                            <Button Name="Toast_DismissButton"
+                                    Classes="hds-ghost"
+                                    ToolTip.Tip="Dismiss notification"
+                                    AutomationProperties.Name="Dismiss notification"
+                                    Command="{Binding $parent[UserControl].DataContext.RemoveToastCommand}"
+                                    CommandParameter="{Binding}">
+                                <PathIcon Data="{StaticResource IcClose}" Width="12" Height="12" />
+                            </Button>
                         </StackPanel>
                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource TextPrimaryBrush}"

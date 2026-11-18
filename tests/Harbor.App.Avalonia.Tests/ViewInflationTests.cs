@@ -3,6 +3,7 @@
 // Use --treenode-filter (NOT --filter) per project memory.
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -301,4 +302,31 @@ public class ViewInflationTests
 file sealed class ToastVm
 {
     public ObservableCollection<Harbor.Ui.Framework.Services.ToastNotification> Toasts { get; } = new();
+
+    // #2681 G48: the dismiss button binds to this command on the parent
+    // UserControl's DataContext, so the inflation VM needs the same seam.
+    public ICommand RemoveToastCommand { get; }
+
+    public ToastVm()
+    {
+        RemoveToastCommand = new DismissCommand(Toasts);
+    }
+
+    private sealed class DismissCommand(
+        ObservableCollection<Harbor.Ui.Framework.Services.ToastNotification> toasts) : ICommand
+    {
+        public event EventHandler? CanExecuteChanged;
+
+        public bool CanExecute(object? parameter) => true;
+
+        public void Execute(object? parameter)
+        {
+            if (parameter is Harbor.Ui.Framework.Services.ToastNotification toast)
+            {
+                toasts.Remove(toast);
+            }
+        }
+
+        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    }
 }
