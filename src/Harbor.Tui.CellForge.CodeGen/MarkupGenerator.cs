@@ -43,6 +43,42 @@ public sealed class MarkupGenerator : IIncrementalGenerator
     private const string ProjectDirectoryOption = "build_property.MSBuildProjectDirectory";
     private const string HarborUiExtension = ".harbor-ui";
 
+    private static readonly DiagnosticDescriptor MissingStateRule = new(
+        id: "HUI002",
+        title: "Binding without a state type",
+        messageFormat: "{0}",
+        category: "CellForge.Markup",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A {Binding} needs a state: Type annotation in the markup file.");
+
+    private static readonly DiagnosticDescriptor UnknownStateTypeRule = new(
+        id: "HUI003",
+        title: "State type not found",
+        messageFormat: "{0}",
+        category: "CellForge.Markup",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The type named by state: is not in the compilation.");
+
+    private static readonly DiagnosticDescriptor UnknownPropertyRule = new(
+        id: "HUI004",
+        title: "Unknown binding property",
+        messageFormat: "{0}",
+        category: "CellForge.Markup",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A binding path does not resolve against the state type.");
+
+    private static readonly DiagnosticDescriptor ReadOnlyPropertyRule = new(
+        id: "HUI005",
+        title: "Read-only binding property",
+        messageFormat: "{0}",
+        category: "CellForge.Markup",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A two-way binding points at a property without a public setter.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -83,6 +119,52 @@ public sealed class MarkupGenerator : IIncrementalGenerator
                 output.Identifier + ".BuildRoot.g.cs",
                 SourceText.From(output.Source, Encoding.UTF8));
         });
+
+        // #2429. Resolving property paths needs the compilation's symbols.
+        // Compilation identity changes on every edit, but the phase's output
+        // is value-comparable, so AddSource only re-runs when the generated
+        // text or a diagnostic actually changes.
+        var bindings = declarations
+            .Combine(context.CompilationProvider)
+            .Select(static (pair, _) => TypedBindingsEmitter.Emit(
+                pair.Right,
+                pair.Left.TargetPath,
+                pair.Left.Identifier,
+                pair.Left.Text,
+                MarkupParser.Parse(pair.Left.Text)))
+            .WithTrackingName("MarkupGenerator.TypedBindings");
+
+        context.RegisterSourceOutput(bindings, static (spc, output) =>
+        {
+            foreach (var diagnostic in output.Diagnostics.Items)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    Descriptor(diagnostic.Id),
+                    MarkupLocation(output.TargetPath, diagnostic.Line, diagnostic.Column),
+                    diagnostic.Message));
+            }
+
+            if (output.Source.Length != 0)
+            {
+                spc.AddSource(
+                    output.Identifier + ".Bindings.g.cs",
+                    SourceText.From(output.Source, Encoding.UTF8));
+            }
+        });
+    }
+
+    private static DiagnosticDescriptor Descriptor(string id) => id switch
+    {
+        "HUI002" => MissingStateRule,
+        "HUI003" => UnknownStateTypeRule,
+        "HUI004" => UnknownPropertyRule,
+        _ => ReadOnlyPropertyRule,
+    };
+
+    private static Location MarkupLocation(string path, int line, int column)
+    {
+        var position = new LinePosition(Math.Max(line - 1, 0), Math.Max(column - 1, 0));
+        return Location.Create(path, new TextSpan(0, 0), new LinePositionSpan(position, position));
     }
 
     /// <summary>Whether a path names a CellForge markup file.</summary>

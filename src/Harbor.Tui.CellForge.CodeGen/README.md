@@ -5,9 +5,10 @@ Build-time Roslyn component for the CellForge markup DSL (issue #2424). It sits 
 ## Public API
 
 - `MarkupGenerator` is the `[Generator]` entry point with one member, `Initialize(IncrementalGeneratorInitializationContext)`.
-- `MarkupParser.Parse(string)` reads `.harbor-ui` text into a `MarkupParseResult`. The result carries a `SpecArena` and a list of `MarkupDiagnostic` values with line and column.
+- `MarkupParser.Parse(string)` reads `.harbor-ui` text into a `MarkupParseResult`. The result carries a `SpecArena`, an optional `state:` type, and a list of `MarkupDiagnostic` values with line and column.
 - `MarkupParseResult` and `MarkupDiagnostic` are the value types returned by the parser.
-- The emitted contract, declarations and `BuildRoot` live in the consuming compilation under `Harbor.Tui.CellForge.CodeGen.Generated`; the emitter itself (`BuildRootEmitter`) is internal to this assembly.
+- `TypedBindingsEmitter` resolves `{Binding ...}` paths against the state type through Roslyn symbols and emits typed delegates.
+- The emitted contract, declarations, `BuildRoot` and binding delegates live in the consuming compilation under `Harbor.Tui.CellForge.CodeGen.Generated`; the emitters (`BuildRootEmitter` and `TypedBindingsEmitter`) are internal to this assembly.
 
 `SpecArena`, `SpecNode`, `SpecOp`, `SpecValue`, `SpecKind`, `SpecValueKind`, `SpecTreeDumper` and `SpecNodeReuseException` live in `Harbor.Abstractions.Contracts` under `Harbor.Abstractions.Dsl`.
 
@@ -42,13 +43,27 @@ The kind list covers the current generic widgets: `Panel`, `Text`, `FilterList`,
 
 Every node is single-use. `SpecNode.AddChild` rejects a child that already has a parent, and `SpecNode.Claim` rejects a second consumer. Both throw `SpecNodeReuseException` naming the kind and source line instead of leaving two owners pointing at one node.
 
-## Two-phase generation (#2428)
+Issue #2429 adds a `state:` directive and typed bindings. The directive names a C# type visible to the compilation; it is parsed once and is not a widget node.
 
-For each `.harbor-ui` file the generator emits three sources:
+```text
+state: Sample.CounterState
+panel "main":
+    text "{Binding Count}"
+    text_input "{Binding Title, Mode=TwoWay}"
+```
+
+A `{Binding Path}` is read-only and emits a `Func<TState, TValue>` whose lambda accesses the property directly. Adding `Mode=TwoWay` also emits an `Action<TState, TValue>` that assigns the final property. Paths may traverse several properties, for example `User.Name`. Every segment must be a public readable property, and a two-way path must end in a property with a public setter.
+
+The generator resolves the path with Roslyn symbols at build time. A missing `state:` annotation (HUI002), an unknown type (HUI003), an unknown or renamed property (HUI004), or a read-only two-way path (HUI005) is an error that breaks the build. HUI004 and HUI005 point at the binding's line and column in the markup file. The emitted delegates use direct property access, so the update path has no reflection and stays AOT-safe.
+
+## Generation phases (#2428 and #2429)
+
+For each `.harbor-ui` file the generator emits four sources:
 
 1. `CellForgeRootContract.g.cs` is added once per compilation during post-initialization. It declares `internal interface ICellForgeRoot` with `Begin(int sequence)`, `Text(int sequence, string text)` and `End()`. The interface types the `root` parameter, so it reaches the compilation before any file is generated.
 2. `<Identifier>.Declarations.g.cs` is phase 1. It holds the `internal partial class` and its declarations (`TargetPath`, `RootCount`, `SequenceCount`). Its provider is `MarkupGenerator.Phase1Declarations`.
 3. `<Identifier>.BuildRoot.g.cs` is phase 2. It holds the other partial half with `internal static void BuildRoot(ICellForgeRoot root)`. Its provider takes phase 1 as input, so it cannot run before the declarations exist.
+4. `<Identifier>.Bindings.g.cs` is phase 3 (#2429). It holds one static class with a `Func<TState, TValue>` field per binding and an `Action<TState, TValue>` field per two-way binding. Its provider combines phase 1 with the compilation, because path resolution needs Roslyn symbols.
 
 `BuildRoot` walks the `SpecArena` in pre-order. Every node emits `root.Begin(seq)` and `root.End()`; a `Text` node also emits `root.Text(seq, literal)`. Sequence numbers are local, dense integers starting at zero. The consumer uses them as cell-diff keys, the role a Blazor render-tree frame sequence plays.
 
@@ -56,7 +71,7 @@ The whole pipeline is keyed by `(TargetPath, text)`, both strings, so an unchang
 
 ## Wiring
 
-`tests/Harbor.Tui.CellForge.Tests` references this project as an analyzer and declares `Fixtures/Sample.harbor-ui` as an `AdditionalFiles` item with `<TargetPath>`. `MarkupGeneratorAdditionalTextTests` drives the same generator in-process and checks the phase split, the sequence numbers, and that the cache key is `TargetPath` rather than the absolute checkout path.
+`tests/Harbor.Tui.CellForge.Tests` references this project as an analyzer and declares `Fixtures/Sample.harbor-ui` as an `AdditionalFiles` item with `<TargetPath>`. `MarkupGeneratorAdditionalTextTests` drives the same generator in-process and checks the phase split, the sequence numbers, and that the cache key is `TargetPath` rather than the absolute checkout path. `TypedBindingsGeneratorTests` runs it over a compilation with a sample state type and checks the emitted delegates, the error diagnostics and their markup positions.
 
 ## Usage
 
@@ -75,5 +90,5 @@ The parser depends only on the BCL and `Harbor.Abstractions.Contracts`. It holds
 ## Known limitations
 
 - Only `Text` nodes produce `root.Text` calls; other operations are recorded in the IR but not bound to widget methods yet. Binding belongs to the generator and dev interpreter, both of which read the same IR.
-- Diagnostics use the `HZ0001` id with a `Location` built from the parser's line and column. Only markup syntax errors are reported today; semantic binding errors are a later slice.
+- Syntax diagnostics use the `HZ0001` id with a `Location` built from the parser's line and column. Binding diagnostics HUI002 through HUI005 are errors too; HUI004 and HUI005 carry the markup line and column.
 - Not part of the runtime layer matrix and not consumed through DI.

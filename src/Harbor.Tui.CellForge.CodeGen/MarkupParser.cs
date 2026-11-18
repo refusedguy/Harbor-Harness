@@ -28,6 +28,7 @@ namespace Harbor.Tui.CellForge.CodeGen;
 public static class MarkupParser
 {
     private const string NewOperation = "new";
+    private const string StateDirective = "state:";
 
     /// <summary>Parses markup text into a <see cref="SpecArena"/>.</summary>
     /// <param name="text">Whole file contents.</param>
@@ -40,6 +41,8 @@ public static class MarkupParser
         var arena = new SpecArena();
         var diagnostics = new List<MarkupDiagnostic>();
         var levels = new List<Level>();
+        string? stateType = null;
+        var stateTypeLine = 0;
         var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
         for (var index = 0; index < lines.Length; index++)
@@ -59,6 +62,27 @@ public static class MarkupParser
             var content = raw[indent..].TrimEnd();
             if (content.Length == 0 || content[0] == '#')
                 continue;
+
+            // #2429. A state directive names the C# type every {Binding} in
+            // this file resolves against. It is parsed once here, never as a
+            // node, so the arena stays a tree of widgets only.
+            if (content.StartsWith(StateDirective, StringComparison.OrdinalIgnoreCase))
+            {
+                var typeName = content[StateDirective.Length..].Trim();
+                if (typeName.Length == 0)
+                    Add(diagnostics, lineNumber, indent + StateDirective.Length + 1,
+                        "A state directive needs a type name.");
+                else if (stateType is not null)
+                    Add(diagnostics, lineNumber, indent + 1,
+                        "Only one state directive is allowed per file.");
+                else
+                {
+                    stateType = typeName;
+                    stateTypeLine = lineNumber;
+                }
+
+                continue;
+            }
 
             if (content[0] == '.')
             {
@@ -120,7 +144,7 @@ public static class MarkupParser
             levels.Add(new Level(indent, node));
         }
 
-        return new MarkupParseResult(arena, diagnostics);
+        return new MarkupParseResult(arena, diagnostics, stateType, stateTypeLine);
     }
 
     private static SpecValue[] ArgumentsFrom(List<SpecValue> tokens, int first) =>
