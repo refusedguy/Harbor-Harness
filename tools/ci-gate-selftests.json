@@ -626,6 +626,17 @@
         "      # tree passes. Without it a checker edited until it matches",
         "      # anything would be green without checking anything."
       ]
+    },
+    {
+      "key": "check-no-nuke",
+      "name": "No-NUKE gate fails on a planted Nuke.Common reference",
+      "run": "tools/bin/harbor-gates-linux-x64 check-no-nuke --self-test",
+      "comment": [
+        "      # #2184. The gate that keeps the retired build path out has to be able",
+        "      # to fail: the load-bearing fixture plants Nuke.Common in a project",
+        "      # file and requires exit 1 with a file:line. The other fixtures cover",
+        "      # the entry-point strings and both sides of the exclusion list."
+      ]
     }
   ]
 }

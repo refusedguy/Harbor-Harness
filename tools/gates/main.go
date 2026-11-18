@@ -60,6 +60,7 @@ import (
 	benchset "harbor.local/gates/check-gate-bench-set"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
 	mdlinks "harbor.local/gates/check-md-links"
+	checknonuke "harbor.local/gates/check-no-nuke"
 	checknotestsdk "harbor.local/gates/check-no-test-sdk"
 	checkpublicapiresign "harbor.local/gates/check-public-api-resign"
 	checkreferencetrimmer "harbor.local/gates/check-reference-trimmer"
@@ -207,6 +208,11 @@ var registry = []registered{
 		name:    "check-local-merge-loss",
 		summary: "a local squash-merge into dev dropped no content",
 		run:     mergeloss.Run,
+	},
+	{
+		name:    "check-no-nuke",
+		summary: "no NUKE build-system reference survives in code, config or workflows",
+		run:     checknonuke.Run,
 	},
 	{
 		name:    "check-no-test-sdk",
