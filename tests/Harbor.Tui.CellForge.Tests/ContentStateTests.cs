@@ -76,7 +76,7 @@ public class ContentStateTests
         await Assert.That(ContentSkeleton.RowWidth(16, 1, 3)).IsEqualTo(12);
         await Assert.That(ContentSkeleton.RowWidth(16, 2, 3)).IsEqualTo(8);
         await Assert.That(ContentSkeleton.RowWidth(3, 0, 3)).IsEqualTo(3);
-        await Assert.That(ContentSkeleton.RowWidth(3, 2, 3)).IsEqualTo(1);
+        await Assert.That(ContentSkeleton.RowWidth(3, 2, 3)).IsEqualTo(2);
         await Assert.That(ContentSkeleton.RowWidth(16, 3, 3)).IsEqualTo(0);
         await Assert.That(ContentSkeleton.RowWidth(0, 0, 3)).IsEqualTo(0);
     }
@@ -204,7 +204,8 @@ public class ContentStateTests
         var buffer = TestRender.Buffer(16, 1);
         ContentState.Loading(1).Paint(buffer, new Rect(0, 0, 16, 1), 0, custom);
 
-        await Assert.That(buffer.Get(0, 0).Style).IsEqualTo(custom.Skeleton);
+        await Assert.That(buffer.Get(10, 0).Style).IsEqualTo(custom.Skeleton);
+        await Assert.That(buffer.Get(0, 0).Style).IsEqualTo(custom.Shimmer);
         await Assert.That(buffer.Get(1, 0).Style).IsEqualTo(custom.Shimmer);
         await Assert.That(custom.Resolve()).IsEqualTo(custom);
         await Assert.That(default(ContentStateStyle).Resolve()).IsEqualTo(ContentStateStyle.Default);
