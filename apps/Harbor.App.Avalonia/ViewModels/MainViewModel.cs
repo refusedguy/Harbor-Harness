@@ -135,6 +135,14 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     [ObservableProperty]
     private bool _isRightDrawerOpen;
 
+    /// <summary>
+    ///     K17: current right-drawer width, driven by the resize grip. The snap
+    ///     rule restores <see cref="PanelSnapRule.DrawerConstraints" />'s default
+    ///     when the panel is dragged closed, so reopening starts at a usable size.
+    /// </summary>
+    [ObservableProperty]
+    private double _drawerWidth = PanelSnapRule.DrawerConstraints.DefaultWidth;
+
     [ObservableProperty]
     private string? _activeDiffText;
 
