@@ -15,7 +15,27 @@ public sealed class AutomationSession
     /// <summary>Protocol version reported by the capabilities handshake.</summary>
     public const string ProtocolVersion = "1.0";
 
-    private static readonly string[] SupportedMethods = ["capabilities", "getTree", "testId", "clock"];
+    /// <summary>The versioned method table: one handler per public method.</summary>
+    private static readonly Dictionary<string, Func<AutomationSession, AutomationRequest, AutomationResponse>> MethodTable =
+        new(StringComparer.Ordinal)
+        {
+            ["capabilities"] = static (session, request) => session.Capabilities(request),
+            ["getTree"] = static (session, request) => session.GetTree(request),
+            ["testId"] = static (session, request) => session.FindTestId(request),
+            ["clock"] = static (session, request) => session.ClockMethod(request)
+        };
+
+    private static readonly string[] SupportedMethods = [.. MethodTable.Keys];
+
+    /// <summary>Clock actions. Fast-forward advances time in one step; now is a read.</summary>
+    private static readonly Dictionary<string, Action<AutomationSession, long>> ClockActions =
+        new(StringComparer.Ordinal)
+        {
+            ["pause"] = static (session, _) => session.Clock.Pause(),
+            ["resume"] = static (session, _) => session.Clock.Resume(),
+            ["fastForward"] = static (session, ms) => session.Clock.FastForward(ms),
+            ["now"] = static (_, _) => { }
+        };
 
     private readonly AutomationNode? _root;
 
@@ -73,20 +93,10 @@ public sealed class AutomationSession
     /// <summary>Dispatches a validated request through the method table.</summary>
     public AutomationResponse Execute(AutomationRequest request)
     {
-        switch (request.Method)
-        {
-            case "capabilities":
-                return Capabilities(request);
-            case "getTree":
-                return GetTree(request);
-            case "testId":
-                return FindTestId(request);
-            case "clock":
-                return ClockMethod(request);
-            default:
-                return Failure(request.Id, AutomationErrorCode.Protocol,
-                    "unknown method '" + request.Method + "'; supported: " + string.Join(",", SupportedMethods));
-        }
+        if (!MethodTable.TryGetValue(request.Method, out var handler))
+            return Failure(request.Id, AutomationErrorCode.Protocol,
+                "unknown method '" + request.Method + "'; supported: " + string.Join(",", SupportedMethods));
+        return handler(this, request);
     }
 
     private AutomationResponse Capabilities(AutomationRequest request) =>
@@ -184,23 +194,10 @@ public sealed class AutomationSession
                 return Failure(request.Id, AutomationErrorCode.Protocol, error);
         }
 
-        switch (action)
-        {
-            case "pause":
-                Clock.Pause();
-                break;
-            case "resume":
-                Clock.Resume();
-                break;
-            case "fastForward":
-                Clock.FastForward(ms);
-                break;
-            case "now":
-                break;
-            default:
-                return Failure(request.Id, AutomationErrorCode.Protocol,
-                    "unknown clock action '" + action + "'");
-        }
+        if (!ClockActions.TryGetValue(action, out var apply))
+            return Failure(request.Id, AutomationErrorCode.Protocol,
+                "unknown clock action '" + action + "'");
+        apply(this, ms);
 
         return Success(request.Id, writer =>
         {
