@@ -38,25 +38,26 @@ namespace Harbor.Tools.Builtin;
 [ToolInfo(
     "harbor_inspect",
     "Inspect",
-    "Read-only catalog of what this runtime offers: registered tools, agents, providers, skills, plugin axes, versions and limits. Reads only — it never runs code and never changes anything.",
+    "Read-only catalog of what this runtime offers: registered tools, agents, providers, skills, plugin axes, versions, limits and the current session's context. Reads only — it never runs code and never changes anything.",
     Glyph = "🧭",
     PromptSnippet = "harbor_inspect: read-only catalog of the runtime API",
     PromptGuidelines = new[]
     {
         "Call harbor_inspect with no arguments for a one-screen overview of this runtime",
-        "Sections: tools, agents, providers, skills, plugins, versions, limits",
+        "Sections: context, tools, agents, providers, skills, plugins, versions, limits",
+        "Call {\"section\":\"context\"} for this session's id, agent, model, message counts, last-step tokens and UTC time",
         "Add \"name\" for one entry in full, e.g. {\"section\":\"tools\",\"name\":\"read\"}",
         "Use it to find out what exists before guessing — including why a tool is not offered",
     })]
 [ToolSchema]
-[ToolParam("section", "string", Description = "Which part of the runtime to describe: overview (default), tools, agents, providers, skills, plugins, versions, limits")]
+[ToolParam("section", "string", Description = "Which part of the runtime to describe: overview (default), context, tools, agents, providers, skills, plugins, versions, limits")]
 [ToolParam("name", "string", Description = "One entry of that section, by its exact name (tool, agent, provider id, skill, plugin axis). Omit to list the whole section.")]
 public sealed partial class InspectTool : ITool
 {
     /// <summary>The sections the catalog answers for, in the order the overview lists them.</summary>
     private static readonly string[] SectionNames =
     [
-        "overview", "tools", "agents", "providers", "skills", "plugins", "versions", "limits",
+        "overview", "context", "tools", "agents", "providers", "skills", "plugins", "versions", "limits",
     ];
 
     /// <summary>
@@ -68,6 +69,7 @@ public sealed partial class InspectTool : ITool
         new Dictionary<string, Section>(StringComparer.OrdinalIgnoreCase)
         {
             ["overview"] = Section.Overview,
+            ["context"] = Section.Context,
             ["tools"] = Section.Tools,
             ["agents"] = Section.Agents,
             ["providers"] = Section.Providers,
@@ -228,6 +230,7 @@ public sealed partial class InspectTool : ITool
     private Result<string> DescribeLegacy(Section section, string? name, ToolContext context) => section switch
     {
         Section.Overview => Result.Success(BuildOverview(context)),
+        Section.Context => Result.Success(BuildContext(context)),
         Section.Tools => BuildTools(name, context),
         Section.Agents => BuildAgents(name),
         Section.Skills => BuildSkills(name, context),
@@ -260,6 +263,77 @@ public sealed partial class InspectTool : ITool
         sb.Append('\n');
         sb.Append("sections: ").Append(string.Join(", ", SectionNames)).Append('\n');
         sb.Append("next: {\"section\":\"tools\"} lists a section, {\"section\":\"tools\",\"name\":\"read\"} shows one entry\n");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    ///     The context section: the calling session's own shape, read from the
+    ///     <see cref="ToolContext" /> the dispatcher hands every tool call. It
+    ///     reports no registry facts — only what this run already knows:
+    ///     session, agent, model, message/part counts, the most recent step's
+    ///     token usage (when the provider reported one) and the UTC time of the
+    ///     answer. Keeping it on the context means the catalog stays a pure
+    ///     projection and needs no new dependency to answer the model's
+    ///     "where am I / how much room is left" question (Kilo F037).
+    /// </summary>
+    private string BuildContext(ToolContext context)
+    {
+        var sb = new StringBuilder();
+        sb.Append("context for session ").Append(context.SessionId).Append('\n');
+        sb.Append("agent: ").Append(context.Agent).Append('\n');
+
+        AgentDefinition? agent = FindAgent(context.Agent);
+        if (agent is null)
+        {
+            sb.Append("model: unknown\n");
+        }
+        else
+        {
+            sb.Append("model: ").Append(agent.ProviderId).Append('/').Append(agent.Model).Append('\n');
+        }
+
+        int messages = context.Messages.Count;
+        int user = 0, assistant = 0, tool = 0, parts = 0;
+        int lastInput = 0, lastOutput = 0;
+        bool hasUsage = false;
+        for (int i = 0; i < messages; i++)
+        {
+            AgentMessage message = context.Messages[i];
+            switch (message)
+            {
+                case UserMessage:
+                    user++;
+                    break;
+                case AssistantMessage response:
+                    assistant++;
+                    parts += response.Parts.Count;
+                    // The most recent step is the last assistant message that
+                    // carries a non-zero usage; earlier steps are not "last".
+                    if (response.Usage.InputTokens > 0 || response.Usage.OutputTokens > 0)
+                    {
+                        lastInput = response.Usage.InputTokens;
+                        lastOutput = response.Usage.OutputTokens;
+                        hasUsage = true;
+                    }
+                    break;
+                case ToolResultMessage result:
+                    tool++;
+                    parts += result.Results.Count;
+                    break;
+            }
+        }
+
+        sb.Append("messages: ").Append(messages)
+            .Append(" (").Append(user).Append(" user, ").Append(assistant).Append(" assistant, ")
+            .Append(tool).Append(" tool result)\n");
+        sb.Append("content parts: ").Append(parts).Append('\n');
+        sb.Append("last-step tokens: in ").Append(lastInput).Append(", out ").Append(lastOutput);
+        if (!hasUsage)
+        {
+            sb.Append(" (no usage reported yet)");
+        }
+        sb.Append('\n');
+        sb.Append("timestamp (UTC): ").Append(DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture)).Append('\n');
         return sb.ToString();
     }
 
@@ -831,6 +905,9 @@ public sealed partial class InspectTool : ITool
     {
         /// <summary>One screen: what this runtime has and how to ask for the rest.</summary>
         Overview,
+
+        /// <summary>The calling session's own shape: id, agent, model, counts, last-step tokens, UTC time.</summary>
+        Context,
 
         /// <summary>The registered tools and what the current agent may do with each.</summary>
         Tools,

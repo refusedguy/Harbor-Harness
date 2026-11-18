@@ -94,7 +94,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
 | 19 | `session_read` | Parallel | Allow | Inspect a peer session's status, outcome and recent transcript |
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
-| 21 | `harbor_inspect` | Parallel | Allow | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes, versions, limits) |
+| 21 | `harbor_inspect` | Parallel | Allow | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes, versions, limits, and the current session's context) |
 | 22 | `plugin_manager` | Sequential | Allow (the tool asks about every change) | List installed plugins; propose installing / removing / enabling / disabling one |
 | 23 | `goal` | Sequential | Allow | Report the goal as complete, or as blocked with a reason |
 | 24 | `ask_user_question` | Sequential | Allow | Ask the user a structured question and read the answer back |
@@ -1197,7 +1197,7 @@ run is readable by anyone who opens the session.
     "scope":  { "type": "string", "description": "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'" }
   },
   "required": ["action"]
-    "section": { "type": "string", "description": "Which part of the runtime to describe: overview (default), tools, agents, providers, skills, plugins, versions, limits" },
+    "section": { "type": "string", "description": "Which part of the runtime to describe: overview (default), context, tools, agents, providers, skills, plugins, versions, limits" },
     "name":    { "type": "string", "description": "One entry of that section, by its exact name (tool, agent, provider id, skill, plugin axis). Omit to list the whole section." }
   }
     "operation": { "type": "string", "enum": ["complete", "block"], "description": "complete — the objective was met; block — it cannot be reached from here" },

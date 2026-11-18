@@ -70,9 +70,56 @@ public class InspectToolTests
         var result = await RunAsync(tool, "{}");
 
         await Assert.That(result).HasSucceeded();
-        await Assert.That(result.Output).Contains("sections: overview, tools, agents, providers, skills, plugins, versions, limits");
+        await Assert.That(result.Output).Contains("sections: overview, context, tools, agents, providers, skills, plugins, versions, limits");
         await Assert.That(result.Output).Contains("harbor 0.4.0");
         await Assert.That(result.Output).Contains("agent code");
+    }
+
+    // F037 (issue #2679): the context section reports this run's own shape —
+    // session, agent, model, message/part counts, the most recent step's tokens
+    // and a UTC timestamp — without adding a dependency to the catalog.
+    [Test]
+    public async Task Context_ReportsSessionAgentModelCountsLastStepTokensAndUtcTime()
+    {
+        var agents = new AgentRegistry();
+        agents.Register(AgentDefinition.CodeDefault("some-model", "some-provider"));
+        var tool = NewTool(agents: agents);
+
+        AgentMessage[] messages =
+        [
+            TestMessages.User("hi"),
+            TestMessages.Assistant("first", usage: new Usage(10, 5)),
+            TestMessages.ToolResult([new ToolResultEntry("tc1", "read", "output", false)]),
+            TestMessages.Assistant("second", usage: new Usage(40, 20)),
+        ];
+        ToolContext context = TestToolContext.Create(
+            sessionId: "ctx-session",
+            agent: "code",
+            messages: messages);
+
+        var result = await tool.ExecuteAsync(Args("""{"section":"context"}"""), context);
+
+        await Assert.That(result).HasSucceeded();
+        await Assert.That(result.Output).Contains("context for session ctx-session");
+        await Assert.That(result.Output).Contains("agent: code");
+        await Assert.That(result.Output).Contains("model: some-provider/some-model");
+        await Assert.That(result.Output).Contains("messages: 4 (1 user, 2 assistant, 1 tool result)");
+        await Assert.That(result.Output).Contains("content parts: 3");
+        await Assert.That(result.Output).Contains("last-step tokens: in 40, out 20");
+        await Assert.That(result.Output).Contains("timestamp (UTC): ");
+    }
+
+    [Test]
+    public async Task Context_OnAnEmptySession_SaysNoUsageReportedYet()
+    {
+        var tool = NewTool();
+
+        var result = await RunAsync(tool, """{"section":"context"}""");
+
+        await Assert.That(result).HasSucceeded();
+        await Assert.That(result.Output).Contains("model: unknown");
+        await Assert.That(result.Output).Contains("messages: 0 (0 user, 0 assistant, 0 tool result)");
+        await Assert.That(result.Output).Contains("last-step tokens: in 0, out 0 (no usage reported yet)");
     }
 
     [Test]
