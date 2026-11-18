@@ -70,25 +70,30 @@ public class McpOAuthTests : IDisposable
         new(new StubHttpMessageHandler(respond));
 
     [Test]
-    public async Task OAuthConfig_Parse_ReadsAuthBlock()
+    public async Task OAuthConfig_ParseResult_ReadsAuthBlock()
     {
         using var doc = JsonDocument.Parse("""
             {"url": "https://mcp.example.com/mcp", "transport": "sse",
              "auth": {"clientId": "cid", "scopes": ["a", "b"], "tokenEndpoint": "https://x/token"}}
             """);
-        var cfg = McpOAuthConfig.Parse(doc.RootElement);
+        var result = McpOAuthConfig.ParseResult(doc.RootElement);
 
-        await Assert.That(cfg).IsNotNull();
-        await Assert.That(cfg!.ClientId).IsEqualTo("cid");
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.HasValue).IsTrue();
+        var cfg = result.Value.Value;
+        await Assert.That(cfg.ClientId).IsEqualTo("cid");
         await Assert.That(cfg.Scopes).IsEquivalentTo(["a", "b"]);
         await Assert.That(cfg.TokenEndpoint).IsEqualTo("https://x/token");
     }
 
     [Test]
-    public async Task OAuthConfig_Parse_MissingAuth_ReturnsNull()
+    public async Task OAuthConfig_ParseResult_MalformedAuth_ReturnsFailure()
     {
-        using var doc = JsonDocument.Parse("""{"url": "https://mcp.example.com/mcp"}""");
-        await Assert.That(McpOAuthConfig.Parse(doc.RootElement)).IsNull();
+        using var doc = JsonDocument.Parse("""{"url": "https://mcp.example.com/mcp", "auth": "not-an-object"}""");
+        var result = McpOAuthConfig.ParseResult(doc.RootElement);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("InvalidAuthBlock");
     }
 
     [Test]
@@ -513,14 +518,18 @@ public class McpOAuthTests : IDisposable
     }
 
     [Test]
-    public async Task Loopback_ParseQuery_ValidatesState()
+    public async Task Loopback_ParseQueryResult_ValidatesState()
     {
-        await Assert.That(
-            McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=s1 HTTP/1.1", "code", "s1"))
-            .IsEqualTo("abc");
-        await Assert.That(
-            McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=evil HTTP/1.1", "code", "s1"))
-            .IsNull();
+        var matched = McpLoopbackListener.ParseQueryResult(
+            "GET /callback?code=abc&state=s1 HTTP/1.1", "code", "s1");
+        await Assert.That(matched.IsSuccess).IsTrue();
+        await Assert.That(matched.Value.HasValue).IsTrue();
+        await Assert.That(matched.Value.Value).IsEqualTo("abc");
+
+        var mismatched = McpLoopbackListener.ParseQueryResult(
+            "GET /callback?code=abc&state=evil HTTP/1.1", "code", "s1");
+        await Assert.That(mismatched.IsSuccess).IsTrue();
+        await Assert.That(mismatched.Value.HasNoValue).IsTrue();
     }
 
     [Test]
