@@ -76,6 +76,42 @@ public class SecondaryCompactionModelTests : CompactionTestBase
         await Assert.That(summaryAssistant.Model).IsEqualTo("test-model");
     }
 
+    /// <summary>
+    ///     #2581: the service is a singleton, so the first resolution must be
+    ///     single-flight. Before the fix, N simultaneous first compactions each
+    ///     called GetModelsAsync for the same secondary model, and a slow catalog
+    ///     delayed all of them. The winner owns the lookup; the others await it.
+    /// </summary>
+    [Test]
+    public async Task ConcurrentFirstCompactions_ResolveSecondaryCatalogOnce()
+    {
+        var primary = new CapturingLlmClient("primary summary", [PrimaryModel]);
+        var cheap = new GatedCatalogLlmClient("cheap summary", [CheapModel]);
+        var svc = CreateService(primary, "cheap/cheap-model", extraProvider: ("cheap", cheap));
+
+        const int callers = 8;
+        Task<Result<CompactionResult>>[] runs = Enumerable.Range(0, callers)
+            .Select(i => Task.Run(() => svc.CompactAsync(
+                $"session-{i}", SixMessageHistory(), HugeWindow(PrimaryModel))))
+            .ToArray();
+
+        // The winner is blocked in its catalog lookup. Every other caller must
+        // be waiting on that one task, not starting a lookup of its own.
+        await cheap.CatalogEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        cheap.Release();
+
+        Result<CompactionResult>[] outcomes =
+            await Task.WhenAll(runs).WaitAsync(TimeSpan.FromSeconds(10));
+
+        await Assert.That(cheap.CatalogCalls).IsEqualTo(1).Because(
+            "one catalog lookup serves all first compactions; N lookups means the "
+            + "singleton's memoization is still unsynchronised");
+        await Assert.That(outcomes.All(o => o.IsSuccess
+            && ((AssistantMessage)o.Value.SummaryMessage).Model == "cheap-model")).IsTrue().Because(
+            "every compaction still summarizes through the resolved secondary client");
+        await Assert.That(primary.Requests.Count).IsEqualTo(0);
+    }
+
     [Test]
     public async Task Constructor_SecondaryInvalid_LogsWarningWithInvalidValueAndReason()
     {
@@ -138,5 +174,44 @@ public class SecondaryCompactionModelTests : CompactionTestBase
 
         await Assert.That(normalized.IsSuccess).IsTrue();
         await Assert.That(normalized.Value.SecondaryModel).IsEqualTo("cheap/cheap-model");
+    }
+
+    /// <summary>
+    ///     A secondary client whose catalog lookup is gated, so the test can hold
+    ///     the first resolution open while the other compactions pile up on it.
+    /// </summary>
+    private sealed class GatedCatalogLlmClient(string summary, ModelInfo[] catalog) : ILlmClient
+    {
+        public TaskCompletionSource CatalogEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _catalogCalls;
+
+        public int CatalogCalls => Volatile.Read(ref _catalogCalls);
+
+        public ProviderId ProviderId { get; } = ProviderId.Create("cheap");
+
+        public void Release() => _release.TrySetResult();
+
+        public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _catalogCalls);
+            CatalogEntered.TrySetResult();
+            await _release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return Result.Success<IReadOnlyList<ModelInfo>>(catalog);
+        }
+
+        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+            LlmRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            yield return TestEvents.TextDelta("0", summary);
+            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            yield return TestEvents.StepFinish(usage: new Usage(0, summary.Length / 4));
+        }
     }
 }

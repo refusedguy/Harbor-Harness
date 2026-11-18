@@ -169,7 +169,7 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `RetryLlmClientDecorator`, [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs)
   - `OllamaLlmClient`, [`src/Harbor.Providers.Ollama/OllamaLlmClient.cs`](../src/Harbor.Providers.Ollama/OllamaLlmClient.cs)
   - `InstrumentedLlmClient`, [`src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs`](../src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs)
-- **Out-of-tree implementations** (15):
+- **Out-of-tree implementations** (16):
   - `FakeClient (Harbor.App.Avalonia.Tests)`, [`tests/Harbor.App.Avalonia.Tests/OnboardingViewModelLiveModelsTests.cs`](../tests/Harbor.App.Avalonia.Tests/OnboardingViewModelLiveModelsTests.cs)
   - `HangingLlmClient (Harbor.Application.Tests)`, [`tests/Harbor.Application.Tests/ExecutionTreeTests.cs`](../tests/Harbor.Application.Tests/ExecutionTreeTests.cs)
   - `TokenCapturingLlmClient`, [`tests/Harbor.Application.Tests/RunBudgetTests.cs`](../tests/Harbor.Application.Tests/RunBudgetTests.cs)
@@ -181,6 +181,7 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `FakeCatalogClient`, [`tests/Harbor.Config.Tests/OnboardingWizardTests.cs`](../tests/Harbor.Config.Tests/OnboardingWizardTests.cs)
   - `ScriptedLlmClient (Harbor.Core.Tests)`, [`tests/Harbor.Core.Tests/CompactionSummaryRetryTests.cs`](../tests/Harbor.Core.Tests/CompactionSummaryRetryTests.cs)
   - `CapturingLlmClient`, [`tests/Harbor.Core.Tests/CompactionTestBase.cs`](../tests/Harbor.Core.Tests/CompactionTestBase.cs)
+  - `GatedCatalogLlmClient`, [`tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs`](../tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs)
   - `CatalogSource`, [`tests/Harbor.Registries.Tests/ProviderRegistryCatalogCacheTtlTests.cs`](../tests/Harbor.Registries.Tests/ProviderRegistryCatalogCacheTtlTests.cs)
   - `RateLimitedLlmClient`, [`tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs`](../tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs)
   - `ScriptedLlmClient (Harbor.TestKit)`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
