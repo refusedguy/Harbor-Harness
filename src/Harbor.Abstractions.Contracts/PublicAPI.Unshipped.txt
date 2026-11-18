@@ -238,3 +238,73 @@ Harbor.Abstractions.Models.RunAcceptance.Rejected = 2 -> Harbor.Abstractions.Mod
 Harbor.Abstractions.Models.RunAcceptance.NotOffered = 3 -> Harbor.Abstractions.Models.RunAcceptance
 Harbor.Abstractions.Models.RunOutcome.Acceptance.get -> Harbor.Abstractions.Models.RunAcceptance
 Harbor.Abstractions.Models.RunOutcome.Acceptance.init -> void
+Harbor.Abstractions.Dsl.SpecArena
+Harbor.Abstractions.Dsl.SpecArena.AddRoot(Harbor.Abstractions.Dsl.SpecNode! node) -> void
+Harbor.Abstractions.Dsl.SpecArena.CreateNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine) -> Harbor.Abstractions.Dsl.SpecNode!
+Harbor.Abstractions.Dsl.SpecArena.Nodes.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecNode!>!
+Harbor.Abstractions.Dsl.SpecArena.Roots.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecNode!>!
+Harbor.Abstractions.Dsl.SpecArena.SpecArena() -> void
+Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Panel = 0 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Text = 1 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.FilterList = 2 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.SortableTable = 3 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Tree = 4 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.LogView = 5 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.TextInput = 6 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.DatePicker = 7 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Table = 8 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.SelectionList = 9 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.TextField = 10 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.NumberInput = 11 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.MultilineTextInput = 12 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Accordion = 13 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.ActionButton = 14 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.AnchoredMenu = 15 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.AnchoredOverlay = 16 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.AttachmentCard = 17 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.CompactLabel = 18 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.CopyMode = 19 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.DocumentView = 20 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Dropdown = 21 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.FocusTooltip = 22 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Form = 23 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.FormScaffold = 24 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.LiveRegion = 25 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Progress = 26 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Questionnaire = 27 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Rating = 28 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.SettingsPanel = 29 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Spinner = 30 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Stepper = 31 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.ToggleSelect = 32 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.Toolbar = 33 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecKind.VirtualList = 34 -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecNode
+Harbor.Abstractions.Dsl.SpecNode.AddChild(Harbor.Abstractions.Dsl.SpecNode! child) -> void
+Harbor.Abstractions.Dsl.SpecNode.AddOperation(Harbor.Abstractions.Dsl.SpecOp! op) -> void
+Harbor.Abstractions.Dsl.SpecNode.Children.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecNode!>!
+Harbor.Abstractions.Dsl.SpecNode.Claim() -> void
+Harbor.Abstractions.Dsl.SpecNode.IsClaimed.get -> bool
+Harbor.Abstractions.Dsl.SpecNode.Kind.get -> Harbor.Abstractions.Dsl.SpecKind
+Harbor.Abstractions.Dsl.SpecNode.Operations.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecOp!>!
+Harbor.Abstractions.Dsl.SpecNode.SourceLine.get -> int
+Harbor.Abstractions.Dsl.SpecNode.SpecNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine) -> void
+Harbor.Abstractions.Dsl.SpecNodeReuseException
+Harbor.Abstractions.Dsl.SpecNodeReuseException.SpecNodeReuseException() -> void
+Harbor.Abstractions.Dsl.SpecNodeReuseException.SpecNodeReuseException(string! message) -> void
+Harbor.Abstractions.Dsl.SpecNodeReuseException.SpecNodeReuseException(string! message, System.Exception! innerException) -> void
+Harbor.Abstractions.Dsl.SpecOp
+Harbor.Abstractions.Dsl.SpecOp.Arguments.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecValue>!
+Harbor.Abstractions.Dsl.SpecOp.Name.get -> string!
+Harbor.Abstractions.Dsl.SpecOp.SpecOp(string! name, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecValue>! arguments) -> void
+Harbor.Abstractions.Dsl.SpecValue
+Harbor.Abstractions.Dsl.SpecValue.Kind.get -> Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Dsl.SpecValue.SpecValue() -> void
+Harbor.Abstractions.Dsl.SpecValue.SpecValue(Harbor.Abstractions.Dsl.SpecValueKind kind, string! text) -> void
+Harbor.Abstractions.Dsl.SpecValue.Text.get -> string!
+Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Dsl.SpecValueKind.String = 0 -> Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Dsl.SpecValueKind.Number = 1 -> Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Dsl.SpecValueKind.Boolean = 2 -> Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Dsl.SpecValueKind.Identifier = 3 -> Harbor.Abstractions.Dsl.SpecValueKind

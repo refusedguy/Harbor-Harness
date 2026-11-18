@@ -39,9 +39,8 @@
       Harbor.CodeGen (a different generator domain) or to Harbor.Tui.CellForge
       (runtime widgets): a generator binds neither.
 
-      The slice-0 stub below binds no contract type yet, so the edge is
-      currently unused; tools/reference-trimmer-baseline.txt records why it
-      stays until the IR slices (#2426/#2428) bind it for real.
+      #2426 binds the SpecArena/SpecNode/SpecOp contracts here for real, so
+      the edge is used and needs no reference-trimmer baseline row.
     -->
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>

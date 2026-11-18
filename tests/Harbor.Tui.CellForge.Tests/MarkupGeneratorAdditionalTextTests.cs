@@ -75,6 +75,24 @@ public class MarkupGeneratorAdditionalTextTests
         await Assert.That(run.Results.SelectMany(r => r.GeneratedSources).Count()).IsEqualTo(0);
     }
 
+    [Test]
+    public async Task Generator_ParsesMarkup_AndForwardsSyntaxDiagnostics()
+    {
+        var valid = new TestAdditionalText("/checkout/one/" + SampleTargetPath, "text \"hello\"\n");
+        var validRun = Run(valid, TestOptionsProvider.For(valid, SampleTargetPath));
+
+        await Assert.That(validRun.Diagnostics.Length).IsEqualTo(0);
+        var validSource = validRun.Results.SelectMany(r => r.GeneratedSources).Single().SourceText.ToString();
+        await Assert.That(validSource).Contains("RootCount = 1");
+
+        var invalid = new TestAdditionalText("/checkout/one/Bad.harbor-ui", "widget \"x\"\n");
+        var invalidRun = Run(invalid, TestOptionsProvider.For(invalid, "Bad.harbor-ui"));
+
+        await Assert.That(invalidRun.Diagnostics.Length).IsEqualTo(1);
+        await Assert.That(invalidRun.Diagnostics[0].Id).IsEqualTo("HUI001");
+        await Assert.That(invalidRun.Diagnostics[0].GetMessage()).Contains("Unknown node kind");
+    }
+
     private static GeneratorDriverRunResult Run(AdditionalText file, AnalyzerConfigOptionsProvider options)
     {
         var compilation = CSharpCompilation.Create("MarkupWiring");
