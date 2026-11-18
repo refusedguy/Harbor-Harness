@@ -978,3 +978,20 @@ slice без измеримой цели и критериев приёмки. I
 
 - Полный текст, таблица покрытия шести пунктов и список неприменимого:
   [ADR-035](ADR-035-gpuix-declarative-terminal-no-new-slice.md).
+## ADR-037: отчёт по Avalonia XAML (#2694) — финальный вердикт, нового slice нет
+
+Issue #2694 — self-contained competitor research по AXAML, compiled bindings,
+hot reload и реестру шаблонов данных. ADR-028 уже сравнил восемь приёмов с
+DSL-платформой Harbor; единственной открытой позицией был dev-хук подмены
+`BuildRoot`, описанный там как «in flight» по PR #2764. Проверка на
+`origin/dev` (`872b6157`): #2764 закрыт как superseded, #2789 влит с
+`BuildRootOverrideCoordinator` и Debug-only trampoline. Все восемь пунктов
+имеют merged-след, новых фактов из upstream нет.
+
+Decided: ADR-028 сохраняет силу, второй ADR-вердикт по тому же сравнению не
+заводится, новый slice не открывается. Оконный previewer, стили, SRE и
+runtime-движок `CompiledBinding` остаются owner-decision. issue #2694 не
+закрывается, гейты и пороги не меняются.
+
+- Полный текст, таблица по восьми пунктам и условия пересмотра:
+  [ADR-037](ADR-037-avalonia-xaml-declarative-verdict.md).
