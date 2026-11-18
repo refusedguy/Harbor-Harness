@@ -126,7 +126,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         InputViewModel? inputVm = null,
         UiStore? store = null,
         ISessionManager? sessions = null,
-        PanelServices? panelServices = null)
+        PanelServices? panelServices = null,
+        ISyncTerminalBackend? backend = null)
         : base(logger)
     {
         // Issue #77: the DI-shared store is injected by the composition root
@@ -150,12 +151,18 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
-        Context = new CellForgeRenderContext(Logger);
+        // Only the golden-frame test seam passes a backend; without one the
+        // context keeps its stdout default. Both paths log through the
+        // renderer's logger (#2457).
+        Context = backend is null
+            ? new CellForgeRenderContext(Logger)
+            : new CellForgeRenderContext(backend, Logger);
     }
 
     /// <summary>Golden-frame test seam. The backend must be an
     /// <see cref="ISyncTerminalBackend"/> — the context flushes synchronously
-    /// (issue #468).</summary>
+    /// (issue #468). Delegates to the primary constructor so panel, mediator
+    /// and projector wiring lives in one place.</summary>
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
         ISyncTerminalBackend backend,
@@ -165,24 +172,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         UiStore? store = null,
         ISessionManager? sessions = null,
         PanelServices? panelServices = null)
-        : base(logger)
+        : this(logger, statusVm, chatVm, inputVm, store, sessions, panelServices, backend)
     {
-        // Issue #77: see the primary ctor — injected shared store or a
-        // private one when null.
-        _store = store ?? new UiStore();
-        _sessions = sessions;
-        // #470: see the primary ctor.
-        PanelDeps = panelServices
-            ?? new PanelServices { Store = _store, Sessions = sessions };
-        Panels = new CellForgePanelRegistry();
-        RegisterBuiltinPanels(Panels);
-        _mediator = new ChatViewModelMediator(
-            ViewModels, () => Screen, IdlePlaceholder, BusyPlaceholder,
-            statusVm, chatVm, inputVm);
-        _chatProjector = _mediator.ChatProjector;
-        Projectors = new ScreenProjectorRegistry();
-        Projectors.Register(_chatProjector);
-        Context = new CellForgeRenderContext(backend, Logger);
     }
 
     /// <summary>
