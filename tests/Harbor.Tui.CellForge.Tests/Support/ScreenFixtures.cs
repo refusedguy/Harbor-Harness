@@ -19,6 +19,24 @@ internal static class ScreenFixtures
 {
     internal static string Art(ScreenBuffer buffer) => TestRender.Art(buffer).TrimEnd('\n');
 
+    /// <summary>
+    ///     Pinned-art document for a golden suite: the header plus one
+    ///     trailing-whitespace-trimmed row per buffer row. Shared so two golden
+    ///     suites do not each spell the art-to-document loop.
+    /// </summary>
+    internal static string GoldenDocument(string name, ScreenBuffer buffer)
+    {
+        string[] raw = Art(buffer).Split('\n');
+        var lines = new string[buffer.Rows];
+        for (int i = 0; i < buffer.Rows; i++)
+        {
+            lines[i] = (i < raw.Length ? raw[i] : string.Empty).TrimEnd();
+        }
+
+        string art = string.Join("\n", lines);
+        return $"# golden: {name} ({buffer.Cols}x{buffer.Rows})\n" + art + "\n";
+    }
+
     internal static void PaintAll(ChatScreen screen, ScreenBuffer buffer)
     {
         foreach (var panel in screen.Tree.Panels)
