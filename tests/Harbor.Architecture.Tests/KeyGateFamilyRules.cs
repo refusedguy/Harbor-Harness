@@ -332,6 +332,12 @@ public class KeyGateFamilyRules
         // Home/End and digits select a value; no text buffer and Shift is
         // refused, so it is a command site. Read-only refuses keys outright.
         new("Rating", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/Rating.cs"),
+        // ActionButton (#2370): the focusable action row. Enter/Space use the
+        // strict no-modifier gate, and a declared hotkey is an EXACT modifier
+        // match (undeclared Shift/chords refused). No text buffer, so it is a
+        // command site. The Toolbar container only forwards keys, so it is not
+        // a separate site.
+        new("ActionButton", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/ActionButton.cs"),
         // Accordion (#2379): multi-section container with a host-owned expanded
         // set. Navigation and Enter/Space expansion use the strict no-modifier
         // command gate, so Shift is refused: a command site, not a text buffer.
