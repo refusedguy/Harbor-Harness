@@ -337,3 +337,8 @@ Harbor.Abstractions.Dsl.SpecValueKind.Identifier = 3 -> Harbor.Abstractions.Dsl.
 Harbor.Abstractions.Extensions.UnicodeDisplayWidth
 static Harbor.Abstractions.Extensions.UnicodeDisplayWidth.Width(System.ReadOnlySpan<char> text) -> int
 static Harbor.Abstractions.Extensions.UnicodeDisplayWidth.Width(System.Text.Rune r) -> int
+const Harbor.Abstractions.Events.AgentEvent.CurrentSchemaVersion = 1 -> int
+Harbor.Abstractions.Events.AgentEvent.SchemaVersion.get -> int
+Harbor.Abstractions.Events.AgentEvent.SchemaVersion.init -> void
+Harbor.Abstractions.Events.AgentEvent.IsJournaled.get -> bool
+Harbor.Abstractions.Events.AgentEvent.IsJournaled.init -> void
