@@ -61,6 +61,12 @@ public class UserHookGatesTests
 
         public Task RunPreCompactAsync(string sessionId, string? agent = null, string? model = null, CancellationToken ct = default) =>
             Task.CompletedTask;
+
+        public Task RunSubagentStartAsync(string sessionId, string? agent = null, string? model = null, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task RunSubagentEndAsync(string sessionId, string? agent = null, string? model = null, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 
     private static AgentLoop CreateLoop(ScriptedLlmClient client, FakeEventBus bus, FakeHookRunner hooks)

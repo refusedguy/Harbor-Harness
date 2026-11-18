@@ -17,7 +17,8 @@ namespace Harbor.Application.Hooks;
 ///             <item>
 ///                 <b>Advisory</b> — <see cref="PostToolUse" />,
 ///                 <see cref="SessionStart" />, <see cref="PreCompact" />,
-///                 <see cref="SessionEnd" />. The verdict is logged and
+///                 <see cref="SessionEnd" />, <see cref="SubagentStart" />,
+///                 <see cref="SubagentEnd" />. The verdict is logged and
 ///                 discarded; a hook can never fail or rewrite the run it
 ///                 observes. Same "observable, never authoritative" contract.
 ///             </item>
@@ -55,4 +56,17 @@ public static class HookEvents
     ///     or rewrite the summary.
     /// </summary>
     public const string PreCompact = "PreCompact";
+
+    /// <summary>
+    ///     Runs once when a sub-agent child session is about to start; advisory.
+    ///     The payload's <c>agent</c>/<c>model</c> describe the child, and
+    ///     <c>sessionId</c> is the child session, not the parent.
+    /// </summary>
+    public const string SubagentStart = "SubagentStart";
+
+    /// <summary>
+    ///     Runs once when a sub-agent child session ends, including failure and
+    ///     cancellation; advisory. It cannot change the child's result.
+    /// </summary>
+    public const string SubagentEnd = "SubagentEnd";
 }

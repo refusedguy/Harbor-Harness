@@ -91,6 +91,8 @@ internal static class CafPilotVerbs
         // #2437: the dev-log producer and its reader, behind the same flag.
         app.Add("dsl watch", DslDevCommands.Watch);
         app.Add("dsl devlog", DslDevCommands.Devlog);
+        // #2438: headless automation protocol (getTree, clock, testId).
+        app.Add("dsl automation", DslAutomationCommands.Automation);
 #endif
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;

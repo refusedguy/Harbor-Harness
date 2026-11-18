@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
@@ -6,6 +7,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
+using Harbor.Application.Hooks;
 using Harbor.Application.Tests.Fakes;
 using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop; // #1769: generated double
 using FakeSessionStore = Harbor.TestKit.FakeSessionStore; // #1825: the shared kit's double — the alias names the one this file means
@@ -69,6 +71,82 @@ public class SubAgentRunnerTests
                 await MidRun().ConfigureAwait(false);
             return _outcome ?? Result.Success();
         }
+    }
+
+    /// <summary>H01: records the child lifecycle events without spawning hook processes.</summary>
+    private sealed class RecordingHookRunner : IHookRunner
+    {
+        public List<string> Events { get; } = [];
+        public string? StartSessionId { get; private set; }
+        public string? EndSessionId { get; private set; }
+        public string? Agent { get; private set; }
+
+        public Task<HookVerdict> RunPreToolUseAsync(string toolName, JsonElement args, string sessionId, CancellationToken ct = default) =>
+            Task.FromResult(HookVerdict.Allow);
+
+        public Task RunPostToolUseAsync(string toolName, JsonElement args, ToolResult result, string sessionId, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task RunSessionEndAsync(string sessionId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task RunSessionStartAsync(string sessionId, string? agent = null, string? model = null, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task<HookVerdict> RunUserPromptSubmitAsync(string sessionId, string prompt, string? agent = null, string? model = null, CancellationToken ct = default) =>
+            Task.FromResult(HookVerdict.Allow);
+
+        public Task RunPreCompactAsync(string sessionId, string? agent = null, string? model = null, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task RunSubagentStartAsync(string sessionId, string? agent = null, string? model = null, CancellationToken ct = default)
+        {
+            Events.Add("SubagentStart");
+            StartSessionId = sessionId;
+            Agent = agent;
+            return Task.CompletedTask;
+        }
+
+        public Task RunSubagentEndAsync(string sessionId, string? agent = null, string? model = null, CancellationToken ct = default)
+        {
+            Events.Add("SubagentEnd");
+            EndSessionId = sessionId;
+            return Task.CompletedTask;
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_FiresSubagentHooks_AroundChildRun()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies: Assistant("done"));
+        var hooks = new RecordingHookRunner();
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance, hooks);
+
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("find", "parent-1"));
+
+        await Assert.That(result).IsSuccessful();
+        await Assert.That(hooks.Events.Count).IsEqualTo(2);
+        await Assert.That(hooks.Events[0]).IsEqualTo("SubagentStart");
+        await Assert.That(hooks.Events[1]).IsEqualTo("SubagentEnd");
+        await Assert.That(hooks.StartSessionId).IsNotNull();
+        await Assert.That(hooks.EndSessionId).IsEqualTo(hooks.StartSessionId);
+        await Assert.That(hooks.Agent).IsEqualTo("explore");
+    }
+
+    [Test]
+    public async Task RunAsync_FailedChildRun_StillFiresSubagentEnd()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(outcome: Result.Failure("model exploded"));
+        var hooks = new RecordingHookRunner();
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance, hooks);
+
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("find"));
+
+        await Assert.That(result).IsFailed();
+        await Assert.That(hooks.Events.Count).IsEqualTo(2);
+        await Assert.That(hooks.Events[0]).IsEqualTo("SubagentStart");
+        await Assert.That(hooks.Events[1]).IsEqualTo("SubagentEnd");
     }
 
     [Test]

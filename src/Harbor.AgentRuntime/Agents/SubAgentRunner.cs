@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
+using Harbor.Application.Hooks;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -34,7 +35,8 @@ namespace Harbor.Application.Agents;
 public sealed class SubAgentRunner(
     ISessionStore store,
     IAgentLoop loop,
-    ILogger<SubAgentRunner> logger) : ISubAgentRunner
+    ILogger<SubAgentRunner> logger,
+    IHookRunner? hookRunner = null) : ISubAgentRunner
 {
     /// <summary>
     ///     Cap on how much of the sub-run's final answer is returned to the parent.
@@ -193,6 +195,15 @@ public sealed class SubAgentRunner(
 
         try
         {
+            // H01: advisory lifecycle notification for the child run. A null
+            // hook runner (direct construction, tests) keeps the hooks-free
+            // path unchanged; the default runner never throws on its own.
+            if (hookRunner is not null)
+            {
+                await hookRunner.RunSubagentStartAsync(
+                    session.Id, agent.Name.Value, agent.Model, ct).ConfigureAwait(false);
+            }
+
             // Persist the parent's task as the only user turn of this isolated session
             // (mirrors DefaultAgent.PromptAsync, F14: memory + store in one step).
             var userMessage = new UserMessage(
@@ -294,6 +305,15 @@ public sealed class SubAgentRunner(
         }
         finally
         {
+            // H01: the end hook rides CancellationToken.None so a cancelled
+            // child still reports its end. Advisory by contract: it cannot
+            // change the result already on its way out of this try block.
+            if (hookRunner is not null)
+            {
+                await hookRunner.RunSubagentEndAsync(
+                    session.Id, agent.Name.Value, agent.Model, CancellationToken.None).ConfigureAwait(false);
+            }
+
             // #201: the producer always completes the writer — a failing run must
             // never hang a reader. The drain only uses TryRead today, but
             // completion is the hang-proof contract for any future blocking read.

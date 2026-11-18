@@ -823,3 +823,16 @@ replay через `Scene`, но прямо помечен «НЕ рекомен�
 
 - Полный текст, таблица покрытия, непокрытый кластер и условный срез:
   [ADR-027](ADR-027-canvas-shape-context-stays-deferred.md).
+
+## ADR-028: Avalonia AXAML vs Harbor DSL — сравнение и вердикт
+
+Issue [#2694](https://github.com/refusedguy/Harbor-Harness/issues/2694)
+сравнил восемь приёмов декларативного XAML в Avalonia с DSL-платформой Harbor.
+Все применимые пункты уже покрыты: компиляция разметки в C#, типобезопасные
+биндинги без reflection, live-интерпретатор, Debug-only подмена `BuildRoot`,
+реестр панелей по типу и ошибки с позицией в ответе на reload. Оконный previewer,
+стили и SRE-компиляция не переносятся в терминал и остаются owner-decision.
+Нового кода, гейтов и порогов этот вердикт не требует.
+
+- Полное сравнение по пунктам и границы проверки:
+  [ADR-028](ADR-028-avalonia-declarative-xaml-dsl-verdict.md).

@@ -97,9 +97,10 @@ public sealed record HookVerdictDto(
 ///     Fail-closed where it matters: <c>PreToolUse</c> and
 ///     <c>UserPromptSubmit</c> deny when a hook times out, cannot start,
 ///     prints invalid JSON, or names an unknown decision.
-///     <c>PostToolUse</c>/<c>SessionStart</c>/<c>PreCompact</c>/<c>SessionEnd</c>
-///     are advisory — hook failures are logged and never fail the run. No
-///     method here throws except on a cancelled <see cref="CancellationToken" />.
+///     <c>PostToolUse</c>/<c>SessionStart</c>/<c>PreCompact</c>/<c>SessionEnd</c>/
+///     <c>SubagentStart</c>/<c>SubagentEnd</c> are advisory — hook failures
+///     are logged and never fail the run. No method here throws except on a
+///     cancelled <see cref="CancellationToken" />.
 /// </remarks>
 public interface IHookRunner
 {
@@ -161,5 +162,29 @@ public interface IHookRunner
     /// <param name="model">Resolved model id whose context window triggered the pass.</param>
     /// <param name="ct">Cancellation token.</param>
     Task RunPreCompactAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Run every <c>SubagentStart</c> hook once, just before a child run
+    ///     begins. Advisory, same contract as <see cref="RunPostToolUseAsync" />.
+    /// </summary>
+    /// <param name="sessionId">The child session id (not the parent's).</param>
+    /// <param name="agent">Child agent name; rides the payload as <c>agent</c>.</param>
+    /// <param name="model">Child model id; rides the payload as <c>model</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RunSubagentStartAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Run every <c>SubagentEnd</c> hook once when a child run finishes,
+    ///     fails or is cancelled. Advisory, same contract as
+    ///     <see cref="RunPostToolUseAsync" />. The caller uses a non-cancellable
+    ///     token so a cancelled child still reports its end.
+    /// </summary>
+    /// <param name="sessionId">The child session id (not the parent's).</param>
+    /// <param name="agent">Child agent name; rides the payload as <c>agent</c>.</param>
+    /// <param name="model">Child model id; rides the payload as <c>model</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RunSubagentEndAsync(
         string sessionId, string? agent = null, string? model = null, CancellationToken ct = default);
 }

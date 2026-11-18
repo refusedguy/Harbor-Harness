@@ -66,7 +66,7 @@ The generator resolves the path with Roslyn symbols at build time. A missing `st
 
 For each `.harbor-ui` file the generator emits four sources:
 
-1. `CellForgeRootContract.g.cs` is added once per compilation during post-initialization. It declares `internal interface ICellForgeRoot` with `Begin(int sequence)`, `Text(int sequence, string text)` and `End()`. The interface types the `root` parameter, so it reaches the compilation before any file is generated.
+1. `CellForgeRootContract.g.cs` is added once per compilation during post-initialization. It declares `internal interface ICellForgeRoot` with `Begin(int sequence)`, `TestId(int sequence, string testId)` (#2438), `Text(int sequence, string text)` and `End()`. The interface types the `root` parameter, so it reaches the compilation before any file is generated.
 2. `<Identifier>.Declarations.g.cs` is phase 1. It holds the `internal partial class` and its declarations (`TargetPath`, `RootCount`, `SequenceCount`). Its provider is `MarkupGenerator.Phase1Declarations`.
 3. `<Identifier>.BuildRoot.g.cs` is phase 2. It holds the other partial half with `internal static void BuildRoot(ICellForgeRoot root)`. Its provider takes phase 1 as input, so it cannot run before the declarations exist.
 4. `<Identifier>.Bindings.g.cs` is phase 3 (#2429). It holds one static class with a `Func<TState, TValue>` field per binding and an `Action<TState, TValue>` field per two-way binding. Its provider combines phase 1 with the compilation, because path resolution needs Roslyn symbols.
