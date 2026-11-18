@@ -35,6 +35,7 @@ consumer needs regardless of which part the type lives in.
 | `CapturingLogger.cs`, `EmptyServiceProvider.cs`, `ManualTimeProvider.cs` | The logging, container and clock doubles. |
 | `TestSeeds.cs` | The single seed source for stochastic tests, overridable from the environment. |
 | `FuzzLoop.cs` | The reusable fuzz driver: a seeded walk whose violations carry the seed, case index and exact input (#2704 P03). |
+| `Arbitrary.cs` | The seeded agent-event transcript generator: a well-formed walk for a given `Random` and turn count (#2704 D02). |
 | `TempDirScope.cs`, `EnvScope.cs`, `GitProbe.cs` | The three scopes: a temp directory, an environment variable, a git repository. |
 | `StubHttpMessageHandler.cs` | The HTTP handler double (#1825). |
 | `Exhaustive.cs`, `TestGitQuery.cs`, `TestEventBusMiddleware.cs`, `TestRepoPaths.cs`, `AppConfigDocument.cs` | The rest of the shared helpers. |
