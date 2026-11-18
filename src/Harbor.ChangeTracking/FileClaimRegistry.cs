@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Extensions;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.ChangeTracking;
 
