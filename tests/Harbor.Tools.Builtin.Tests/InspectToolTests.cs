@@ -116,7 +116,7 @@ public class InspectToolTests
         var empty = await RunAsync(tool, """{"section":"context"}""");
         string output = empty.Output;
 
-        await Assert.That(empty.IsSuccess).IsTrue();
+        await Assert.That(empty.IsError).IsFalse();
         await Assert.That(output).Contains("model: unknown");
         await Assert.That(output).Contains("messages: 0 (0 user, 0 assistant, 0 tool result)");
         await Assert.That(output).Contains("last-step tokens: in 0, out 0 (no usage reported yet)");
