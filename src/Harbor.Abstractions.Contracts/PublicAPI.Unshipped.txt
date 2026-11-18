@@ -390,3 +390,21 @@ override Harbor.Abstractions.Models.ServiceUsage.GetHashCode() -> int
 override Harbor.Abstractions.Models.ServiceUsage.ToString() -> string!
 static Harbor.Abstractions.Models.ServiceUsage.operator !=(Harbor.Abstractions.Models.ServiceUsage? left, Harbor.Abstractions.Models.ServiceUsage? right) -> bool
 static Harbor.Abstractions.Models.ServiceUsage.operator ==(Harbor.Abstractions.Models.ServiceUsage? left, Harbor.Abstractions.Models.ServiceUsage? right) -> bool
+Harbor.Abstractions.Models.CacheReuseMetrics
+Harbor.Abstractions.Models.CacheReuseMetrics.<Clone>$() -> Harbor.Abstractions.Models.CacheReuseMetrics!
+Harbor.Abstractions.Models.CacheReuseMetrics.CachedTokens.get -> long
+Harbor.Abstractions.Models.CacheReuseMetrics.CacheReuseMetrics(long cachedTokens = 0, long missedTokens = 0, int checkpoints = 0, string? promptPrefixId = null) -> void
+Harbor.Abstractions.Models.CacheReuseMetrics.Checkpoints.get -> int
+Harbor.Abstractions.Models.CacheReuseMetrics.Combine(Harbor.Abstractions.Models.CacheReuseMetrics! other) -> Harbor.Abstractions.Models.CacheReuseMetrics!
+Harbor.Abstractions.Models.CacheReuseMetrics.Equals(Harbor.Abstractions.Models.CacheReuseMetrics? other) -> bool
+Harbor.Abstractions.Models.CacheReuseMetrics.HasStablePrefix.get -> bool
+Harbor.Abstractions.Models.CacheReuseMetrics.IsEmpty.get -> bool
+Harbor.Abstractions.Models.CacheReuseMetrics.MissedTokens.get -> long
+Harbor.Abstractions.Models.CacheReuseMetrics.PromptPrefixId.get -> string?
+Harbor.Abstractions.Models.CacheReuseMetrics.ReuseRatio.get -> double
+Harbor.Abstractions.Models.CacheReuseMetrics.TotalTokens.get -> long
+override Harbor.Abstractions.Models.CacheReuseMetrics.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.CacheReuseMetrics.GetHashCode() -> int
+override Harbor.Abstractions.Models.CacheReuseMetrics.ToString() -> string!
+static Harbor.Abstractions.Models.CacheReuseMetrics.operator !=(Harbor.Abstractions.Models.CacheReuseMetrics? left, Harbor.Abstractions.Models.CacheReuseMetrics? right) -> bool
+static Harbor.Abstractions.Models.CacheReuseMetrics.operator ==(Harbor.Abstractions.Models.CacheReuseMetrics? left, Harbor.Abstractions.Models.CacheReuseMetrics? right) -> bool
