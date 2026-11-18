@@ -152,6 +152,16 @@ public sealed class TokenTracker : ITokenTracker
         Ensure.NotNull(messages);
         Ensure.NotNull(model);
 
+        // #2679 F041 — HARBOR_DISABLE_AUTOCOMPACT is the process-level escape
+        // hatch. It lands on the single "should we compact?" choke point, so both
+        // the turn pipeline and CompactionService.ShouldCompact see the same
+        // verdict. Explicit CompactAsync is unaffected. Checked before the
+        // estimate so a disabled check costs one env read, not a full rescan.
+        if (AutoCompactDisabled)
+        {
+            return false;
+        }
+
         // An unreported window (0, the sentinel ProviderConfig uses when
         // context_length is missing) cannot produce a token budget. Refuse to
         // compact, but say so at Warning: the old code folded this into the
@@ -215,6 +225,22 @@ public sealed class TokenTracker : ITokenTracker
         lock (_sync)
         {
             return new TokenStats(_totalInputTokens, _totalOutputTokens, _totalReasoningTokens, _totalCacheReadTokens, _totalCacheWriteTokens);
+        }
+    }
+
+    /// <summary>
+    ///     Whether the caller opted out of automatic compaction for this process.
+    ///     Only an explicit truthy value ("1" or "true", case-insensitive) opts
+    ///     out; an unset or unrelated value keeps the historical behaviour, so a
+    ///     stray environment variable cannot silently change a session's context
+    ///     management.
+    /// </summary>
+    private static bool AutoCompactDisabled
+    {
+        get
+        {
+            string? value = Environment.GetEnvironmentVariable("HARBOR_DISABLE_AUTOCOMPACT");
+            return value is "1" || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
         }
     }
 
