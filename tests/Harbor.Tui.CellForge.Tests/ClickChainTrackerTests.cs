@@ -1,5 +1,3 @@
-using EngineInput = Harbor.Tui.CellForge.Input;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
