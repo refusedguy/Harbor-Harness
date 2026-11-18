@@ -62,6 +62,18 @@ public partial class ChatView : UserControl
         // whichever box the user was typing in.
         var originBox = sender as TextBox ?? InputBox;
 
+        // #2681 G02: Alt+Up / Alt+Down walk the prompts sent from this composer.
+        // Both composers share this handler, so the caret goes back to the end
+        // of the recalled text in whichever box the user was typing in.
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt) && (e.Key == Key.Up || e.Key == Key.Down))
+        {
+            e.Handled = true;
+            if (e.Key == Key.Up) vm.NavigateInputHistoryUp();
+            else vm.NavigateInputHistoryDown();
+            originBox.CaretIndex = originBox.Text?.Length ?? 0;
+            return;
+        }
+
         bool isPlainEnter = e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         bool isCtrlEnter = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
 

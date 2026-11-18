@@ -39,6 +39,17 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private readonly SessionStatusTracker? _statusTracker;
     private UiStore _store;
 
+    /// <summary>
+    ///     #2681 G02: prompts already sent from this composer, walked with
+    ///     Alt+Up / Alt+Down. The buffer is local because the Avalonia input box
+    ///     owns its text directly; the store's <c>InputModel.History</c> belongs
+    ///     to the terminal key-event path and never sees these keystrokes.
+    /// </summary>
+    private readonly InputHistoryBuffer _inputHistory = new();
+
+    /// <summary>Oldest-first snapshot of submitted prompts (for history navigation and tests).</summary>
+    public IReadOnlyList<string> InputHistory => _inputHistory.Entries;
+
     public ObservableCollection<Suggestion> ContextualSuggestions { get; } = new();
 
     /// <summary>Construct the chat view-model.</summary>
@@ -177,6 +188,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         if (string.IsNullOrWhiteSpace(text)) return;
 
         ChatViewModelLog.SubmittingPrompt(Logger, text.Length);
+        _inputHistory.Add(text);
         InputText = string.Empty;
         SendCommand.NotifyCanExecuteChanged();
 
@@ -197,6 +209,23 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         }
 
         _effects.Run(effect);
+    }
+
+    /// <summary>
+    ///     #2681 G02: recall the previous submitted prompt (Alt+Up). A first
+    ///     step saves whatever the user was typing so Down can bring it back.
+    /// </summary>
+    public void NavigateInputHistoryUp()
+    {
+        if (_inputHistory.TryNavigateUp(InputText, out string text))
+            InputText = text;
+    }
+
+    /// <summary>#2681 G02: walk toward newer prompts, or restore the draft (Alt+Down).</summary>
+    public void NavigateInputHistoryDown()
+    {
+        if (_inputHistory.TryNavigateDown(out string text))
+            InputText = text;
     }
 
     /// <summary>
