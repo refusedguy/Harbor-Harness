@@ -61,6 +61,11 @@ public class FullLayerMatrixTests
         // there is nothing to constrain.
         ["Harbor.Arch.Analyzers"] = "Build-time Roslyn analyzer project (the repository's own architecture rules); consumed via OutputItemType=Analyzer, produces no runtime assembly.",
 
+        // #2424: the markup-DSL generator is another build-time Roslyn
+        // component. It binds IR contracts at compile time and emits code into
+        // its consumer; no runtime assembly of its own ships.
+        ["Harbor.Tui.CellForge.CodeGen"] = "Build-time Roslyn source generator for the CellForge markup DSL; emits code into its consumer, produces no runtime assembly.",
+
         // Harbor.Plugins.Host.csproj produces the assembly 'harbor-plugins-host'
         // (OutputType=Exe): an out-of-process MCP stdio server, i.e. an
         // app/composition root like apps/*. It may reference anything.
