@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tools;
 
 namespace Harbor.App.Cli.Commands;
@@ -66,13 +67,14 @@ internal sealed class ToolsCommand
             return await UsageAsync("Missing tool name").ConfigureAwait(false);
 
         string name = args[0];
-        var tool = _tools().FirstOrDefault(
+        var match = _tools().TryFirst(
             t => string.Equals(t.Name.Value, name, StringComparison.OrdinalIgnoreCase));
-        if (tool is null)
+        if (match.HasNoValue)
         {
             await _error.WriteLineAsync($"Unknown tool: {name}").ConfigureAwait(false);
             return 1;
         }
+        var tool = match.Value;
 
         if (json)
         {
