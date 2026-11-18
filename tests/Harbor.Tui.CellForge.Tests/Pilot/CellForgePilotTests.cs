@@ -103,20 +103,52 @@ public sealed class CellForgePilotTests
     }
 
     [Test]
-    public async Task WaitForEvent_MissingEvent_TimesOut()
+    public async Task WaitForEvent_MissingEvent_TimesOut_WithDiagnostic()
     {
         await using var pilot = await CellForgePilot.LaunchAsync();
 
-        bool timedOut = false;
+        TimeoutException? failure = null;
         try
         {
             await pilot.WaitForEventAsync<AgentErrorEvent>(timeout: TimeSpan.FromMilliseconds(50));
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
-            timedOut = true;
+            failure = ex;
         }
 
-        await Assert.That(timedOut).IsTrue();
+        await Assert.That(failure).IsNotNull();
+        await Assert.That(failure!.Message).Contains("WaitForEventAsync<AgentErrorEvent>");
+        await Assert.That(failure.Message).Contains("predicate none");
+        await Assert.That(failure.Message).Contains("No events were published");
+        await Assert.That(pilot.LastWaitDiagnostic).IsEqualTo(failure.Message);
+    }
+
+    [Test]
+    public async Task WaitForEvent_Timeout_NamesEventsThatDidArrive()
+    {
+        await using var pilot = await CellForgePilot.LaunchAsync();
+        await pilot.PublishAsync(TestEvents.AgentStart());
+        await pilot.PublishAsync(TestEvents.AgentEnd());
+
+        TimeoutException? failure = null;
+        try
+        {
+            await pilot.WaitForEventAsync<AgentErrorEvent>(
+                e => e.Message.Contains("boom", StringComparison.Ordinal),
+                TimeSpan.FromMilliseconds(30));
+        }
+        catch (TimeoutException ex)
+        {
+            failure = ex;
+        }
+
+        await Assert.That(failure).IsNotNull();
+        string message = failure!.Message;
+        await Assert.That(message).Contains("predicate supplied");
+        await Assert.That(message).Contains("Observed 2 event(s)");
+        await Assert.That(message).Contains("AgentStartEvent x1");
+        await Assert.That(message).Contains("AgentEndEvent x1");
+        await Assert.That(pilot.LastWaitDiagnostic).IsEqualTo(message);
     }
 }
