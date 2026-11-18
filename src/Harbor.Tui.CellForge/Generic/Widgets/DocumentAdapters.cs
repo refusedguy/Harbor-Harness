@@ -252,6 +252,13 @@ public static class DocumentAdapters
                 return;
             }
 
+            // Indentation between block tags is markup whitespace, not content:
+            // keeping it would emit blank lines for every indented <li>.
+            if (!_pre && _current.Count == 0 && IsAllWhitespace(text))
+            {
+                return;
+            }
+
             if (_pre)
             {
                 int start = 0;
@@ -322,6 +329,19 @@ public static class DocumentAdapters
             {
                 _current.Add(new DocumentSpan(sb.ToString(), CurrentStyle()));
             }
+        }
+
+        private static bool IsAllWhitespace(ReadOnlySpan<char> text)
+        {
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (!char.IsWhiteSpace(text[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static string? DecodeEntity(ReadOnlySpan<char> entity)
