@@ -11,9 +11,11 @@ namespace Harbor.Plugins.Hosting;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The host itself is stateless beyond constructor-injected dependencies. All
-///         per-plugin state lives in the layers below. This makes the host trivially
-///         testable with in-memory doubles.
+///         The host holds no mutable collections of its own (#2607): the load set,
+///         the inventory ledger and the lifecycle gate live in
+///         <see cref="PluginStateStore" />. The host orchestrates the layers and
+///         keeps its constructor-injected dependencies, so it stays testable
+///         with in-memory doubles.
 ///     </para>
 ///     <para>
 ///         Failures at any stage are logged. Whether they abort the run or not depends
@@ -56,28 +58,10 @@ public sealed class PluginHost
     private readonly IPluginRegistrar _registrar;
     private readonly IPluginSource _source;
 
-    // #1733: the activation state of the load set. `_active` holds the plugins that are
-    // initialized and registered; `_pending` holds the ones that are loaded and waiting for
-    // a dependency. `_activeNames` is what a plugin-to-plugin dependency resolves against.
-    //
-    // #1722: `_inventory` is the LEDGER the live composition is projected from. It is
-    // filled in as the load proceeds — one entry per plugin the host met, with the
-    // phase it reached — and it is the only place the host keeps that history. The
-    // inventory is a rendering of it, not a second copy of it.
-    private readonly object _sync = new();
-    private readonly List<LoadedPlugin> _active = [];
-    private readonly HashSet<string> _activeNames = new(StringComparer.Ordinal);
-    private readonly List<PendingEntry> _pending = [];
-
-    // #1737: the lifecycle model. `_definitions` is what each plugin IS — the
-    // immutable package, which outlives the run; `_runs` is the live activation
-    // of it. The gate serializes the lifecycle operations, so a stop, a run and
-    // an update never interleave — that is what makes "an update reloads
-    // without races" true rather than aspirational.
-    private readonly Dictionary<string, LoadedPlugin> _definitions = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IPluginRun> _runs = new(StringComparer.Ordinal);
-    private readonly SemaphoreSlim _lifecycle = new(1, 1);
-    private readonly List<PluginInventoryEntry> _inventory = [];
+    // #2607: the load set, the ledger and the lifecycle gate are one
+    // responsibility. PluginStateStore owns them. The host keeps the
+    // decisions and the orchestration; the store keeps the state they produce.
+    private readonly PluginStateStore _state = new();
 
     /// <summary>
     ///     Construct a new plugin host.
@@ -109,16 +93,7 @@ public sealed class PluginHost
     ///     The plugins that are loaded AND activated — initialized, with their
     ///     contributions registered.
     /// </summary>
-    public IReadOnlyList<LoadedPlugin> ActivePlugins
-    {
-        get
-        {
-            lock (_sync)
-            {
-                return [.. _active];
-            }
-        }
-    }
+    public IReadOnlyList<LoadedPlugin> ActivePlugins => _state.ActivePlugins;
 
     /// <summary>
     ///     The plugins that are loaded but NOT activated, and the dependencies each of them
@@ -129,24 +104,7 @@ public sealed class PluginHost
     ///     is listed here so the state is visible to whoever asks the host, and the host logs
     ///     it too — a plugin that waits is a fact the user can be told, not a silence.
     /// </remarks>
-    public IReadOnlyList<PendingPlugin> PendingPlugins
-    {
-        get
-        {
-            lock (_sync)
-            {
-                var pending = new List<PendingPlugin>(_pending.Count);
-                foreach (PendingEntry entry in _pending)
-                {
-                    pending.Add(new PendingPlugin(
-                        entry.Plugin.Name,
-                        entry.Plugin.Version,
-                        entry.Unsatisfied));
-                }
-                return pending;
-            }
-        }
-    }
+    public IReadOnlyList<PendingPlugin> PendingPlugins => _state.PendingPlugins;
 
     /// <summary>
     ///     The live plugin composition, as one machine-readable document (#1722).
@@ -165,16 +123,7 @@ public sealed class PluginHost
     ///         host gave it.
     ///     </para>
     /// </remarks>
-    public PluginInventory Inventory
-    {
-        get
-        {
-            lock (_sync)
-            {
-                return new PluginInventory(_options.RouteId, [.. _inventory]);
-            }
-        }
-    }
+    public PluginInventory Inventory => new(_options.RouteId, _state.InventoryEntries);
 
     /// <summary>
     ///     The definitions the host knows about (#1737) — the plugins it has met,
@@ -185,16 +134,7 @@ public sealed class PluginHost
     ///     plugin is still defined: that is the difference between "stopped" and
     ///     "forgotten", and it is why the definition outlives the run.
     /// </remarks>
-    public IReadOnlyList<LoadedPlugin> Definitions
-    {
-        get
-        {
-            lock (_sync)
-            {
-                return [.. _definitions.Values];
-            }
-        }
-    }
+    public IReadOnlyList<LoadedPlugin> Definitions => _state.Definitions;
 
     /// <summary>
     ///     Load every script produced by the source, compiling + instantiating +
@@ -227,7 +167,7 @@ public sealed class PluginHost
             if (refusal is not null)
             {
                 _logger.LogWarning("Plugin {Path} was not loaded: {Reason}", script.Path, refusal);
-                RecordInventory(RefusedEntry(script, refusal));
+                _state.RecordInventory(RefusedEntry(script, refusal));
                 if (FailOrContinue(refusal))
                     return Result.Failure<IReadOnlyList<LoadedPlugin>>(refusal);
                 continue;
@@ -240,7 +180,7 @@ public sealed class PluginHost
                 // run continues — per-plugin failure is never an error, because the
                 // overall load still succeeds under ContinueOnError.
                 _logger.LogWarning("Plugin compilation failed for {Path}: {Error}", script.Path, compiled.Error);
-                RecordInventory(RefusedEntry(script, compiled.Error));
+                _state.RecordInventory(RefusedEntry(script, compiled.Error));
                 if (FailOrContinue(compiled.Error))
                     return compiled.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
@@ -255,7 +195,7 @@ public sealed class PluginHost
             if (instantiated.IsFailure)
             {
                 _logger.LogWarning("Plugin instantiation failed for {Path}: {Error}", script.Path, instantiated.Error);
-                RecordInventory(RefusedEntry(script, instantiated.Error));
+                _state.RecordInventory(RefusedEntry(script, instantiated.Error));
                 if (FailOrContinue(instantiated.Error))
                     return instantiated.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
@@ -317,11 +257,7 @@ public sealed class PluginHost
         int activated = 0;
         while (true)
         {
-            List<PendingEntry> snapshot;
-            lock (_sync)
-            {
-                snapshot = [.. _pending];
-            }
+            IReadOnlyList<PluginStateStore.PendingEntry> snapshot = _state.PendingEntries;
 
             if (snapshot.Count == 0)
             {
@@ -329,26 +265,26 @@ public sealed class PluginHost
             }
 
             bool progressed = false;
-            foreach (PendingEntry entry in snapshot)
+            foreach (PluginStateStore.PendingEntry entry in snapshot)
             {
                 IReadOnlyList<string> unmet = UnsatisfiedDependencies(entry.Plugin, out string? malformed);
                 if (malformed is not null)
                 {
                     // A declaration the host cannot even read is a plugin bug, not a wait.
-                    RemovePending(entry);
+                    _state.RemovePending(entry);
                     _logger.LogWarning("Plugin registration failed for {DisplayName}: {Error}", entry.Plugin.DisplayName, malformed);
-                    ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Failed, [], [], malformed));
+                    _state.ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Failed, [], [], malformed));
                     continue;
                 }
 
                 if (unmet.Count > 0)
                 {
-                    entry.Unsatisfied = unmet;
-                    ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Pending, unmet, [], null));
+                    _state.UpdatePending(entry, unmet);
+                    _state.ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Pending, unmet, [], null));
                     continue;
                 }
 
-                RemovePending(entry);
+                _state.RemovePending(entry);
 
                 // #1737: a pending plugin is DEFINED but has no run. Bringing it up
                 // is a plain run, not an update: there is nothing running under
@@ -473,24 +409,6 @@ public sealed class PluginHost
     }
 
     /// <summary>
-    ///     A loaded plugin that is waiting, and the dependencies it is waiting for.
-    /// </summary>
-    private sealed class PendingEntry
-    {
-        internal PendingEntry(LoadedPlugin plugin, IReadOnlyList<string> unsatisfied)
-        {
-            Plugin = plugin;
-            Unsatisfied = unsatisfied;
-        }
-
-        /// <summary>The loaded plugin.</summary>
-        internal LoadedPlugin Plugin { get; }
-
-        /// <summary>The dependency names that are not satisfied yet.</summary>
-        internal IReadOnlyList<string> Unsatisfied { get; set; }
-    }
-
-    /// <summary>
     ///     Bring one plugin up: activate it when its declared dependencies are met, park it
     ///     as pending when they are not, and report a malformed declaration as a failure.
     /// </summary>
@@ -510,39 +428,23 @@ public sealed class PluginHost
         IReadOnlyList<string> unmet = UnsatisfiedDependencies(plugin, out string? malformed);
         if (malformed is not null)
         {
-            RecordInventory(Entry(plugin, PluginInventoryPhase.Failed, [], [], malformed));
+            _state.RecordInventory(Entry(plugin, PluginInventoryPhase.Failed, [], [], malformed));
             return (ActivationOutcome.Failed, malformed);
         }
 
         if (unmet.Count > 0)
         {
-            lock (_sync)
-            {
-                _pending.Add(new PendingEntry(plugin, unmet));
-            }
-
-            RecordInventory(Entry(plugin, PluginInventoryPhase.Pending, unmet, [], null));
+            _state.AddPending(plugin, unmet);
+            _state.RecordInventory(Entry(plugin, PluginInventoryPhase.Pending, unmet, [], null));
             return (ActivationOutcome.Pending, string.Empty);
         }
 
-        bool unchanged = false;
-        lock (_sync)
-        {
-            if (_runs.ContainsKey(plugin.Name)
-                && _definitions.TryGetValue(plugin.Name, out LoadedPlugin? current)
-                && current is not null
-                && string.Equals(current.SourceHash, plugin.SourceHash, StringComparison.Ordinal))
-            {
-                unchanged = true;
-            }
-        }
-
-        if (unchanged)
+        if (_state.IsUnchangedRun(plugin))
         {
             return (ActivationOutcome.AlreadyRunning, string.Empty);
         }
 
-        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        await _state.WaitLifecycleAsync(ct).ConfigureAwait(false);
         try
         {
             Result started = await StartRunCoreAsync(plugin, host, ct).ConfigureAwait(false);
@@ -555,7 +457,7 @@ public sealed class PluginHost
         }
         finally
         {
-            _lifecycle.Release();
+            _state.ReleaseLifecycle();
         }
     }
 
@@ -579,31 +481,25 @@ public sealed class PluginHost
         if (host is null)
             throw new ArgumentNullException(nameof(host));
 
-        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        await _state.WaitLifecycleAsync(ct).ConfigureAwait(false);
         try
         {
-            LoadedPlugin package;
-            lock (_sync)
+            if (!_state.TryGetDefinition(name, out LoadedPlugin? definition) || definition is null)
             {
-                if (!_definitions.TryGetValue(name, out LoadedPlugin? definition) || definition is null)
-                {
-                    return Result.Failure($"No plugin named '{name}' is defined.");
-                }
-
-                if (_runs.ContainsKey(name))
-                {
-                    return Result.Failure(
-                        $"Plugin '{name}' is already running. Stop it before running it again.");
-                }
-
-                package = definition;
+                return Result.Failure($"No plugin named '{name}' is defined.");
             }
 
-            return StartRunCore(package, host, PluginRunMode.Run);
+            if (_state.HasRun(name))
+            {
+                return Result.Failure(
+                    $"Plugin '{name}' is already running. Stop it before running it again.");
+            }
+
+            return StartRunCore(definition, host, PluginRunMode.Run);
         }
         finally
         {
-            _lifecycle.Release();
+            _state.ReleaseLifecycle();
         }
     }
 
@@ -630,14 +526,14 @@ public sealed class PluginHost
         if (host is null)
             throw new ArgumentNullException(nameof(host));
 
-        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        await _state.WaitLifecycleAsync(ct).ConfigureAwait(false);
         try
         {
             return await StartRunCoreAsync(plugin, host, ct).ConfigureAwait(false);
         }
         finally
         {
-            _lifecycle.Release();
+            _state.ReleaseLifecycle();
         }
     }
 
@@ -656,14 +552,14 @@ public sealed class PluginHost
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        await _state.WaitLifecycleAsync(ct).ConfigureAwait(false);
         try
         {
             return await StopRunCoreAsync(name, ct).ConfigureAwait(false);
         }
         finally
         {
-            _lifecycle.Release();
+            _state.ReleaseLifecycle();
         }
     }
 
@@ -700,15 +596,10 @@ public sealed class PluginHost
     /// </returns>
     public async Task<Result> StopAllAsync(CancellationToken ct = default)
     {
-        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        await _state.WaitLifecycleAsync(ct).ConfigureAwait(false);
         try
         {
-            string[] names;
-            lock (_sync)
-            {
-                names = _runs.Keys.ToArray();
-            }
-
+            string[] names = _state.RunNames;
             Array.Reverse(names);
 
             Result firstFailure = Result.Success();
@@ -732,7 +623,7 @@ public sealed class PluginHost
         }
         finally
         {
-            _lifecycle.Release();
+            _state.ReleaseLifecycle();
         }
     }
 
@@ -752,26 +643,22 @@ public sealed class PluginHost
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        await _state.WaitLifecycleAsync(ct).ConfigureAwait(false);
         try
         {
-            lock (_sync)
+            if (_state.HasRun(name))
             {
-                if (_runs.ContainsKey(name))
-                {
-                    return Result.Failure(
-                        $"Plugin '{name}' is running. Stop it before forgetting it.");
-                }
-
-                _definitions.Remove(name);
+                return Result.Failure(
+                    $"Plugin '{name}' is running. Stop it before forgetting it.");
             }
 
-            RemoveInventory(name);
+            _state.RemoveDefinition(name);
+            _state.RemoveInventory(name);
             return Result.Success();
         }
         finally
         {
-            _lifecycle.Release();
+            _state.ReleaseLifecycle();
         }
     }
 
@@ -783,11 +670,7 @@ public sealed class PluginHost
         IPluginLoadHost host,
         CancellationToken ct)
     {
-        bool replaced;
-        lock (_sync)
-        {
-            replaced = _runs.ContainsKey(plugin.Name);
-        }
+        bool replaced = _state.HasRun(plugin.Name);
 
         if (replaced)
         {
@@ -816,21 +699,15 @@ public sealed class PluginHost
         Result<IPluginRun> registered = _registrar.Register(plugin, recorder, mode);
         if (registered is { IsSuccess: true, Value: var run })
         {
-            lock (_sync)
-            {
-                _active.Add(plugin);
-                _activeNames.Add(plugin.Name);
-                _definitions[plugin.Name] = plugin;
-                _runs[plugin.Name] = run;
-            }
+            _state.RecordRun(plugin, run);
 
             _logger.LogInformation("Plugin {DisplayName} is running ({Mode}).", plugin.DisplayName, mode);
-            ReplaceInventory(Entry(plugin, PluginInventoryPhase.Active, [], recorder.Registrations, null));
+            _state.ReplaceInventory(Entry(plugin, PluginInventoryPhase.Active, [], recorder.Registrations, null));
             return Result.Success();
         }
 
         string error = registered.Error;
-        RecordInventory(Entry(plugin, PluginInventoryPhase.Failed, [], recorder.Registrations, error));
+        _state.RecordInventory(Entry(plugin, PluginInventoryPhase.Failed, [], recorder.Registrations, error));
         return Result.Failure(error);
     }
 
@@ -839,56 +716,24 @@ public sealed class PluginHost
     /// </summary>
     private async Task<Result> StopRunCoreAsync(string name, CancellationToken ct)
     {
-        IPluginRun run;
-        LoadedPlugin? definition = null;
-        lock (_sync)
+        if (!_state.TryTakeRun(name, out IPluginRun? run, out LoadedPlugin? definition) || run is null)
         {
-            if (!_runs.TryGetValue(name, out IPluginRun? live) || live is null)
-            {
-                // Nothing is running under that name. The state the caller wanted
-                // already holds, so this is not a failure.
-                return Result.Success();
-            }
-
-            run = live;
-            _runs.Remove(name);
-            if (_definitions.TryGetValue(name, out LoadedPlugin? found) && found is not null)
-            {
-                definition = found;
-            }
+            // Nothing is running under that name. The state the caller wanted
+            // already holds, so this is not a failure.
+            return Result.Success();
         }
 
         Result stopped = await run.StopAsync(ct).ConfigureAwait(false);
 
-        lock (_sync)
-        {
-            if (definition is not null)
-            {
-                _active.Remove(definition);
-            }
-
-            _activeNames.Remove(name);
-        }
+        _state.FinishStop(name, definition);
 
         if (definition is not null)
         {
-            ReplaceInventory(Entry(definition, PluginInventoryPhase.Stopped, [], [], null));
+            _state.ReplaceInventory(Entry(definition, PluginInventoryPhase.Stopped, [], [], null));
         }
 
         _logger.LogInformation("Plugin {Name} was stopped.", name);
         return stopped;
-    }
-
-    /// <summary>
-    ///     Forget a plugin's entry in the ledger: the host does not know it any more.
-    /// </summary>
-    /// <param name="name">The plugin's name.</param>
-    private void RemoveInventory(string name)
-    {
-        lock (_sync)
-        {
-            _inventory.RemoveAll(entry => string.Equals(entry.Name, name, StringComparison.Ordinal));
-        }
     }
 
     // ── The live composition ledger (#1722) ──────────────────────────────────────
@@ -948,52 +793,6 @@ public sealed class PluginHost
             ManifestPresent: script.Manifest is not null);
 
     /// <summary>
-    ///     Add a plugin to the ledger.
-    /// </summary>
-    /// <param name="entry">The entry to add.</param>
-    private void RecordInventory(PluginInventoryEntry entry)
-    {
-        lock (_sync)
-        {
-            _inventory.Add(entry);
-        }
-    }
-
-    /// <summary>
-    ///     Replace a plugin's entry in the ledger — the pending entry becomes the
-    ///     active one, or the failed one.
-    /// </summary>
-    /// <param name="entry">The new entry.</param>
-    private void ReplaceInventory(PluginInventoryEntry entry)
-    {
-        lock (_sync)
-        {
-            for (int i = 0; i < _inventory.Count; i++)
-            {
-                if (SamePlugin(_inventory[i], entry))
-                {
-                    _inventory[i] = entry;
-                    return;
-                }
-            }
-
-            _inventory.Add(entry);
-        }
-    }
-
-    /// <summary>
-    ///     Whether two entries describe the same plugin: the same source file, and
-    ///     the same plugin name inside it. One source file may hold more than one
-    ///     plugin, so the name is part of the identity.
-    /// </summary>
-    /// <param name="left">The first entry.</param>
-    /// <param name="right">The second entry.</param>
-    /// <returns>True when both entries are about the same plugin.</returns>
-    private static bool SamePlugin(PluginInventoryEntry left, PluginInventoryEntry right) =>
-        string.Equals(left.SourcePath, right.SourcePath, StringComparison.Ordinal)
-        && string.Equals(left.Name, right.Name, StringComparison.Ordinal);
-
-    /// <summary>
     ///     The declared dependencies that are not satisfied yet (#1733).
     /// </summary>
     /// <param name="plugin">The plugin to check.</param>
@@ -1040,24 +839,13 @@ public sealed class PluginHost
     /// </remarks>
     private bool IsSatisfied(string name)
     {
-        lock (_sync)
+        if (_state.IsActiveName(name))
         {
-            if (_activeNames.Contains(name))
-            {
-                return true;
-            }
+            return true;
         }
 
         // No resolver means the host published no capability at all — nothing is ready.
         return _dependencies is not null && _dependencies.IsSatisfied(name);
-    }
-
-    private void RemovePending(PendingEntry entry)
-    {
-        lock (_sync)
-        {
-            _pending.Remove(entry);
-        }
     }
 
     /// <summary>
@@ -1066,26 +854,22 @@ public sealed class PluginHost
     /// </summary>
     private void ReportPending()
     {
-        List<PendingEntry> snapshot;
-        lock (_sync)
-        {
-            snapshot = [.. _pending];
-        }
+        IReadOnlyList<PluginStateStore.PendingEntry> snapshot = _state.PendingEntries;
 
         if (snapshot.Count == 0)
         {
             return;
         }
 
-        Dictionary<string, PendingEntry> byName = new(StringComparer.Ordinal);
-        foreach (PendingEntry entry in snapshot)
+        Dictionary<string, PluginStateStore.PendingEntry> byName = new(StringComparer.Ordinal);
+        foreach (PluginStateStore.PendingEntry entry in snapshot)
         {
             // First one wins: two plugins with the same name is a different defect, and
             // this report is about dependencies.
             byName.TryAdd(entry.Plugin.Name, entry);
         }
 
-        foreach (PendingEntry entry in snapshot)
+        foreach (PluginStateStore.PendingEntry entry in snapshot)
         {
             IReadOnlyList<string>? cycle = FindCycle(entry, byName);
             if (cycle is not null)
@@ -1114,12 +898,12 @@ public sealed class PluginHost
     ///     is somebody else's, and is reported when that plugin is visited.
     /// </remarks>
     private static IReadOnlyList<string>? FindCycle(
-        PendingEntry start,
-        IReadOnlyDictionary<string, PendingEntry> pendingByName)
+        PluginStateStore.PendingEntry start,
+        IReadOnlyDictionary<string, PluginStateStore.PendingEntry> pendingByName)
     {
         List<string> path = [start.Plugin.Name];
         HashSet<string> seen = new(StringComparer.Ordinal) { start.Plugin.Name };
-        PendingEntry current = start;
+        PluginStateStore.PendingEntry current = start;
 
         while (true)
         {
