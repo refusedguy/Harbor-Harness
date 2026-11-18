@@ -28,7 +28,7 @@ namespace Harbor.Application.Hooks;
 ///         ONLY place fail-closed lives — both <c>PreToolUse</c> and
 ///         <c>UserPromptSubmit</c> go through it. The advisory loop
 ///         (<see cref="RunAdvisoryAsync" />) runs hooks for their side effects
-///         and discards verdicts — the other four events go through it. A new
+///         and discards verdicts — the other six events go through it. A new
 ///         event point is therefore a constant plus one call, never a second
 ///         copy of the fail-closed rules.
 ///     </para>
@@ -209,6 +209,30 @@ public sealed class HookRunner : IHookRunner
         return RunAdvisoryAsync(HookEvents.PreCompact, null, payload, ct);
     }
 
+    /// <inheritdoc />
+    public Task RunSubagentStartAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default)
+    {
+        var payload = new HookPayload(HookEvents.SubagentStart, null, null, null, sessionId)
+        {
+            Agent = agent,
+            Model = model,
+        };
+        return RunAdvisoryAsync(HookEvents.SubagentStart, null, payload, ct);
+    }
+
+    /// <inheritdoc />
+    public Task RunSubagentEndAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default)
+    {
+        var payload = new HookPayload(HookEvents.SubagentEnd, null, null, null, sessionId)
+        {
+            Agent = agent,
+            Model = model,
+        };
+        return RunAdvisoryAsync(HookEvents.SubagentEnd, null, payload, ct);
+    }
+
     /// <summary>
     ///     The advisory loop the non-gating events share: run every matching
     ///     hook, log what it printed or how it failed, and return normally.
@@ -216,8 +240,9 @@ public sealed class HookRunner : IHookRunner
     /// <remarks>
     ///     Nothing here reaches the model or the run outcome. That is the
     ///     whole contract — a hook on <c>PostToolUse</c>, <c>SessionStart</c>,
-    ///     <c>PreCompact</c> or <c>SessionEnd</c> is a notification, so a
-    ///     broken one costs a log line, never a failed turn.
+    ///     <c>PreCompact</c>, <c>SessionEnd</c>, <c>SubagentStart</c> or
+    ///     <c>SubagentEnd</c> is a notification, so a broken one costs a log
+    ///     line, never a failed turn.
     /// </remarks>
     private async Task RunAdvisoryAsync(
         string eventName, string? toolName, HookPayload payload, CancellationToken ct)

@@ -580,6 +580,70 @@ public class HookRunnerTests
         await runner.RunPreCompactAsync("s1", "code", "test-model");
     }
 
+    // ── H01: subagent lifecycle (advisory) ───────────────────────────────
+
+    [Test]
+    public async Task SubagentStart_RunsCommand()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+        string dir = NewTempDir();
+        string marker = Path.Combine(dir, "subagent-start-marker");
+        var runner = NewRunner(dir,
+            "{\"hooks\":{\"SubagentStart\":[{\"command\":\"touch " + marker + "\"}]}}");
+
+        await runner.RunSubagentStartAsync("child-1", "explore", "test-model");
+
+        await Assert.That(File.Exists(marker)).IsTrue();
+    }
+
+    [Test]
+    public async Task SubagentEnd_RunsCommand()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+        string dir = NewTempDir();
+        string marker = Path.Combine(dir, "subagent-end-marker");
+        var runner = NewRunner(dir,
+            "{\"hooks\":{\"SubagentEnd\":[{\"command\":\"touch " + marker + "\"}]}}");
+
+        await runner.RunSubagentEndAsync("child-1", "explore", "test-model");
+
+        await Assert.That(File.Exists(marker)).IsTrue();
+    }
+
+    [Test]
+    public async Task SubagentStart_PayloadCarriesChildIdentity()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+        string dir = NewTempDir();
+        string captured = Path.Combine(dir, "subagent-payload.json");
+        var runner = NewRunner(dir,
+            "{\"hooks\":{\"SubagentStart\":[{\"command\":\"cat > " + captured + "\"}]}}");
+
+        await runner.RunSubagentStartAsync("child-1", "explore", "test-model");
+
+        string json = File.ReadAllText(captured);
+        using var doc = JsonDocument.Parse(json);
+        await Assert.That(doc.RootElement.GetProperty("event").GetString()).IsEqualTo("SubagentStart");
+        await Assert.That(doc.RootElement.GetProperty("sessionId").GetString()).IsEqualTo("child-1");
+        await Assert.That(doc.RootElement.GetProperty("agent").GetString()).IsEqualTo("explore");
+        await Assert.That(doc.RootElement.GetProperty("model").GetString()).IsEqualTo("test-model");
+        await Assert.That(doc.RootElement.GetProperty("tool").ValueKind).IsEqualTo(JsonValueKind.Null);
+    }
+
+    [Test]
+    public async Task SubagentEnd_FailingHook_DoesNotThrow()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+        var runner = NewRunner(NewTempDir(),
+            """{"hooks":{"SubagentEnd":[{"command":"exit 3"}]}}""");
+
+        await runner.RunSubagentEndAsync("child-1", "explore", "test-model");
+    }
+
     // ── Slice 2: loop integration ────────────────────────────────────────
 
     /// <summary>

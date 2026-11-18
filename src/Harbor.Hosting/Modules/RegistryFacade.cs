@@ -159,7 +159,8 @@ internal static class RegistryFacade
                 store,
                 sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentLoop>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
-                    .CreateLogger<Harbor.Application.Agents.SubAgentRunner>());
+                    .CreateLogger<Harbor.Application.Agents.SubAgentRunner>(),
+                sp.GetService<Harbor.Application.Hooks.IHookRunner>());
             subAgents.Attach(real);
             supervisedSessions.Attach(store);
             return real;
