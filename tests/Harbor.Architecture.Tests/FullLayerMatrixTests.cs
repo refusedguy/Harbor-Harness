@@ -186,8 +186,10 @@ public class FullLayerMatrixTests
         // moved out of Harbor.Application/Git), the provider health-check
         // (second leaf, moved out of Harbor.Application/Providers), the
         // default file-tree policy (third leaf, moved out of
-        // Harbor.Application/Filesystem) and the skill-freshness seeder (fourth
-        // leaf, moved out of Harbor.Application/Skills), all verbatim.
+        // Harbor.Application/Filesystem), the skill-freshness seeder (fourth
+        // leaf, moved out of Harbor.Application/Skills) and the image-attachment
+        // probe + reader (fifth leaf, moved out of Harbor.Application/Attachments),
+        // all verbatim.
         "Harbor.Intelligence",
         // #1614: first-run wizard + setup-checklist detection, one-way leaf
         // over Harbor.Application's configuration family (0 reverse edges).
@@ -613,11 +615,14 @@ public class FullLayerMatrixTests
         // (the IProviderHealthCheck adapter). Third leaf:
         // Harbor.Application/Filesystem/DefaultFileTreePolicy (the IFileTreePolicy
         // adapter). Fourth leaf: Harbor.Application/Skills/SkillFreshnessSeeder
-        // (the BCL-only skill-lock snapshot seeder). All bind the contract
-        // vocabulary from Abstractions; the git probes also use the pooled builders
-        // from Extensions. Never Application, Infrastructure or Presentation.
-        // Namespaces stay Harbor.Application.Git / Harbor.Application.Providers /
-        // Harbor.Application.Filesystem / Harbor.Application.Skills so consumers
+        // (the BCL-only skill-lock snapshot seeder). Fifth leaf:
+        // Harbor.Application/Attachments/ImageProbe + ImageAttachmentReader
+        // (the magic-byte image probe and the vision-aware attachment reader).
+        // All bind the contract vocabulary from Abstractions; the git probes also
+        // use the pooled builders from Extensions. Never Application, Infrastructure
+        // or Presentation. Namespaces stay Harbor.Application.Git /
+        // Harbor.Application.Providers / Harbor.Application.Filesystem /
+        // Harbor.Application.Skills / Harbor.Application.Attachments so consumers
         // keep their usings (same convention as #1623/#1613/#1625).
         ["Harbor.Intelligence"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
