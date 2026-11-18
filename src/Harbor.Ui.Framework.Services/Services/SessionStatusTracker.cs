@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
 namespace Harbor.Ui.Framework.Services;
@@ -20,8 +21,13 @@ namespace Harbor.Ui.Framework.Services;
 /// </remarks>
 public sealed class SessionStatusTracker
 {
-    /// <summary>Per-session message counts (a display projection, not a status authority).</summary>
-    private readonly Dictionary<string, int> _messageCounts = new();
+    /// <summary>
+    ///     Per-session message counts (a display projection, not a status authority).
+    ///     This tracker is a singleton and <see cref="NotifyMessageCount" /> is
+    ///     reachable both from the UI frame and from store notifications on pool
+    ///     threads, so the map must tolerate concurrent writers (#2550).
+    /// </summary>
+    private readonly ConcurrentDictionary<string, int> _messageCounts = new();
 
     /// <summary>The store whose state this projection follows.</summary>
     private UiStore? _boundStore;
