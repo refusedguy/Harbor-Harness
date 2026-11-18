@@ -7,16 +7,24 @@ public sealed class CompositeToolRegistry : IToolRegistry
 {
     private readonly List<IToolSource> _sources = new();
     private readonly CompositeLiveSource _liveSource;
-    // #183: single volatile publish-once snapshot — see FrozenToolView.
-    private volatile FrozenToolView? _frozenView;
 
-    // #557: the guard set implied by the tools the sources expose, rebuilt on every
-    // AddSource so a path-taking tool is guarded by being registered, never by
-    // being remembered in a list.
-    private volatile IReadOnlyList<IArgSafetyPolicy> _safetyPolicies = ToolSafetyPolicies.Build([]);
+    /// <summary>
+    ///     One publication unit: the frozen view and the safety policies derived
+    ///     from the sources it was built from (#2570, #557).
+    /// </summary>
+    private sealed record RegistrySnapshot(
+        FrozenToolView? FrozenView,
+        IReadOnlyList<IArgSafetyPolicy> SafetyPolicies)
+    {
+        public static RegistrySnapshot Empty { get; } = new(null, ToolSafetyPolicies.Build([]));
+    }
+
+    // #183: publish-once snapshot, see FrozenToolView. One volatile write pairs
+    // source and guards, so no reader can observe them from different generations.
+    private volatile RegistrySnapshot _snapshot = RegistrySnapshot.Empty;
 
     /// <inheritdoc />
-    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _safetyPolicies;
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _snapshot.SafetyPolicies;
 
     public CompositeToolRegistry()
     {
@@ -51,17 +59,20 @@ public sealed class CompositeToolRegistry : IToolRegistry
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
         // #1101 dual-path (RESOLVED, §OOP-005): single IToolSource path like
-        // ToolRegistry — frozen snapshot when present, live fan-out otherwise.
-        // No duplicated lookup logic here.
-        IToolSource source = _frozenView ?? (IToolSource)_liveSource;
+        // ToolRegistry. One volatile read selects source and guards as a pair
+        // (#2570); no duplicated lookup logic here.
+        RegistrySnapshot snapshot = _snapshot;
+        IToolSource source = snapshot.FrozenView ?? (IToolSource)_liveSource;
         return source.GetAllTools();
     }
 
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
     {
         // #1101 dual-path (RESOLVED): same single-path selection; the frozen
-        // view serves cached/memoized arrays, the live source fans out.
-        IToolSource source = _frozenView ?? (IToolSource)_liveSource;
+        // view serves cached/memoized arrays, the live source fans out. One
+        // volatile read keeps source and guards from the same generation.
+        RegistrySnapshot snapshot = _snapshot;
+        IToolSource source = snapshot.FrozenView ?? (IToolSource)_liveSource;
         return source.ResolveTools(agentName, sessionPermission);
     }
 
@@ -69,7 +80,8 @@ public sealed class CompositeToolRegistry : IToolRegistry
     {
         // #1101 dual-path (RESOLVED): frozen fast path first, live fan-out
         // inside the source selection.
-        IToolSource source = _frozenView ?? (IToolSource)_liveSource;
+        RegistrySnapshot snapshot = _snapshot;
+        IToolSource source = snapshot.FrozenView ?? (IToolSource)_liveSource;
         return source.GetTool(name);
     }
 
@@ -92,16 +104,19 @@ public sealed class CompositeToolRegistry : IToolRegistry
             }
         }
 
-        _frozenView = FrozenToolView.Build(dict.ToFrozenDictionary(), ToDescriptor);
+        // Guards are carried forward from the last AddSource, which rebuilds
+        // them from what the sources expose (#557).
+        _snapshot = new RegistrySnapshot(
+            FrozenToolView.Build(dict.ToFrozenDictionary(), ToDescriptor),
+            _snapshot.SafetyPolicies);
     }
 
     private void InvalidateFrozenSnapshot()
     {
-        Interlocked.Exchange(ref _frozenView, null);
-        // #557: same contract as ToolRegistry — the guard set is derived from what
-        // the sources expose, so a path-taking tool in a source is guarded without
-        // any list to update.
-        _safetyPolicies = BuildSafetyPolicies();
+        // One volatile write publishes the invalidated view and the freshly
+        // derived guards together (#2570). A path-taking tool in a source is
+        // guarded by being registered, never by a hand-maintained list (#557).
+        _snapshot = new RegistrySnapshot(null, BuildSafetyPolicies());
     }
 
     /// <summary>
