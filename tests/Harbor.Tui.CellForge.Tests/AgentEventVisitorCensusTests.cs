@@ -1,5 +1,6 @@
 using System.Reflection;
 using Harbor.Abstractions.Events;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Streaming;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -35,6 +36,36 @@ public class AgentEventVisitorCensusTests
             () => new AgentProbe().Route(new RogueEvent()));
 
         await Assert.That(refused.Message.Contains("RogueEvent", StringComparison.Ordinal)).IsTrue();
+    }
+
+    /// <summary>
+    ///     #2704 D02. Reflection proves every arm exists; routing a generated
+    ///     transcript proves the visitor accepts the kinds a real run carries.
+    /// </summary>
+    [Test]
+    public async Task GeneratedTranscripts_Route_WithoutRejection()
+    {
+        var probe = new AgentProbe();
+        var mismatches = new List<string>();
+        int routed = 0;
+
+        foreach (int seed in new[] { 1, 2, 3, 5, 8 })
+        {
+            foreach (AgentEvent item in Arbitrary.EventStream(new Random(seed), 6))
+            {
+                string kind = probe.Route(item);
+                if (!string.Equals(kind, item.GetType().Name, StringComparison.Ordinal))
+                {
+                    mismatches.Add($"seed {seed}: {item.GetType().Name} routed as {kind}");
+                }
+
+                routed++;
+            }
+        }
+
+        await Assert.That(mismatches).IsEmpty().Because(string.Join("\n", mismatches));
+        await Assert.That(routed).IsGreaterThan(0)
+            .Because("the census must not pass on an empty generated transcript");
     }
 
     private static void Census(Type union, Type visitor, List<string> gaps)
