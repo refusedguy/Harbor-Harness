@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# build.sh — NUKE bootstrap (Linux / macOS).
+# build.sh — Fallout bootstrap (Linux / macOS).
 #
-# Bootstraps the .NET SDK if missing, restores the build/_build.csproj project,
-# then invokes the NUKE Build class with whatever targets / args were passed
-# through. Standard NUKE-generated bootstrap script (lightly customized for
-# the Harbor solution layout: .NET 10 SDK at $HOME/.dotnet, build project at
-# ./build/_build.csproj, solution file at ./Harbor.slnx).
+# Bootstraps the .NET SDK if missing, builds the primary
+# build/_build.fallout/_build.fallout.csproj project, then invokes the Fallout
+# Build class with whatever targets / args were passed through. Adapted from
+# the generated bootstrap for the Harbor solution layout: .NET 10 SDK at
+# $HOME/.dotnet, build project at ./build/_build.fallout/_build.fallout.csproj,
+# solution file at ./Harbor.slnx.
 #
 # Examples (never invent commands — ask the build itself):
 #   ./build.sh                                  # default target (Compile)
@@ -25,13 +26,13 @@ set -euo pipefail
 # ── Solution-relative paths ──────────────────────────────────────────────────
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)"
-BUILD_PROJECT_FILE="$ROOT_DIR/build/_build.csproj"
+BUILD_PROJECT_FILE="$ROOT_DIR/build/_build.fallout/_build.fallout.csproj"
 SOLUTION_FILE="$ROOT_DIR/Harbor.slnx"
 
 # ── Artifacts / temp ─────────────────────────────────────────────────────────
-NUKE_TEMP_DIR="$ROOT_DIR/.nuke/temp"
-NUKE_BIN_DIR="$ROOT_DIR/.nuke/bin"
-mkdir -p "$NUKE_TEMP_DIR"
+FALLOUT_TEMP_DIR="$ROOT_DIR/.fallout/temp"
+FALLOUT_BIN_DIR="$ROOT_DIR/.fallout/bin"
+mkdir -p "$FALLOUT_TEMP_DIR"
 
 # ── .NET SDK bootstrap ───────────────────────────────────────────────────────
 # Honor the user's DOTNET_INSTALL_DIR; default to $HOME/.dotnet (matches the
@@ -53,11 +54,10 @@ fi
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
 export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
-export NUKE_TELEMETRY_OPTOUT=1
 
-# ── Build the _build project (or use cached output) ─────────────────────────
+# ── Build the Fallout orchestrator (or use cached output) ───────────────────
 BUILD_PROJECT_FRAMEWORK="net10.0"
-BUILD_PROJECT_OUTPUT="$NUKE_BIN_DIR/$BUILD_PROJECT_FRAMEWORK"
+BUILD_PROJECT_OUTPUT="$FALLOUT_BIN_DIR/$BUILD_PROJECT_FRAMEWORK"
 
 "$DOTNET_EXE" build "$BUILD_PROJECT_FILE" \
     --framework "$BUILD_PROJECT_FRAMEWORK" \
@@ -66,5 +66,5 @@ BUILD_PROJECT_OUTPUT="$NUKE_BIN_DIR/$BUILD_PROJECT_FRAMEWORK"
     -nologo -clp:NoSummary \
     "${DOTNET_BUILD_EXTRA_ARGS[@]:-}"
 
-# ── Invoke NUKE ──────────────────────────────────────────────────────────────
-"$DOTNET_EXE" exec "$BUILD_PROJECT_OUTPUT/_build.dll" "$@"
+# ── Invoke Fallout ───────────────────────────────────────────────────────────
+"$DOTNET_EXE" exec "$BUILD_PROJECT_OUTPUT/_build.fallout.dll" "$@"

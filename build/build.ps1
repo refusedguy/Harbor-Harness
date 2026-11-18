@@ -1,10 +1,10 @@
-# build.ps1 — NUKE bootstrap (Windows PowerShell).
+# build.ps1 — Fallout bootstrap (Windows PowerShell).
 #
-# Bootstraps the .NET SDK if missing, restores the build/_build.csproj project,
-# then invokes the NUKE Build class with whatever targets / args were passed
-# through. Standard NUKE-generated bootstrap script (lightly customized for
-# the Harbor solution layout: build project at .\build\_build.csproj, solution
-# file at .\Harbor.slnx).
+# Bootstraps the .NET SDK if missing, builds the primary
+# build\_build.fallout\_build.fallout.csproj project, then invokes the Fallout
+# Build class with whatever targets / args were passed through. Adapted from
+# the generated bootstrap for the Harbor solution layout: build project at
+# .\build\_build.fallout\_build.fallout.csproj, solution file at .\Harbor.slnx.
 #
 # Examples (never invent commands — ask the build itself):
 #   .\build.ps1                                  # default target (Compile)
@@ -32,15 +32,15 @@ if ($env:TRACE -eq 'true')
 # ── Solution-relative paths ──────────────────────────────────────────────────
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RootDir = (Resolve-Path "$ScriptDir\..").Path
-$BuildProjectFile = Join-Path $RootDir 'build\_build.csproj'
+$BuildProjectFile = Join-Path $RootDir 'build\_build.fallout\_build.fallout.csproj'
 $SolutionFile = Join-Path $RootDir 'Harbor.slnx'
 
 # ── Artifacts / temp ─────────────────────────────────────────────────────────
-$NukeTempDir = Join-Path $RootDir '.nuke\temp'
-$NukeBinDir = Join-Path $RootDir '.nuke\bin'
-if (-not (Test-Path $NukeTempDir))
+$FalloutTempDir = Join-Path $RootDir '.fallout\temp'
+$FalloutBinDir = Join-Path $RootDir '.fallout\bin'
+if (-not (Test-Path $FalloutTempDir))
 {
-    New-Item -ItemType Directory -Path $NukeTempDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $FalloutTempDir -Force | Out-Null
 }
 
 # ── .NET SDK bootstrap ───────────────────────────────────────────────────────
@@ -78,11 +78,10 @@ if (-not (Test-Path $DotnetExe))
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
-$env:NUKE_TELEMETRY_OPTOUT = '1'
 
-# ── Build the _build project (or use cached output) ─────────────────────────
+# ── Build the Fallout orchestrator (or use cached output) ───────────────────
 $BuildProjectFramework = 'net10.0'
-$BuildProjectOutput = Join-Path $NukeBinDir $BuildProjectFramework
+$BuildProjectOutput = Join-Path $FalloutBinDir $BuildProjectFramework
 
 & $DotnetExe build $BuildProjectFile `
     --framework $BuildProjectFramework `
@@ -93,12 +92,12 @@ $BuildProjectOutput = Join-Path $NukeBinDir $BuildProjectFramework
 
 if ($LASTEXITCODE -ne 0)
 {
-    Write-Error "Building _build.csproj failed with exit code $LASTEXITCODE"
+    Write-Error "Building _build.fallout.csproj failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
-# ── Invoke NUKE ──────────────────────────────────────────────────────────────
-$BuildDll = Join-Path $BuildProjectOutput '_build.dll'
+# ── Invoke Fallout ───────────────────────────────────────────────────────────
+$BuildDll = Join-Path $BuildProjectOutput '_build.fallout.dll'
 if ($Target)
 {
     & $DotnetExe exec $BuildDll @Target
