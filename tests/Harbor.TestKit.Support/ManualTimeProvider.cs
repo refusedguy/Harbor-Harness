@@ -192,7 +192,7 @@ public sealed class ManualTimeProvider : TimeProvider
             callback(state);
         }
 
-        return armed ?? NoopTimer.Instance;
+        return (ITimer?)armed ?? NoopTimer.Instance;
     }
 
     /// <summary>

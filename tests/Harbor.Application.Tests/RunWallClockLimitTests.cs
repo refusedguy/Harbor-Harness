@@ -15,6 +15,7 @@ using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using TUnit.Assertions;
 
@@ -247,7 +248,7 @@ public class RunWallClockLimitTests
     ///     reach the in-flight work through the token, not through an exception
     ///     thrown by a timer on some other thread.
     /// </summary>
-    private sealed class BlockingTool : ITool
+    private sealed class BlockingTool : FakeToolBase
     {
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -255,25 +256,14 @@ public class RunWallClockLimitTests
 
         public bool CompletedNormally { get; private set; }
 
-        public ToolName Name => ToolName.Create("block");
+        public BlockingTool()
+        {
+            Name = ToolName.Create("block");
+            DisplayName = "Block";
+            Description = "Blocks until its cancellation token fires.";
+        }
 
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "Block";
-
-        public string Description => "Blocks until its cancellation token fires.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => [];
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public async Task<ToolResult> ExecuteAsync(
+        public override async Task<ToolResult> ExecuteAsync(
             JsonElement args,
             ToolContext context,
             CancellationToken cancellationToken = default)
