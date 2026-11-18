@@ -250,6 +250,34 @@ public sealed record RunOutcome(
     RunLimitKind? Limit = null)
 {
     /// <summary>
+    ///     The acceptance axis of the run result (epic #41, slice B1.2).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Additive, not a constructor change.</b> This is a property
+    ///         with an initializer in the record body, not a primary
+    ///         constructor parameter. The ten-argument constructor and the
+    ///         generated <c>Deconstruct</c> signature stay byte-identical, so
+    ///         every caller written before this axis keeps compiling and
+    ///         <see cref="StopReason" /> remains the single execution path.
+    ///     </para>
+    ///     <para>
+    ///         <b>Why the initializer is <see cref="RunAcceptance.NotOffered" />.</b>
+    ///         An outcome built by a caller that has no acceptance channel did
+    ///         not offer a change to accept. Defaulting to
+    ///         <see cref="RunAcceptance.Pending" /> would claim a decision is
+    ///         expected for a run that may never have produced a change, and
+    ///         defaulting to <see cref="RunAcceptance.Rejected" /> would invent
+    ///         a decision nobody made. Acceptance arrives after the run, so a
+    ///         late decision is applied with a <c>with</c> expression; the
+    ///         stored outcome is a point-in-time view and is never re-derived
+    ///         from <see cref="MessageIds" />, which carry no accept/reject
+    ///         kind.
+    ///     </para>
+    /// </remarks>
+    public RunAcceptance Acceptance { get; init; } = RunAcceptance.NotOffered;
+
+    /// <summary>
     ///     Reconstruct a finished run's outcome from the session store's message
     ///     history plus the terminal lifecycle events. Pure function — no I/O.
     /// </summary>
