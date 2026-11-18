@@ -14,6 +14,24 @@ public class LspServerCatalogTests
     }
 
     [Test]
+    public async Task BuiltinCatalog_DeclaresLspLanguageIds()
+    {
+        await Assert.That(LspServerDefinition.Builtin.Select(d => d.LanguageId))
+            .IsEquivalentTo(["typescript", "python", "go", "rust", "csharp",
+                "c/c++", "java", "html", "css", "json", "lua"]);
+    }
+
+    [Test]
+    public async Task LanguageId_CustomDefinition_FallsBackThenCanBeDeclared()
+    {
+        var definition = new LspServerDefinition("custom", "MyLang", "none", [], [".x"]);
+        await Assert.That(definition.LanguageId).IsEqualTo("mylang");
+
+        var declared = definition with { LanguageId = "special" };
+        await Assert.That(declared.LanguageId).IsEqualTo("special");
+    }
+
+    [Test]
     public async Task Handles_MatchesDeclaredExtensions_Only()
     {
         LspServerDefinition ts = LspServerDefinition.TypeScript;
