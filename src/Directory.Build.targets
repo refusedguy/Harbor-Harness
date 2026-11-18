@@ -15,12 +15,19 @@
       lands in each packable
       .nupkg). The relative Include matches the SDK default-glob None
       item, so this only adds Pack metadata — never a duplicate entry.
+    - PackageReleaseNotes pointing at the repository change log.
 
     Scope is src/ on purpose: samples/* plugin packages and the PackAsTool
     CLI package keep their own per-project pack shape.
   -->
   <PropertyGroup Condition="'$(IsPackable)' == 'true'">
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!--
+      #22 / #429: every packable library carries release notes. The SDK writes
+      this as <releaseNotes> into the nuspec. Version and repository URL come
+      from the root Directory.Build.props, so no version is restated here.
+    -->
+    <PackageReleaseNotes>Harbor $(Version). Full change log: $(RepositoryUrl)/blob/dev/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsPackable)' == 'true'">

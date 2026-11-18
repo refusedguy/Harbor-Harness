@@ -11,7 +11,7 @@ inside the existing job, no new job or matrix axis:
 
 1. `dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages`
    Pack warnings fail the job (`TreatWarningsAsErrors` in `Directory.Build.props`).
-2. `tools/bin/harbor-gates-linux-x64 pack-validate out/packages` — for each of the 43 packable
+2. `tools/bin/harbor-gates-linux-x64 pack-validate out/packages` — for each of the 53 packable
    `src/` projects asserts the `.nupkg` exists and carries: non-empty description,
    MIT license expression, `RepositoryUrl`/`RepositoryType` pointing at
    `refusedguy/Harbor-Harness`, a project URL, at least 3 tags, `README.md` at
@@ -28,18 +28,20 @@ inside the existing job, no new job or matrix axis:
 
 ## The packable set
 
-43 of the 52 `src/` projects are packable libraries. Per-project `csproj`
+53 of the 64 `src/` projects are packable libraries. Per-project `csproj`
 files declare the reviewable metadata (`IsPackable`, `PackageId`,
-`Description`, `PackageTags`); shared mechanics (README embed) live in
-`src/Directory.Build.targets`.
+`Description`, `PackageTags`); shared mechanics (README embed, release notes)
+live in `src/Directory.Build.targets`.
 
 Non-packable projects carry an explicit `IsPackable=false` with a one-line
 reason:
 
 | Project | Why not packable |
 |---|---|
+| `Harbor.Arch.Analyzers` | Build-time analyzers for Harbor's own rules, not a runtime library |
 | `Harbor.CodeGen` | Build-time Roslyn component, ships as an analyzer, not a runtime library |
 | `Harbor.Logging` | Internal Serilog bootstrap composed by app hosts, not a public contract |
+| `Harbor.Tui.CellForge.CodeGen` | Build-time source generator for the CellForge renderer, not a runtime library |
 | `Harbor.Plugins.Host` | `OutputType=Exe` out-of-process plugin host, deployed as a binary |
 | `Harbor.Ui.Framework.Abstractions` | Intermediate module, ships via the `Harbor.Ui.Framework` meta-package |
 | `Harbor.Ui.Framework.Projection` | Intermediate module, ships via the `Harbor.Ui.Framework` meta-package |
