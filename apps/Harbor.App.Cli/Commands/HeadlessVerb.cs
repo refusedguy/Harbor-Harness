@@ -38,7 +38,12 @@ internal static class HeadlessVerb
         }
 
         await CliInfrastructure.StartIpcAsync(host.Services, logger).ConfigureAwait(false);
-        Console.WriteLine($"harbor daemon listening on '{server.Endpoint}'");
+        // #2676 item 133: an operator running several daemons needs to see which
+        // one this is. The id is set by --runner-id in Program.Main; without the
+        // flag the line is byte-identical to before.
+        string? runnerId = Environment.GetEnvironmentVariable(RunnerArgs.RunnerIdVariable);
+        Console.WriteLine($"harbor daemon listening on '{server.Endpoint}'" +
+            (string.IsNullOrEmpty(runnerId) ? string.Empty : $" runner='{runnerId}'"));
         CliInfrastructure.PrintPairingBlock(host.Services, logger);
         HeadlessVerbLog.DaemonReady(logger, server.Endpoint);
 

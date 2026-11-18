@@ -25,6 +25,24 @@ public static class Program
         string? scriptPath = CliArgs.ExtractScriptArg(args, out string[] remainingArgs);
         args = remainingArgs;
 
+        // #2676 item 133: global runner flags (--runner-id, --runner-dir,
+        // --amp-env). Strip before verb dispatch and apply before host/Logger
+        // composition so the overlay reaches every child process and the log
+        // root. A bad flag or secret file fails closed with the reason.
+        var runnerResult = RunnerArgs.Extract(args);
+        if (runnerResult.IsFailure)
+        {
+            Console.Error.WriteLine(runnerResult.Error);
+            return 1;
+        }
+        var runnerApply = RunnerArgs.Apply(runnerResult.Value);
+        if (runnerApply.IsFailure)
+        {
+            Console.Error.WriteLine(runnerApply.Error);
+            return 1;
+        }
+        args = runnerResult.Value.Remaining.ToArray();
+
         // Console level: Debug under debugger, Information by default. User can
         // override via --loglevel/-ll/HARBOR_LOGLEVEL. The previous default was
         // Warning, which is why the user "only saw a minimal log".
