@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Harbor.Tui.CellForge.CodeGen;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -127,11 +128,12 @@ public class TypedBindingsGeneratorTests
         const string markup = "state: Sample.CounterState\ntext \"{Binding ReadOnly, Mode=TwoWay}\"\n";
 
         (_, GeneratorRunResult generator) = Run(markup, StateSource);
+        Diagnostic diagnostic = await OnlyDiagnostic(generator);
 
-        await Assert.That(generator.Diagnostics.Length).IsEqualTo(1);
-        await Assert.That(generator.Diagnostics[0].Id).IsEqualTo("HUI005");
-        await Assert.That(generator.Diagnostics[0].Severity).IsEqualTo(DiagnosticSeverity.Error);
-        await Assert.That(generator.Diagnostics[0].GetMessage()).Contains("ReadOnly");
+        await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(diagnostic.Id).IsEqualTo("HUI005");
+        await Assert.That(diagnostic.GetMessage()).Contains("ReadOnly");
+        await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(1);
         await Assert.That(HasBindingsSource(generator)).IsFalse();
     }
 
@@ -155,6 +157,12 @@ public class TypedBindingsGeneratorTests
 
         await Assert.That(generator.Diagnostics.Length).IsEqualTo(0);
         await Assert.That(HasBindingsSource(generator)).IsFalse();
+    }
+
+    private static async Task<Diagnostic> OnlyDiagnostic(GeneratorRunResult generator)
+    {
+        await Assert.That(generator.Diagnostics.Length).IsEqualTo(1);
+        return generator.Diagnostics[0];
     }
 
     private static string BindingsSource(GeneratorRunResult generator) =>

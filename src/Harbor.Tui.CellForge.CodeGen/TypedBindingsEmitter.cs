@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using Harbor.Abstractions.Dsl;
@@ -121,7 +120,7 @@ internal static class TypedBindingsEmitter
             "",
             $"internal static class {identifier}Bindings",
             "{",
-            $"    internal const string StateType = {Literal(parse.StateType)};",
+            $"    internal const string StateType = {EmittedCSharp.StringLiteral(parse.StateType)};",
             "",
         };
         lines.AddRange(members);
@@ -268,32 +267,6 @@ internal static class TypedBindingsEmitter
         foreach (var c in path)
             result.Append(char.IsLetterOrDigit(c) ? c : '_');
         return result.Length == 0 ? "Binding" : result.ToString();
-    }
-
-    private static string Literal(string value)
-    {
-        var result = new StringBuilder(value.Length + 2);
-        result.Append('"');
-        foreach (var c in value)
-        {
-            switch (c)
-            {
-                case '\\': result.Append("\\\\"); break;
-                case '"': result.Append("\\\""); break;
-                case '\n': result.Append("\\n"); break;
-                case '\r': result.Append("\\r"); break;
-                case '\t': result.Append("\\t"); break;
-                default:
-                    if (char.IsControl(c))
-                        result.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
-                    else
-                        result.Append(c);
-                    break;
-            }
-        }
-
-        result.Append('"');
-        return result.ToString();
     }
 
     private static string Lines(params string[] lines) => string.Join("\n", lines) + "\n";

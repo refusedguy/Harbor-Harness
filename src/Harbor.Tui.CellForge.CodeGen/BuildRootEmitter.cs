@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
 using Harbor.Abstractions.Dsl;
 
 namespace Harbor.Tui.CellForge.CodeGen;
@@ -184,31 +183,7 @@ internal static class BuildRootEmitter
         return string.Empty;
     }
 
-    private static string Literal(string value)
-    {
-        var result = new StringBuilder(value.Length + 2);
-        result.Append('"');
-        foreach (var c in value)
-        {
-            switch (c)
-            {
-                case '\\': result.Append("\\\\"); break;
-                case '"': result.Append("\\\""); break;
-                case '\n': result.Append("\\n"); break;
-                case '\r': result.Append("\\r"); break;
-                case '\t': result.Append("\\t"); break;
-                default:
-                    if (char.IsControl(c))
-                        result.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
-                    else
-                        result.Append(c);
-                    break;
-            }
-        }
-
-        result.Append('"');
-        return result.ToString();
-    }
+    internal static string Literal(string value) => EmittedCSharp.StringLiteral(value);
 
     private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
 
