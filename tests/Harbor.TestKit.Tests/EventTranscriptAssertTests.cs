@@ -52,112 +52,39 @@ public class EventTranscriptAssertTests
         await Assert.That(EventTranscriptAssert.FindViolations(events)).IsEmpty();
     }
 
+    /// <summary>
+    ///     One shape per lifecycle rule. A malformed transcript must report the
+    ///     specific broken pair, not merely "something was wrong".
+    /// </summary>
     [Test]
-    public async Task ToolEnd_WithoutStart_IsReported()
+    [Arguments(Malformed.BareToolEnd, "ToolExecutionEnd for 'tcX' without an open start")]
+    [Arguments(Malformed.SecondToolEnd, "[2] ToolExecutionEnd for 'tc1' without an open start")]
+    [Arguments(Malformed.OrphanToolUpdate, "ToolExecutionUpdate for 'tc1' with no open start")]
+    [Arguments(Malformed.ReusedToolId, "reuses an earlier call id")]
+    [Arguments(Malformed.MessageEnd, "MessageEnd without a preceding MessageStart")]
+    [Arguments(Malformed.TurnEnd, "TurnEnd without a preceding TurnStart")]
+    [Arguments(Malformed.AgentEnd, "AgentEnd without a preceding AgentStart")]
+    [Arguments(Malformed.CompactionEnd, "CompactionFailed for 's1' without an open CompactionStarted")]
+    public async Task MalformedTranscript_ReportsTheBrokenPair(Malformed kind, string expected)
     {
-        var events = new AgentEvent[] { TestEvents.ToolExecutionEnd("tcX") };
+        AgentEvent[] events = Transcript(kind);
 
         IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
 
         await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("ToolExecutionEnd for 'tcX' without an open start");
+        await Assert.That(violations[0]).Contains(expected);
+    }
+
+    [Test]
+    public async Task BareToolEnd_AssertAlsoThrowsCarryingTheViolation()
+    {
+        AgentEvent[] events = [TestEvents.ToolExecutionEnd("tcX")];
 
         EventTranscriptException thrown = Assert.Throws<EventTranscriptException>(
             () => EventTranscriptAssert.AssertWellFormed(events));
+
         await Assert.That(thrown.Violations.Count).IsEqualTo(1);
         await Assert.That(thrown.Message).Contains("ToolExecutionEnd for 'tcX'");
-    }
-
-    [Test]
-    public async Task SecondToolEnd_IsReported()
-    {
-        AgentEvent[] events =
-        [
-            TestEvents.ToolExecutionStart("tc1"),
-            TestEvents.ToolExecutionEnd("tc1"),
-            TestEvents.ToolExecutionEnd("tc1"),
-        ];
-
-        IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
-
-        await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("[2] ToolExecutionEnd for 'tc1' without an open start");
-    }
-
-    [Test]
-    public async Task ToolUpdate_WithoutOpenStart_IsReported()
-    {
-        AgentEvent[] events =
-        [
-            TestEvents.ToolExecutionStart("tc1"),
-            TestEvents.ToolExecutionEnd("tc1"),
-            TestEvents.ToolExecutionUpdate("tc1"),
-        ];
-
-        IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
-
-        await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("ToolExecutionUpdate for 'tc1' with no open start");
-    }
-
-    [Test]
-    public async Task ReusedToolCallId_IsReported()
-    {
-        AgentEvent[] events =
-        [
-            TestEvents.ToolExecutionStart("tc1"),
-            TestEvents.ToolExecutionEnd("tc1"),
-            TestEvents.ToolExecutionStart("tc1"),
-        ];
-
-        IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
-
-        await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("reuses an earlier call id");
-    }
-
-    [Test]
-    public async Task MessageEnd_WithoutStart_IsReported()
-    {
-        var events = new AgentEvent[] { TestEvents.MessageEnd() };
-
-        IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
-
-        await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("MessageEnd without a preceding MessageStart");
-    }
-
-    [Test]
-    public async Task TurnEnd_WithoutStart_IsReported()
-    {
-        var events = new AgentEvent[] { TestEvents.TurnEnd() };
-
-        IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
-
-        await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("TurnEnd without a preceding TurnStart");
-    }
-
-    [Test]
-    public async Task AgentEnd_WithoutStart_IsReported()
-    {
-        var events = new AgentEvent[] { TestEvents.AgentEnd() };
-
-        IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
-
-        await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("AgentEnd without a preceding AgentStart");
-    }
-
-    [Test]
-    public async Task CompactionEnd_WithoutStart_IsReported()
-    {
-        var events = new AgentEvent[] { TestEvents.CompactionFailed("s1") };
-
-        IReadOnlyList<string> violations = EventTranscriptAssert.FindViolations(events);
-
-        await Assert.That(violations.Count).IsEqualTo(1);
-        await Assert.That(violations[0]).Contains("CompactionFailed for 's1' without an open CompactionStarted");
     }
 
     [Test]
@@ -178,4 +105,44 @@ public class EventTranscriptAssertTests
         await Assert.That(thrown.Message).Contains("MessageEnd without");
         await Assert.That(thrown.Message).Contains("ToolExecutionEnd for 'tc1'");
     }
+
+    private enum Malformed
+    {
+        BareToolEnd,
+        SecondToolEnd,
+        OrphanToolUpdate,
+        ReusedToolId,
+        MessageEnd,
+        TurnEnd,
+        AgentEnd,
+        CompactionEnd,
+    }
+
+    private static AgentEvent[] Transcript(Malformed kind) => kind switch
+    {
+        Malformed.BareToolEnd => [TestEvents.ToolExecutionEnd("tcX")],
+        Malformed.SecondToolEnd =>
+        [
+            TestEvents.ToolExecutionStart("tc1"),
+            TestEvents.ToolExecutionEnd("tc1"),
+            TestEvents.ToolExecutionEnd("tc1"),
+        ],
+        Malformed.OrphanToolUpdate =>
+        [
+            TestEvents.ToolExecutionStart("tc1"),
+            TestEvents.ToolExecutionEnd("tc1"),
+            TestEvents.ToolExecutionUpdate("tc1"),
+        ],
+        Malformed.ReusedToolId =>
+        [
+            TestEvents.ToolExecutionStart("tc1"),
+            TestEvents.ToolExecutionEnd("tc1"),
+            TestEvents.ToolExecutionStart("tc1"),
+        ],
+        Malformed.MessageEnd => [TestEvents.MessageEnd()],
+        Malformed.TurnEnd => [TestEvents.TurnEnd()],
+        Malformed.AgentEnd => [TestEvents.AgentEnd()],
+        Malformed.CompactionEnd => [TestEvents.CompactionFailed("s1")],
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }
