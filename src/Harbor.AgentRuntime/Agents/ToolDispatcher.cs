@@ -344,7 +344,7 @@ public sealed class ToolDispatcher(
     /// <summary>
     ///     Resolve a raw tool name. #1100: imperative form, no per-call closures.
     /// </summary>
-    internal Result<ITool> ResolveTool(string rawName)
+    private Result<ITool> ResolveTool(string rawName)
     {
         var parsed = ToolName.TryCreate(rawName);
         if (!parsed.IsSuccess) return Result.Failure<ITool>($"Invalid tool name: {parsed.Error}");
