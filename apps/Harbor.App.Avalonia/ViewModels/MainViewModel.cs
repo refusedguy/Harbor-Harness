@@ -519,6 +519,18 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         });
     }
 
+    /// <summary>
+    ///     Dismiss a toast before its four-second auto-dismiss timer fires
+    ///     (issue #2681 item G48). The close button in <c>ToastNotificationsView</c>
+    ///     binds to <c>RemoveToastCommand</c>; removing an already-dismissed
+    ///     toast is a no-op, so the timer can still fire afterwards without a race.
+    /// </summary>
+    [RelayCommand]
+    private void RemoveToast(ToastNotification toast)
+    {
+        Dispatcher.Post(() => Toasts.Remove(toast));
+    }
+
     private async Task RemoveToastAfterDelayAsync(ToastNotification toast)
     {
         // #1945: the delay reads the injected clock, so the E2E suite can drive
