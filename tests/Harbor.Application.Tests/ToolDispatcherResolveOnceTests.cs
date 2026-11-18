@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
@@ -305,5 +307,104 @@ public class ToolDispatcherResolveOnceTests
             });
 
         await result.AssertWithinBudgetsAsync("tool dispatch per tool call");
+    }
+
+    // ---- #1100: ResolveTool closure gate -----------------------------------
+    // These tests live in THIS file, which already names ITool, on purpose:
+    // the seam-graph gate counts consumer files per interface, and a new file
+    // would make docs/SEAM_GRAPH.md stale. ResolveTool stays private and is
+    // bound through a reflection-created delegate — no InternalsVisibleTo,
+    // because exposing AgentRuntime's internals here leaks its generated
+    // ZLinq drop-in extensions and breaks LINQ resolution in this assembly.
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Result<ITool> OldResolveChain(CountingRegistry tools, string rawName) =>
+        ToolName.TryCreate(rawName)
+            .MapError(e => $"Invalid tool name: {e}")
+            .Bind(name => tools.GetTool(name).MapError(_ => $"Unknown tool: '{rawName}'."));
+
+    private const int ResolveIterations = 4096;
+
+    /// <summary>One ToolName record (24 B header + one reference); the old chain added two closure pairs.</summary>
+    private const long MaxResolveBytesPerCall = 96;
+
+    private static Func<string, Result<ITool>> BindResolveTool(ToolDispatcher dispatcher)
+    {
+        MethodInfo method = typeof(ToolDispatcher).GetMethod(
+            "ResolveTool", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (Func<string, Result<ITool>>)Delegate.CreateDelegate(
+            typeof(Func<string, Result<ITool>>), dispatcher, method);
+    }
+
+    private static double AllocatedPerCall(Func<string, Result<ITool>> resolve, string rawName)
+    {
+        for (int i = 0; i < ResolveIterations; i++) _ = resolve(rawName);
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        Result<ITool> sink = default;
+        for (int i = 0; i < ResolveIterations; i++) sink = resolve(rawName);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        GC.KeepAlive(sink);
+
+        return (double)allocated / ResolveIterations;
+    }
+
+    [Test]
+    public async Task ResolveTool_ValidName_ReturnsTheRegisteredInstance()
+    {
+        var tool = new NoopTool("noop", ExecutionMode.Parallel);
+        var dispatcher = NewDispatcher(new CountingRegistry(tool), new FakeEventBus());
+
+        Result<ITool> resolved = BindResolveTool(dispatcher)("noop");
+
+        await Assert.That(resolved.IsSuccess).IsTrue();
+        await Assert.That(ReferenceEquals(resolved.Value, tool)).IsTrue();
+    }
+
+    [Test]
+    public async Task ResolveTool_InvalidName_ErrorTextIsUnchanged()
+    {
+        const string raw = "Bad Name!";
+        var dispatcher = NewDispatcher(
+            new CountingRegistry(new NoopTool("noop", ExecutionMode.Parallel)), new FakeEventBus());
+
+        // The exact old-railway text, computed from the same parse failure.
+        string expected = ToolName.TryCreate(raw)
+            .MapError(e => $"Invalid tool name: {e}")
+            .Error;
+        Result<ITool> resolved = BindResolveTool(dispatcher)(raw);
+
+        await Assert.That(resolved.IsFailure).IsTrue();
+        await Assert.That(resolved.Error).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task ResolveTool_UnknownTool_UsesAvailableToolsDiagnostic()
+    {
+        var dispatcher = NewDispatcher(new CountingRegistry(), new FakeEventBus());
+
+        Result<ITool> resolved = BindResolveTool(dispatcher)("missing");
+
+        await Assert.That(resolved.IsFailure).IsTrue();
+        await Assert.That(resolved.Error).IsEqualTo("Unknown tool: 'missing'. Available: ");
+    }
+
+    [Test]
+    [Timeout(120_000)]
+    public async Task ResolveTool_SuccessPath_DropsTheCapturingClosures()
+    {
+        var registry = new CountingRegistry(new NoopTool("noop", ExecutionMode.Parallel));
+        var dispatcher = NewDispatcher(registry, new FakeEventBus());
+        Func<string, Result<ITool>> current = BindResolveTool(dispatcher);
+        Func<string, Result<ITool>> old = raw => OldResolveChain(registry, raw);
+
+        double currentBytes = AllocatedPerCall(current, "noop");
+        double oldBytes = AllocatedPerCall(old, "noop");
+
+        await Assert.That(currentBytes).IsLessThan(MaxResolveBytesPerCall).Because(
+            "ResolveTool must allocate only the one ToolName record; the old chain built two closure pairs");
+        // Sensitivity: the gate fails on the shape this slice removed.
+        await Assert.That(oldBytes).IsGreaterThan(currentBytes * 1.5).Because(
+            "the control proves the gate would fail on the chained TryCreate/Bind shape");
     }
 }

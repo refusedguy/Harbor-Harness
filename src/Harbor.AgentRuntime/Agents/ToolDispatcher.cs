@@ -342,15 +342,15 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Parse a raw tool name and resolve it to a registered tool on one
-    ///     railway. Failure text is produced at the source of each failure:
-    ///     invalid format via MapError, unknown tool (with the available-tools
-    ///     inventory) via the registry-miss branch.
+    ///     Resolve a raw tool name. #1100: imperative form, no per-call closures.
     /// </summary>
-    private Result<ITool> ResolveTool(string rawName) =>
-        ToolName.TryCreate(rawName)
-            .MapError(e => $"Invalid tool name: {e}")
-            .Bind(name => tools.GetTool(name).MapError(_ => UnknownToolDiagnostic(rawName)));
+    private Result<ITool> ResolveTool(string rawName)
+    {
+        var parsed = ToolName.TryCreate(rawName).MapError(e => $"Invalid tool name: {e}");
+        if (!parsed.IsSuccess) return parsed.ConvertFailure<ITool>();
+        var resolved = tools.GetTool(parsed.Value);
+        return resolved.IsSuccess ? resolved : Result.Failure<ITool>(UnknownToolDiagnostic(rawName));
+    }
 
     /// <summary>
     ///     Build the "available tools" list with a pooled StringBuilder instead of
