@@ -407,6 +407,9 @@ wins over the persisted JSON value.
 | `ASPNETCORE_URLS` | `BlazorConfig.ListenPort` | Standard ASP.NET Core override; takes precedence. Blazor only. |
 | `--no-open-browser` (CLI flag) | `BlazorConfig.AutoOpenBrowser` | Flag wins. Blazor only. |
 
+The full list, including the debug-only and CI switches, is in
+[Environment variables](./ENV_VARS.md).
+
 ---
 
 ## 7. Migrating from B2 / legacy `HarborConfig`

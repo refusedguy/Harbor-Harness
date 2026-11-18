@@ -76,6 +76,8 @@
   href: DIALOG_OVERLAY_KIND_CENSUS.md
 - name: E2E Testing
   href: E2E_TESTING.md
+- name: Environment Variables
+  href: ENV_VARS.md
 - name: Evals
   href: EVALS.md
 - name: Event Bus Sinks
