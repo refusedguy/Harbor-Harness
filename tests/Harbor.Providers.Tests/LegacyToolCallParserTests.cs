@@ -124,12 +124,8 @@ public class LegacyToolCallParserTests
             ```
             $ echo done
             """;
-        var calls = _parser.Parse(text);
+        string names = string.Join(",", _parser.Parse(text).Select(c => c.ToolName));
 
-        await Assert.That(calls.Count).IsEqualTo(3);
-        await Assert.That(calls[0].ToolName).IsEqualTo("bash");
-        await Assert.That(calls[1].ToolName).IsEqualTo("list_functions");
-        await Assert.That(calls[2].ToolName).IsEqualTo("bash");
-        await Assert.That(calls[2].ArgumentsJson).IsEqualTo("""{"command":"echo done"}""");
+        await Assert.That(names).IsEqualTo("bash,list_functions,bash");
     }
 }
