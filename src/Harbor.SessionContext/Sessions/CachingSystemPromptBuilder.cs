@@ -88,10 +88,11 @@ namespace Harbor.Application.Sessions;
 ///         </list>
 ///     </para>
 ///     <para>
-///         <b>The inventory, both directions.</b> Rendered and keyed: eight
+///         <b>The inventory, both directions.</b> Rendered and keyed: nine
 ///         context chains (<c>WorkingDirectory</c>, <c>Model.ProviderId</c>,
-///         <c>Model.Id</c>, <c>Agent.SystemPromptAppend</c>, <c>Tools</c>,
-///         <c>Skills</c>, <c>ContextFiles</c>, <c>McpInstructions</c>), plus the
+///         <c>Model.Id</c>, <c>Model.ContextWindow</c>,
+///         <c>Agent.SystemPromptAppend</c>, <c>Tools</c>, <c>Skills</c>,
+///         <c>ContextFiles</c>, <c>McpInstructions</c>), plus the
 ///         tool, skill and file members reached through locals. Keyed and NOT
 ///         rendered: seven agent fields — <c>Name</c>, <c>DisplayName</c>,
 ///         <c>Description</c>, <c>Model</c>, <c>ProviderId</c>,
@@ -196,12 +197,13 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         The two model fields sit next to each other because they are rendered as
-    ///         one line: <c>- Model: &lt;provider&gt;/&lt;id&gt;</c>
-    ///         (<c>SystemPromptBuilder</c>, the Environment section). #815 keyed the
-    ///         agent's provider here and not the model's, and with the pair adjacent the
-    ///         block still read as coverage. <c>PromptCacheKeyCoverageRules</c> compares
-    ///         both chains against the renderer, so the next mismatch cannot land quietly.
+    ///         The model fields sit next to each other: the provider and id are rendered
+    ///         as one line (<c>- Model: &lt;provider&gt;/&lt;id&gt;</c>, the Environment
+    ///         section) and the context window decides whether the tool section is
+    ///         compact (#2678 item 93). #815 keyed the agent's provider here and not the
+    ///         model's, and with the pair adjacent the block still read as coverage.
+    ///         <c>PromptCacheKeyCoverageRules</c> compares every chain against the
+    ///         renderer, so the next mismatch cannot land quietly.
     ///     </para>
     ///     <para>
     ///         The tool schemas used to ride a static <c>ConcurrentDictionary</c> that
@@ -245,6 +247,11 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
         AppendField(hash, context.Agent.SystemPromptAppend);
         AppendField(hash, context.Model.ProviderId);
         AppendField(hash, context.Model.Id);
+        // #2678 item 93: the tool section is rendered compact when this value is
+        // below SystemPromptBuilder.CompactToolListContextWindow, so two models
+        // that differ only here read different prompts. The key must hold it or
+        // a cache hit would serve the other window's list with no miss or log.
+        AppendField(hash, context.Model.ContextWindow.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         var tools = context.Tools;
         for (int i = 0; i < tools.Count; i++)
