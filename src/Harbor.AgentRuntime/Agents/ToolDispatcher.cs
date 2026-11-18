@@ -616,7 +616,7 @@ public sealed class ToolDispatcher(
         TimeSpan? toolExecutionTimeout = null)
     {
         using var activity = Source.StartActivity("Tool.Execute");
-        activity?.SetTag(ToolNameTag, toolCall.ToolName);
+        activity?.SetTag(ToolNameTag, toolCall.ToolName).SetTag("gen_ai.tool.call.id", toolCall.Id);
 
         // §4.6-ok: выход Bind-рельсы (ROP-C П.4), диагностики различаются по
         // построению (L5) — текст приехал из ResolveTool в ExecuteAsync.

@@ -60,7 +60,10 @@ public sealed partial class McpToolAdapter : ITool
     {
         JsonElement methodArgs = JsonArgs.GetObject(args, "arguments");
 
-        JsonElement argsEl = McpJsonRpc.BuildToolCallParams(_toolName, methodArgs);
+        // #2678 item 113: the MCP server runs out of process, so it cannot read
+        // our Activity.Current. Carry the W3C traceparent in tools/call._meta so
+        // its span joins the same trace. No ambient activity keeps the old wire.
+        JsonElement argsEl = McpJsonRpc.BuildToolCallParams(_toolName, methodArgs, McpTraceContext.CurrentTraceparent);
         // ROP-A Z1 п.17: boundary Match.
         return await _registry.InvokeAsync(_server, "tools/call", argsEl, cancellationToken)
             .Match(

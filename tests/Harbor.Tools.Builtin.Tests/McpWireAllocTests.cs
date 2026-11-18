@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Harbor.TestKit;
 using Harbor.Tools.Mcp;
@@ -14,6 +15,26 @@ namespace Harbor.Tools.Builtin.Tests;
 /// </summary>
 public class McpWireAllocTests
 {
+    private static readonly ActivitySource AgentSource = new("Harbor");
+
+    /// <summary>
+    ///     Start a W3C activity from the agent's own source. An ActivitySource
+    ///     hands back an Activity only while a listener samples it in; the id is
+    ///     generated at Start, so the listener can be dropped right afterwards.
+    /// </summary>
+    private static Activity StartAgentActivity(string name)
+    {
+        var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "Harbor",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+        Activity activity = AgentSource.StartActivity(name)!;
+        listener.Dispose();
+        return activity;
+    }
+
     // ---------- McpSse.TryParseResponse ----------
 
     [Test]
@@ -111,6 +132,79 @@ public class McpWireAllocTests
         await Assert.That(paramsEl.GetRawText()).IsEqualTo("""{"name":"t","arguments":{}}""");
     }
 
+    /// <summary>
+    ///     #2678 item 113: a W3C traceparent travels to the MCP server in
+    ///     <c>_meta.traceparent</c> so its span joins the agent's trace. The
+    ///     original <c>name</c>/<c>arguments</c> members stay untouched.
+    /// </summary>
+    [Test]
+    public async Task ToolCallParams_WithTraceparent_EmitsMeta()
+    {
+        const string traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+        JsonElement paramsEl = McpJsonRpc.BuildToolCallParams("t", default, traceparent);
+
+        await Assert.That(paramsEl.GetProperty("_meta").GetProperty("traceparent").GetString()).IsEqualTo(traceparent);
+        await Assert.That(paramsEl.GetProperty("name").GetString()).IsEqualTo("t");
+        await Assert.That(paramsEl.GetProperty("arguments").ValueKind).IsEqualTo(JsonValueKind.Object);
+    }
+
+    /// <summary>
+    ///     #2678 item 113: no traceparent means no <c>_meta</c> member at all.
+    ///     The no-activity wire shape is byte-identical to the historical one,
+    ///     so an MCP server that predates trace propagation sees no change.
+    /// </summary>
+    [Test]
+    public async Task ToolCallParams_WithoutTraceparent_OmitsMeta()
+    {
+        JsonElement paramsEl = McpJsonRpc.BuildToolCallParams("t", default);
+
+        await Assert.That(paramsEl.TryGetProperty("_meta", out _)).IsFalse();
+        await Assert.That(paramsEl.GetRawText()).IsEqualTo("""{"name":"t","arguments":{}}""");
+    }
+
+    /// <summary>
+    ///     #2678 item 113: the agent's own W3C activity id IS the traceparent.
+    ///     Asserting the prefix keeps a hierarchical id from passing as one.
+    /// </summary>
+    [Test]
+    public async Task McpTraceContext_W3cActivity_ReturnsTraceparent()
+    {
+        using var activity = StartAgentActivity("test");
+
+        string? traceparent = McpTraceContext.CurrentTraceparent;
+
+        await Assert.That(activity.IdFormat).IsEqualTo(ActivityIdFormat.W3C);
+        await Assert.That(traceparent).IsEqualTo(activity.Id);
+        await Assert.That(traceparent!).StartsWith("00-");
+    }
+
+    /// <summary>
+    ///     #2678 item 113: a W3C activity from another instrumenter (a host
+    ///     request or a test runner) is not the agent trace and must not leak
+    ///     onto the MCP wire. This is what keeps the no-trace wire shape stable
+    ///     when the process happens to have some unrelated ambient span.
+    /// </summary>
+    [Test]
+    public async Task McpTraceContext_ForeignW3cActivity_ReturnsNull()
+    {
+        using var activity = new Activity("foreign").SetIdFormat(ActivityIdFormat.W3C).Start();
+
+        await Assert.That(McpTraceContext.CurrentTraceparent).IsNull();
+    }
+
+    /// <summary>
+    ///     #2678 item 113: a hierarchical id is not a traceparent; emitting it
+    ///     as one would produce a wire value no server could interpret.
+    /// </summary>
+    [Test]
+    public async Task McpTraceContext_HierarchicalActivity_ReturnsNull()
+    {
+        using var activity = new Activity("test").SetIdFormat(ActivityIdFormat.Hierarchical).Start();
+
+        await Assert.That(McpTraceContext.CurrentTraceparent).IsNull();
+    }
+
     [Test]
     public async Task PromptGetParams_EscapesName_Verbatim()
     {
@@ -153,6 +247,28 @@ public class McpWireAllocTests
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(registry.LastMethod).IsEqualTo("tools/call");
         await Assert.That(registry.LastArgsJson).IsEqualTo("""{"name":"tool","arguments":{}}""");
+    }
+
+    /// <summary>
+    ///     #2678 item 113: the adapter reads the agent's ambient W3C activity at
+    ///     the boundary and the scripted registry observes the same traceparent on
+    ///     tools/call. That is the behavior the builder-only tests cannot prove.
+    /// </summary>
+    [Test]
+    public async Task Adapter_WithW3cActivity_PropagatesTraceparent()
+    {
+        var registry = ScriptedMcpRegistry.Succeed("{}");
+        var tool = new McpToolAdapter(registry, "srv", "tool");
+        using var activity = StartAgentActivity("dispatch");
+        using var argsDoc = JsonDocument.Parse("{}");
+
+        var result = await tool.ExecuteAsync(argsDoc.RootElement, TestToolContext.Create());
+
+        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(registry.LastMethod).IsEqualTo("tools/call");
+        using var sent = JsonDocument.Parse(registry.LastArgsJson!);
+        await Assert.That(sent.RootElement.GetProperty("_meta").GetProperty("traceparent").GetString())
+            .IsEqualTo(activity.Id);
     }
 
     [Test]
