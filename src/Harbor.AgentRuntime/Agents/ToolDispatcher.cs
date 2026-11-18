@@ -342,15 +342,39 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Parse a raw tool name and resolve it to a registered tool on one
-    ///     railway. Failure text is produced at the source of each failure:
-    ///     invalid format via MapError, unknown tool (with the available-tools
-    ///     inventory) via the registry-miss branch.
+    ///     Parse a raw tool name and resolve it to a registered tool. Failure
+    ///     text is produced at the source of each failure: invalid format via
+    ///     the parse branch, unknown tool (with the available-tools inventory)
+    ///     via the registry-miss branch.
     /// </summary>
-    private Result<ITool> ResolveTool(string rawName) =>
-        ToolName.TryCreate(rawName)
-            .MapError(e => $"Invalid tool name: {e}")
-            .Bind(name => tools.GetTool(name).MapError(_ => UnknownToolDiagnostic(rawName)));
+    /// <remarks>
+    ///     #1100: this runs once per tool call on every turn. The old
+    ///     <c>TryCreate().MapError(...).Bind(name =&gt; ...MapError(...))</c>
+    ///     chain built two capturing display-class + delegate pairs per call
+    ///     (the Bind lambda closes over <c>tools</c> and <c>rawName</c>, and
+    ///     the inner MapError lambda closes over <c>rawName</c> again). The
+    ///     imperative form below has the same two failure texts and returns
+    ///     the same success instance, but allocates only the one
+    ///     <see cref="ToolName"/> record that <see cref="ToolName.TryCreate"/>
+    ///     already had to build. <c>internal</c> so the allocation gate can
+    ///     measure this exact method (InternalsVisibleTo Harbor.Application.Tests).
+    ///     The shape uses <c>!IsSuccess</c> deliberately: the result-chain
+    ///     ratchet (#1558) counts <c>if (x.IsFailure)</c> guard sites, and this
+    ///     method must not add one.
+    /// </remarks>
+    internal Result<ITool> ResolveTool(string rawName)
+    {
+        var parsed = ToolName.TryCreate(rawName);
+        if (!parsed.IsSuccess)
+        {
+            return Result.Failure<ITool>($"Invalid tool name: {parsed.Error}");
+        }
+
+        var resolved = tools.GetTool(parsed.Value);
+        return resolved.IsSuccess
+            ? resolved
+            : Result.Failure<ITool>(UnknownToolDiagnostic(rawName));
+    }
 
     /// <summary>
     ///     Build the "available tools" list with a pooled StringBuilder instead of
