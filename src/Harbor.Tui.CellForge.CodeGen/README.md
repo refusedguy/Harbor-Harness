@@ -35,7 +35,8 @@ panel "main":
 - Kind names ignore case, underscores and dashes, so `filter_list`, `filter-list` and `FilterList` resolve to `SpecKind.FilterList`.
 - An operation line starts with `.`, then a name and optional arguments. It attaches to the nearest enclosing node.
 - Arguments are quoted strings, numbers, `true`/`false` or bare names. The parser classifies each one as a `SpecValueKind`.
-- Syntax errors become `MarkupDiagnostic` values with a 1-based line and column. The generator forwards them as `HUI001` compiler diagnostics.
+- Syntax errors become `MarkupDiagnostic` values with a 1-based line and column. The generator forwards them as `HZ0001` compiler errors with a location in the `.harbor-ui` file. A document that has diagnostics produces no generated source, so no empty `BuildRoot` is emitted or cached.
+- The generated declarations carry a SHA-256 `SourceChecksum` of the source text so dev mode can reject stale output, plus a comment per node and operation with its 1-based line and column from the IR.
 
 The kind list covers the current generic widgets: `Panel`, `Text`, `FilterList`, `SortableTable`, `Tree`, `LogView`, `TextInput`, `DatePicker`, `Table`, `SelectionList`, `TextField`, `NumberInput`, `MultilineTextInput`, `Accordion`, `ActionButton`, `AnchoredMenu`, `AnchoredOverlay`, `AttachmentCard`, `CompactLabel`, `CopyMode`, `DocumentView`, `Dropdown`, `FocusTooltip`, `Form`, `FormScaffold`, `LiveRegion`, `Progress`, `Questionnaire`, `Rating`, `SettingsPanel`, `Spinner`, `Stepper`, `ToggleSelect`, `Toolbar` and `VirtualList`.
 
@@ -74,5 +75,5 @@ The parser depends only on the BCL and `Harbor.Abstractions.Contracts`. It holds
 ## Known limitations
 
 - Only `Text` nodes produce `root.Text` calls; other operations are recorded in the IR but not bound to widget methods yet. Binding belongs to the generator and dev interpreter, both of which read the same IR.
-- Diagnostics use the `HUI001` id without source spans; the `HZxxxx` scheme and `SourceSpan` are #2427/#2431.
+- Diagnostics use the `HZ0001` id with a `Location` built from the parser's line and column. Only markup syntax errors are reported today; semantic binding errors are a later slice.
 - Not part of the runtime layer matrix and not consumed through DI.

@@ -29,6 +29,12 @@ namespace Harbor.Tui.CellForge.CodeGen;
 ///         partial class and its declarations; phase 2 depends on phase 1's
 ///         provider and emits <c>BuildRoot</c> with local sequence numbers.
 ///     </para>
+///     <para>
+///         Issue #2427 puts 1-based source spans on the IR. Issue #2431 reports
+///         parse errors as <c>HZ0001</c> with a location, refuses to emit either
+///         half for a document with diagnostics, and carries a source checksum
+///         and positional comments in the generated code.
+///     </para>
 /// </remarks>
 [Generator]
 public sealed class MarkupGenerator : IIncrementalGenerator
@@ -36,15 +42,6 @@ public sealed class MarkupGenerator : IIncrementalGenerator
     private const string TargetPathOption = "build_metadata.AdditionalFiles.TargetPath";
     private const string ProjectDirectoryOption = "build_property.MSBuildProjectDirectory";
     private const string HarborUiExtension = ".harbor-ui";
-
-    private static readonly DiagnosticDescriptor MarkupSyntaxRule = new(
-        id: "HUI001",
-        title: "Invalid CellForge markup",
-        messageFormat: "{0}:{1}: {2}",
-        category: "CellForge.Markup",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description: "The .harbor-ui parser rejected this line.");
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -132,24 +129,22 @@ public sealed class MarkupGenerator : IIncrementalGenerator
     {
         var parse = MarkupParser.Parse(input.Text);
         foreach (var diagnostic in parse.Diagnostics)
-        {
-            spc.ReportDiagnostic(Diagnostic.Create(
-                MarkupSyntaxRule,
-                Location.None,
-                diagnostic.Line,
-                diagnostic.Column,
-                diagnostic.Message));
-        }
+            spc.ReportDiagnostic(MarkupDiagnostics.SyntaxError(input.TargetPath, input.Text, diagnostic));
 
         // A document with syntax errors gets no half-generated class. The
-        // diagnostic breaks the build, and there is no stale BuildRoot to keep.
+        // HZ0001 diagnostic breaks the build; there is no stale BuildRoot to
+        // keep and nothing for the incremental pipeline to cache.
         if (parse.Diagnostics.Count != 0)
             return;
 
         spc.AddSource(
             input.Identifier + ".Declarations.g.cs",
             SourceText.From(
-                BuildRootEmitter.EmitDeclaration(input.TargetPath, input.Identifier, parse),
+                BuildRootEmitter.EmitDeclaration(
+                    input.TargetPath,
+                    input.Identifier,
+                    parse,
+                    MarkupChecksum.Compute(input.Text)),
                 Encoding.UTF8));
     }
 
