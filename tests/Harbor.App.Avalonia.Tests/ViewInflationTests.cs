@@ -139,6 +139,22 @@ public class ViewInflationTests
     }
 
     [Test]
+    public async Task ToastNotificationsView_ToastContainer_IsPoliteLiveRegion()
+    {
+        // #2681 G74: a toast is a transient notification. Without a live
+        // region a screen reader never announces one being added, so the
+        // ItemsControl that holds the toast cards carries LiveSetting=Polite.
+        // The attached property defaults to Off, so this fails without the
+        // AXAML attribute and passes with it.
+        var view = new Views.ToastNotificationsView();
+        view.ApplyTemplate();
+        ItemsControl container = view.GetLogicalDescendants().OfType<ItemsControl>().First();
+
+        await Assert.That(AutomationProperties.GetLiveSetting(container))
+            .IsEqualTo(AutomationLiveSetting.Polite);
+    }
+
+    [Test]
     public async Task SettingsView_Inflates()
     {
         // SettingsView contacts the AvaloniaDispatcher during XAML
