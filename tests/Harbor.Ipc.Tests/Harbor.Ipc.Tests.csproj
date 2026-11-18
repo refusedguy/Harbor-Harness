@@ -40,6 +40,10 @@
          The sibling references Harbor.Abstractions only, which this project
          already has, so the reference adds no product assembly. -->
     <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
+    <!-- #2704 H05: FakeEventBus is the canonical in-process event bus double.
+         The sibling TestKit assembly is the only home of that type; Support
+         owns the clock/seed/data builders, not the bus double itself. -->
+    <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
