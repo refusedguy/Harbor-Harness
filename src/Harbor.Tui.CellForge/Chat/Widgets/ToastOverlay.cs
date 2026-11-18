@@ -40,13 +40,21 @@ public sealed class ToastOverlay
 
     public bool IsEmpty => _active.Count == 0 && _pending.Count == 0;
 
-    public void Show(string message, ToastKind kind = ToastKind.Info)
+    public void Show(string message, ToastKind kind = ToastKind.Info) =>
+        Show(new ToastNotification(message, kind));
+
+    /// <summary>
+    ///     Enqueues an already-materialised notification (#2372). The
+    ///     <see cref="IToastService" /> adapter uses this so the id it reports
+    ///     on <c>ToastAdded</c> is the id actually sitting in the queue.
+    /// </summary>
+    public void Show(ToastNotification toast)
     {
-        if (string.IsNullOrEmpty(message))
+        if (toast is null || string.IsNullOrEmpty(toast.Message))
         {
             return;
         }
-        _pending.Enqueue(new ToastNotification(message, kind));
+        _pending.Enqueue(toast);
     }
 
     public bool Dismiss(Guid id)
