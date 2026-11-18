@@ -18,6 +18,7 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
     private readonly IShellChrome _shellChrome;
     private readonly IWorkspaceCommands _workspaceCommands;
     private readonly TuiEffectHost _effects;
+    private readonly IKeyboardShortcutService _shortcuts;
     private readonly ILogger<CommandPaletteViewModel> _logger;
     private readonly IFloatingTerminals? _floatingTerminals;
 
@@ -28,12 +29,14 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
         IShellChrome shellChrome,
         IWorkspaceCommands workspaceCommands,
         TuiEffectHost effects,
+        IKeyboardShortcutService shortcuts,
         IFloatingTerminals? floatingTerminals = null)
         : base(dispatcher, logger)
     {
         _shellChrome = shellChrome;
         _workspaceCommands = workspaceCommands;
         _effects = effects;
+        _shortcuts = shortcuts;
         _logger = logger;
         _floatingTerminals = floatingTerminals;
         // Build the command list (platform callbacks) and run the initial filter.
@@ -45,15 +48,24 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
             new("command", "Open provider browser", "ProviderBrowser", OpenProviderBrowser),
             new("command", "Open diff view", "DiffView", OpenDiff),
             new("command", "Open token usage chart", "TokenUsageView", OpenTokenUsage),
-            new("command", "Toggle sidebar (Ctrl+B)", "SidebarToggle", ToggleSidebar),
-            new("command", "Toggle theme (Ctrl+Shift+T)", "ThemeToggle", ToggleTheme),
-            new("command", "Floating terminal pane (Ctrl+`)", "TerminalPane", ToggleTerminalPane),
+            // #2682 Z06: the chip text comes from the shell's shortcut service,
+            // keyed by the same id the Hint column carries. Labels keep their
+            // parenthesized chord so a query like "ctrl+b" still finds the row.
+            new("command", "Toggle sidebar (Ctrl+B)", "SidebarToggle", ToggleSidebar,
+                _shortcuts.GetKeyText("SidebarToggle")),
+            new("command", "Toggle theme (Ctrl+Shift+T)", "ThemeToggle", ToggleTheme,
+                _shortcuts.GetKeyText("ThemeToggle")),
+            new("command", "Floating terminal pane (Ctrl+`)", "TerminalPane", ToggleTerminalPane,
+                _shortcuts.GetKeyText("TerminalPane")),
             new("command", "New session", "SessionNew", NewSession),
             new("command", "Branch active session", "SessionBranch", BranchSession),
-            new("command", "Open file (Ctrl+O)", "FileOpen", OpenFile),
-            new("command", "Save file (Ctrl+S)", "FileSave", SaveFile),
+            new("command", "Open file (Ctrl+O)", "FileOpen", OpenFile,
+                _shortcuts.GetKeyText("FileOpen")),
+            new("command", "Save file (Ctrl+S)", "FileSave", SaveFile,
+                _shortcuts.GetKeyText("FileSave")),
             new("command", "Stop agent", "AgentStop", StopAgent),
-            new("command", "Clear chat (Ctrl+L)", "ChatClear", ClearChat),
+            new("command", "Clear chat (Ctrl+L)", "ChatClear", ClearChat,
+                _shortcuts.GetKeyText("ChatClear")),
             new("command", "Refresh session list", "SessionRefresh", RefreshSessions),
         });
 

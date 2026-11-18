@@ -187,6 +187,10 @@ internal static class ServiceRegistration
         services.AddSingleton<AvaloniaUiViewport>();
         services.AddSingleton<ChatStreamingPresenter>();
         services.AddSingleton<UiRenderEngine>();
+        // #2682 Z06: the palette reads binding chips through the narrow display
+        // port; one singleton backs both the dispatcher and the hint reader.
+        services.AddSingleton<IKeyboardShortcutService>(
+            sp => sp.GetRequiredService<KeyboardShortcutService>());
         // #670: SessionFactory forks through the core's SessionForkService, which lives in
         // Harbor.Application — a layer this Presentation framework may not reference. The
         // adapter below is the bridge, same shape as CommonConfigReaderAdapter (#453, ADR-009).

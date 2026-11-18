@@ -8,7 +8,13 @@ namespace Harbor.Desktop.ViewModels;
 /// <param name="Label">Primary text shown large.</param>
 /// <param name="Hint">Secondary text shown muted (e.g. shortcut or category).</param>
 /// <param name="Action">Callback invoked when the user activates this entry.</param>
-public sealed record CommandResultViewModel(string Kind, string Label, string Hint, Action Action)
+/// <param name="KeyText">Optional global shortcut shown as a <c>Kbd</c> chip (#2682 Z06).</param>
+public sealed record CommandResultViewModel(
+    string Kind,
+    string Label,
+    string Hint,
+    Action Action,
+    string KeyText = "")
 {
     /// <summary>Icon glyph based on kind.</summary>
     public string Icon => Kind switch
@@ -19,4 +25,7 @@ public sealed record CommandResultViewModel(string Kind, string Label, string Hi
         "session" => "💬",
         _ => "•"
     };
+
+    /// <summary>Whether this row has a binding worth a chip (#2682 Z06).</summary>
+    public bool HasKeyText => !string.IsNullOrEmpty(KeyText);
 }

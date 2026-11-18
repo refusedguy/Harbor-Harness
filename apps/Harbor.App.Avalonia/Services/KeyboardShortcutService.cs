@@ -33,7 +33,7 @@ namespace Harbor.App.Avalonia.Services;
 ///         save that threw was invisible — no log, no toast. It now reports.
 ///     </para>
 /// </remarks>
-public sealed class KeyboardShortcutService
+public sealed class KeyboardShortcutService : IKeyboardShortcutService
 {
     private readonly IShellChrome _shellChrome;
     private readonly IWorkspaceCommands _workspaceCommands;
@@ -115,6 +115,13 @@ public sealed class KeyboardShortcutService
 
         return false;
     }
+
+    /// <summary>
+    ///     #2682 Z06: the chip text for a command-palette row. The table lives
+    ///     beside the dispatcher it describes so the two can be reviewed
+    ///     together; this method never influences routing.
+    /// </summary>
+    public string GetKeyText(string commandId) => KeyboardShortcutHints.Get(commandId);
 }
 
 /// <summary>
