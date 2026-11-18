@@ -1,0 +1,3 @@
+# golden: loading-shimmer (12x2)
+░░░░░░░░░░░░
+░░░░░░░░
