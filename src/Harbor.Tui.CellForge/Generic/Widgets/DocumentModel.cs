@@ -58,7 +58,7 @@ public sealed class DocumentLine
 
 /// <summary>
 /// Display-width aware greedy wrapper for styled document spans. Splits each
-/// span into trailing-whitespace tokens, packs tokens up to <paramref name="width"/>
+/// span into trailing-whitespace tokens, packs tokens up to the requested width
 /// cells with a word-boundary preference, and hard-cuts a single over-long token
 /// by rune width. Wide runes never split; zero-width runes attach to the current
 /// piece. AOT-clean: no regex, no reflection, BCL only.

@@ -4,8 +4,10 @@
 // HTML is a deliberately small, self-contained subset for viewing generated
 // docs. No registry, no plugin seam: the format is an enum chosen by the host.
 
+using System.Collections.Frozen;
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Widgets;
 
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
@@ -53,7 +55,7 @@ public static class DocumentAdapters
             for (int s = 0; s < md.Spans.Count; s++)
             {
                 var span = md.Spans[s];
-                runs[s] = new DocumentSpan(span.Text, StyleFor(span.Style));
+                runs[s] = new DocumentSpan(span.Text, AssistantMarkdownBlock.StyleFor(span.Style));
             }
 
             lines.Add(new DocumentLine(runs));
@@ -94,20 +96,6 @@ public static class DocumentAdapters
     public static IReadOnlyList<DocumentLine> AdaptHtml(string? source, int width) =>
         new HtmlCollector(Math.Max(1, width)).Collect(source ?? string.Empty);
 
-    /// <summary>Markdown style → cell style, byte-identical to the chat block's palette mapping.</summary>
-    private static CellStyle StyleFor(MdStyle style) => style switch
-    {
-        MdStyle.Bold or MdStyle.Heading => new CellStyle(
-            style == MdStyle.Heading ? PackedColor.Indexed(4) : default,
-            attrs: StyleAttr.Bold),
-        MdStyle.Italic => new CellStyle(attrs: StyleAttr.Italic),
-        MdStyle.BoldItalic => new CellStyle(attrs: StyleAttr.Bold | StyleAttr.Italic),
-        MdStyle.Code => new CellStyle(PackedColor.Indexed(3)),
-        MdStyle.Fence => ChatPalette.Dim,
-        MdStyle.Bullet => new CellStyle(PackedColor.Indexed(4)),
-        _ => CellStyle.Plain,
-    };
-
     private readonly struct Inline(bool bold, bool italic, bool underline, bool code)
     {
         public bool Bold { get; init; } = bold;
@@ -118,6 +106,66 @@ public static class DocumentAdapters
 
     private sealed class HtmlCollector
     {
+        private enum TagKind : byte
+        {
+            Unknown,
+            Script,
+            Style,
+            Br,
+            Hr,
+            Heading,
+            Paragraph,
+            Div,
+            Quote,
+            Ul,
+            Ol,
+            Li,
+            Pre,
+            Bold,
+            Italic,
+            Underline,
+            Code,
+            TableRow,
+            TableCell,
+        }
+
+        // Tag dispatch is a table, not a string switch: the string-switch gate
+        // owns every string-dispatched switch in src/, and an enum keeps the
+        // dispatch AOT-clean and the accepted vocabulary visible in one place.
+        private static readonly FrozenDictionary<string, TagKind> TagKinds =
+            new Dictionary<string, TagKind>(StringComparer.Ordinal)
+            {
+                ["script"] = TagKind.Script,
+                ["style"] = TagKind.Style,
+                ["br"] = TagKind.Br,
+                ["hr"] = TagKind.Hr,
+                ["h1"] = TagKind.Heading,
+                ["h2"] = TagKind.Heading,
+                ["h3"] = TagKind.Heading,
+                ["h4"] = TagKind.Heading,
+                ["h5"] = TagKind.Heading,
+                ["h6"] = TagKind.Heading,
+                ["p"] = TagKind.Paragraph,
+                ["div"] = TagKind.Div,
+                ["blockquote"] = TagKind.Quote,
+                ["ul"] = TagKind.Ul,
+                ["ol"] = TagKind.Ol,
+                ["li"] = TagKind.Li,
+                ["pre"] = TagKind.Pre,
+                ["b"] = TagKind.Bold,
+                ["strong"] = TagKind.Bold,
+                ["i"] = TagKind.Italic,
+                ["em"] = TagKind.Italic,
+                ["u"] = TagKind.Underline,
+                ["a"] = TagKind.Underline,
+                ["code"] = TagKind.Code,
+                ["kbd"] = TagKind.Code,
+                ["tt"] = TagKind.Code,
+                ["tr"] = TagKind.TableRow,
+                ["td"] = TagKind.TableCell,
+                ["th"] = TagKind.TableCell,
+            }.ToFrozenDictionary(StringComparer.Ordinal);
+
         private static readonly CellStyle HeadingStyle = new(PackedColor.Indexed(4), attrs: StyleAttr.Bold);
         private static readonly CellStyle CodeStyle = new(PackedColor.Indexed(3));
         private static readonly CellStyle QuoteStyle = new(ChatPalette.Dim.Fg, attrs: StyleAttr.Italic);
@@ -130,7 +178,7 @@ public static class DocumentAdapters
         private int _itemIndex;
         private bool _ordered;
         private bool _pre;
-        private string? _skipTag;
+        private TagKind? _skipTag;
 
         public HtmlCollector(int width) => _width = width;
 
@@ -340,10 +388,11 @@ public static class DocumentAdapters
             }
 
             string name = tag[..end].ToString().ToLowerInvariant();
+            var kind = TagKinds.GetValueOrDefault(name);
 
             if (_skipTag is not null)
             {
-                if (closing && name == _skipTag)
+                if (closing && kind == _skipTag)
                 {
                     _skipTag = null;
                 }
@@ -351,51 +400,53 @@ public static class DocumentAdapters
                 return;
             }
 
-            if (name is "script" or "style")
+            switch (kind)
             {
-                if (!closing)
-                {
-                    FlushLine();
-                    _skipTag = name;
-                }
+                case TagKind.Script:
+                case TagKind.Style:
+                    if (!closing)
+                    {
+                        FlushLine();
+                        _skipTag = kind;
+                    }
 
-                return;
-            }
+                    return;
+                case TagKind.Br:
+                    if (!closing)
+                    {
+                        FlushLine();
+                    }
 
-            if (!closing && name == "br")
-            {
-                FlushLine();
-                return;
-            }
+                    return;
+                case TagKind.Hr:
+                    if (!closing)
+                    {
+                        FlushLine();
+                        _lines.Add(new DocumentLine([new DocumentSpan(new string('─', _width), ChatPalette.Dim)]));
+                    }
 
-            if (!closing && name == "hr")
-            {
-                FlushLine();
-                _lines.Add(new DocumentLine([new DocumentSpan(new string('─', _width), ChatPalette.Dim)]));
-                return;
-            }
-
-            switch (name)
-            {
-                case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
+                    return;
+                case TagKind.Heading:
                     Block(closing, HeadingStyle);
                     break;
-                case "p": case "div":
+                case TagKind.Paragraph:
+                case TagKind.Div:
                     Block(closing, CellStyle.Plain);
                     break;
-                case "blockquote":
+                case TagKind.Quote:
                     Block(closing, QuoteStyle);
                     break;
-                case "ul": case "ol":
+                case TagKind.Ul:
+                case TagKind.Ol:
                     FlushLine();
                     if (!closing)
                     {
                         _itemIndex = 0;
-                        _ordered = name == "ol";
+                        _ordered = kind == TagKind.Ol;
                     }
 
                     break;
-                case "li":
+                case TagKind.Li:
                     if (!closing)
                     {
                         FlushLine();
@@ -409,7 +460,7 @@ public static class DocumentAdapters
                     }
 
                     break;
-                case "pre":
+                case TagKind.Pre:
                     if (!closing)
                     {
                         FlushLine();
@@ -424,24 +475,23 @@ public static class DocumentAdapters
                     }
 
                     break;
-                case "b": case "strong":
+                case TagKind.Bold:
                     ToggleInline(closing, f => f with { Bold = true });
                     break;
-                case "i": case "em":
+                case TagKind.Italic:
                     ToggleInline(closing, f => f with { Italic = true });
                     break;
-                case "u": case "a":
+                case TagKind.Underline:
                     ToggleInline(closing, f => f with { Underline = true });
                     break;
-                case "code": case "kbd": case "tt":
+                case TagKind.Code:
                     ToggleInline(closing, f => f with { Code = true });
                     break;
-                // table/tr/td/span/font and anything else are transparent:
-                // span and font carry inline children, table rows break lines.
-                case "tr":
+                // table rows break lines; other table/cell tags are transparent.
+                case TagKind.TableRow:
                     FlushLine();
                     break;
-                case "td": case "th":
+                case TagKind.TableCell:
                     if (closing)
                     {
                         _current.Add(new DocumentSpan("  ", CellStyle.Plain));
