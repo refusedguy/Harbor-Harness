@@ -31,9 +31,9 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
     private readonly Func<CancellationToken, Task<Result<Maybe<string>>>>? _oauthTokenProvider;
-    private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
     private readonly McpHttpClientFactory _clients;
+    private readonly McpRoundTripTemplate _template;
 
     // The cached transport is reused by overlapping calls, so disposal must
     // be one-shot under contention rather than a check-then-write race.
@@ -49,7 +49,6 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         _endpoint = endpoint;
         _headers = headers;
         _oauthTokenProvider = oauthTokenProvider;
-        _logger = logger;
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(60);
 
         // The client is NOT bounded: the GET stream outlives any single
@@ -58,6 +57,17 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         // itself is assembled by the factory (#1567); the timeout is the only
         // thing that differs from the streamable-HTTP transport.
         _clients = new McpHttpClientFactory(Timeout.InfiniteTimeSpan);
+        _template = new McpRoundTripTemplate(
+            endpoint,
+            _requestTimeout,
+            "SSE",
+            logger is null
+                ? null
+                : (attempt, cause) => McpSseTransportLog.RoundTripFailed(logger, endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, cause),
+            logger is null
+                ? null
+                : (attempt, ex) => McpSseTransportLog.RoundTripFailedRetrying(logger, ex, endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts),
+            logger is null ? null : error => McpSseTransportLog.TransportFailure(logger, error));
     }
 
     /// <summary>
@@ -79,7 +89,6 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         var sw = Stopwatch.StartNew();
-        HttpClient client = _clients.Client;
         // ROP-A ПР.11: serialize the JSON-RPC envelope straight to UTF-8 bytes.
         // GetRawText() materialized a UTF-16 string that StringContent then
         // re-encoded to UTF-8, one copy too many on the request path.
@@ -89,61 +98,10 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             request.WriteTo(writer);
         }
         byte[] body = bufferWriter.WrittenSpan.ToArray();
-        int attempt = 1;
 
-        while (true)
-        {
-            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            attemptCts.CancelAfter(_requestTimeout);
-            try
-            {
-                Attempt once =
-                    await TryRoundTripOnceAsync(client, body, expectedId, attemptCts.Token).ConfigureAwait(false);
-                if (once.Outcome.IsFailure)
-                {
-                    // #714: not every failure is a blip. A refused channel, a missing
-                    // key or a rejected grant fails identically on attempt two, so
-                    // retrying it is latency in front of a guaranteed error — and for
-                    // 401 it is three more chances for the provider to flag the key.
-                    // The verdict travels beside the Result because the status code
-                    // cannot travel inside it (Failure is a string).
-                    if (!once.Retryable || attempt >= TransientFailurePolicy.DefaultMaxAttempts)
-                        return Fail<Maybe<JsonElement>>(sw, attempt, once.Outcome.Error);
-                    if (_logger is not null) McpSseTransportLog.RoundTripFailed(_logger, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, once.Outcome.Error);
-                    await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
-                    attempt++;
-                    continue;
-                }
-
-                return once.Outcome;
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                string cause = $"server did not respond within {_requestTimeout.TotalSeconds:F0}s";
-                if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
-                    return Fail<Maybe<JsonElement>>(sw, attempt, cause);
-
-                await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
-                attempt++;
-            }
-            catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex)
-                                       && attempt < TransientFailurePolicy.DefaultMaxAttempts)
-            {
-                if (_logger is not null) McpSseTransportLog.RoundTripFailedRetrying(_logger, ex, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts);
-                await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
-                attempt++;
-            }
-            catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex))
-            {
-                return Fail<Maybe<JsonElement>>(sw, attempt, ex.Message);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException
-                && ex is not ObjectDisposedException
-                && !cancellationToken.IsCancellationRequested)
-            {
-                return Fail<Maybe<JsonElement>>(sw, attempt, ex.Message);
-            }
-        }
+        return await _template
+            .RunAsync(ct => TryOnceAsync(body, expectedId, ct), sw, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public ValueTask DisposeAsync()
@@ -158,61 +116,28 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     }
 
     /// <summary>
-    ///     One attempt's outcome plus whether its cause earns another attempt (#714).
+    ///     One legacy-SSE attempt: open the channel, POST to the announced
+    ///     endpoint, then read the response frame. A closed stream or a non-OK
+    ///     endpoint is a <c>Failure</c>; mid-stream transport exceptions still
+    ///     propagate to <see cref="McpRoundTripTemplate" />, which owns the
+    ///     retry policy. The verdict rides beside the Result because a status
+    ///     code cannot survive inside a <c>Failure</c> string.
     /// </summary>
-    /// <remarks>
-    ///     The verdict rides beside the <see cref="Result{T}" /> rather than inside
-    ///     it. <c>Failure</c> is <c>CSharpFunctionalExtensions.Failure</c> — a struct
-    ///     around one <see cref="string" /> — so by the time a status code is inside
-    ///     a <c>Result</c> it is prose, and a caller that wants to branch on 401-vs-503
-    ///     has nothing but string parsing. Minting a typed HTTP error here would answer
-    ///     that for good, but it is a new error axis, and this fix does not need one:
-    ///     the branch is decided one frame below, while the response is still in hand.
-    ///     <para>
-    ///         Deliberately transport-private. <see cref="TransientFailurePolicy" />
-    ///         documents status classification as *not* its business ("the transports
-    ///         classify their own status codes inline at the call site"), so the
-    ///         predicate below mirrors <see cref="McpHttpTransport" /> rather than
-    ///         being hoisted into a shared type the policy comment disclaims.
-    ///     </para>
-    /// </remarks>
-    private readonly record struct Attempt(Result<Maybe<JsonElement>> Outcome, bool Retryable)
-    {
-        /// <summary>A failure worth another attempt: a dropped socket, a closed stream, a 5xx.</summary>
-        public static Attempt Transient(Result<Maybe<JsonElement>> outcome) => new(outcome, true);
-
-        /// <summary>A failure that will repeat verbatim: a refusal, a bad grant, a wrong URL.</summary>
-        public static Attempt Terminal(Result<Maybe<JsonElement>> outcome) => new(outcome, false);
-
-        /// <summary>The success case — there is no cause to weigh.</summary>
-        public static Attempt Succeeded(Result<Maybe<JsonElement>> outcome) => new(outcome, false);
-    }
-
-    /// <summary>
-    ///     Single SSE round-trip on the Result railway: a closed stream or a
-    ///     non-OK endpoint is a <c>Failure</c> (was: <c>IOException</c>/
-    ///     <c>HttpRequestException</c> throws). Mid-stream transport exceptions
-    ///     still propagate to the retry loop above, which owns the policy.
-    ///     <para>
-    ///         Each failure also declares whether it is worth retrying (#714). A
-    ///         closed stream is a blip and keeps its budget; a refused status and a
-    ///         rejected grant do not, and are terminal on the first attempt.
-    ///     </para>
-    /// </summary>
-    private async Task<Attempt> TryRoundTripOnceAsync(
-        HttpClient client,
+    private async Task<McpAttempt> TryOnceAsync(
         byte[] body,
         int? expectedId,
         CancellationToken cancellationToken)
     {
+        HttpClient client = _clients.Client;
+
         // 1. GET the SSE channel and wait for the endpoint announcement.
+        // Resolution stays per attempt, as before #2599.
         Result<Maybe<string>> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
         if (oauth.IsFailure)
         {
-            // A rejected grant is an answer, not an outage. McpHttpTransport already
-            // gets this right by resolving the token before its loop; here the
-            // resolution is per attempt, so the grant was asked for three times.
-            return Attempt.Terminal(oauth.ConvertFailure<Maybe<JsonElement>>());
+            // A rejected grant is an answer, not an outage: terminal on the
+            // first attempt, so the provider is not asked again.
+            return McpAttempt.Terminal(oauth.ConvertFailure<Maybe<JsonElement>>());
         }
 
         Maybe<string> oauthToken = oauth.Value;
@@ -244,7 +169,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             {
                 // The channel opened and then closed: a blip, and the one failure on
                 // this path that genuinely earns its retries.
-                return Attempt.Transient(
+                return McpAttempt.Transient(
                     Result.Failure<Maybe<JsonElement>>("SSE stream closed before announcing an endpoint."));
             }
 
@@ -278,42 +203,35 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             string? line = await streamReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
-                return Attempt.Transient(
+                return McpAttempt.Transient(
                     Result.Failure<Maybe<JsonElement>>("SSE stream closed before a response arrived."));
             }
 
             if (reader.Feed(line) is { Event: "message" } ev
                 && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
             {
-                return Attempt.Succeeded(Result.Success(Maybe<JsonElement>.From(doc)));
+                return McpAttempt.Succeeded(Result.Success(Maybe<JsonElement>.From(doc)));
             }
         }
     }
 
     /// <summary>
-    ///     Weights a refused HTTP response. Transient is exactly the set
-    ///     <see cref="McpHttpTransport.IsTransientStatus" /> already retries — 5xx
-    ///     and 408 — so the two transports cannot disagree about what a server
-    ///     hiccup is. Everything else (401/403/404, and 429, which both transports
-    ///     also treat as terminal) is an answer rather than a blip.
+    ///     Weights a refused HTTP response while it is still in hand (#714).
+    ///     The verdict itself moved to
+    ///     <see cref="TransientFailurePolicy.IsTransientStatus" /> in #2599.
     /// </summary>
-    private static Attempt AttemptFor(HttpStatusCode status, Result<Maybe<JsonElement>> failure)
+    private static McpAttempt AttemptFor(HttpStatusCode status, Result<Maybe<JsonElement>> failure)
         => IsTransientStatus(status)
-            ? Attempt.Transient(failure)
-            : Attempt.Terminal(failure);
+            ? McpAttempt.Transient(failure)
+            : McpAttempt.Terminal(failure);
 
     /// <summary>
-    ///     The same set <see cref="McpHttpTransport.IsTransientStatus" /> answers
-    ///     for, named so the two are comparable. <see cref="AttemptFor" /> asks
-    ///     this instead of restating the expression, so the duplication #822 left
-    ///     behind is one expression the two files both name — and
-    ///     <c>TransportRetryOwnershipRules</c> can hold the two to each other
-    ///     instead of a reader holding them in their head. Same shape as the
-    ///     exception-shaped half #572 already hoisted, on the side its rule could
-    ///     not reach.
+    ///     Declared forwarder to the shared status verdict. The ownership rule
+    ///     calls this on both transports to prove they ask the same owner;
+    ///     there is no second expression of the set to drift (#2599).
     /// </summary>
     private static bool IsTransientStatus(HttpStatusCode status)
-        => (int)status >= 500 || status == HttpStatusCode.RequestTimeout;
+        => TransientFailurePolicy.IsTransientStatus(status);
 
     private void ApplyHeaders(HttpRequestMessage request, Maybe<string> oauthToken)
     {
@@ -365,17 +283,6 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             return Result.Failure<Maybe<string>>($"MCP OAuth token failed: {ex.Message}");
         }
     }
-
-    /// <summary>See <see cref="McpHttpTransport.Fail{T}" /> — same one-line contract, SSE wording.</summary>
-    private Result<T> Fail<T>(Stopwatch sw, int attempts, string cause)
-    {
-        string error = $"SSE {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
-        if (_logger is not null) McpSseTransportLog.TransportFailure(_logger, error);
-        return Result.Failure<T>(error);
-    }
-
-    private static Task BackoffAsync(int attempt, CancellationToken cancellationToken)
-        => Task.Delay(TransientFailurePolicy.BackoffDelay(attempt), cancellationToken);
 }
 
 /// <summary>

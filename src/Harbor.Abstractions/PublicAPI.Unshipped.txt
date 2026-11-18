@@ -399,3 +399,4 @@ Harbor.Abstractions.Speech.ISpeechToText
 Harbor.Abstractions.Speech.ISpeechToText.IsAvailable.get -> bool
 Harbor.Abstractions.Speech.ISpeechToText.StartAsync(System.Action<string!>! onPartial, System.Action<string!>! onFinal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 static Harbor.Abstractions.Resilience.TransientFailurePolicy.BackoffDelay(int failedAttempt, System.TimeSpan firstRetryDelay, System.TimeSpan? maxDelay, bool jitter) -> System.TimeSpan
+static Harbor.Abstractions.Resilience.TransientFailurePolicy.IsTransientStatus(System.Net.HttpStatusCode status) -> bool
