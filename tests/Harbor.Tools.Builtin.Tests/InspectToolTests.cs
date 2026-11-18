@@ -113,13 +113,14 @@ public class InspectToolTests
     public async Task Context_OnAnEmptySession_SaysNoUsageReportedYet()
     {
         var tool = NewTool();
+        var empty = await RunAsync(tool, """{"section":"context"}""");
+        string output = empty.Output;
 
-        var result = await RunAsync(tool, """{"section":"context"}""");
-
-        await Assert.That(result).HasSucceeded();
-        await Assert.That(result.Output).Contains("model: unknown");
-        await Assert.That(result.Output).Contains("messages: 0 (0 user, 0 assistant, 0 tool result)");
-        await Assert.That(result.Output).Contains("last-step tokens: in 0, out 0 (no usage reported yet)");
+        await Assert.That(empty.IsSuccess).IsTrue();
+        await Assert.That(output).Contains("model: unknown");
+        await Assert.That(output).Contains("messages: 0 (0 user, 0 assistant, 0 tool result)");
+        await Assert.That(output).Contains("last-step tokens: in 0, out 0 (no usage reported yet)");
+        await Assert.That(output).Contains("timestamp (UTC): ");
     }
 
     [Test]
