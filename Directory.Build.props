@@ -214,7 +214,8 @@
       so plain `dotnet build` evaluated src/Harbor.Hosting with an empty value:
       no plugin ProjectReferences, no DefineConstants, runtime log printed
       "Feature flags: plugins=False" and the entire CS-plugin pipeline was dead
-      code outside NUKE-driven release builds. These defaults make a standard
+      code outside release builds driven by the build orchestrator (Fallout now,
+      the legacy NUKE path until step 4). These defaults make a standard
       `dotnet build` produce what actually ships. Env override:
       HARBOR_MINIMAL=true keeps the stripped profile (matches Cli's mapping);
       explicit /p:HarborWith*=false still wins when passed directly.
@@ -224,8 +225,9 @@
 
     <!--
       Slice A (#1144): daemon on/off. Default keeps the full IPC graph
-      (in-process + server + client); with-daemon=false (NUKE spelling carries
-      the usual double-hyphen prefix) or HARBOR_MINIMAL drops the Server/Client
+      (in-process + server + client); with-daemon=false (the build orchestrator's
+      spelling carries the usual double-hyphen prefix in both the primary Fallout
+      copy and the legacy NUKE path) or HARBOR_MINIMAL drops the Server/Client
       assemblies so the binary is single-process only.
       HarborWithRenderer above deliberately has no HARBOR_MINIMAL row.
     -->
@@ -234,7 +236,7 @@
 
     <!--
       Slice A (#1144): build-time renderer selection. Default composes every
-      backend (status quo); the NUKE with-renderer flag narrows it (see
+      backend (status quo); the orchestrator's with-renderer flag narrows it (see
       src/Harbor.Hosting/Harbor.Hosting.csproj for what each value excludes).
       Case-insensitive in MSBuild; canonical lowercase spellings.
 
@@ -262,8 +264,8 @@
       apps/, samples/ and tools/ all import it (apps/, tests/ and src/ do it
       by RELATIVE path, because the project-file analyzer can only follow an
       import it can resolve on disk, see src/Directory.Build.props). The two
-      places it does NOT reach are build/ (the NUKE tool, which declares
-      that it does not inherit solution-wide strictness) and contrib/ (not
+      places it does NOT reach are build/ (the build orchestrator projects, which
+      declare that they do not inherit solution-wide strictness) and contrib/ (not
       built by CI). Both are noted here so the claim "the audit is pinned
       repository-wide" is not read as covering them.
 

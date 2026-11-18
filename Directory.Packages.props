@@ -3,8 +3,10 @@
   Directory.Packages.props — Central Package Management (CPM) for the Harbor solution.
 
   Every NuGet package consumed by any project in the repo has its version pinned
-  here, with ONE exception: the NUKE build project under build/ turns CPM off
-  for itself and pins its own dependency chain inline, in build/_build.csproj.
+  here, with TWO exceptions: the build orchestrator projects under build/ turn
+  CPM off for themselves and pin their own dependency chains inline, in
+  build/_build.fallout/_build.fallout.csproj (primary since #2180) and
+  build/_build.csproj (legacy NUKE path, kept until step 4).
   Individual .csproj files declare only `<PackageReference Include="..." />`
   (no Version attribute) and inherit the version from this file.
 
@@ -581,25 +583,30 @@
          Every 4.x-only diagnostic (ACTR010-ACTR030) belongs to that IoC
          container and cannot fire without a [ServiceProvider] type. -->
     <PackageVersion Include="AutoCtor" Version="4.0.2" />
-    <!-- ── NUKE build system ──────────────────────────────────────────── -->
+    <!-- ── build orchestrator (Fallout primary, NUKE until step 4) ─────── -->
     <!--
-      NO Nuke.Common ENTRY HERE, ON PURPOSE.
+      NO Nuke.Common OR Fallout.Common ENTRY HERE, ON PURPOSE.
 
-      The NUKE version lives in build/_build.csproj, and only there. That
-      project turns Central Package Management OFF for itself — the
-      PropertyGroup in build/_build.csproj sets
-      ManagePackageVersionsCentrally=false, and it is THAT copy that
-      decides, not the one in build/Directory.Build.props: the SDK imports
-      Directory.Build.props first and this file second, so a
-      <PackageVersion> written here would never take part in the build
-      project's restore. It would be dead text, and the comment beside it a
-      second answer to "which NUKE do we build with?" that the build does
-      not agree with. #1896 removed the dead entry and the contradiction
-      that came with it.
+      Neither build project is governed by CPM. The PRIMARY copy is
+      build/_build.fallout/_build.fallout.csproj (#2180 step 1); the bootstrap
+      builds it and runs _build.fallout.dll. The legacy build/_build.csproj
+      (NUKE) stays until step 4. Both turn Central Package Management OFF for
+      themselves: their PropertyGroups set
+      ManagePackageVersionsCentrally=false, and it is THOSE copies that decide,
+      not the one in build/Directory.Build.props. The SDK imports
+      Directory.Build.props first and this file second, so a <PackageVersion>
+      written here would never take part in either project's restore. It would
+      be dead text, and the comment beside it a second answer to "which
+      orchestrator do we build with?" that the build does not agree with.
+      #1896 removed the dead Nuke.Common entry and the contradiction that came
+      with it; Fallout.Common is absent here for the same reason.
 
-      To change the NUKE version, change it in build/_build.csproj — and
-      read the comment there first: the NUKE version decides the
-      Microsoft.Build* floor beside it, and a stale floor is NU1605.
+      To change a version, edit the owning project file: Fallout.Common 10.4.0
+      and NuGet.Packaging 6.14.3 in build/_build.fallout/_build.fallout.csproj;
+      until step 4, Nuke.Common 10.1.0 and NuGet.Packaging 6.12.5 in
+      build/_build.csproj. Read the comment there first: the orchestrator
+      version decides the Microsoft.Build* floor beside it, and a stale floor
+      is NU1605.
     -->
     <!-- ── DI analyzers ──────────────────────────────────────────────────── -->
     <!--
