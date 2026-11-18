@@ -1,13 +1,16 @@
 # SpectreTUI Deep Dive — Harbor
 
-> ⚠️ **CONTRIB RENDERER, NOT THE DEFAULT SHELL.** `Harbor.Tui.SpectreTui` с sprint-2
-> живёт в contrib ([`contrib/tui/Harbor.Tui.SpectreTui/`](../contrib/tui/Harbor.Tui.SpectreTui/),
-> собирается через `contrib/Contrib.slnx`) и **не собирается ни одной сборкой,
-> которую собирает CI**. Флаг `HarborWithSpectreTui` по-прежнему определён и
-> по-прежнему включён по умолчанию (`Harbor.App.Cli.csproj:84`), но `<ItemGroup>`, который
-> ссылался бы на contrib-рендереры, там **закомментирован** (`Harbor.App.Cli.csproj:299-309`),
-> поэтому значение `true` не добавляет ни одного `ProjectReference`. `SpectreTuiRenderer`
-> в дереве нет (0 файлов). Вторая интерактивная оболочка — **`src/Harbor.Tui.CellForge/`**
+> ⚠️ **CONTRIB RENDERER, NOT THE DEFAULT SHELL.** `Harbor.Tui.SpectreTui` живёт в contrib
+> ([`contrib/tui/Harbor.Tui.SpectreTui/`](../contrib/tui/Harbor.Tui.SpectreTui/)), и его
+> `SpectreTuiRenderer.cs` на месте. Рендерер **не входит в обычную сборку CLI**: его
+> `<ProjectReference>` живёт в `src/Harbor.Hosting/Harbor.Hosting.csproj:166-172` под
+> условием `HarborWithSpectreTui='true'`. CLI задаёт флаг по умолчанию
+> (`Harbor.App.Cli.csproj:107-108`) и определяет символ `HARBOR_WITH_SPECTRE_TUI` (`:121`),
+> но обычный `dotnet build`/`dotnet run` не передаёт его в `Harbor.Hosting`, поэтому шесть
+> фабрик в `TuiBackendRegistry.cs` остаются за закрытым `#if`, а id `spectre`/`fullscreen`/
+> `spectre-tui` откатываются на `plain`. Активация — `-p:HarborWithSpectreTui=true`
+> (или NUKE/distro-сборка); подробности в [docs/ALTERNATIVE_UIS.md](./ALTERNATIVE_UIS.md).
+> CI этот флаг не передаёт. Вторая интерактивная оболочка — **`src/Harbor.Tui.CellForge/`**
 > (raw-mode вход, cell-diff вывод, виртуализированный таймлайн; включение —
 > `HARBOR_TUI=cellforge`, см. README проекта). Этот документ полезен и как источник
 > рецептов (diff-view, slash-completion, file-tree) для переноса в ConsoleEx.

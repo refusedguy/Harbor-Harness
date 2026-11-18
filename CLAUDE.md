@@ -76,10 +76,14 @@ src/                                   — ~50 projects (all included in Harbor.
 apps/Harbor.App.Cli/                   — CLI entry point, slash commands, REPL, HostBuilder DI root
 apps/Harbor.App.Avalonia/              — cross-platform desktop GUI
 
-contrib/tui/                           — extra interactive shells, NOT compiled into the default CLI build
-                                         (own Contrib.slnx; the CLI-side ItemGroup is commented out and the
-                                         Hosting-side group needs HarborWithSpectreTui=true, which has no
-                                         global default — AGENTS.md project map is authoritative here):
+contrib/tui/                           — extra interactive shells, NOT compiled into the default CLI build:
+                                         Harbor.Hosting.csproj:166-172 references six of them behind
+                                         HarborWithSpectreTui=true (activate with -p:HarborWithSpectreTui=true
+                                         or a NUKE/distro build). The CLI sets the flag's default to true
+                                         (Harbor.App.Cli.csproj:107-108) and defines HARBOR_WITH_SPECTRE_TUI
+                                         (:121), but a plain dotnet build/run does not pass it to Harbor.Hosting,
+                                         so these shells stay out and the spectre ids fall back to plain.
+                                         See docs/ALTERNATIVE_UIS.md; AGENTS.md project map is authoritative here.
                                          SpectreTui shell, Spectre.Fullscreen, TerminalGui, Termina, RazorConsole
 contrib/tui/Harbor.Tui.NickConsoleEx/   — the SharpConsoleUI renderer, moved OUT of the product (ADR-019):
                                          not built by CI, not published, not referenced by src/ or apps/

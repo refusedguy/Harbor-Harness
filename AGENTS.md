@@ -44,7 +44,7 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 5. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for high-level design + principles summary.
 6. Read [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for development workflow + **principles checklist** for PRs.
 7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
-8. If touching the interactive shell or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features. The canonical renderer is `src/Harbor.Tui.CellForge`; the optional interactive Spectre shell is `contrib/tui/Harbor.Tui.SpectreTui` (NOT in the default build — own `Contrib.slnx`, opt-in via `HARBOR_WITH_SPECTRE_TUI`; see the project map below).
+8. If touching the interactive shell or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features. The canonical renderer is `src/Harbor.Tui.CellForge`; the optional interactive Spectre shell is `contrib/tui/Harbor.Tui.SpectreTui` (referenced by `Harbor.Hosting` only when built with `-p:HarborWithSpectreTui=true`; a plain `dotnet build`/`dotnet run` leaves it out and the `spectre` ids fall back to `plain`. See [docs/ALTERNATIVE_UIS.md](./docs/ALTERNATIVE_UIS.md) and the project map below).
 9. Run `dotnet build` to make sure the project compiles.
 10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. Do not use `dotnet test` (see the MTP note in "Quick state" above for why, and for what is still unverified).
 
@@ -104,15 +104,18 @@ src/Harbor.Arch.Analyzers/           — the repository's OWN architecture rules
 apps/Harbor.App.Cli/                  — CLI entry point, slash commands, REPL, HostBuilder DI root
 apps/Harbor.App.Avalonia/             — cross-platform desktop GUI
 
-contrib/                              — UNMAINTAINED, NOT COMPILED BY CI. Not in Harbor.slnx, no
-                                        ProjectReference from apps/ or src/ (the contrib/tui block in
-                                        Harbor.App.Cli.csproj is commented out; HarborWithSpectreTui is
-                                        defined nowhere, so six renderer factories in TuiBackendRegistry
-                                        sit behind an #if that never opens). Do NOT send work here and do
-                                        not expect CI to catch breakage in it. The supported renderers
-                                        are in src/ (CellForge, AnsiPlain) and apps/.
-                                        What is here, kept for reference only:
-                                        Harbor.Tui.SpectreTui, Harbor.Tui.Spectre.Fullscreen,
+contrib/                              — UNMAINTAINED, NOT COMPILED BY CI. Not in Harbor.slnx. The Spectre/
+                                        TerminalGui/Termina/RazorConsole shells under contrib/tui/ DO have
+                                        ProjectReferences: src/Harbor.Hosting/Harbor.Hosting.csproj:166-172
+                                        pulls in six of them behind HarborWithSpectreTui=true. The CLI sets that
+                                        flag's default to true (Harbor.App.Cli.csproj:107-108) and defines
+                                        HARBOR_WITH_SPECTRE_TUI (:121), but a plain dotnet build/run does not
+                                        pass it to Harbor.Hosting, so the six factories in TuiBackendRegistry
+                                        stay behind a closed #if and the spectre ids fall back to plain
+                                        (see docs/ALTERNATIVE_UIS.md). Do NOT send work here and do not expect
+                                        CI to catch breakage in it. The renderers in the default build are in
+                                        src/ (CellForge, AnsiPlain) and apps/. What is here, kept for
+                                        reference only: Harbor.Tui.SpectreTui, Harbor.Tui.Spectre.Fullscreen,
                                         Harbor.Tui.{Spectre,TerminalGui,Termina,RazorConsole}
 contrib/tui/Harbor.Tui.NickConsoleEx/  — the SharpConsoleUI renderer, moved out of the product (ADR-019);
                                         not built by CI, not published, not referenced by src/ or apps/
