@@ -14,17 +14,18 @@ namespace Harbor.App.Cli.Commands;
 /// <remarks>
 ///     Unlike CAF-A/CAF-B (raw <c>[Argument]params</c> tails with a
 ///     <c>--flag</c> fail-closed deferral), <c>logs</c> IS flags: bare,
-///     <c>--list</c>, <c>--last</c>, <c>--follow</c> and <c>--clean</c> are the
+///     <c>--list</c>, <c>--last</c>, <c>--follow</c>, <c>--clean</c> and
+///     <c>--spans</c> (with its <c>--slow</c>/<c>--top</c> values) are the
 ///     whole interface, so a raw tail would fail the primary paths at the
 ///     parser (a non-digit <c>-</c> token is an option candidate, never
-///     positional). The four flags are typed here (single-letter aliases via
+///     positional). The flags are typed here (single-letter aliases via
 ///     the doc comments) and rebuilt into the manual tail in manual precedence
-///     order (list, last, follow, clean); anything else rides the positional
-///     tail untouched. Multi-flag combos normalize to the first set flag while
-///     the manual parser reads only <c>args[0]</c> — that interleave is the
-///     one documented divergence; single-flag + bare + unknown-sub paths are
-///     byte-identical (see <c>CafLogsTests</c>). Fully order-preserving tails
-///     are the follow-up.
+///     order (list, last, follow, clean, spans); anything else rides the
+///     positional tail untouched. Multi-flag combos normalize to the first set
+///     flag while the manual parser reads only <c>args[0]</c> — that
+///     interleave is the one documented divergence; single-flag + bare +
+///     unknown-sub paths are byte-identical (see <c>CafLogsTests</c>). Fully
+///     order-preserving tails are the follow-up.
 /// </remarks>
 internal static class CafLogsCommands
 {
@@ -33,19 +34,34 @@ internal static class CafLogsCommands
     /// <param name="last">-n, Print the most recent log file.</param>
     /// <param name="follow">-f, Tail the most recent log file (Ctrl-C to exit).</param>
     /// <param name="clean">-c, Delete all log files (prompts for confirmation).</param>
+    /// <param name="spans">-s, Show the slowest finished spans from the telemetry export.</param>
+    /// <param name="slow">Only spans at or above this many milliseconds (accepts an ms suffix).</param>
+    /// <param name="top">Keep only the N slowest spans.</param>
     /// <param name="args">Positional tail (unknown subcommands).</param>
     public static async Task<int> Logs(
         bool list = false,
         bool last = false,
         bool follow = false,
         bool clean = false,
+        bool spans = false,
+        string? slow = null,
+        int? top = null,
         [Argument]params string[] args)
     {
         string[] tail = list ? ["--list", ..args]
             : last ? ["--last", ..args]
             : follow ? ["--follow", ..args]
             : clean ? ["--clean", ..args]
+            : spans ? ["--spans", ..args]
             : args;
+        if (slow is not null)
+        {
+            tail = ["--slow", slow, ..tail];
+        }
+        if (top is not null)
+        {
+            tail = ["--top", top.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), ..tail];
+        }
         return await new LogsCommand(Console.Out, Console.Error).ExecuteAsync(tail).ConfigureAwait(false);
     }
 }

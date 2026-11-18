@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.App.Cli.Logging;
+using System.Globalization;
 using System.Threading.Tasks;
 namespace Harbor.App.Cli.Commands;
 /// <summary>
@@ -29,6 +30,10 @@ namespace Harbor.App.Cli.Commands;
 ///             <description>Delete every <c>harbor-*.log</c> file (after confirmation prompt).</description>
 ///         </item>
 ///         <item>
+///             <term>--spans [--slow MS] [--top N]</term>
+///             <description>Show the slowest finished spans from the telemetry export.</description>
+///         </item>
+///         <item>
 ///             <term>--help</term><description>Show usage.</description>
 ///         </item>
 ///     </list>
@@ -44,13 +49,15 @@ public sealed class LogsCommand : ICommand
 
     private readonly TextWriter _error;
     private readonly TextWriter _output;
+    private readonly string _telemetryPath;
 
     public string Name => "logs";
 
-    public LogsCommand(TextWriter output, TextWriter error)
+    public LogsCommand(TextWriter output, TextWriter error, string? telemetryPath = null)
     {
         _output = output;
         _error = error;
+        _telemetryPath = telemetryPath ?? Path.Combine(LogDir, "telemetry.txt");
     }
 
     /// <summary>
@@ -76,6 +83,8 @@ public sealed class LogsCommand : ICommand
                 return await PrintLastAsync(follow: true, ct).ConfigureAwait(false);
             case "--clean" or "-c":
                 return await CleanAsync(ct).ConfigureAwait(false);
+            case "--spans" or "-s":
+                return PrintSpans(args, ct);
             default:
                 _error.WriteLine($"Unknown subcommand: {args[0]}");
                 PrintUsage();
@@ -95,9 +104,12 @@ public sealed class LogsCommand : ICommand
                             harbor logs --last         Print the most recent log file
                             harbor logs --follow       Tail the most recent log file (Ctrl-C to exit)
                             harbor logs --clean        Delete all log files (prompts for confirmation)
+                            harbor logs --spans        Show the slowest telemetry spans
+                              --slow MS                Only spans at or above MS milliseconds (default: 0)
+                              --top N                  Keep the N slowest spans (default: 10)
                             harbor logs --help         Show this help
 
-                          Shorthands: -l, -n, -f, -c, -h.
+                          Shorthands: -l, -n, -f, -c, -s, -h.
                           """);
     }
 
@@ -232,6 +244,101 @@ public sealed class LogsCommand : ICommand
             _error.WriteLine($"Cannot read {latest.Value.FullName}: {ex.Message}");
             return 2;
         }
+    }
+
+    /// <summary>
+    ///     Print the slowest finished spans from the telemetry export. The
+    ///     export is opt-in, so a missing file is reported as an empty result
+    ///     with a hint rather than as an error.
+    /// </summary>
+    private Task<int> PrintSpans(string[] args, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        double slowMs = 0;
+        int top = 10;
+        for (int i = 1; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--slow":
+                    if (i + 1 >= args.Length || !TryParseMilliseconds(args[++i], out slowMs))
+                    {
+                        _error.WriteLine("--slow needs a non-negative millisecond value (for example: --slow 100).");
+                        return Task.FromResult(1);
+                    }
+                    break;
+                case "--top":
+                    if (i + 1 >= args.Length
+                        || !int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out top)
+                        || top <= 0)
+                    {
+                        _error.WriteLine("--top needs a positive integer (for example: --top 10).");
+                        return Task.FromResult(1);
+                    }
+                    break;
+                default:
+                    _error.WriteLine($"Unknown option for --spans: {args[i]}");
+                    PrintUsage();
+                    return Task.FromResult(1);
+            }
+        }
+
+        if (!File.Exists(_telemetryPath))
+        {
+            _output.WriteLine($"No telemetry export yet: {_telemetryPath}");
+            _output.WriteLine("Set HARBOR_TELEMETRY_EXPORT=file to record spans, then run a session.");
+            return Task.FromResult(0);
+        }
+
+        IReadOnlyList<SpanLogReader.SpanEntry> entries;
+        try
+        {
+            entries = SpanLogReader.Read(_telemetryPath);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error.WriteLine($"Cannot read {_telemetryPath}: {ex.Message}");
+            return Task.FromResult(2);
+        }
+        catch (IOException ex)
+        {
+            _error.WriteLine($"Cannot read {_telemetryPath}: {ex.Message}");
+            return Task.FromResult(2);
+        }
+
+        List<SpanLogReader.SpanEntry> slow = entries
+            .Where(e => e.DurationMs >= slowMs)
+            .OrderByDescending(e => e.DurationMs)
+            .ThenBy(e => e.Name, StringComparer.Ordinal)
+            .Take(top)
+            .ToList();
+
+        _output.WriteLine($"Span log: {_telemetryPath}");
+        _output.WriteLine($"Spans: {entries.Count} total, showing {slow.Count} at or above {slowMs.ToString("F1", CultureInfo.InvariantCulture)} ms (slowest first).");
+        _output.WriteLine();
+        for (int i = 0; i < slow.Count; i++)
+        {
+            SpanLogReader.SpanEntry e = slow[i];
+            _output.WriteLine($"  {i + 1,3}. {e.DurationMs.ToString("F3", CultureInfo.InvariantCulture),10} ms  {e.Name}  status={e.Status}");
+        }
+
+        return Task.FromResult(0);
+    }
+
+    /// <summary>Accept a bare number or a number with an <c>ms</c> suffix.</summary>
+    private static bool TryParseMilliseconds(string raw, out double milliseconds)
+    {
+        string text = raw.Trim();
+        if (text.EndsWith("ms", StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[..^2];
+        }
+
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out milliseconds)
+            && milliseconds >= 0
+            && !double.IsNaN(milliseconds)
+            && !double.IsInfinity(milliseconds);
     }
 
     private async Task<int> CleanAsync(CancellationToken ct)
