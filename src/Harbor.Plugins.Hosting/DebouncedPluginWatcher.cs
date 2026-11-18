@@ -211,7 +211,19 @@ public sealed class DebouncedPluginWatcher : IDisposable
             _ =>
             {
                 timer.Dispose();
-                owner.FireIfLatestCore(path, generation);
+                try
+                {
+                    owner.FireIfLatestCore(path, generation);
+                }
+                catch (Exception ex)
+                {
+                    // A Timer callback runs on a thread-pool thread with no observer,
+                    // so an escaping exception can tear down the process (FP-003).
+                    // FireIfLatestCore already catches a throwing ChangesReady handler;
+                    // this outer net observes anything else on the callback path.
+                    _logger?.LogWarning(
+                        ex, "Plugin watcher timer callback threw for {Path}", path);
+                }
             },
             null,
             _debounce,
