@@ -270,6 +270,10 @@ public sealed class ToolRegistryBuilder : IToolRegistryBuilder
         }
     }
 
+    // #2578: these factory overloads invoke the factory at registration time on purpose.
+    // The registry needs the tool instance for its key, its safety declaration (#557) and
+    // the descriptor snapshot built by Freeze(). See the IToolRegistryBuilder remarks for
+    // the full rationale and why the provider builder's obsolete overload has no twin here.
     /// <inheritdoc />
     public void AddTool<T>() where T : ITool, new() => AddTool(new T());
 
