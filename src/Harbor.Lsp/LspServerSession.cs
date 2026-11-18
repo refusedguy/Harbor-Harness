@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
@@ -9,8 +8,9 @@ namespace Harbor.Lsp;
 
 /// <summary>
 ///     One running language server process: spawn → initialize handshake →
-///     open/change/close traffic → diagnostics cache. Owns the transport and
-///     shuts the process down on dispose.
+///     open/change/close traffic → diagnostics coordination. Owns the transport
+///     and shuts the process down on dispose; the published diagnostics cache
+///     lives in <see cref="LspDiagnosticSink" />.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -73,13 +73,9 @@ public sealed class LspServerSession : IAsyncDisposable
     private readonly Process _process;
     private readonly ILogger _logger;
     private readonly TimeSpan _requestTimeout;
-    // #1095: diagnostics cache is on the LSP hot path — the server pushes
-    // publishDiagnostics per keystroke on the notification thread while the
-    // UI/tests pull per file via GetDiagnostics. A ConcurrentDictionary keeps
-    // both sites lock-free; the published List is built locally and never
-    // mutated after publication, so the reference swap is the whole publish.
-    // Same discipline as LspClient._pending (#1402).
-    private readonly ConcurrentDictionary<string, List<LspDiagnostic>> _diagnostics = new();
+    // #2613: the hot-path cache and payload normalization live in the sink;
+    // the session only forwards notifications and re-raises its public event.
+    private readonly LspDiagnosticSink _diagnosticSink;
     private int _documentVersion;
     private int _disposed;
 
@@ -95,6 +91,8 @@ public sealed class LspServerSession : IAsyncDisposable
         _process = process;
         _logger = logger;
         _requestTimeout = requestTimeout;
+        _diagnosticSink = new LspDiagnosticSink(definition.Id, logger);
+        _diagnosticSink.Published += OnDiagnosticsPublished;
         _client.ServerNotification += OnServerNotification;
         _client.Disconnected += OnClientDisconnected;
     }
@@ -414,12 +412,8 @@ public sealed class LspServerSession : IAsyncDisposable
     }
 
     /// <summary>Diagnostics last published for the file.</summary>
-    public IReadOnlyList<LspDiagnostic> GetDiagnostics(string filePath)
-    {
-        return _diagnostics.TryGetValue(filePath, out List<LspDiagnostic>? list)
-            ? [.. list]
-            : [];
-    }
+    public IReadOnlyList<LspDiagnostic> GetDiagnostics(string filePath) =>
+        _diagnosticSink.GetDiagnostics(filePath);
 
     // ── Notifications ──────────────────────────────────────────────────────
 
@@ -447,40 +441,15 @@ public sealed class LspServerSession : IAsyncDisposable
         }
     }
 
-    private void OnServerNotification(object? sender, LspNotificationEventArgs args)
-    {
-        if (args.Method != "textDocument/publishDiagnostics" || args.Parameters.ValueKind != JsonValueKind.Object) return;
+    private void OnServerNotification(object? sender, LspNotificationEventArgs args) =>
+        _diagnosticSink.HandleNotification(args);
 
-        try
-        {
-            LspWire.PublishDiagnosticsParams? published =
-                args.Parameters.Deserialize(LspJsonContext.Default.PublishDiagnosticsParams);
-            if (published is null) return;
-
-            string filePath = FromUri(published.Uri);
-            var list = new List<LspDiagnostic>(published.Diagnostics.Count);
-            foreach (LspWire.DiagnosticDto dto in published.Diagnostics)
-            {
-                list.Add(new LspDiagnostic(
-                    filePath,
-                    dto.Range.Start.Line,
-                    dto.Range.Start.Character,
-                    dto.Range.End.Line,
-                    dto.Range.End.Character,
-                    (LspSeverity)(dto.Severity ?? (int)LspSeverity.Error),
-                    dto.Source ?? _definition.Id,
-                    dto.Message));
-            }
-
-            _diagnostics[filePath] = list;
-
-            DiagnosticsChanged?.Invoke(this, new LspDiagnosticsChangedEventArgs(filePath));
-        }
-        catch (JsonException ex)
-        {
-            LspServerSessionLog.MalformedPublishDiagnostics(_logger, ex);
-        }
-    }
+    /// <summary>
+    ///     Relay the sink's publication as the session's public event. The
+    ///     sender stays this session, not the internal helper.
+    /// </summary>
+    private void OnDiagnosticsPublished(object? sender, LspDiagnosticsChangedEventArgs args) =>
+        DiagnosticsChanged?.Invoke(this, args);
 
     /// <summary>
     ///     Normalize a definition payload: the first usable location wins,
