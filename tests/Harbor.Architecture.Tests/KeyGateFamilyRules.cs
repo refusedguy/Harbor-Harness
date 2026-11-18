@@ -332,6 +332,13 @@ public class KeyGateFamilyRules
         // Home/End and digits select a value; no text buffer and Shift is
         // refused, so it is a command site. Read-only refuses keys outright.
         new("Rating", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/Rating.cs"),
+        // AnchoredMenu (#2377): arrows/vim keys navigate, Right/Left open and
+        // close submenus, Enter activates, Alt+mnemonic fires a hotkey slot.
+        // No text buffer, no fuzzy query, and Shift/chords are refused.
+        new("AnchoredMenu", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/AnchoredMenu.cs"),
+        // DropdownButton (#2377): Enter/Space run the primary action, Down
+        // opens the anchored menu; a strict no-modifier command gate.
+        new("DropdownButton", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/DropdownButton.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
