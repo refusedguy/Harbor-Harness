@@ -40,11 +40,97 @@ public static class ChatAppReducer
     /// </summary>
     public static bool IsBusy(UiState state) => state.Chat.IsAgentRunning;
 
+    // ── markup message dispatch (#2621) ──────────────────────────────────────
+    //
+    // The screenshot-markup arms were the largest single block in the god
+    // switch (18 consecutive cases). They are one self-contained group (#400):
+    // every one folds through WithMarkup over Chat.Markup, and none touch
+    // TabStrip, the transcript or agent state. Moving them into a table keyed
+    // by the concrete message type keeps ReduceMessage about the remaining
+    // domains without changing a single public signature: the forwarders
+    // further down still resolve for every existing call site and test.
+    private static readonly IReadOnlyDictionary<Type, Func<UiState, AppMsg, ReduceResult?>> MarkupDispatch =
+        new Dictionary<Type, Func<UiState, AppMsg, ReduceResult?>>
+        {
+            [typeof(ChatAppMsg.OpenMarkup)] = Handler<ChatAppMsg.OpenMarkup>(static (s, m) => ReduceResult.NoOp(s with
+            {
+                Chat = s.Chat with
+                {
+                    Markup = MarkupOverlayState.Open(
+                        m.SourcePath, m.SourceName, m.SourceWidth, m.SourceHeight, m.ScrollOffset)
+                }
+            })),
+            [typeof(ChatAppMsg.CloseMarkup)] = static (s, _) => ReduceResult.NoOp(s with
+            {
+                Chat = s.Chat with { Markup = MarkupOverlayState.Closed }
+            }),
+            [typeof(ChatAppMsg.MarkupSelectTool)] = Handler<ChatAppMsg.MarkupSelectTool>(static (s, m) =>
+                WithMarkup(s, x => x with { ActiveTool = m.Tool, Error = string.Empty })),
+            [typeof(ChatAppMsg.MarkupMoveCursor)] = Handler<ChatAppMsg.MarkupMoveCursor>(static (s, m) =>
+                WithMarkup(s, x => x with { Cursor = x.Cursor.Shift(m.Dx, m.Dy) })),
+            [typeof(ChatAppMsg.MarkupPlace)] = static (s, _) => WithMarkup(s, PlaceAtCursor),
+            [typeof(ChatAppMsg.MarkupSetPendingText)] = Handler<ChatAppMsg.MarkupSetPendingText>(static (s, m) =>
+                WithMarkup(s, x => x with
+                {
+                    PendingText = m.Text.Length <= MarkupOverlayState.MaxPendingTextLength
+                        ? m.Text
+                        : m.Text[..MarkupOverlayState.MaxPendingTextLength]
+                })),
+            [typeof(ChatAppMsg.MarkupNudge)] = Handler<ChatAppMsg.MarkupNudge>(static (s, m) =>
+                WithMarkup(s, x => x with { Model = x.Model.MoveSelected(m.Dx, m.Dy), Error = string.Empty })),
+            [typeof(ChatAppMsg.MarkupResize)] = Handler<ChatAppMsg.MarkupResize>(static (s, m) =>
+                WithMarkup(s, x => x with { Model = x.Model.ResizeSelected(m.Dx, m.Dy), Error = string.Empty })),
+            [typeof(ChatAppMsg.MarkupSelectNext)] = static (s, _) =>
+                WithMarkup(s, x => x with { Model = x.Model.SelectNext() }),
+            [typeof(ChatAppMsg.MarkupSelectAt)] = Handler<ChatAppMsg.MarkupSelectAt>(static (s, m) =>
+                WithMarkup(s, x => SelectAtPoint(x, NormalizedPoint.Create(m.X, m.Y)))),
+            [typeof(ChatAppMsg.MarkupPressAt)] = Handler<ChatAppMsg.MarkupPressAt>(static (s, m) =>
+                WithMarkup(s, x => PressAtPoint(x, NormalizedPoint.Create(m.X, m.Y)))),
+            [typeof(ChatAppMsg.MarkupDragTo)] = Handler<ChatAppMsg.MarkupDragTo>(static (s, m) =>
+                WithMarkup(s, x => DragToPoint(x, NormalizedPoint.Create(m.X, m.Y)))),
+            [typeof(ChatAppMsg.MarkupReleaseAt)] = Handler<ChatAppMsg.MarkupReleaseAt>(static (s, m) =>
+                WithMarkup(s, x => ReleaseAtPoint(x, NormalizedPoint.Create(m.X, m.Y)))),
+            [typeof(ChatAppMsg.MarkupDeleteSelected)] = static (s, _) =>
+                WithMarkup(s, x => x with { Model = x.Model.Delete(), Error = string.Empty }),
+            [typeof(ChatAppMsg.MarkupUndo)] = static (s, _) =>
+                WithMarkup(s, x => x with { Model = x.Model.UndoFrame() }),
+            [typeof(ChatAppMsg.MarkupRedo)] = static (s, _) =>
+                WithMarkup(s, x => x with { Model = x.Model.RedoFrame() }),
+            [typeof(ChatAppMsg.MarkupSaved)] = Handler<ChatAppMsg.MarkupSaved>(static (s, m) =>
+                WithMarkup(s, x => x with { SavedPath = m.Path ?? string.Empty, Error = string.Empty })),
+            [typeof(ChatAppMsg.MarkupFailed)] = Handler<ChatAppMsg.MarkupFailed>(static (s, m) =>
+                WithMarkup(s, x => x with
+                {
+                    Error = string.IsNullOrWhiteSpace(m.Error) ? "Save failed." : m.Error
+                })),
+        };
+
+    /// <summary>Adapt a typed markup fold to the table's erased handler shape.</summary>
+    private static Func<UiState, AppMsg, ReduceResult?> Handler<TMsg>(Func<UiState, TMsg, ReduceResult?> fold)
+        where TMsg : AppMsg => (s, m) => fold(s, (TMsg)m);
+
     /// <summary>
     ///     Claim the chat-owned arms. Returns <see langword="null" /> for every
     ///     message this reducer does not own so the generic pass runs.
     /// </summary>
-    public static ReduceResult? ReduceMessage(UiState state, AppMsg msg) => msg switch
+    public static ReduceResult? ReduceMessage(UiState state, AppMsg msg) =>
+        TryMarkup(state, msg) ?? ReduceCore(state, msg);
+
+    /// <summary>
+    ///     Markup messages are claimed by the dispatch table above, not by the
+    ///     switch below (#2621). The `is ChatAppMsg` guard keeps the generic
+    ///     message path free of a dictionary lookup.
+    /// </summary>
+    private static ReduceResult? TryMarkup(UiState state, AppMsg msg) =>
+        msg is ChatAppMsg && MarkupDispatch.TryGetValue(msg.GetType(), out var markup)
+            ? markup(state, msg)
+            : null;
+
+    /// <summary>
+    ///     The remaining chat-owned arms, after the markup group has been
+    ///     claimed by <see cref="MarkupDispatch" /> (#2621).
+    /// </summary>
+    private static ReduceResult? ReduceCore(UiState state, AppMsg msg) => msg switch
     {
         ChatAppMsg.Agent a => new ReduceResult(Reduce(state, a.Event), new TuiEffect.None()),
         ChatAppMsg.AgentStarted => new ReduceResult(state with
@@ -96,35 +182,6 @@ public static class ChatAppReducer
         ChatAppMsg.MarkTabUnread m => ReduceResult.NoOp(MarkTabUnread(state, m.SessionId, m.IsError)),
         ChatAppMsg.MarkTabRead m => ReduceResult.NoOp(MarkTabRead(state, m.SessionId)),
         ChatAppMsg.HydrateTabStrip ht => HydrateTabStrip(state, ht),
-        ChatAppMsg.OpenMarkup om => ReduceResult.NoOp(state with
-        {
-            Chat = state.Chat with { Markup = MarkupOverlayState.Open(om.SourcePath, om.SourceName, om.SourceWidth, om.SourceHeight, om.ScrollOffset) }
-        }),
-        ChatAppMsg.CloseMarkup => ReduceResult.NoOp(state with
-        {
-            Chat = state.Chat with { Markup = MarkupOverlayState.Closed }
-        }),
-        ChatAppMsg.MarkupSelectTool st => WithMarkup(state, m => m with { ActiveTool = st.Tool, Error = string.Empty }),
-        ChatAppMsg.MarkupMoveCursor mc => WithMarkup(state, m => m with { Cursor = m.Cursor.Shift(mc.Dx, mc.Dy) }),
-        ChatAppMsg.MarkupPlace => WithMarkup(state, PlaceAtCursor),
-        ChatAppMsg.MarkupSetPendingText pt => WithMarkup(state, m => m with
-        {
-            PendingText = pt.Text.Length <= MarkupOverlayState.MaxPendingTextLength
-                ? pt.Text
-                : pt.Text[..MarkupOverlayState.MaxPendingTextLength]
-        }),
-        ChatAppMsg.MarkupNudge mn => WithMarkup(state, m => m with { Model = m.Model.MoveSelected(mn.Dx, mn.Dy), Error = string.Empty }),
-        ChatAppMsg.MarkupResize mr => WithMarkup(state, m => m with { Model = m.Model.ResizeSelected(mr.Dx, mr.Dy), Error = string.Empty }),
-        ChatAppMsg.MarkupSelectNext => WithMarkup(state, m => m with { Model = m.Model.SelectNext() }),
-        ChatAppMsg.MarkupSelectAt sa => WithMarkup(state, m => SelectAtPoint(m, NormalizedPoint.Create(sa.X, sa.Y))),
-        ChatAppMsg.MarkupPressAt pa => WithMarkup(state, m => PressAtPoint(m, NormalizedPoint.Create(pa.X, pa.Y))),
-        ChatAppMsg.MarkupDragTo dt => WithMarkup(state, m => DragToPoint(m, NormalizedPoint.Create(dt.X, dt.Y))),
-        ChatAppMsg.MarkupReleaseAt ra => WithMarkup(state, m => ReleaseAtPoint(m, NormalizedPoint.Create(ra.X, ra.Y))),
-        ChatAppMsg.MarkupDeleteSelected => WithMarkup(state, m => m with { Model = m.Model.Delete(), Error = string.Empty }),
-        ChatAppMsg.MarkupUndo => WithMarkup(state, m => m with { Model = m.Model.UndoFrame() }),
-        ChatAppMsg.MarkupRedo => WithMarkup(state, m => m with { Model = m.Model.RedoFrame() }),
-        ChatAppMsg.MarkupSaved ms => WithMarkup(state, m => m with { SavedPath = ms.Path ?? string.Empty, Error = string.Empty }),
-        ChatAppMsg.MarkupFailed mf => WithMarkup(state, m => m with { Error = string.IsNullOrWhiteSpace(mf.Error) ? "Save failed." : mf.Error }),
 
         // A clear-screen must not close the user's tabs — the strip is workspace
         // chrome, not transcript (#388), and UiState.ClearTranscript already
