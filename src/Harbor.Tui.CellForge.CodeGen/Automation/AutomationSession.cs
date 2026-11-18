@@ -194,7 +194,7 @@ public sealed class AutomationSession
                 return Failure(request.Id, AutomationErrorCode.Protocol, error);
         }
 
-        if (!ClockActions.TryGetValue(action, out var apply))
+        if (!ClockActions.TryGetValue(action!, out var apply))
             return Failure(request.Id, AutomationErrorCode.Protocol,
                 "unknown clock action '" + action + "'");
         apply(this, ms);
