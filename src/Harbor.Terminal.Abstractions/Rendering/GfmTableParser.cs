@@ -32,7 +32,7 @@ public static class GfmTableParser
             return false;
 
         var headers = SplitRow(lines[index]);
-        var alignments = ParseAlignments(lines[index + 1]);
+        var alignments = ParseAlignments(lines[index + 1].AsSpan());
         var rows = new List<IReadOnlyList<string>>();
 
         int i = index + 2;
@@ -66,47 +66,66 @@ public static class GfmTableParser
     {
         if (!IsRow(line))
             return false;
-        var cells = SplitRow(line!);
-        foreach (string raw in cells)
+        var cells = new RowCells(RowInterior(line!.AsSpan()));
+        while (cells.MoveNext(out ReadOnlySpan<char> cell))
         {
-            string t = raw.Trim();
-            if (t.Length == 0)
+            // RowCells already yields trimmed cells, so the extra Trim in the
+            // original SplitRow + IsSeparator pair was a no-op.
+            if (cell.Length == 0)
                 return false;
-            int s = t[0] == ':' ? 1 : 0;
-            int e = t.Length - 1;
-            if (t[e] == ':')
+            int s = cell[0] == ':' ? 1 : 0;
+            int e = cell.Length - 1;
+            if (cell[e] == ':')
                 e--;
             if (s > e)
                 return false;
             for (int k = s; k <= e; k++)
             {
-                if (t[k] != '-')
+                if (cell[k] != '-')
                     return false;
             }
         }
         return true;
     }
 
+    /// <summary>
+    ///     The trimmed body of a pipe row, with the outer pipes removed. Callers
+    ///     only pass lines that already passed <see cref="IsRow" />.
+    /// </summary>
+    private static ReadOnlySpan<char> RowInterior(ReadOnlySpan<char> line)
+    {
+        ReadOnlySpan<char> trimmed = line.Trim();
+        return trimmed[1..^1];
+    }
+
+    /// <summary>
+    ///     Splits a row into trimmed cells without materialising the intermediate
+    ///     strings that <c>string.Split('|')</c> used to allocate. Only the cells the
+    ///     <see cref="GfmTable" /> model retains are turned into strings.
+    /// </summary>
     private static IReadOnlyList<string> SplitRow(string line)
     {
-        line = line.Trim();
-        line = line[1..^1]; // drop outer pipes
-        string[] parts = line.Split('|');
-        for (int k = 0; k < parts.Length; k++)
-            parts[k] = parts[k].Trim();
+        ReadOnlySpan<char> inner = RowInterior(line.AsSpan());
+        int count = inner.Count('|') + 1; // string.Split('|') keeps empty cells
+        var parts = new string[count];
+        var cells = new RowCells(inner);
+        int i = 0;
+        while (cells.MoveNext(out ReadOnlySpan<char> cell))
+            parts[i++] = cell.ToString();
         return parts;
     }
 
-    private static IReadOnlyList<GfmAlign> ParseAlignments(string separatorLine)
+    private static IReadOnlyList<GfmAlign> ParseAlignments(ReadOnlySpan<char> separatorLine)
     {
-        var cells = SplitRow(separatorLine);
-        var result = new GfmAlign[cells.Count];
-        for (int i = 0; i < cells.Count; i++)
+        ReadOnlySpan<char> inner = RowInterior(separatorLine);
+        var result = new GfmAlign[inner.Count('|') + 1];
+        var cells = new RowCells(inner);
+        int i = 0;
+        while (cells.MoveNext(out ReadOnlySpan<char> cell))
         {
-            string t = cells[i].Trim();
-            bool left = t.Length > 0 && t[0] == ':';
-            bool right = t.Length > 1 && t[^1] == ':';
-            result[i] = (left, right) switch
+            bool left = cell.Length > 0 && cell[0] == ':';
+            bool right = cell.Length > 1 && cell[^1] == ':';
+            result[i++] = (left, right) switch
             {
                 (true, true) => GfmAlign.Center,
                 (false, true) => GfmAlign.Right,
@@ -115,6 +134,45 @@ public static class GfmTableParser
             };
         }
         return result;
+    }
+
+    /// <summary>
+    ///     Enumerates the trimmed cells of a pipe row's interior. Uses
+    ///     <c>IndexOf('|')</c> to find delimiters, so the row is never copied and
+    ///     non-retained cells (separator rows) cost nothing.
+    /// </summary>
+    private ref struct RowCells
+    {
+        private ReadOnlySpan<char> _remaining;
+        private bool _done;
+
+        public RowCells(ReadOnlySpan<char> interior)
+        {
+            _remaining = interior;
+            _done = false;
+        }
+
+        public bool MoveNext(out ReadOnlySpan<char> cell)
+        {
+            if (_done)
+            {
+                cell = default;
+                return false;
+            }
+
+            int pipe = _remaining.IndexOf('|');
+            if (pipe < 0)
+            {
+                cell = _remaining.Trim();
+                _remaining = default;
+                _done = true;
+                return true;
+            }
+
+            cell = _remaining[..pipe].Trim();
+            _remaining = _remaining[(pipe + 1)..];
+            return true;
+        }
     }
 
     private static IReadOnlyList<GfmAlign> NormalizeAlignments(
