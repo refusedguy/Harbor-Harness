@@ -113,8 +113,6 @@ public static class StatusProjectorPanel
             elapsedText = null;
         }
 
-        int n = 0;
-
         // One ordering for the whole row, and one accent per cell.
         //
         // Host-driven slots are declared here because the host owns them: the
@@ -130,15 +128,20 @@ public static class StatusProjectorPanel
         // The sort is stable, so equal numbers keep declaration order — which
         // is how retry precedes skills, and scroll precedes elapsed, without
         // either pair needing a rank of its own.
-        var row = new List<Cell>(segments.Count + 3);
+        // Cells go straight into the caller's workspace; the List and its
+        // backing array are gone. `StatusSeg` carries a string, so it cannot be
+        // stack-allocated; only the sort coordinates need scratch space, and
+        // those are unmanaged values. At most MaxSegments cells fit a row.
+        Span<RowKey> keys = stackalloc RowKey[MaxSegments];
+        int count = 0;
 
-        for (int i = 0; i < segments.Count; i++)
+        for (int i = 0; i < segments.Count && count < workspace.Length && count < keys.Length; i++)
         {
             UiStatusSegment seg = segments[i];
-            row.Add(new Cell(seg, MapAccent(seg.Style)));
+            AddCell(workspace, keys, ref count, seg, MapAccent(seg.Style));
         }
 
-        if (!string.IsNullOrEmpty(retryLine))
+        if (!string.IsNullOrEmpty(retryLine) && count < workspace.Length && count < keys.Length)
         {
             // Warning is a CellForge accent with no word in the shared style
             // enum: `UiSpanStyle` is closed and every backend maps it, so
@@ -146,7 +149,7 @@ public static class StatusProjectorPanel
             // The accent belongs to the host that owns the slot; its ORDER and
             // its truncation priority are declared the same way as everyone
             // else's.
-            row.Add(new Cell(
+            AddCell(workspace, keys, ref count,
                 new UiStatusSegment(
                     Text: retryLine!,
                     Align: Alignment.Right,
@@ -156,102 +159,104 @@ public static class StatusProjectorPanel
                     // truncation drops the counters before it (same rule as
                     // the freshness pill).
                     FixedPriority: true),
-                StatusAccent.Warning));
+                StatusAccent.Warning);
         }
 
-        if (skills is not null)
+        if (skills is not null && count < workspace.Length && count < keys.Length)
         {
-            row.Add(new Cell(
+            AddCell(workspace, keys, ref count,
                 new UiStatusSegment(
                     Text: skills.Text,
                     Align: Alignment.Right,
                     Importance: 5,
                     Style: skills.Style,
                     FixedPriority: true),
-                MapAccent(skills.Style)));
+                MapAccent(skills.Style));
         }
 
-        if (elapsedText is not null)
+        if (elapsedText is not null && count < workspace.Length && count < keys.Length)
         {
-            row.Add(new Cell(
+            AddCell(workspace, keys, ref count,
                 new UiStatusSegment(
                     Text: elapsedText,
                     Align: Alignment.Right,
                     Importance: 4,
                     Style: UiSpanStyle.Dim),
-                StatusAccent.Dim));
+                StatusAccent.Dim);
         }
 
-        // Sort the row with the ONE rule, then paint it. `StatusSegmentOrdering`
-        // sorts `UiStatusSegment`; this is the same three-group comparison over
-        // the same coordinates, applied to entries that also carry an accent —
-        // a stable insertion sort rather than a second LINQ pipeline, so the
-        // row costs no extra allocation and the comparison stays next to the
-        // declaration it implements.
-        SortRow(row);
+        // Sort the row in place with the ONE rule. `StatusSegmentOrdering` sorts
+        // `UiStatusSegment`; this is the same three-group comparison over the
+        // same coordinates, applied to the cells already in the workspace. A
+        // stable insertion pass over a handful of cells allocates nothing and
+        // keeps the comparison next to the declaration it implements.
+        SortRow(workspace, keys, count);
+        return count;
+    }
 
-        for (int i = 0; i < row.Count && n < workspace.Length; i++)
-        {
-            Cell cell = row[i];
-            UiStatusSegment seg = cell.Segment;
-
-            // The only per-cell decision left is the renderer's own vocabulary:
-            // a style becomes an accent. FixedPriority is read through, not
-            // re-derived.
-            workspace[n++] = new StatusSeg(seg.Text, cell.Accent, seg.FixedPriority);
-        }
-
-        return n;
+    /// <summary>
+    ///     Writes one mapped cell into the workspace and records the sort
+    ///     coordinates that <see cref="StatusSeg" /> does not carry.
+    /// </summary>
+    private static void AddCell(
+        Span<StatusSeg> row,
+        Span<RowKey> keys,
+        ref int count,
+        UiStatusSegment seg,
+        StatusAccent accent)
+    {
+        int at = count++;
+        row[at] = new StatusSeg(seg.Text, accent, seg.FixedPriority);
+        keys[at] = new RowKey(seg.Align, seg.Importance);
     }
 
     /// <summary>
     ///     Left → center → right, ascending by importance except the right
     ///     group, which descends. Identical to
-    ///     <see cref="StatusSegmentOrdering.Ordered" />, over entries that
-    ///     carry an accent as well as a segment.
+    ///     <see cref="StatusSegmentOrdering.Ordered" />, over the cells already
+    ///     packed into the workspace.
     /// </summary>
     /// <remarks>
     ///     Stable, so equal importances keep declaration order — that is what
     ///     puts retry before skills and scroll before elapsed without either
     ///     pair needing a rank of its own. A status row is a handful of cells,
-    ///     so insertion sort is the right algorithm and the in-place pass
-    ///     allocates nothing.
+    ///     so insertion sort is the right algorithm; each swap moves the cell
+    ///     and its key together, in place, with no allocation.
     /// </remarks>
-    private static void SortRow(List<Cell> row)
+    private static void SortRow(Span<StatusSeg> row, Span<RowKey> keys, int count)
     {
-        for (int i = 1; i < row.Count; i++)
+        for (int i = 1; i < count; i++)
         {
-            Cell cell = row[i];
+            StatusSeg cell = row[i];
+            RowKey key = keys[i];
             int j = i - 1;
-            while (j >= 0 && Compare(row[j], cell) > 0)
+            while (j >= 0 && Compare(keys[j], key) > 0)
             {
                 row[j + 1] = row[j];
+                keys[j + 1] = keys[j];
                 j--;
             }
 
             row[j + 1] = cell;
+            keys[j + 1] = key;
         }
     }
 
     /// <summary>Negative when <paramref name="a" /> paints before <paramref name="b" />.</summary>
-    private static int Compare(in Cell a, in Cell b)
+    private static int Compare(in RowKey a, in RowKey b)
     {
-        if (a.Segment.Align != b.Segment.Align)
+        if (a.Align != b.Align)
         {
-            return ((int)a.Segment.Align).CompareTo((int)b.Segment.Align);
+            return ((int)a.Align).CompareTo((int)b.Align);
         }
 
         // Left and center ascend; right descends, so the rightmost cell — the
         // one Fit drops first — is the least important.
-        return a.Segment.Align == Alignment.Right
-            ? b.Segment.Importance.CompareTo(a.Segment.Importance)
-            : a.Segment.Importance.CompareTo(b.Segment.Importance);
+        return a.Align == Alignment.Right
+            ? b.Importance.CompareTo(a.Importance)
+            : a.Importance.CompareTo(b.Importance);
     }
 
-    /// <summary>
-    ///     A row entry: the shared cell plus the accent this backend paints it
-    ///     in. The accent is a rendering fact, not a declaration fact, so it
-    ///     rides alongside the segment instead of inside the shared enum.
-    /// </summary>
-    private readonly record struct Cell(UiStatusSegment Segment, StatusAccent Accent);
+    /// <summary>Unmanaged sort coordinates that ride beside each workspace cell.</summary>
+    private readonly record struct RowKey(Alignment Align, int Importance);
 }
