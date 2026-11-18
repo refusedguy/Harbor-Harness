@@ -81,6 +81,7 @@ public class SecondaryCompactionModelTests : CompactionTestBase
     ///     single-flight. Before the fix, N simultaneous first compactions each
     ///     called GetModelsAsync for the same secondary model, and a slow catalog
     ///     delayed all of them. The winner owns the lookup; the others await it.
+    ///     Distinct sessions keep the per-session foreground lock out of the way.
     /// </summary>
     [Test]
     public async Task ConcurrentFirstCompactions_ResolveSecondaryCatalogOnce()
