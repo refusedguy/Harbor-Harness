@@ -62,14 +62,14 @@ internal static class SessionExportFormattedRunner
         try
         {
             var loaded = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
-            if (loaded.IsFailure)
+            if (!loaded.IsSuccess)
             {
                 await error.WriteLineAsync($"Export failed: {loaded.Error}").ConfigureAwait(false);
                 return 1;
             }
 
             var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-            if (messages.IsFailure)
+            if (!messages.IsSuccess)
             {
                 await error.WriteLineAsync($"Export failed: {messages.Error}").ConfigureAwait(false);
                 return 1;
@@ -285,7 +285,7 @@ internal static class SessionExportFormattedRunner
 
         await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        await writer.WriteAsync(text.ToString(), ct).ConfigureAwait(false);
+        await writer.WriteAsync(text.ToString().AsMemory(), ct).ConfigureAwait(false);
     }
 
     private static string Stamp(DateTimeOffset value) => value.ToString("O", CultureInfo.InvariantCulture);
