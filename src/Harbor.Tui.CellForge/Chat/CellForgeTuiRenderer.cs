@@ -57,6 +57,12 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     private readonly ISessionManager? _sessions;
 
     /// <summary>
+    ///     #2639: one owner of stdin per renderer. Lazily created so a renderer
+    ///     that never reads a line never parks a thread on the console.
+    /// </summary>
+    private readonly Lazy<StdinLineSource> _stdin = new(() => new StdinLineSource());
+
+    /// <summary>
     ///     Typed dependencies handed to every <see cref="PanelContext" /> this
     ///     renderer builds (#470). Built once from what the host injected — the
     ///     per-frame context no longer carries a container. Named
@@ -390,6 +396,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         // the widgets freeze one event behind.
         _ = PumpProjection();
         _chatProjector.Dispose();
+        if (_stdin.IsValueCreated)
+        {
+            _stdin.Value.Dispose();
+        }
         if (_subscribedStore is not null)
         {
             _subscribedStore.Changed -= OnStoreChanged;
@@ -405,15 +415,13 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         try
         {
             Context.WriteColored(prompt, TuiColor.Green);
-            ct.ThrowIfCancellationRequested();
-            // #1110: Console.ReadLine blocks the calling (frame-loop) thread with
-            // no cancellation. Offload to the pool so ct can abort the wait
-            // (PlainPermissionAsker passes ct expecting Deny-on-cancel); the
-            // orphaned pool read may still block on stdin, which is unavoidable
-            // for a console reader.
-            string? line = await Task.Run(Console.ReadLine, CancellationToken.None).WaitAsync(ct).ConfigureAwait(false);
-            // EOF is absence, not failure: Maybe.None, not Success("") (#589).
-            return Maybe.From(line);
+            // #1110 offloaded the blocking read so ct could abort it, but left a
+            // pool thread orphaned on stdin. After a cancelled permission ask that
+            // reader stole the user's next line from the real prompt.
+            // #2639: the source owns one pump for the renderer's lifetime; a
+            // cancelled wait detaches this caller only, so the next line reaches
+            // the following caller. Behavior on a completed read is unchanged.
+            return await _stdin.Value.ReadLineAsync(ct).ConfigureAwait(false);
         }
         finally
         {
