@@ -836,6 +836,24 @@ Issue [#2694](https://github.com/refusedguy/Harbor-Harness/issues/2694)
 
 - Полное сравнение по пунктам и границы проверки:
   [ADR-028](ADR-028-avalonia-declarative-xaml-dsl-verdict.md).
+## ADR-036: Blazor declarative UI и Hot Reload vs Harbor DSL. Сравнение и вердикт
+
+Issue [#2695](https://github.com/refusedguy/Harbor-Harness/issues/2695) прислал
+competitor research по декларативному UI и Hot Reload в Blazor с восемью идеями для
+`.harbor-ui`. Проверка `gh pr list --search 2695` и дерева `origin/dev` (`09a673bc`)
+показала: все применимые пункты уже влиты цепочкой #2424-#2441 и #2688. Это
+двухфазный `MarkupGenerator` с кэшем по `(TargetPath, text)`, sequence numbers в
+`BuildRoot`, правило `HasRemovedDirectParameters` в `BuildRootOverrideCoordinator`,
+изолированный dev-reload с `ReloadResult.Rejected`, checksum и диагностики с
+1-based позицией. Прямой `MetadataUpdateHandler` отклонён: он требует JIT и не
+работает под AOT, а граница `HarborWithDslDev` жёстче AppContext-выключателя.
+
+Decided: код не писать, гейты и пороги не менять, issue оставить OPEN как источник
+сравнения. Пересмотр только по новому факту, например измеримой выгоде IL-дельты в
+JIT-only dev-сборке.
+
+- Полное сравнение по восьми пунктам и границы проверки:
+  [ADR-036](ADR-036-blazor-declarative-hotreload-verdict.md).
 ## ADR-029: gpui-kit: переносимые паттерны уже в Harbor
 
 Issue [#2701](https://github.com/refusedguy/Harbor-Harness/issues/2701) прислал
@@ -922,21 +940,22 @@ Decided: новый code slice не открывается. Subsecond/JIT-пат
 
 - Полный текст, таблица по семи фреймворкам и пять заимствований:
   [ADR-033](ADR-033-declarative-ui-crosslang-report-verdict.md).
-## ADR-036: Blazor declarative UI и Hot Reload vs Harbor DSL. Сравнение и вердикт
+## ADR-034: gpui declarative devtools (#2700), verdict без кода
 
-Issue [#2695](https://github.com/refusedguy/Harbor-Harness/issues/2695) прислал
-competitor research по декларативному UI и Hot Reload в Blazor с восемью идеями для
-`.harbor-ui`. Проверка `gh pr list --search 2695` и дерева `origin/dev` (`09a673bc`)
-показала: все применимые пункты уже влиты цепочкой #2424-#2441 и #2688. Это
-двухфазный `MarkupGenerator` с кэшем по `(TargetPath, text)`, sequence numbers в
-`BuildRoot`, правило `HasRemovedDirectParameters` в `BuildRootOverrideCoordinator`,
-изолированный dev-reload с `ReloadResult.Rejected`, checksum и диагностики с
-1-based позицией. Прямой `MetadataUpdateHandler` отклонён: он требует JIT и не
-работает под AOT, а граница `HarborWithDslDev` жёстче AppContext-выключателя.
+Issue #2700 — self-contained отчёт по devtools для декларативного UI, прочитанный
+по локальным клонам gpui-kit (`249a963`) и Zed (`6983685`). Из восьми идей,
+которые отчёт называет заимствуемыми, семь уже влиты: IR описания (PR 2489),
+ретенция дерева и patch (PR 2727, 2789), чистый генератор `BuildRoot`
+(PR 2531, 2535), инструменты `dsl check` / `dsl types` (PR 2538), `debug_tree` и
+`getTree` (PR 2528, 2761), prefix hashes и типизированное состояние элементов
+(PR 2442). Восьмая идея, sentinel-поиск слотов, не имеет runtime-шаблона в
+компилируемом C# DSL и отложена за владельцем. Dev-канал логов (PR 2760) и
+automation (PR 2761, закрывает issue 2438) уже на дереве; watcher PR 2765
+открыт другим агентом и не дублируется.
 
-Decided: код не писать, гейты и пороги не менять, issue оставить OPEN как источник
-сравнения. Пересмотр только по новому факту, например измеримой выгоде IL-дельты в
-JIT-only dev-сборке.
+Decided: код, тесты, гейты и пороги не меняются. Issue остаётся OPEN как источник
+сравнения. Пересмотр — по новому факту: runtime-слоты в компилируемом шаблоне или
+новый devtool с конкретным терминальным аналогом.
 
-- Полное сравнение по восьми пунктам и границы проверки:
-  [ADR-036](ADR-036-blazor-declarative-hotreload-verdict.md).
+- Полный текст, таблица по восьми идеям и список неприменимого:
+  [ADR-034](ADR-034-gpui-declarative-devtools-no-new-slice.md).
