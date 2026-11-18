@@ -97,4 +97,53 @@ public class TaskFireAndForgetTests
         Exception fault = await seen.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(fault).IsTypeOf<OperationCanceledException>();
     }
+
+    [Test]
+    [NotInParallel("TaskFireAndForget.Trace")]
+    public async Task ThrowingFaultSink_IsContainedAndTraced()
+    {
+        // #2573 (FP-003/FP-006): the continuation is the last observer. A sink
+        // that throws must not fault the continuation with nobody watching.
+        // The secondary fault goes to the diagnostic trace instead. The listener
+        // signals only on our unique marker, so this fails deterministically on
+        // the pre-fix code, where the sink's exception escapes and no trace
+        // write ever happens.
+        using var listener = new MarkerTraceListener("sink-broke");
+        System.Diagnostics.Trace.Listeners.Add(listener);
+        try
+        {
+            TaskFireAndForget.Forget(
+                Task.FromException(new InvalidOperationException("primary")),
+                _ => throw new InvalidOperationException("sink-broke"));
+
+            string reported = await listener.SawMarker.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            await Assert.That(reported).Contains("sink-broke");
+            await Assert.That(reported).Contains("primary");
+        }
+        finally
+        {
+            System.Diagnostics.Trace.Listeners.Remove(listener);
+        }
+    }
+
+    private sealed class MarkerTraceListener : System.Diagnostics.TraceListener
+    {
+        private readonly string _marker;
+        private readonly TaskCompletionSource<string> _sawMarker =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public MarkerTraceListener(string marker) => _marker = marker;
+
+        public Task<string> SawMarker => _sawMarker.Task;
+
+        public override void Write(string? message) => Capture(message);
+
+        public override void WriteLine(string? message) => Capture(message);
+
+        private void Capture(string? message)
+        {
+            if (message is not null && message.Contains(_marker, StringComparison.Ordinal))
+                _sawMarker.TrySetResult(message);
+        }
+    }
 }

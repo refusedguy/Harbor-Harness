@@ -14,6 +14,11 @@ namespace Harbor.Abstractions.Tools;
 ///     <c>TaskScheduler.UnobservedTaskException</c>. Even with a
 ///     <see langword="null" /> callback the exception is observed (read), just
 ///     not logged.
+///     The continuation is the last observer in this chain. If <c>onError</c>
+///     throws, rethrowing would fault the continuation with nobody left to observe
+///     it, reproducing this defect one level deeper (FP-003/FP-006). Such a
+///     secondary fault is reported to <see cref="System.Diagnostics.Trace" />
+///     and swallowed instead.
 /// </remarks>
 public static class TaskFireAndForget
 {
@@ -36,7 +41,31 @@ public static class TaskFireAndForget
                 Exception fault = t.Exception?.InnerException ?? t.Exception!;
                 if (fault is OperationCanceledException && token.IsCancellationRequested)
                     return;
-                callback?.Invoke(fault);
+                try
+                {
+                    callback?.Invoke(fault);
+                }
+                catch (Exception sinkFault)
+                {
+                    // FP-003/FP-006: the original fault was already handed to this
+                    // sink, so a second fault has no recipient. Letting it escape
+                    // would fault THIS continuation with nobody observing it, the
+                    // exact defect Forget exists to prevent one level deeper.
+                    // Report the broken sink on the diagnostic trace and return
+                    // normally; never rethrow from the last observer.
+                    try
+                    {
+                        System.Diagnostics.Trace.TraceError(
+                            "TaskFireAndForget fault sink threw while reporting {0}: {1}",
+                            fault,
+                            sinkFault);
+                    }
+                    catch
+                    {
+                        // Even a throwing trace listener must not resurrect the
+                        // unobserved-fault bug. There is no further sink.
+                    }
+                }
             },
             (onError, cancellationToken),
             CancellationToken.None,
