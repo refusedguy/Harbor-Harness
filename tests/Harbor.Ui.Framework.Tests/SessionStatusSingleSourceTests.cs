@@ -34,7 +34,7 @@
 // tests/Harbor.Architecture.Tests/SessionStatusSourceRule.cs grades that.
 //
 // NOT HERE: the FRAME. `ChatViewModel.RenderFrameTick`
-// (apps/Harbor.App.Avalonia/ViewModels/ChatViewModel.cs:142) is what pushes that
+// (apps/Harbor.App.Avalonia/ViewModels/ChatViewModel.cs:151) is what pushes that
 // read into the tracker every 16 ms, and this test project references no apps/
 // assembly — four src/ projects, zero apps/ — so the frame was never reachable
 // from here and no rewrite of this file could reach it. A test named after the
@@ -138,7 +138,7 @@ public class SessionStatusSingleSourceTests
         //
         // What it CANNOT prove is that the FRAME publishes this answer. The frame
         // is ChatViewModel.RenderFrameTick (apps/Harbor.App.Avalonia/ViewModels/
-        // ChatViewModel.cs:142), and this test project references no apps/
+        // ChatViewModel.cs:151), and this test project references no apps/
         // assembly — not by oversight, but by its reference graph, which is four
         // src/ projects and zero apps/. So the frame was never in reach here, and
         // the previous name ("…_IsWhatTheNextFramePushes") asserted a guarantee
@@ -148,7 +148,7 @@ public class SessionStatusSingleSourceTests
         // The frame's reachability is now pinned where it can be seen, by
         // SessionStatusFrameReachabilityTests in
         // tests/Harbor.Architecture.Tests/ — which is where the production comment
-        // at ChatViewModel.cs:139-141 ("the last writer standing on the tracker's
+        // at ChatViewModel.cs:148-150 ("the last writer standing on the tracker's
         // value") gets a check behind it. This test keeps the pure read.
         var state = StreamedAssistantMessage();
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd())).State;
