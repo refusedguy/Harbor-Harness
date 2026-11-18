@@ -127,53 +127,36 @@ public sealed class ManualTimeProvider : TimeProvider
 
     private void Move(TimeSpan delta, long milliseconds)
     {
-        List<ManualTimer>? due = null;
         lock (_gate)
         {
             _now += delta;
             ElapsedMilliseconds += milliseconds;
-
-            if (!FireTimerOnAdvance)
-            {
-                return;
-            }
-
-            due = [];
-            for (int i = _timers.Count - 1; i >= 0; i--)
-            {
-                ManualTimer timer = _timers[i];
-                if (!timer.IsDue(_now))
-                {
-                    continue;
-                }
-
-                due.Add(timer);
-                if (timer.Period == Timeout.InfiniteTimeSpan || timer.Period <= TimeSpan.Zero)
-                {
-                    timer.Deadline = null;
-                    _timers.RemoveAt(i);
-                }
-                else
-                {
-                    DateTimeOffset next = timer.Deadline!.Value + timer.Period;
-                    while (next <= _now)
-                    {
-                        next += timer.Period;
-                    }
-
-                    timer.Deadline = next;
-                }
-            }
         }
 
-        // Fire outside the lock: a CTS callback can dispose its own timer,
-        // and that disposal takes the same lock.
-        if (due is not null)
+        if (FireTimerOnAdvance)
         {
-            foreach (ManualTimer timer in due)
+            RaiseReachedTimers();
+        }
+    }
+
+    private void RaiseReachedTimers()
+    {
+        ManualTimer[] reached;
+        lock (_gate)
+        {
+            reached = [.. _timers.Where(timer => timer.DueAt <= _now)];
+            foreach (ManualTimer timer in reached)
             {
-                timer.Fire();
+                timer.ScheduleNext(_now);
             }
+
+            _timers.RemoveAll(timer => timer.DueAt == DateTimeOffset.MaxValue);
+        }
+
+        // Fire outside the lock: a CTS callback can dispose its own timer.
+        foreach (ManualTimer timer in reached)
+        {
+            timer.Raise();
         }
     }
 
@@ -235,49 +218,65 @@ public sealed class ManualTimeProvider : TimeProvider
     /// </summary>
     private sealed class ManualTimer(
         ManualTimeProvider owner,
-        TimerCallback callback,
-        object? state,
-        TimeSpan dueTime,
-        TimeSpan period) : ITimer
+        TimerCallback signal,
+        object? payload,
+        TimeSpan firstDue,
+        TimeSpan repeatEvery) : ITimer
     {
-        private bool _disposed;
+        private bool _stopped;
 
-        /// <summary>When the timer fires, or null when it is disarmed.</summary>
-        public DateTimeOffset? Deadline { get; set; } =
-            dueTime == Timeout.InfiniteTimeSpan ? null : owner._now + dueTime;
+        /// <summary>The next firing instant, or MaxValue once disarmed.</summary>
+        public DateTimeOffset DueAt { get; private set; } =
+            firstDue == Timeout.InfiniteTimeSpan ? DateTimeOffset.MaxValue : owner._now + firstDue;
 
-        /// <summary>The repeat interval, or an infinite/one-shot value.</summary>
-        public TimeSpan Period { get; private set; } = period;
+        private TimeSpan RepeatEvery { get; set; } = repeatEvery;
 
-        /// <summary>Whether the virtual clock has reached the deadline.</summary>
-        public bool IsDue(DateTimeOffset now) => Deadline is { } deadline && now >= deadline;
-
-        /// <summary>Run the callback unless the timer was disposed.</summary>
-        public void Fire()
+        /// <summary>Advance a periodic timer past every deadline the jump swallowed.</summary>
+        public void ScheduleNext(DateTimeOffset now)
         {
-            if (!_disposed)
+            if (RepeatEvery <= TimeSpan.Zero)
             {
-                callback(state);
+                DueAt = DateTimeOffset.MaxValue;
+                return;
+            }
+
+            DateTimeOffset next = DueAt + RepeatEvery;
+            while (next <= now)
+            {
+                next += RepeatEvery;
+            }
+
+            DueAt = next;
+        }
+
+        /// <summary>Invoke the callback unless the timer was disposed.</summary>
+        public void Raise()
+        {
+            if (!_stopped)
+            {
+                signal(payload);
             }
         }
 
         /// <inheritdoc />
-        public bool Change(TimeSpan newDueTime, TimeSpan newPeriod)
+        public bool Change(TimeSpan dueTime, TimeSpan period)
         {
-            if (_disposed)
+            if (_stopped)
             {
                 return false;
             }
 
-            Period = newPeriod;
-            Deadline = newDueTime == Timeout.InfiniteTimeSpan ? null : owner._now + newDueTime;
+            RepeatEvery = period;
+            DueAt = dueTime == Timeout.InfiniteTimeSpan
+                ? DateTimeOffset.MaxValue
+                : owner._now + dueTime;
             return true;
         }
 
         /// <inheritdoc />
         public void Dispose()
         {
-            _disposed = true;
+            _stopped = true;
             lock (owner._gate)
             {
                 owner._timers.Remove(this);

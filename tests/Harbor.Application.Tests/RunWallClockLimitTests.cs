@@ -9,7 +9,6 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
-using Harbor.Application.Hooks;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
@@ -117,15 +116,7 @@ public class RunWallClockLimitTests
         new(Session.Create("/tmp/harbor-wall-clock-limit-tests", "code", "test", "test-model"));
 
     /// <summary>A provider that never stops asking for tools, so only a budget can end the run.</summary>
-    private static ScriptedLlmClient AlwaysCallsATool() => new(
-    [
-        new LlmEvent[]
-        {
-            TestEvents.ToolCallStart(toolName: "clock"),
-            TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
-            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
-        }
-    ]);
+    private static ScriptedLlmClient AlwaysCallsATool() => AlwaysCalls("clock");
 
     private static AgentLoop Loop(
         ILlmClient client,
@@ -133,8 +124,7 @@ public class RunWallClockLimitTests
         FakeEventBus bus,
         AgentDefinition agent,
         ManualTimeProvider clock,
-        TimeSpan? runTimeout,
-        IHookRunner? hooks = null)
+        TimeSpan? runTimeout)
     {
         var agents = new FakeAgentRegistry(agent);
         return new AgentLoop(
@@ -150,8 +140,7 @@ public class RunWallClockLimitTests
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance,
             timeProvider: clock,
-            runTimeout: runTimeout,
-            hookRunner: hooks);
+            runTimeout: runTimeout);
     }
 
     [Test]
@@ -305,39 +294,6 @@ public class RunWallClockLimitTests
         }
     }
 
-    /// <summary>Counts the advisory SessionEnd close so cleanup is observable.</summary>
-    private sealed class CountingHookRunner : IHookRunner
-    {
-        public int SessionEndCalls;
-
-        public Task<HookVerdict> RunPreToolUseAsync(
-            string toolName, JsonElement args, string sessionId, CancellationToken ct = default) =>
-            Task.FromResult(HookVerdict.Allow);
-
-        public Task RunPostToolUseAsync(
-            string toolName, JsonElement args, ToolResult result, string sessionId, CancellationToken ct = default) =>
-            Task.CompletedTask;
-
-        public Task RunSessionEndAsync(string sessionId, CancellationToken ct = default)
-        {
-            Interlocked.Increment(ref SessionEndCalls);
-            return Task.CompletedTask;
-        }
-
-        public Task RunSessionStartAsync(
-            string sessionId, string? agent = null, string? model = null, CancellationToken ct = default) =>
-            Task.CompletedTask;
-
-        public Task<HookVerdict> RunUserPromptSubmitAsync(
-            string sessionId, string prompt, string? agent = null, string? model = null,
-            CancellationToken ct = default) =>
-            Task.FromResult(HookVerdict.Allow);
-
-        public Task RunPreCompactAsync(
-            string sessionId, string? agent = null, string? model = null, CancellationToken ct = default) =>
-            Task.CompletedTask;
-    }
-
     [Test]
     public async Task RunAsync_MidStreamTimeout_InterruptsToolViaTokenAndStampsLimit()
     {
@@ -350,9 +306,8 @@ public class RunWallClockLimitTests
         var tool = new BlockingTool();
         var client = AlwaysCalls("block");
         var bus = new FakeEventBus();
-        var hooks = new CountingHookRunner();
         var agent = Agent(maxSteps: 50);
-        var loop = Loop(client, tool, bus, agent, clock, TimeSpan.FromMinutes(10), hooks);
+        var loop = Loop(client, tool, bus, agent, clock, TimeSpan.FromMinutes(10));
 
         Task<Result> run = loop.RunAsync(NewSession(), agent);
         await tool.Started.Task;
@@ -368,7 +323,6 @@ public class RunWallClockLimitTests
         await Assert.That(end.Limit).IsEqualTo(RunLimitKind.Timeout);
         await Assert.That(end.Cancelled).IsFalse();
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
-        await Assert.That(hooks.SessionEndCalls).IsEqualTo(1);
         // Cleanup: the deadline's timer is released on the limit exit.
         await Assert.That(clock.ActiveTimerCount).IsEqualTo(0);
     }
