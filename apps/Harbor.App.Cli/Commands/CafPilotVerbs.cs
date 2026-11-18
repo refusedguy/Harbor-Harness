@@ -59,6 +59,7 @@ internal static class CafPilotVerbs
         app.Add("run", CafRunCommands.Run);
         app.Add("providers", CafProviderCommands.Providers);
         app.Add("models", CafProviderCommands.Models);
+        app.Add("models preflight", CafProviderOptionCommands.Preflight);
         app.Add("auth", CafAuthCommands.Auth);
         app.Add("config", CafConfigCommands.Config);
         app.Add("daemon", CafDaemonCommands.Daemon);
