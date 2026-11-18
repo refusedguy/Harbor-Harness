@@ -194,6 +194,23 @@ public sealed class SessionStatusToBrushConverter : OneWayConverterBase<SessionS
 }
 
 /// <summary>
+///     Returns the resource key for a <see cref="SessionStatus" />, not the
+///     resolved brush. <c>SessionRow</c> takes a key string so it stays
+///     platform-agnostic and resolves the brush through <see cref="BrushKeyConverter" />
+///     itself. Keeping the key mapping in one place means the row and the
+///     palette cannot disagree about which status uses which color.
+/// </summary>
+public sealed class SessionStatusToBrushKeyConverter : OneWayConverterBase<SessionStatusToBrushKeyConverter>
+{
+    /// <inheritdoc />
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not SessionStatus status) return null;
+        return StatusMappers.SessionStatusToBrushKey(status);
+    }
+}
+
+/// <summary>
 ///     Wraps <see cref="StatusMappers.TimeAgo" /> as an Avalonia
 ///     <see cref="IValueConverter" />. Bound to a UTC <c>DateTime</c>,
 ///     returns "5m ago" / "2h ago" / "Mar 5".
