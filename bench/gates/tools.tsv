@@ -39,6 +39,7 @@ check-arch-twins.py	python3 tools/check-arch-twins.py
 check-coverage-registry	tools/bin/harbor-gates-linux-x64 check-coverage-registry --coverage-dir Coverage --source-root . --registry tools/coverage-registry.txt --status Coverage/status.tsv --min-files 1200 --min-covered 400
 check-demo-screens.py	python3 tools/check-demo-screens.py --dir assets/demo
 check-contrast.py	python3 tools/check-contrast.py --min-pairs 8
+check-accessible-names.py	python3 tools/check-accessible-names.py --baseline tools/accessible-names-baseline.txt --min-files 46 --min-controls 96 --min-baseline 20
 check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
 check-doc-facts	tools/bin/harbor-gates-linux-x64 check-doc-facts --min-facts 5
 check-event-topology	tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24

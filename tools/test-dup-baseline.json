@@ -299,11 +299,12 @@
     "136e393d8ff76a1145da28e90b03ec43a442407b": {
       "members": [
         "tests/Harbor.Abstractions.Tests/RunVerificationRecordTests.cs::Contract#0",
+        "tests/Harbor.Abstractions.Tests/TriStateRunResultTests.cs::Contract#0",
         "tests/Harbor.Storage.Tests/RunOutcomeTests.cs::VerificationContract#0"
       ],
-      "count": 2,
+      "count": 3,
       "lines": 8,
-      "files": 2,
+      "files": 3,
       "exact": 0,
       "shape": "57bd1a3f0d69971f5274c494ba69663128e62287"
     },
