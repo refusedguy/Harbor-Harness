@@ -167,35 +167,42 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
 }
 
 /// <summary>
-///     Minimal System.Text.Json converter for
-///     <see cref="ImmutableDictionary{TKey, TValue}" />. Mirrors
-///     <c>ImmutableListConverter&lt;T&gt;</c> in <c>JsonAppConfigStore.cs</c>:
-///     round-trips via a mutable <see cref="Dictionary{TKey, TValue}" /> and
-///     calls <see cref="ImmutableDictionary.ToImmutableDictionary" />.
+///     AOT-safe System.Text.Json converter for
+///     <see cref="ImmutableDictionary{TKey, TValue}" /> of <see cref="string" />
+///     keys and values — the shape <c>CommonConfig.ApiKeys</c> uses. Mirrors
+///     <see cref="ImmutableStringListConverter" /> in
+///     <c>JsonAppConfigStore.cs</c>.
 /// </summary>
-/// <typeparam name="TKey">Key type.</typeparam>
-/// <typeparam name="TValue">Value type.</typeparam>
-internal sealed class ImmutableDictionaryConverter<TKey, TValue> : JsonConverter<ImmutableDictionary<TKey, TValue>>
-    where TKey : notnull
+/// <remarks>
+///     #2623: this used to be a generic
+///     <c>ImmutableDictionaryConverter&lt;TKey, TValue&gt;</c> whose Read/Write
+///     called <c>JsonSerializer.Deserialize&lt;TValue&gt;</c> /
+///     <c>JsonSerializer.Serialize(writer, kv.Value, options)</c>, with the
+///     reflection and IL2026/IL3050 cost that entails. Only string→string maps
+///     are persisted today, so the loop below reads and writes the tokens
+///     directly. The dictionary key stays a JSON property name and the value a
+///     JSON string, so the on-disk shape is unchanged.
+/// </remarks>
+internal sealed class ImmutableStringDictionaryConverter : JsonConverter<ImmutableDictionary<string, string>>
 {
     /// <summary>Singleton instance — the converter is stateless.</summary>
-    public static readonly ImmutableDictionaryConverter<TKey, TValue> Instance = new();
+    public static readonly ImmutableStringDictionaryConverter Instance = new();
 
-    private ImmutableDictionaryConverter() { }
+    private ImmutableStringDictionaryConverter() { }
 
     /// <inheritdoc />
-    public override ImmutableDictionary<TKey, TValue> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override ImmutableDictionary<string, string> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Null)
         {
-            return ImmutableDictionary<TKey, TValue>.Empty;
+            return ImmutableDictionary<string, string>.Empty;
         }
         if (reader.TokenType != JsonTokenType.StartObject)
         {
-            throw new JsonException($"Expected StartObject token for ImmutableDictionary<{typeof(TKey).Name},{typeof(TValue).Name}>, got {reader.TokenType}.");
+            throw new JsonException($"Expected StartObject token for ImmutableDictionary<string,string>, got {reader.TokenType}.");
         }
 
-        var dict = new Dictionary<TKey, TValue>();
+        var dict = new Dictionary<string, string>();
         while (reader.Read())
         {
             if (reader.TokenType == JsonTokenType.EndObject)
@@ -208,22 +215,25 @@ internal sealed class ImmutableDictionaryConverter<TKey, TValue> : JsonConverter
             }
             string? keyStr = reader.GetString();
             reader.Read();
-            var value = JsonSerializer.Deserialize<TValue>(ref reader, options);
+            // Direct token read replaces the former generic
+            // JsonSerializer.Deserialize<TValue>(ref reader, options).
+            string? value = reader.TokenType switch
+            {
+                JsonTokenType.String => reader.GetString(),
+                JsonTokenType.Null => null,
+                var other => throw new JsonException($"Expected String token in ImmutableDictionary<string,string>, got {other}.")
+            };
             if (keyStr is null)
             {
                 throw new JsonException("Null property name in ImmutableDictionary JSON.");
             }
-            // Convert the JSON string key to TKey. Only string keys are
-            // supported by CommonConfig today, but the converter stays
-            // generic for future reuse.
-            var key = (TKey)(object)keyStr;
-            dict[key] = value!;
+            dict[keyStr] = value!;
         }
         return dict.ToImmutableDictionary();
     }
 
     /// <inheritdoc />
-    public override void Write(Utf8JsonWriter writer, ImmutableDictionary<TKey, TValue> value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, ImmutableDictionary<string, string> value, JsonSerializerOptions options)
     {
         if (value is null)
         {
@@ -233,9 +243,10 @@ internal sealed class ImmutableDictionaryConverter<TKey, TValue> : JsonConverter
         writer.WriteStartObject();
         foreach (var kv in value)
         {
-            string keyStr = kv.Key is string s ? s : kv.Key?.ToString() ?? string.Empty;
-            writer.WritePropertyName(keyStr);
-            JsonSerializer.Serialize(writer, kv.Value, options);
+            writer.WritePropertyName(kv.Key);
+            // WriteStringValue(string?) writes a JSON null for a null value,
+            // matching the former generic JsonSerializer.Serialize(writer, kv.Value, options).
+            writer.WriteStringValue(kv.Value);
         }
         writer.WriteEndObject();
     }

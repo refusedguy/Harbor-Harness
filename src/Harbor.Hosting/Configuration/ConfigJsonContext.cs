@@ -77,12 +77,20 @@ internal static class ConfigJson
     ///     <see cref="CommonConfig" /> route to them while everything else
     ///     keeps using the generated metadata.
     /// </summary>
+    /// <remarks>
+    ///     #2623: the two converters are non-generic and read/write their
+    ///     string elements with <see cref="Utf8JsonReader" /> /
+    ///     <see cref="Utf8JsonWriter" /> directly. No generic
+    ///     <c>JsonSerializer.Serialize&lt;T&gt;</c> /
+    ///     <c>Deserialize&lt;T&gt;</c> is called from them, so the config
+    ///     round-trip stays AOT-safe end to end.
+    /// </remarks>
     public static JsonSerializerOptions Options { get; } = new(ConfigJsonContext.Default.Options)
     {
         Converters =
         {
-            ImmutableListConverter<string>.Instance,
-            ImmutableDictionaryConverter<string, string>.Instance
+            ImmutableStringListConverter.Instance,
+            ImmutableStringDictionaryConverter.Instance
         }
     };
 

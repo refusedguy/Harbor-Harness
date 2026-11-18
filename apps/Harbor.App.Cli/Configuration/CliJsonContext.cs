@@ -39,8 +39,8 @@
 // System.Text.Json's immutable-collection support; `IImmutableList<T>` is
 // listed as serializing AND deserializing in the supported-types table, and
 // its wire shape is the same JSON array the hand-written
-// `ImmutableListConverter<T>` wrote, so the on-disk file is unchanged. The
-// converter stays registered on the reflection path it belongs to.
+// `ImmutableStringListConverter` writes for CommonConfig, so the on-disk file
+// is unchanged. That converter is non-generic and AOT-safe (#2623).
 
 using System.Text.Json.Serialization;
 
