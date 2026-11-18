@@ -88,13 +88,17 @@ internal static class SessionExportFormattedRunner
                         .ConfigureAwait(false);
                     return 0;
                 }
-
-                await error.WriteLineAsync($"Export failed: {messages.Error}").ConfigureAwait(false);
+                else
+                {
+                    await error.WriteLineAsync($"Export failed: {messages.Error}").ConfigureAwait(false);
+                    return 1;
+                }
+            }
+            else
+            {
+                await error.WriteLineAsync($"Export failed: {loaded.Error}").ConfigureAwait(false);
                 return 1;
             }
-
-            await error.WriteLineAsync($"Export failed: {loaded.Error}").ConfigureAwait(false);
-            return 1;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
                                       or ArgumentException)
