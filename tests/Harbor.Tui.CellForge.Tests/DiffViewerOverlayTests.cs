@@ -330,6 +330,53 @@ public sealed class DiffViewerOverlayTests
         await Assert.That(PaintAll(seated)).IsEqualTo(expected);
     }
 
+    [Test]
+    public async Task Show_SameFileAfterHide_RestoresBodyScroll()
+    {
+        var overlay = Shown();
+        ScrollBody(overlay, 3);
+        int saved = overlay.ScrollOffset;
+
+        overlay.Hide();
+        overlay.Show("src/app.cs", Sample);
+
+        await Assert.That(saved).IsGreaterThan(0);
+        await Assert.That(overlay.ScrollOffset).IsEqualTo(saved);
+    }
+
+    [Test]
+    public async Task Show_DifferentFile_StartsAtTop_AndKeepsFirstFilePosition()
+    {
+        var overlay = Shown(file: "src/first.cs");
+        ScrollBody(overlay, 2);
+
+        overlay.Show("src/second.cs", Sample);
+        await Assert.That(overlay.ScrollOffset).IsEqualTo(0);
+
+        overlay.Show("src/first.cs", Sample);
+        await Assert.That(overlay.ScrollOffset).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Show_UnnamedDiff_StartsAtTop()
+    {
+        var overlay = Shown();
+        ScrollBody(overlay, 2);
+
+        overlay.Show(null, Sample);
+
+        await Assert.That(overlay.ScrollOffset).IsEqualTo(0);
+    }
+
+    // A short viewport leaves room for only six body rows, so a scroll of two
+    // or three rows survives ClampScroll and the test reads a real position.
+    private static void ScrollBody(DiffViewerOverlay overlay, int rows)
+    {
+        var buffer = TestRender.Buffer(80, 10);
+        overlay.Paint(buffer, new Rect(0, 0, 80, 10));
+        overlay.ScrollBy(rows);
+    }
+
     private static ChatScreen BuildScreen() => ScreenFixtures.BuildScreen(48, 14);
 
     private static string PaintAll(ChatScreen screen)
