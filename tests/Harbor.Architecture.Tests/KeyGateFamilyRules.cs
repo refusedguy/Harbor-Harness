@@ -347,6 +347,12 @@ public class KeyGateFamilyRules
         // set. Navigation and Enter/Space expansion use the strict no-modifier
         // command gate, so Shift is refused: a command site, not a text buffer.
         new("Accordion", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/Accordion.cs"),
+        // SettingsPanel (#2380): navigation/activation is a strict no-modifier
+        // command gate, but an open free-text entry forwards runes to
+        // GenericTextField, where Shift is a case shaper. One widget, two
+        // families by state, the same split QuestionFormView documents.
+        new("SettingsPanel(navigation)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/SettingsPanel.cs"),
+        new("SettingsPanel(editing)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/SettingsPanel.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
