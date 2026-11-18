@@ -124,7 +124,7 @@ public class FormScaffoldTests
             .ToArray();
 
         // Widest key is 6 cells, values start at column 8.
-        await Assert.That(lines[0]).IsEqualTo("a      1");
+        await Assert.That(lines[0]).IsEqualTo("a       1");
         await Assert.That(lines[1]).IsEqualTo("longer  2");
         await Assert.That(description.Count).IsEqualTo(2);
     }
