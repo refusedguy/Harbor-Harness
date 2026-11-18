@@ -394,6 +394,51 @@ internal sealed class CellForgeReplRunner(
     }
 
     /// <summary>
+    ///     #2495: hand the terminal to the external editor named by
+    ///     <c>$VISUAL</c> / <c>$EDITOR</c>. Ctrl+E in <see cref="ReplInputLoop"/>
+    ///     is the only entry point. The scope owns the raw-mode restore and
+    ///     full repaint in its own finally; this method only reports the case
+    ///     where the hand-over could not happen at all.
+    /// </summary>
+    internal async Task OpenExternalEditorAsync(CancellationToken ct)
+    {
+        var scope = new ExternalEditorScope(
+            ModeController,
+            leaveScreen: token => Backend.WriteAsync(ReplLifecycle.Utf8(SeqLeaveAltScreen), token),
+            enterScreenAndRepaint: ResumeAfterExternalEditorAsync,
+            stdinRedirected: null,
+            getEnv: null,
+            launch: null);
+
+        int? exitCode = await scope.RunAsync(ct).ConfigureAwait(false);
+        if (exitCode is null)
+        {
+            // No editor value in the message: a path can carry a secret.
+            Bridge.AppendSystemLine("external editor: unavailable (redirected stdin or could not start)");
+            _broadDamageNextFrame = true;
+            _wake.Writer.TryWrite(null);
+        }
+    }
+
+    /// <summary>
+    ///     Re-entry half of the suspend scope (#2495): re-arm the alternate
+    ///     screen, then force the next frame to repaint every cell. The child
+    ///     wrote to the terminal while we were gone, so FRONT must not be
+    ///     trusted. Blank it and clear the damage hints, or the diff would
+    ///     compare the new paint against a stale mirror and emit nothing into
+    ///     the fresh (empty) alternate-screen buffer.
+    /// </summary>
+    private async ValueTask ResumeAfterExternalEditorAsync(CancellationToken ct)
+    {
+        await Backend.WriteAsync(ReplLifecycle.Utf8(SeqEnterAltScreen), ct).ConfigureAwait(false);
+        ScreenSession.Front.BlankAll();
+        ScreenSession.DamageAll();
+        _broadDamageNextFrame = true;
+        _frameDirtySeq++;
+        _wake.Writer.TryWrite(null);
+    }
+
+    /// <summary>
     /// Heartbeat condition (#170): the Running/Compacting spinner plus any
     /// mascot reaction/latch still playing out in Idle — the error/success face
     /// revives by itself once the latch expires instead of freezing mid-sequence

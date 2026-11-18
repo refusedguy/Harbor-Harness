@@ -469,6 +469,21 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
+        // External editor (issue #2495): Ctrl+E hands the terminal to
+        // $VISUAL / $EDITOR. Press-only so a held chord cannot spawn several
+        // children; the scope restores raw mode and forces a full repaint in
+        // its own finally. Claimed here, ahead of the palette and composer,
+        // so the chord never leaks into the prompt as a character.
+        if (key.Key == KeyCode.Char
+            && key.Modifiers == KeyModifiers.Ctrl
+            && key.EventType == KeyEventType.Press
+            && char.ToLowerInvariant((char)key.Character.Value) == 'e')
+        {
+            await host.OpenExternalEditorAsync(ct).ConfigureAwait(false);
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
         if (host._palette.Visible && host._palette.HandleKey(key))
         {
             // Frame-carried continuations: no host-side stacks. Esc/Hide drops
