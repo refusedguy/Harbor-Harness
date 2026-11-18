@@ -24,9 +24,20 @@ namespace Harbor.Tui.Notifications;
 ///         Select with <c>HARBOR_TUI=notifications</c>. Combine with
 ///         <c>harbor ask "&lt;prompt&gt;"</c> for one-shot background runs.
 ///     </para>
+///     <para>
+///         #2675 item 121: <c>HARBOR_FORCE_BEL</c> (or its Amp alias
+///         <c>AMP_FORCE_BEL</c>) makes every notification also emit a terminal
+///         bell (BEL, ASCII 7). This is the SSH / background fallback: the OS
+///         notifier is unreachable there, but every terminal emulator honours
+///         BEL. Set the variable to <c>1</c> or <c>true</c>; it decorates
+///         whichever backend was selected, so the OS notification still fires.
+///     </para>
 /// </remarks>
 public sealed class NotificationTuiRenderer : BaseTuiRenderer
 {
+    private const string ForceBellVariable = "HARBOR_FORCE_BEL";
+    private const string AmpForceBellVariable = "AMP_FORCE_BEL";
+
     private readonly INotificationBackend _backend;
     private readonly ILogger<NotificationTuiRenderer> _logger;
 
@@ -231,17 +242,38 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
         // renderer writes no other terminal output, so an OSC 777 sequence on
         // stdout cannot interleave with a frame. Opt-in wins over the platform
         // default: an SSH session has no notify-send / osascript / msg to use.
+        INotificationBackend backend;
         if (Environment.GetEnvironmentVariable("HARBOR_NOTIFY_OSC777") == "1")
-            return new Osc777NotificationBackend(Console.Out);
+            backend = new Osc777NotificationBackend(Console.Out);
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            backend = new LinuxNotifySendBackend(processRunner);
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            backend = new MacOsascriptBackend(processRunner);
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            backend = new WindowsToastBackend(processRunner);
+        else
+            backend = new NullNotificationBackend();
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return new LinuxNotifySendBackend(processRunner);
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return new MacOsascriptBackend(processRunner);
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return new WindowsToastBackend(processRunner);
-        return new NullNotificationBackend();
+        // #2675 item 121: the bell is a decoration, not a replacement. Over
+        // SSH the OS notifier may be silent, so the BEL is what the user
+        // actually perceives; locally it is an extra cue on top of the toast.
+        return IsForceBellEnabled(
+            Environment.GetEnvironmentVariable(ForceBellVariable),
+            Environment.GetEnvironmentVariable(AmpForceBellVariable))
+            ? new BellNotificationBackend(backend, Console.Out)
+            : backend;
     }
+
+    /// <summary>
+    ///     Pure env-flag parse, split out from <see cref="DetectBackend" /> so
+    ///     the two accepted spellings and the Amp alias can be pinned without
+    ///     mutating process-wide environment variables in tests.
+    /// </summary>
+    internal static bool IsForceBellEnabled(string? harborValue, string? ampValue)
+        => IsTrue(harborValue) || IsTrue(ampValue);
+
+    private static bool IsTrue(string? value)
+        => value is "1" || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>Abstraction over the OS's notification mechanism.</summary>
@@ -320,6 +352,35 @@ internal sealed class NullNotificationBackend : INotificationBackend
 {
     public string Name => "null (no notifications)";
     public void Notify(string title, string body, bool isError, CancellationToken cancellationToken = default) { }
+}
+
+/// <summary>
+///     Decorates any notification backend so every notification also rings the
+///     terminal bell (#2675 item 121). The BEL is the one signal every terminal
+///     emulator honours, including over SSH where the OS notifier is silent.
+/// </summary>
+/// <remarks>
+///     The notification renderer writes no other terminal output, so a lone
+///     BEL cannot interleave with a rendered frame. The inner backend still
+///     receives the notification unchanged: this is an extra cue, not a
+///     replacement, and the flush keeps a buffered stdout from swallowing it.
+/// </remarks>
+internal sealed class BellNotificationBackend(
+    INotificationBackend inner,
+    TextWriter output) : INotificationBackend
+{
+    private const char Bell = '\u0007';
+
+    /// <inheritdoc />
+    public string Name => $"terminal bell + {inner.Name}";
+
+    /// <inheritdoc />
+    public void Notify(string title, string body, bool isError, CancellationToken cancellationToken = default)
+    {
+        inner.Notify(title, body, isError, cancellationToken);
+        output.Write(Bell);
+        output.Flush();
+    }
 }
 
 /// <summary>Render context shim — the notification renderer doesn't paint.</summary>
