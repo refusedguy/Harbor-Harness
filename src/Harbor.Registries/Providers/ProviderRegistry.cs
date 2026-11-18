@@ -323,10 +323,35 @@ public sealed class ProviderRegistry : IProviderRegistry
     /// <inheritdoc />
     public void Register(ProviderId providerId, Func<ILlmClient> factory)
     {
+        // #2574: a duplicate id used to be silently overwritten (last writer
+        // wins), so a plugin could replace the client behind an existing user
+        // choice without anyone noticing. Fail fast instead. Callers that can
+        // recover from a conflict use TryRegister, which reports it as a Result.
+        var result = TryRegister(providerId, factory);
+        if (result.IsFailure)
+        {
+            throw new InvalidOperationException(result.Error);
+        }
+    }
+
+    /// <summary>
+    ///     Atomically register a provider, reporting a duplicate id as a
+    ///     failure instead of replacing the existing client (#2574).
+    /// </summary>
+    /// <param name="providerId">The provider id to register.</param>
+    /// <param name="factory">Factory invoked the first time the provider is needed.</param>
+    /// <returns>Success on registration, or a failure naming the duplicate id.</returns>
+    public Result TryRegister(ProviderId providerId, Func<ILlmClient> factory)
+    {
         var lazy = new Lazy<ILlmClient>(() => factory(), LazyThreadSafetyMode.ExecutionAndPublication);
-        _clients[providerId] = lazy;
+        if (!_clients.TryAdd(providerId, lazy))
+        {
+            return Result.Failure($"Provider '{providerId}' is already registered.");
+        }
+
         _catalogCache.TryRemove(providerId, out _);
         InvalidateFrozenSnapshot();
+        return Result.Success();
     }
 
     /// <inheritdoc />
