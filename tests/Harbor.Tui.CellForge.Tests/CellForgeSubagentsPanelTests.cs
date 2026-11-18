@@ -128,6 +128,8 @@ public class CellForgeSubagentsPanelTests
             _messages = messages ?? new Dictionary<string, List<AgentMessage>>(StringComparer.Ordinal);
         }
 
+        public void Add(Session session) => _sessions[session.Id] = session;
+
         public Task<Result<Session>> CreateAsync(
             string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
             Task.FromResult(Result.Failure<Session>("Not supported in tests."));
@@ -338,6 +340,26 @@ public class CellForgeSubagentsPanelTests
         await Assert.That(text).Contains("▸ task(explore): dig  explore  working");
         await Assert.That(store.Appends).IsEqualTo(0);
         await Assert.That(store.Updates).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Build_AfterExplicitRefresh_ShowsUpdatedSnapshot()
+    {
+        var stored = Sess("sub1", "task(explore): dig", "parent", SessionKind.Subagent, SessionStatus.Done, Now);
+        var store = new RecordingStore(new[] { stored });
+        var services = new PanelServices { SessionStore = store };
+        var panel = new CellForgeSubagentsPanel();
+        var ctx = Ctx(StateWithActive("parent"), services);
+
+        string first = Joined(panel.Build(ctx));
+        await Assert.That(first).Contains("Subagents (1)");
+
+        store.Add(Sess("sub2", "task(plan): think", "parent", SessionKind.Subagent, SessionStatus.Working, Now));
+        await Assert.That(panel.OnKey(UiKey.ForChar('r'), ctx)).IsTrue();
+        string second = Joined(panel.Build(ctx));
+
+        await Assert.That(second).Contains("Subagents (2)");
+        await Assert.That(second).Contains("task(plan): think");
     }
 
     [Test]
