@@ -34,6 +34,7 @@ consumer needs regardless of which part the type lives in.
 | `TestArgs.cs`, `TestToolArgs.cs`, `TestJson.cs`, `TestJsonContext.cs` | The shared argument and JSON helpers. |
 | `CapturingLogger.cs`, `EmptyServiceProvider.cs`, `ManualTimeProvider.cs` | The logging, container and clock doubles. |
 | `TestSeeds.cs` | The single seed source for stochastic tests, overridable from the environment. |
+| `FuzzLoop.cs` | The reusable fuzz driver: a seeded walk whose violations carry the seed, case index and exact input (#2704 P03). |
 | `TempDirScope.cs`, `EnvScope.cs`, `GitProbe.cs` | The three scopes: a temp directory, an environment variable, a git repository. |
 | `StubHttpMessageHandler.cs` | The HTTP handler double (#1825). |
 | `Exhaustive.cs`, `TestGitQuery.cs`, `TestEventBusMiddleware.cs`, `TestRepoPaths.cs`, `AppConfigDocument.cs` | The rest of the shared helpers. |
@@ -52,7 +53,9 @@ HARBOR_TEST_ITERATIONS=20 dotnet run --project tests/Harbor.Ipc.Tests -c Release
 ```
 
 Both fuzz suites put the resolved seed in their failure message, so a red run
-can be replayed without guessing which input failed.
+can be replayed without guessing which input failed. `FuzzLoop<TInput>`
+enforces that shape for any new suite: its `FuzzViolationException` carries the
+loop name, seed, case index, count and the failing bytes.
 
 ## Where a double belongs
 
