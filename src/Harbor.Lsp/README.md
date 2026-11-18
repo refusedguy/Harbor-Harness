@@ -55,10 +55,13 @@ Supporting types:
   the `DiagnosticsChanged` event. `FileUri`/`FromUri` convert paths.
   Every operation is bounded by `DefaultRequestTimeout` (15s) and reports a
   stalled server as a `Result.Failure`, never as a wait that never ends.
-- `LspClient` — the raw JSON-RPC transport over a pair of streams:
+- `LspClient` — request/response demux over an `ILspFrameTransport`:
   `Start()`, `SendRequestAsync`, `SendNotificationAsync`, plus
-  `ServerNotification` and `Disconnected` events. `LspRequestException` is the
-  failure type.
+  `ServerNotification` and `Disconnected` events. Correlation by request id
+  stays here; `LspRequestException` is the failure type.
+- `ILspFrameTransport` / `LspFrameTransport` — Content-Length framing over a
+  pair of streams (#2613). Written against an interface so the framing can be
+  tested with in-memory frames and the client can be driven without a process.
 - `LspWire` (`LspServerCatalog.cs:107`) — the source-generated wire records
   (`InitializeParams`, `ClientCapabilities`, `TextDocumentCapabilities`,
   `SyncCapabilities`, `DidOpenTextDocumentParams`).
