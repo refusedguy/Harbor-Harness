@@ -88,7 +88,7 @@ public sealed class CompositeToolRegistry : IToolRegistry
     ///     tool, and the result is an immutable, deduplicated array. Safety guards,
     ///     the frozen snapshot and the live read path all consume this list, so a
     ///     duplicate name can no longer resolve to different tools depending on
-    ///     which path reads it. Unresolvable descriptors are skipped, as before.
+    ///     which path reads it. Unresolvable descriptors stay skipped, as before.
     /// </summary>
     private static IReadOnlyList<ITool> EnumerateResolvedTools(IReadOnlyList<IToolSource> sources)
     {
