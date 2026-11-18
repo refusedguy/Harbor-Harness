@@ -276,15 +276,35 @@ public sealed class HookRunner : IHookRunner
 
     private IReadOnlyList<HookEntry> GetHooks(string eventName, string? toolName)
     {
-        IReadOnlyList<HookEntry> matches = _config.GetHooks(eventName, toolName);
-        string? loadError = _config.LoadError;
-        if (loadError is not null && loadError != _lastLoadErrorLogged)
+        // One locked read: the error belongs to the same reload as the hooks.
+        HookConfig.HookLookup lookup = _config.GetHooksWithError(eventName, toolName);
+        if (lookup.LoadError is { } loadError)
         {
-            _lastLoadErrorLogged = loadError;
-            HookRunnerLog.HookConfigIgnored(_logger, loadError);
+            LogLoadErrorOnce(loadError);
         }
 
-        return matches;
+        return lookup.Entries;
+    }
+
+    /// <summary>
+    ///     Log a load error once per distinct message. The compare/exchange
+    ///     makes the check-and-set atomic, so two concurrent callers cannot
+    ///     both log the same error (the old unsynchronized read/write could).
+    /// </summary>
+    private void LogLoadErrorOnce(string loadError)
+    {
+        string? last = Volatile.Read(ref _lastLoadErrorLogged);
+        while (!string.Equals(last, loadError, StringComparison.Ordinal))
+        {
+            string? prior = Interlocked.CompareExchange(ref _lastLoadErrorLogged, loadError, last);
+            if (string.Equals(prior, last, StringComparison.Ordinal))
+            {
+                HookRunnerLog.HookConfigIgnored(_logger, loadError);
+                return;
+            }
+
+            last = prior;
+        }
     }
 
     /// <summary>
