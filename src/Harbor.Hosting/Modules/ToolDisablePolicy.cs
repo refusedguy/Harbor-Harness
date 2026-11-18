@@ -127,14 +127,14 @@ internal sealed class ToolDisablePolicy
             int colon = raw.IndexOf(':');
             if (colon > 0)
             {
-                switch (raw[..colon].ToLowerInvariant())
+                string scope = raw[..colon].ToLowerInvariant();
+                if (scope == "builtin")
                 {
-                    case "builtin":
-                        source = ToolSourceKind.Builtin;
-                        break;
-                    case "mcp":
-                        source = ToolSourceKind.Mcp;
-                        break;
+                    source = ToolSourceKind.Builtin;
+                }
+                else if (scope == "mcp")
+                {
+                    source = ToolSourceKind.Mcp;
                 }
 
                 if (source is not null)
