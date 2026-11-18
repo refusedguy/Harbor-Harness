@@ -82,9 +82,21 @@ public static class DiffPreview
     ///     renders without a diff.
     /// </summary>
     /// <param name="toolName">The tool's stable name.</param>
-    /// <param name="argsJson">The raw arguments the call was made with.</param>
+    /// <param name="argsJson">
+    ///     The raw arguments the call was made with. Absent or blank arguments are
+    ///     absence, not an empty JSON object to parse (#1101).
+    /// </param>
     public static Maybe<DiffPayload> ExtractDiff(string toolName, string argsJson)
     {
+        // #1101: "no arguments" is its own case. The old caller spelled it as
+        // "{}" so that a parse of a non-existent document would succeed with
+        // nothing in it; absence is expressed by the None branch below instead,
+        // and a null payload no longer reaches JsonSerializer as an exception.
+        if (string.IsNullOrWhiteSpace(argsJson))
+        {
+            return Maybe<DiffPayload>.None;
+        }
+
         if (toolName != WellKnownTools.Edit && toolName != WellKnownTools.Write && toolName != WellKnownTools.Patch)
         {
             return Maybe<DiffPayload>.None;

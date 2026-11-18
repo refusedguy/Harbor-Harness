@@ -25,6 +25,24 @@ public class DiffPayloadTests
     }
 
     [Test]
+    public async Task ExtractDiff_AbsentArgs_ReturnsNoPayload()
+    {
+        var payload = DiffPreview.ExtractDiff("edit", null!);
+
+        await Assert.That(payload.HasValue).IsFalse()
+            .Because("absent arguments are absence, not a JSON document that must be parsed");
+    }
+
+    [Test]
+    public async Task ExtractDiff_BlankArgs_ReturnsNoPayload()
+    {
+        var payload = DiffPreview.ExtractDiff("edit", "   ");
+
+        await Assert.That(payload.HasValue).IsFalse()
+            .Because("blank arguments carry no payload, so the extractor must not invent an object");
+    }
+
+    [Test]
     public async Task ExtractDiff_MalformedJson_ReturnsNoPayload()
     {
         var payload = DiffPreview.ExtractDiff("edit", "{not json");
@@ -60,6 +78,18 @@ public class DiffPayloadTests
         await Assert.That(payload.Value.FilePath).IsEqualTo("src/app.cs");
         await Assert.That(payload.Value.Preview).Contains("- var a = 1;");
         await Assert.That(payload.Value.FullDiff).Contains("+ var a = 2;");
+    }
+
+    [Test]
+    public async Task Start_AbsentArgs_KeepsTheCardDiffFree()
+    {
+        ToolCallSnapshot card = ToolCallSnapshot.Start("tc_0", "edit", null, null!);
+
+        await Assert.That(card.IsDiffTool).IsFalse();
+        await Assert.That(card.ArgsPreview).IsEqualTo(string.Empty);
+        await Assert.That(card.DiffFilePath).IsNull();
+        await Assert.That(card.DiffPreview).IsNull();
+        await Assert.That(card.DiffFull).IsNull();
     }
 
     [Test]
