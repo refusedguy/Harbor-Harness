@@ -1,4 +1,3 @@
-#error SAMPLE_OUTSIDE_SOLUTION_CONTROL_2540
 // Design-system consumer smoke: proves the standalone package story.
 // References only Harbor.DesignSystem (see .csproj) and verifies at runtime
 // that the package assembly carries zero Harbor.* assembly dependencies.
