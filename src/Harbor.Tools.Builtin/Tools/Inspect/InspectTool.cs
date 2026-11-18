@@ -94,6 +94,14 @@ public sealed partial class InspectTool : ITool
     private readonly ILogger<InspectTool> _logger;
 
     /// <summary>
+    ///     Sections that have moved behind <see cref="ISectionInspector" />,
+    ///     keyed by the section they declare. The table, not the tool, decides
+    ///     who renders a section; the remaining sections still go through
+    ///     <see cref="DescribeLegacy" /> until their own slice moves them here.
+    /// </summary>
+    private readonly FrozenDictionary<Section, ISectionInspector> _inspectors;
+
+    /// <summary>
     ///     Construct the catalog tool.
     /// </summary>
     /// <param name="tools">The live tool registry — the tools it lists are the ones registered right now.</param>
@@ -134,6 +142,8 @@ public sealed partial class InspectTool : ITool
         _pluginInventoryPath = pluginInventoryPath;
         _facts = facts ?? throw new ArgumentNullException(nameof(facts));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _inspectors = new ISectionInspector[] { new ProvidersSectionInspector(providers, facts) }
+            .ToFrozenDictionary(inspector => inspector.Section);
     }
 
     /// <inheritdoc />
@@ -204,15 +214,22 @@ public sealed partial class InspectTool : ITool
     }
 
     /// <summary>
-    ///     Build the answer for one section. A failure is the "no such entry"
-    ///     answer, and it names what IS there.
+    ///     Dispatch one section to the inspector that owns it. A failure is the
+    ///     "no such entry" answer, and it names what IS there. Sections not yet
+    ///     moved behind <see cref="ISectionInspector" /> keep their rendering
+    ///     here; each slice makes this method thinner.
     /// </summary>
-    private Result<string> Describe(Section section, string? name, ToolContext context) => section switch
+    private Result<string> Describe(Section section, string? name, ToolContext context)
+        => _inspectors.TryGetValue(section, out ISectionInspector? inspector)
+            ? inspector.Describe(name, context)
+            : DescribeLegacy(section, name, context);
+
+    /// <summary>The rendering switch for the sections still owned by the tool.</summary>
+    private Result<string> DescribeLegacy(Section section, string? name, ToolContext context) => section switch
     {
         Section.Overview => Result.Success(BuildOverview(context)),
         Section.Tools => BuildTools(name, context),
         Section.Agents => BuildAgents(name),
-        Section.Providers => BuildProviders(name),
         Section.Skills => BuildSkills(name, context),
         Section.Plugins => BuildPlugins(name),
         Section.Versions => Result.Success(BuildVersions()),
@@ -385,74 +402,6 @@ public sealed partial class InspectTool : ITool
         if (!string.IsNullOrWhiteSpace(agent.SystemPromptAppend))
         {
             sb.Append("prompt append: ").Append(Truncate(agent.SystemPromptAppend, MaxDescriptionChars)).Append('\n');
-        }
-
-        return sb.ToString();
-    }
-
-    private Result<string> BuildProviders(string? name)
-    {
-        IReadOnlyList<ProviderId> registered = _providers.GetRegisteredProviderIds();
-        IReadOnlyList<RuntimeProviderEntry> known = _facts.KnownProviders;
-
-        if (name is not null)
-        {
-            foreach (RuntimeProviderEntry entry in known)
-            {
-                if (string.Equals(entry.Id, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Result.Success(BuildProviderDetail(entry, IsRegistered(registered, entry.Id)));
-                }
-            }
-
-            foreach (ProviderId id in registered)
-            {
-                if (string.Equals(id.Value, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Result.Success(BuildProviderDetail(
-                        new RuntimeProviderEntry(id.Value, id.Value, string.Empty, false, null),
-                        true));
-                }
-            }
-
-            return Result.Failure<string>(
-                $"No provider named '{name}'. Known providers: {Names(known.Select(p => p.Id))}.");
-        }
-
-        var sb = new StringBuilder();
-        sb.Append("providers: ").Append(known.Count).Append(" known, ").Append(registered.Count).Append(" registered\n");
-        foreach (RuntimeProviderEntry entry in known)
-        {
-            sb.Append(entry.Id);
-            sb.Append(" | ").Append(entry.DisplayName);
-            if (!string.IsNullOrWhiteSpace(entry.DefaultModel))
-            {
-                sb.Append(" | default model ").Append(entry.DefaultModel);
-            }
-
-            sb.Append(" | ").Append(entry.RequiresApiKey ? "api key required" : "no api key");
-            sb.Append(" | ").Append(IsRegistered(registered, entry.Id) ? "registered" : "not registered");
-            sb.Append('\n');
-        }
-
-        return Result.Success(sb.ToString());
-    }
-
-    private string BuildProviderDetail(RuntimeProviderEntry entry, bool registered)
-    {
-        var sb = new StringBuilder();
-        sb.Append("provider ").Append(entry.Id).Append('\n');
-        sb.Append("display: ").Append(entry.DisplayName).Append('\n');
-        if (!string.IsNullOrWhiteSpace(entry.DefaultModel))
-        {
-            sb.Append("default model: ").Append(entry.DefaultModel).Append('\n');
-        }
-
-        sb.Append("credential: ").Append(entry.RequiresApiKey ? "an api key is required" : "none required").Append('\n');
-        sb.Append("registered: ").Append(registered ? "yes" : "no").Append('\n');
-        if (!string.IsNullOrWhiteSpace(entry.SetupHint))
-        {
-            sb.Append("setup: ").Append(entry.SetupHint).Append('\n');
         }
 
         return sb.ToString();
@@ -809,19 +758,6 @@ public sealed partial class InspectTool : ITool
         sb.Append(" | model ").Append(agent.ProviderId).Append('/').Append(agent.Model);
     }
 
-    private static bool IsRegistered(IReadOnlyList<ProviderId> registered, string id)
-    {
-        foreach (ProviderId provider in registered)
-        {
-            if (string.Equals(provider.Value, id, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static string DescribeBudget(RunBudgetCaps? budget)
     {
         if (budget is null)
@@ -873,7 +809,8 @@ public sealed partial class InspectTool : ITool
         return collapsed.Length <= max ? collapsed : collapsed[..max].TrimEnd() + "...";
     }
 
-    private static string Names(IEnumerable<string> names)
+    /// <summary>Shared name-list formatting, also used by the section inspectors.</summary>
+    internal static string Names(IEnumerable<string> names)
     {
         List<string> all = names.ToList();
         if (all.Count == 0)
@@ -890,7 +827,7 @@ public sealed partial class InspectTool : ITool
     }
 
     /// <summary>The sections the catalog answers for.</summary>
-    private enum Section
+    internal enum Section
     {
         /// <summary>One screen: what this runtime has and how to ask for the rest.</summary>
         Overview,
