@@ -169,11 +169,21 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             IReadOnlyList<ToolDescriptor> tools = IsSortedByToolName(context.Tools)
                 ? context.Tools
                 : SortedToolsCopy(context.Tools);
+            // #2678 item 93: a small-context model gets the one-line summary only.
+            // The full schemas still arrive as API tool definitions, so dropping
+            // the guideline bullets loses no callable information — only guidance
+            // that would otherwise consume scarce context-window budget.
+            bool compactTools = context.Model.ContextWindow < CompactToolListContextWindow;
             for (int i = 0; i < tools.Count; i++)
             {
                 ToolDescriptor tool = tools[i];
                 builder.Append("- `").Append(tool.Name.Value).Append("`: ")
                     .AppendLine(tool.PromptSnippet ?? tool.Description);
+
+                if (compactTools)
+                {
+                    continue;
+                }
 
                 if (tool.PromptGuidelines.Count > 0)
                 {
@@ -458,6 +468,25 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         if (OperatingSystem.IsLinux()) return "linux";
         return RuntimeInformation.OSDescription;
     }
+
+    /// <summary>
+    ///     Models with a context window below this budget get a compact tool list:
+    ///     one <c>name: description</c> line per tool and no per-tool guideline
+    ///     bullets. On a small window those bullets crowd out the conversation the
+    ///     model has to reason over, and the full parameter schemas travel in the
+    ///     API tool definitions anyway, so the guidelines are the only part of the
+    ///     tool section that can be dropped without losing callable information.
+    /// </summary>
+    /// <remarks>
+    ///     #2678 item 93. Named so the bound that decides what the model reads is
+    ///     held by a test (<c>PromptSectionPolicyRule</c> forbids a bare literal
+    ///     here) and so the cache can key the render that depends on it. Declared
+    ///     below the prompt assembly (rather than beside the other constants) so
+    ///     a historical `file:line` citation into the Environment section keeps
+    ///     resolving to the same line — the check-doc-cites gate anchors on the
+    ///     line number, not on content.
+    /// </remarks>
+    public const int CompactToolListContextWindow = 32_000;
 }
 
 /// <summary>

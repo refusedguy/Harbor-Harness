@@ -108,6 +108,36 @@ public class CachingSystemPromptBuilderTests
         await Assert.That(inner.BuildCalls).IsEqualTo(2);
     }
 
+    /// <summary>
+    ///     #2678 item 93: the tool section renders compact below
+    ///     <see cref="SystemPromptBuilder.CompactToolListContextWindow" />. A
+    ///     cache key that held only the model's provider and id would serve the
+    ///     large-window prompt to the small-window model with no miss, so this
+    ///     context member must move the key.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_ContextWindowChange_RebuildsPrompt()
+    {
+        var inner = new CountingPromptBuilder();
+        var caching = new CachingSystemPromptBuilder(inner);
+
+        _ = await caching.BuildAsync(Context());
+        var smallWindow = TestModel with { ContextWindow = SystemPromptBuilder.CompactToolListContextWindow - 1 };
+        var otherContext = new SystemPromptContext(
+            TestAgents.AllowAll(),
+            smallWindow,
+            Array.Empty<ToolDescriptor>(),
+            Array.Empty<ContextFile>(),
+            Array.Empty<SkillDescriptor>(),
+            null,
+            WorkDir);
+        _ = await caching.BuildAsync(otherContext);
+
+        await Assert.That(inner.BuildCalls).IsEqualTo(2)
+            .Because("the two contexts differ only in ContextWindow, which decides whether the tool "
+                   + "list is compact; a shared cache entry would serve the wrong prompt");
+    }
+
     [Test]
     public async Task RunAsync_TwoTurnRunWithSameTools_PromptBuiltOnce()
     {

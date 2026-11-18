@@ -38,9 +38,10 @@ public class SystemPromptBuilderTests
     private static SystemPromptContext Context(
         AgentDefinition agent,
         IReadOnlyList<ToolDescriptor> tools,
-        string workingDirectory = "~/.cache/harbor-tests") => new(
+        string workingDirectory = "~/.cache/harbor-tests",
+        ModelInfo? model = null) => new(
         agent,
-        TestModel,
+        model ?? TestModel,
         tools,
         Array.Empty<ContextFile>(),
         Array.Empty<SkillDescriptor>(),
@@ -258,6 +259,49 @@ public class SystemPromptBuilderTests
             .Because("the boundary is a policy about what the model reads, so it is pinned from BOTH "
                    + "sides: a guideline exactly at the ceiling is kept and one character past it is "
                    + "dropped. A single 'long ones are dropped' assertion would pass for any threshold");
+    }
+
+    /// <summary>
+    ///     #2678 item 93: a model whose context window cannot afford the
+    ///     guideline bullets still gets the one-line tool summary (the full
+    ///     schemas arrive separately as API tool definitions). The compact path
+    ///     must keep the name and description — dropping those would remove the
+    ///     model's only signal that the tool exists.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_SmallContextWindow_UsesCompactToolList()
+    {
+        var builder = new SystemPromptBuilder();
+        var smallModel = TestModel with { ContextWindow = SystemPromptBuilder.CompactToolListContextWindow - 1 };
+        var tool = Tool("read", "Read a file", "read: Read a file from disk", "guideline one", "guideline two");
+        var ctx = Context(Agent(), new[] { tool }, model: smallModel);
+
+        string prompt = await builder.BuildAsync(ctx);
+
+        await Assert.That(prompt).Contains("## Available Tools");
+        await Assert.That(prompt).Contains("read: Read a file from disk");
+        await Assert.That(prompt.Contains("guideline one")).IsFalse();
+        await Assert.That(prompt.Contains("guideline two")).IsFalse();
+    }
+
+    /// <summary>
+    ///     The compact path is strictly BELOW the threshold. Pinning the boundary
+    ///     from this side stops a single "small models are compact" assertion
+    ///     from passing when the comparison is written as <c>&lt;=</c> by mistake
+    ///     and a model exactly at the budget loses its guidelines.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_ContextWindowAtThreshold_KeepsGuidelines()
+    {
+        var builder = new SystemPromptBuilder();
+        var atThreshold = TestModel with { ContextWindow = SystemPromptBuilder.CompactToolListContextWindow };
+        var tool = Tool("read", "Read a file", "read: Read a file from disk", "guideline one");
+        var ctx = Context(Agent(), new[] { tool }, model: atThreshold);
+
+        string prompt = await builder.BuildAsync(ctx);
+
+        await Assert.That(prompt).Contains("guideline one")
+            .Because("the threshold model still has the full 32k budget, so the full tool list is kept");
     }
 
     [Test]
