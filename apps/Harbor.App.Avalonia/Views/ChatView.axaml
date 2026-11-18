@@ -257,14 +257,19 @@
                         Command="{Binding SendCommand}"
                         Margin="8,0,0,0"
                         Padding="20,12"
-                        VerticalAlignment="Bottom" />
+                        VerticalAlignment="Bottom"
+                        IsVisible="{Binding !IsAgentRunning}" />
+                <!-- G08: Stop must stay available for the whole agent run, not
+                     just the thinking phase. Binding it to IsThinking left a
+                     streaming reply impossible to abort from the chat input.
+                     Matches ComposerView, which already uses IsAgentRunning. -->
                 <Button Grid.Column="1" Classes="Secondary" Content="Stop ■"
                         AutomationProperties.Name="Stop generation"
                         Command="{Binding StopCommand}"
                         Margin="8,0,0,0"
                         Padding="16,12"
                         VerticalAlignment="Bottom"
-                        IsVisible="{Binding IsThinking}" />
+                        IsVisible="{Binding IsAgentRunning}" />
             </Grid>
             <!-- C3: kbd chips replace the long instructional placeholder. -->
             <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,6,0,0">
