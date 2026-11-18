@@ -2,8 +2,8 @@ using Harbor.Abstractions.Permissions;
 namespace Harbor.Abstractions.Tests;
 /// <summary>
 ///     #195 (immutability batch): the process-wide glob-regex cache is bounded
-///     (LRU eviction) and replaceable via
-///     <see cref="PermissionRule.RegexCacheProvider" />.
+///     (LRU eviction) and settable once at startup via
+///     <see cref="PermissionRule.RegexCacheProvider" />, then frozen at first use.
 /// </summary>
 public class PatternRegexCacheTests
 {
@@ -55,21 +55,29 @@ public class PatternRegexCacheTests
     }
 
     [Test]
-    public async Task RegexCacheProvider_IsInjectable_AndRestorable()
+    public async Task RegexCacheProvider_IsProcessWide_AndFrozenAfterFirstUse()
     {
-        var original = PermissionRule.RegexCacheProvider;
+        var cache = PermissionRule.RegexCacheProvider;
+        var rule = new PermissionRule("read", "src/*", PermissionAction.Allow);
+        await Assert.That(rule.MatchesPattern("src/a.cs")).IsTrue();
+
+        // Matching compiled into the one process-wide cache, and the getter
+        // keeps returning that same instance.
+        await Assert.That(cache.Count >= 1).IsTrue();
+        await Assert.That(ReferenceEquals(PermissionRule.RegexCacheProvider, cache)).IsTrue();
+
+        // Runtime replacement is forbidden: no caller can change the matching
+        // style of agents that are already running in this process.
+        bool threw = false;
         try
         {
-            var custom = new BoundedPatternRegexCache(8);
-            PermissionRule.RegexCacheProvider = custom;
-
-            var rule = new PermissionRule("read", "src/*", PermissionAction.Allow);
-            await Assert.That(rule.MatchesPattern("src/a.cs")).IsTrue();
-            await Assert.That(custom.Count >= 1).IsTrue();
+            PermissionRule.RegexCacheProvider = new BoundedPatternRegexCache(8);
         }
-        finally
+        catch (InvalidOperationException)
         {
-            PermissionRule.RegexCacheProvider = original;
+            threw = true;
         }
+
+        await Assert.That(threw).IsTrue();
     }
 }
