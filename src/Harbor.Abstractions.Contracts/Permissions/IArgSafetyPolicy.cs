@@ -118,8 +118,11 @@ public sealed class BashSafetyPolicy : IArgSafetyPolicy
 ///     traversal escapes (<c>src/*</c> matching <c>src/../../../etc/passwd</c>), and
 ///     absolute paths carry no workspace-relative meaning, so non-literal Allow rules
 ///     are skipped and the decision falls through to Ask (or an earlier matching Deny).
-///     Only an exact literal rule pattern (no glob metacharacters) may still allow such
-///     an argument — it can only match that one string.
+///     The same treatment applies to dotenv files (<c>.env</c>, <c>.env.local</c>, …):
+///     a broad read Allow must not disclose them, while <c>.env.example</c> is the
+///     documented template exception. Only an exact literal rule pattern (no glob
+///     metacharacters) may still allow such an argument. It can match only that one
+///     string.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -188,7 +191,25 @@ public sealed class PathGuardSafetyPolicy : IArgSafetyPolicy
 
     /// <inheritdoc />
     public bool SuppressAllow(string rulePattern, string argPath) =>
-        HasUnsafePathShape(argPath) && !IsLiteralPattern(rulePattern);
+        (HasUnsafePathShape(argPath) || IsSensitiveEnvPath(argPath)) && !IsLiteralPattern(rulePattern);
+
+    /// <summary>
+    ///     F019: returns <see langword="true" /> when the file name of
+    ///     <paramref name="argPath" /> is <c>.env</c> or one of its variants
+    ///     (<c>.env.local</c>, <c>.env.production</c>, …), on either separator style.
+    ///     <c>.env.example</c> is a template, not a secret, and stays allowed.
+    /// </summary>
+    private static bool IsSensitiveEnvPath(string argPath)
+    {
+        if (argPath.Length == 0) return false;
+
+        int slash = Math.Max(argPath.LastIndexOf('/'), argPath.LastIndexOf('\\'));
+        ReadOnlySpan<char> name = slash >= 0 ? argPath.AsSpan(slash + 1) : argPath.AsSpan();
+
+        if (name.Equals(".env.example".AsSpan(), StringComparison.OrdinalIgnoreCase)) return false;
+        return name.Equals(".env".AsSpan(), StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith(".env.".AsSpan(), StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     ///     Returns <see langword="true" /> when <paramref name="argPath" /> either contains a
