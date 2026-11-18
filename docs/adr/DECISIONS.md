@@ -1377,3 +1377,27 @@ OPEN как источник сравнения; комментарий соде
 
 - Полный текст, таблица по пяти влитым item и список нереализованных:
   [ADR-055](ADR-055-desktop-ux-gaps-part2-report-verdict.md).
+
+## ADR-056: отчёт testing-qa-gaps part 2/2 (#2705) — одного общего slice нет
+
+Issue #2705 — self-contained отчёт `testing-qa-gaps` part 2/2 с пунктами X01 и
+X02, десятью «формулировками issue» и итоговой таблицей на 57 идей. Проверка
+`origin/dev` (`e5656566`), комментарии issue, `gh pr list --search 2705` и
+`docs/adr/DECISIONS.md` показали три влитых item с прямой меткой `#2705`: T03
+единый seed (#2776, `6633f102`), T04 детерминированный event drain (#2912,
+`3cefd7cd`) и T08 fault injection в `MockLlmServer` (#2904, `8ae547fb`). Все
+merge commit подтверждены как предки `origin/dev`.
+
+Decided: код не писать. Три влитых item не перевыводятся, остальные не
+объединяются в meta-PR. P02 и X01 прямо помечены в отчёте как `ЕСТЬ`; соседние
+срезы part 1/2 (#2704) закрывают fake time, seeded JSONL fuzz, культуру и
+event-transcript отдельными PR. Quarantine lane, flake accounting из TRX,
+coverage изменённых строк, отказ от MCP-fallback, авто-pin ChatPalette и X02
+(категории `fast`/`ui`/`flaky`) требуют владельца, CI-поверхности и измеримой
+цели. Гейты, пороги, golden и AOT-профиль не меняются. Issue остаётся OPEN как
+источник сравнения; комментарий содержит только хеш коммита ADR. Пересмотр — по
+новому факту: владелец называет конкретный item, потребителя и измеримую цель.
+Соседний part 1/2 (#2704) покрыт своими slices и этим решением не перевыводится.
+
+- Полный текст, таблица по трём влитым item и список нереализованных:
+  [ADR-056](ADR-056-testing-qa-part2-report-verdict.md).
