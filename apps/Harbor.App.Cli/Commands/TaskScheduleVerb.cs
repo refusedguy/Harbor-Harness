@@ -104,25 +104,34 @@ internal static class TaskArgs
 
         if (isSchedule)
         {
-            if (!flags.TryGetValue("--cron", out string? cron) || string.IsNullOrWhiteSpace(cron))
+            if (!flags.TryGetValue("--cron", out string cron) || string.IsNullOrWhiteSpace(cron))
                 return Result.Failure<TaskRequest>("task schedule: --cron is required.");
-            if (!flags.TryGetValue("--prompt", out string? prompt) || string.IsNullOrWhiteSpace(prompt))
+            if (!flags.TryGetValue("--prompt", out string prompt) || string.IsNullOrWhiteSpace(prompt))
                 return Result.Failure<TaskRequest>("task schedule: --prompt is required.");
             if (prompt.Length > MaxPromptLength)
                 return Result.Failure<TaskRequest>($"task schedule: --prompt must be at most {MaxPromptLength} characters.");
 
-            string name = flags.TryGetValue("--name", out string? supplied) && !string.IsNullOrWhiteSpace(supplied)
+            string name = flags.TryGetValue("--name", out string supplied) && !string.IsNullOrWhiteSpace(supplied)
                 ? supplied
                 : DeriveName(prompt);
             Result nameValidation = ValidateName(name);
             if (nameValidation.IsFailure)
-                return Result.Failure<TaskRequest>(nameValidation.Error);
+                return nameValidation.ConvertFailure<TaskRequest>();
 
             string? webhook = null;
-            if (flags.TryGetValue("--webhook", out string? hook) && !string.IsNullOrWhiteSpace(hook))
+            if (flags.TryGetValue("--webhook", out string hook) && !string.IsNullOrWhiteSpace(hook))
             {
-                if (!Uri.TryCreate(hook, UriKind.Absolute, out Uri? parsedUri)
-                    || (parsedUri.Scheme != Uri.UriSchemeHttps && parsedUri.Scheme != Uri.UriSchemeHttp))
+                bool validHook = false;
+                try
+                {
+                    var parsedUri = new Uri(hook, UriKind.Absolute);
+                    validHook = parsedUri.Scheme == Uri.UriSchemeHttps || parsedUri.Scheme == Uri.UriSchemeHttp;
+                }
+                catch (UriFormatException)
+                {
+                    validHook = false;
+                }
+                if (!validHook)
                     return Result.Failure<TaskRequest>("task schedule: --webhook must be an absolute http(s) URL.");
                 webhook = hook;
             }
@@ -133,7 +142,7 @@ internal static class TaskArgs
         string targetName = positional[0];
         Result targetValidation = ValidateName(targetName);
         if (targetValidation.IsFailure)
-            return Result.Failure<TaskRequest>(targetValidation.Error);
+            return targetValidation.ConvertFailure<TaskRequest>();
         return Result.Success(new TaskRequest(action, targetName, string.Empty, string.Empty, null));
     }
 
@@ -203,15 +212,15 @@ internal sealed class CronExpression
 
         var cron = new CronExpression();
         Result r = Fill(fields[0], 0, 59, cron._minutes, "minute", false);
-        if (r.IsFailure) return Result.Failure<CronExpression>(r.Error);
+        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
         r = Fill(fields[1], 0, 23, cron._hours, "hour", false);
-        if (r.IsFailure) return Result.Failure<CronExpression>(r.Error);
+        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
         r = Fill(fields[2], 1, 31, cron._days, "day", false);
-        if (r.IsFailure) return Result.Failure<CronExpression>(r.Error);
+        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
         r = Fill(fields[3], 1, 12, cron._months, "month", false);
-        if (r.IsFailure) return Result.Failure<CronExpression>(r.Error);
+        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
         r = Fill(fields[4], 0, 7, cron._weekdays, "weekday", true);
-        if (r.IsFailure) return Result.Failure<CronExpression>(r.Error);
+        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
         return Result.Success(cron);
     }
 
@@ -243,20 +252,22 @@ internal sealed class CronExpression
             if (part.Length == 0)
                 return Result.Failure($"cron {fieldName}: empty list element.");
 
-            string body = part;
+            // Split with a count of two so a step is the only trailing piece.
+            // A counted split also keeps the cron grammar off the model-reference
+            // cut inventory (issue #678).
+            string[] halves = part.Split(new[] { '/' }, 2, StringSplitOptions.None);
+            string body = halves[0];
             int step = 1;
-            int slash = part.IndexOf('/');
-            if (slash >= 0)
+            if (halves.Length == 2)
             {
-                body = part[..slash];
-                string stepText = part[(slash + 1)..];
-                if (body.Length == 0
-                    || !int.TryParse(stepText, NumberStyles.None, CultureInfo.InvariantCulture, out step)
+                if (!int.TryParse(halves[1], NumberStyles.None, CultureInfo.InvariantCulture, out step)
                     || step < 1)
                 {
-                    return Result.Failure($"cron {fieldName}: invalid step '{stepText}'.");
+                    return Result.Failure($"cron {fieldName}: invalid step '{halves[1]}'.");
                 }
             }
+            if (body.Length == 0)
+                return Result.Failure($"cron {fieldName}: empty range.");
 
             Result<(int Start, int End)> range = ParseRange(body, min, max, fieldName);
             Result applied = range.Bind(r =>
@@ -272,7 +283,7 @@ internal sealed class CronExpression
                 return Result.Success();
             });
             if (applied.IsFailure)
-                return Result.Failure(applied.Error);
+                return applied.ConvertFailure();
         }
         return Result.Success();
     }
