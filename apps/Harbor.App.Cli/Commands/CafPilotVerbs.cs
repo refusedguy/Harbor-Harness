@@ -86,6 +86,9 @@ internal static class CafPilotVerbs
         app.Add("dsl check", DslDevCommands.Check);
         app.Add("dsl types", DslDevCommands.Types);
         app.Add("dsl reload", DslDevCommands.Reload);
+        // #2437: the dev-log producer and its reader, behind the same flag.
+        app.Add("dsl watch", DslDevCommands.Watch);
+        app.Add("dsl devlog", DslDevCommands.Devlog);
 #endif
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;

@@ -91,6 +91,14 @@ The parser depends only on the BCL and `Harbor.Abstractions.Contracts`. It holds
 
 The interpreter lives in this build-time tooling assembly, not in the runtime. The CLI references this assembly only with `HarborWithDslDev=true`; an AOT publish switches that flag and the `HARBOR_WITH_DSL_DEV` symbol off together, so no dev-interpreter code, JIT, Roslyn compilation or Subsecond engine reaches the AOT binary. The `harbor dsl reload <before> [<after>]` verb drives it interactively, behind the same dev-only symbol.
 
+## Dev log channel (#2437)
+
+`DevReload.DevLogChannel` is the diagnostic channel for the markup dev tools. A producer writes one short record (UTC time, source, message) to a bounded in-memory tail and to an append-only JSONL file. Neither the channel nor its producers touch `IEventBus`, an `ILogger` provider or a renderer, so a watcher or interpreter write cannot mark a frame dirty or paint into the CellForge cell grid.
+
+`DslDevFileWatcher` polls a `.harbor-ui` file at 250 ms with a 200 ms debounce and calls the shared interpreter. Both the watcher and `DevReloadInterpreter.Reload` write to the channel; a rejected edit leaves the live tree, and therefore the screen's last valid frame, untouched. A file write failure is contained and the in-memory tail keeps the record.
+
+`harbor dsl watch <file> [--devlog <path>]` starts the producer and writes nothing to the console. `harbor dsl devlog [--devlog <path>] [--count <N>]` is the separate reader and prints the tail to stdout. Both commands are behind `HARBOR_WITH_DSL_DEV`, and the channel, watcher and interpreter all live in this tooling assembly, which the CLI references only when `HarborWithDslDev=true`. An AOT publish switches the flag off, so the channel is not in the AOT binary.
+
 ## Dependencies
 
 - `Microsoft.CodeAnalysis.CSharp` (private) - the compiler API the generator is compiled against.
