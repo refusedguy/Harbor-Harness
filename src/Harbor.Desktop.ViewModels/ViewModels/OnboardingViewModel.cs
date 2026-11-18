@@ -453,6 +453,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException)
         {
+            OnboardingViewModelLog.ConnectionTestCancelled(_logger, providerId);
             ConnectionStatus = "Connection test cancelled.";
         }
         catch (Exception ex)
@@ -525,6 +526,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException)
         {
+            OnboardingViewModelLog.ModelListFetchCancelled(_logger, providerId);
             SetFreeTextFallback("Model list fetch cancelled/timed out.");
         }
         catch (Exception ex)
@@ -613,4 +615,18 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
             IsBusy = false;
         }
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OnboardingViewModel" />.
+///     Internal so the public API freeze stays untouched. Cancellations are
+///     expected, so they stay at Debug; the user already sees the status text.
+/// </summary>
+internal static partial class OnboardingViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Connection test cancelled for {Provider}")]
+    public static partial void ConnectionTestCancelled(ILogger logger, string provider);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Live model list fetch cancelled for {Provider}")]
+    public static partial void ModelListFetchCancelled(ILogger logger, string provider);
 }

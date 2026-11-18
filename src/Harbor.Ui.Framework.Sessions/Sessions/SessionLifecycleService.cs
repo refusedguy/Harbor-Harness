@@ -77,7 +77,11 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         if (_router.ActiveContext is not null) return;
 
         var createResult = await _factory.CreateDefaultAsync().ConfigureAwait(false);
-        if (createResult.IsFailure) return;
+        if (createResult.IsFailure)
+        {
+            SessionLog.DefaultCreateFailed(_logger, createResult.Error);
+            return;
+        }
 
         var session = createResult.Value;
 
@@ -87,7 +91,11 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         _status.SetStatus(session.Id, SessionStatus.Idle);
         RebindChatViewModel(ctx);
 
-        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return;
+        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false))
+        {
+            SessionLog.DefaultOpenFailed(_logger, session.Id);
+            return;
+        }
         ctx.StoreWasHydrated = true;
     }
 
@@ -143,7 +151,11 @@ public sealed class SessionLifecycleService : ISessionLifecycle
     public async Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
     {
         var createResult = await _factory.CreateNewAsync(agentName, providerId, modelId, workingDirectory).ConfigureAwait(false);
-        if (createResult.IsFailure) return createResult;
+        if (createResult.IsFailure)
+        {
+            SessionLog.NewCreateFailed(_logger, createResult.Error);
+            return createResult;
+        }
 
         var session = createResult.Value;
         var ctx = _router.GetOrCreateContext(session);
@@ -154,6 +166,7 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false))
         {
             _status.SetStatus(session.Id, SessionStatus.Error);
+            SessionLog.NewOpenFailed(_logger, session.Id);
             return Result.Failure<Session>($"Session '{session.Id}' was created but could not be opened.");
         }
         ctx.StoreWasHydrated = true;
@@ -180,7 +193,11 @@ public sealed class SessionLifecycleService : ISessionLifecycle
 
         if (!ctx.StoreWasHydrated)
         {
-            if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return false;
+            if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false))
+            {
+                SessionLog.SwitchFailed(_logger, session.Id);
+                return false;
+            }
             ctx.StoreWasHydrated = true;
         }
         else
@@ -208,6 +225,10 @@ public sealed class SessionLifecycleService : ISessionLifecycle
                     lines.Add(new ChatLine(role, text));
                 }
             }
+            else
+            {
+                SessionLog.ReplayFailed(_logger, session.Id, messages.Error);
+            }
 
             // session.Status travels with the hydration — the core's own answer
             // for this session, not one re-derived from the replayed lines (#687).
@@ -230,13 +251,22 @@ public sealed class SessionLifecycleService : ISessionLifecycle
     /// <returns>The new active branch, or a failure carrying the cause.</returns>
     public async Task<Result<Session>> BranchActiveAsync()
     {
-        if (_router.ActiveContext is null) return Result.Failure<Session>("No active session to branch.");
+        if (_router.ActiveContext is null)
+        {
+            SessionLog.BranchNoActive(_logger);
+            return Result.Failure<Session>("No active session to branch.");
+        }
         var branchResult = await _factory.CreateBranchAsync(_router.ActiveContext.Session).ConfigureAwait(false);
-        if (branchResult.IsFailure) return branchResult;
+        if (branchResult.IsFailure)
+        {
+            SessionLog.BranchCreateFailed(_logger, branchResult.Error);
+            return branchResult;
+        }
         var branch = branchResult.Value;
         if (!await OpenSessionAsync(branch.Id).ConfigureAwait(false))
         {
             _status.SetStatus(branch.Id, SessionStatus.Error);
+            SessionLog.BranchOpenFailed(_logger, branch.Id);
             return Result.Failure<Session>($"Branch '{branch.Id}' was created but could not be opened.");
         }
         return Result.Success(branch);
@@ -265,10 +295,14 @@ public sealed class SessionLifecycleService : ISessionLifecycle
             var list = await _sessionStore.ListAsync().ConfigureAwait(false);
             if (list.IsSuccess && list.Value.Count > 0)
             {
-                await OpenSessionAsync(list.Value[0].Id).ConfigureAwait(false);
+                string fallbackId = list.Value[0].Id;
+                if (!await OpenSessionAsync(fallbackId).ConfigureAwait(false))
+                    SessionLog.DeleteFallbackOpenFailed(_logger, fallbackId);
             }
             else
             {
+                if (list.IsFailure)
+                    SessionLog.DeleteFallbackListFailed(_logger, sessionId, list.Error);
                 await EnsureDefaultSessionAsync().ConfigureAwait(false);
             }
         }
