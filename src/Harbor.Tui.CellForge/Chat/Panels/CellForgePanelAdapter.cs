@@ -28,7 +28,7 @@ namespace Harbor.Tui.CellForge.Panels;
 public static class CellForgePanelAdapter
 {
     private static readonly object _decoderGate = new();
-    private static IReadOnlyList<IPanelWidgetDecoder> _decoders = Defaults();
+    private static volatile IReadOnlyList<IPanelWidgetDecoder> _decoders = Defaults();
 
     private static IReadOnlyList<IPanelWidgetDecoder> Defaults() =>
     [
