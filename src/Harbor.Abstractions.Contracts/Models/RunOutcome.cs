@@ -250,6 +250,34 @@ public sealed record RunOutcome(
     RunLimitKind? Limit = null)
 {
     /// <summary>
+    ///     The acceptance axis of the run result (epic #41, slice B1.2).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Additive, not a constructor change.</b> This is a property
+    ///         with an initializer in the record body, not a primary
+    ///         constructor parameter. The ten-argument constructor and the
+    ///         generated <c>Deconstruct</c> signature stay byte-identical, so
+    ///         every caller written before this axis keeps compiling and
+    ///         <see cref="StopReason" /> remains the single execution path.
+    ///     </para>
+    ///     <para>
+    ///         <b>Why the initializer is <see cref="RunAcceptance.NotOffered" />.</b>
+    ///         An outcome built by a caller that has no acceptance channel did
+    ///         not offer a change to accept. Defaulting to
+    ///         <see cref="RunAcceptance.Pending" /> would claim a decision is
+    ///         expected for a run that may never have produced a change, and
+    ///         defaulting to <see cref="RunAcceptance.Rejected" /> would invent
+    ///         a decision nobody made. Acceptance arrives after the run, so a
+    ///         late decision is applied with a <c>with</c> expression; the
+    ///         stored outcome is a point-in-time view and is never re-derived
+    ///         from <see cref="MessageIds" />, which carry no accept/reject
+    ///         kind.
+    ///     </para>
+    /// </remarks>
+    public RunAcceptance Acceptance { get; init; } = RunAcceptance.NotOffered;
+
+    /// <summary>
     ///     Reconstruct a finished run's outcome from the session store's message
     ///     history plus the terminal lifecycle events. Pure function — no I/O.
     /// </summary>
@@ -273,6 +301,64 @@ public sealed record RunOutcome(
             errorMessage: error?.Message,
             limit: end.Limit,
             verification: verification);
+
+    /// <summary>
+    ///     Reconstruct with an explicit acceptance value, leaving the execution
+    ///     and verification axes to the existing mapping. Pure function — no I/O.
+    /// </summary>
+    /// <remarks>
+    ///     Additive overload: the four-argument-through-six-argument forms above
+    ///     are untouched, so callers that predate the acceptance axis still bind
+    ///     to them. <see cref="Acceptance" /> is applied after reconstruction
+    ///     because the store carries no accept/reject fact to derive it from.
+    /// </remarks>
+    /// <param name="runId">The run id minted at run start.</param>
+    /// <param name="sessionId">The owning session id.</param>
+    /// <param name="messages">The run's messages in chronological order.</param>
+    /// <param name="end">The terminal <c>AgentEndEvent</c> of the run.</param>
+    /// <param name="acceptance">The user's decision, supplied by the caller that has it.</param>
+    /// <param name="error">The terminal <c>AgentErrorEvent</c>, when the run errored; otherwise null.</param>
+    /// <param name="verification">The sealed verification evidence for the run; null when the caller has none.</param>
+    /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
+    public static RunOutcome Reconstruct(
+        RunId runId,
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        AgentEndEvent end,
+        RunAcceptance acceptance,
+        AgentErrorEvent? error = null,
+        RunVerificationRecord? verification = null) =>
+        Reconstruct(runId, sessionId, messages, end, error, verification) with { Acceptance = acceptance };
+
+    /// <summary>
+    ///     Reconstruct from terminal stop signals with an explicit acceptance
+    ///     value. Pure function — no I/O.
+    /// </summary>
+    /// <remarks>
+    ///     Additive overload; the existing signal-based form keeps its
+    ///     signature and its defaults. The acceptance value is an input, never
+    ///     a derivation from the message history.
+    /// </remarks>
+    /// <param name="runId">The run id minted at run start.</param>
+    /// <param name="sessionId">The owning session id.</param>
+    /// <param name="messages">The run's messages in chronological order.</param>
+    /// <param name="cancelled">True when the run ended via cancellation.</param>
+    /// <param name="errorMessage">Error text when the run errored; otherwise null.</param>
+    /// <param name="limit">Which limit ended the run; null when none did.</param>
+    /// <param name="verification">The sealed verification evidence; null when the caller has none.</param>
+    /// <param name="acceptance">The user's decision, supplied by the caller that has it.</param>
+    /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
+    public static RunOutcome Reconstruct(
+        RunId runId,
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        bool cancelled,
+        string? errorMessage,
+        RunLimitKind? limit,
+        RunVerificationRecord? verification,
+        RunAcceptance acceptance) =>
+        Reconstruct(runId, sessionId, messages, cancelled, errorMessage, limit, verification)
+            with { Acceptance = acceptance };
 
     /// <summary>
     ///     Reconstruct a finished run's outcome from stored messages and terminal
