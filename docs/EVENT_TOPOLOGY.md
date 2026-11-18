@@ -64,7 +64,7 @@ subscribers (all in-process, each owns its IDisposable — see §6)
   CellForge bridges (one owned handle) ...... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:26
   Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
   DemoCellForgeScreen (demo scene) .......... apps/Harbor.App.Cli/Demo/DemoCellForgeScreen.cs:278
-  TurnChangeOracle (turn summary) ........... src/Harbor.Application/Observability/TurnChangeOracle.cs:133,134,135,136
+  TurnChangeOracle (turn summary) ........... src/Harbor.Application/Observability/TurnChangeOracle.cs:137,138,139,140
 ```
 
 ### 1.1 The rows' criterion
