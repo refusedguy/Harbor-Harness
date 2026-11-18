@@ -20,7 +20,7 @@
               - Default provider — TextBox (ollama / openai / anthropic / …).
               - Default model — TextBox (provider-specific model id).
               - Font family — TextBox (Inter default).
-              - Storage backend — ComboBox (memory / jsonl / sqlite).
+              - Storage backend — ComboBox (memory / jsonl).
               - Log level — ComboBox (trace / debug / info / warning / error).
               - Ollama host — TextBox (URL).
               - Onboarding re-run — button.
@@ -171,11 +171,18 @@
                                  means "not chosen", and the composition preset decides
                                  (CLI jsonl, desktop memory). The old view-model filled this
                                  box with "jsonl" so the preset was unreachable. -->
+                            <!-- #2681 G18: only backends the desktop build can actually
+                                 resolve may be offered here. The sqlite factory in
+                                 SessionStoreRegistry sits behind HARBOR_WITH_ALL_PROVIDERS,
+                                 which the Avalonia csproj does not define; storing "sqlite"
+                                 here made the next composition throw "Unknown
+                                 HARBOR_STORAGE: 'sqlite'" at startup. Adding the factory
+                                 would pull in the full provider/tool set, so the honest
+                                 fix is to drop the unreachable option. -->
                             <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180"
                                       AutomationProperties.Name="Storage backend">
                                 <ComboBoxItem Content="memory" />
                                 <ComboBoxItem Content="jsonl" />
-                                <ComboBoxItem Content="sqlite" />
                             </ComboBox>
                             <TextBlock Text="Leave empty to use the app's default backend."
                                        FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
