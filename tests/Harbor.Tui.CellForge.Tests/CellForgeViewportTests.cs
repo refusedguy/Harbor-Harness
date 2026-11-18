@@ -26,7 +26,7 @@ public class CellForgeViewportTests
             new UiStatusBarModel(Array.Empty<UiStatusSegment>()),
             new UiInputModel(string.Empty, 0, IsEnabled: true, string.Empty),
             FocusMode.Input,
-            "rev");
+            new UiRevisionFingerprint(1, lineCount, IsStreaming: false, TextLength: 0, ThinkLength: 0));
     }
 
     [Test]
