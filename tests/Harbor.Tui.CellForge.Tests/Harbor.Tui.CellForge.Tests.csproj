@@ -21,6 +21,15 @@
     <!-- #462: PaletteCatalogTests derives its expectations from SlashCommandCatalog. -->
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"/>
+    <!--
+      #2425: the markup generator runs over THIS project's sample .harbor-ui.
+      Child-element OutputItemType is the form the repo's reference reader
+      recognises; ReferenceOutputAssembly is left at its default so the driver
+      half of MarkupGeneratorAdditionalTextTests can bind MarkupGenerator.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.CodeGen\Harbor.Tui.CellForge.CodeGen.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
     <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
     <!-- #1772: the shared terminal-backend doubles. The sibling references
          Harbor.Tui.CellForge.Engine only, which this project already has,
@@ -39,6 +48,23 @@
       real-store coverage away from the widget.
     -->
     <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      #2425: the sample reaches the generator as an AdditionalText. MSBuild
+      forwards <TargetPath> as the base64 analyzer option
+      build_metadata.AdditionalFiles.TargetPath; that project-relative path is
+      the incremental cache key, unlike the absolute %(FullPath).
+    -->
+    <AdditionalFiles Include="Fixtures\Sample.harbor-ui">
+      <TargetPath>Fixtures/Sample.harbor-ui</TargetPath>
+    </AdditionalFiles>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Roslyn at test time: the driver half runs the generator in-process. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
   </ItemGroup>
 
   <!--

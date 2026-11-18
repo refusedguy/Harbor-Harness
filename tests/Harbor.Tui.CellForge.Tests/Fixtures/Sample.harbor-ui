@@ -1,0 +1,4 @@
+# The #2425 sample: fed to MarkupGenerator as an AdditionalText.
+# There is no parser yet (#2426); the text only has to reach the pipeline.
+panel "sample":
+    text "Hello from the CellForge markup sample"
