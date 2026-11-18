@@ -21,7 +21,9 @@ namespace Harbor.Application.Hooks;
 ///     <para>
 ///         Hook commands are the user's own (same trust as the <c>bash</c>
 ///         tool): stdin/stdout are piped, stderr is captured for diagnostics,
-///         the environment is inherited.
+///         and the environment is inherited. The inheritance is declared
+///         through <see cref="ProcessLaunchPolicy.InheritedEnvironmentKeys" />
+///         so the allowlist mechanism has one owner (#2595).
 ///     </para>
 ///     <para>
 ///         <b>Two shapes, one runner.</b> The gate loop
@@ -319,6 +321,9 @@ public sealed class HookRunner : IHookRunner
         };
         psi.ArgumentList.Add(OperatingSystem.IsWindows() ? "/c" : "-c");
         psi.ArgumentList.Add(entry.Command);
+        // Hooks inherit the parent environment by design; pass that key list
+        // to the shared allowlist owner rather than leaving psi untouched.
+        ProcessLaunchPolicy.ApplyEnvironment(psi, ProcessLaunchPolicy.InheritedEnvironmentKeys());
 
         using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
         var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
