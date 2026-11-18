@@ -45,36 +45,41 @@ public sealed class SessionSearchFilter
         if (string.IsNullOrWhiteSpace(expression))
             return Result.Success(new SessionSearchFilter([], null));
 
-        Result<List<string>> tokens = Tokenize(expression);
-        if (tokens.IsFailure)
-            return tokens.ConvertFailure<SessionSearchFilter>();
+        // One railway from tokenization to the finished filter: no guard site
+        // can swallow a failure and report a filter that selects everything.
+        return Tokenize(expression)
+            .Bind(static tokens => tokens.Aggregate(
+                Result.Success(new Accumulator()),
+                static (acc, token) => acc.Bind(a => ApplyToken(a, token))))
+            .Map(static acc => new SessionSearchFilter(acc.Criteria, acc.IdSubstring));
+    }
 
-        var criteria = new List<Criterion>();
-        string? idSubstring = null;
-        foreach (string token in tokens.Value)
+    private static Result<Accumulator> ApplyToken(Accumulator acc, string token)
+    {
+        int colon = token.IndexOf(':', StringComparison.Ordinal);
+        if (colon < 0)
         {
-            int colon = token.IndexOf(':', StringComparison.Ordinal);
-            if (colon < 0)
-            {
-                if (idSubstring is not null)
-                    return Result.Failure<SessionSearchFilter>(
-                        $"Ambiguous session-id filter: '{idSubstring}' and '{token}'. Use id: for each value.");
-                idSubstring = token;
-                continue;
-            }
-
-            string key = token[..colon].ToLowerInvariant();
-            string value = token[(colon + 1)..];
-            if (value.Length == 0)
-                return Result.Failure<SessionSearchFilter>($"Filter '{key}:' needs a value.");
-
-            Result<Criterion> criterion = Criterion.Create(key, value);
-            if (criterion.IsFailure)
-                return criterion.ConvertFailure<SessionSearchFilter>();
-            criteria.Add(criterion.Value);
+            if (acc.IdSubstring is not null)
+                return Result.Failure<Accumulator>(
+                    $"Ambiguous session-id filter: '{acc.IdSubstring}' and '{token}'. Use id: for each value.");
+            acc.IdSubstring = token;
+            return Result.Success(acc);
         }
 
-        return Result.Success(new SessionSearchFilter(criteria, idSubstring));
+        string key = token[..colon].ToLowerInvariant();
+        string value = token[(colon + 1)..];
+        if (value.Length == 0)
+            return Result.Failure<Accumulator>($"Filter '{key}:' needs a value.");
+
+        return Criterion.Create(key, value)
+            .Tap(criterion => acc.Criteria.Add(criterion))
+            .Map(_ => acc);
+    }
+
+    private sealed class Accumulator
+    {
+        public List<Criterion> Criteria { get; } = [];
+        public string? IdSubstring { get; set; }
     }
 
     /// <summary>True when <paramref name="session"/> satisfies every criterion.</summary>
