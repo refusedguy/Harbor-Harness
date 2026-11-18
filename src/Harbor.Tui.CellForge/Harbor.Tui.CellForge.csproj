@@ -49,6 +49,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- #2457: the CellForgeRenderContext [LoggerMessage] delegates need the
+         Logging.Abstractions source generator in THIS assembly; analyzers from
+         a ProjectReference's packages do not flow transitively. The types were
+         already used here through Harbor.Terminal.Abstractions, so the package
+         graph does not grow — the generator just becomes visible. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
 

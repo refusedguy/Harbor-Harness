@@ -144,7 +144,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
-        Context = new CellForgeRenderContext();
+        Context = new CellForgeRenderContext(Logger);
     }
 
     /// <summary>Golden-frame test seam. The backend must be an
@@ -176,7 +176,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
-        Context = new CellForgeRenderContext(backend);
+        Context = new CellForgeRenderContext(backend, Logger);
     }
 
     /// <summary>
@@ -449,6 +449,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 public sealed class CellForgeRenderContext : ITuiRenderContext
 {
     private readonly AnsiWriter _writer;
+    private readonly ILogger? _logger;
 
     public CellForgeRenderContext() : this(new StdoutBackend())
     {
@@ -461,9 +462,23 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
     /// <see cref="Flush"/> has nowhere to await, so an async-only backend can
     /// never serve it (issue #468).
     /// </summary>
-    public CellForgeRenderContext(ISyncTerminalBackend backend)
+    public CellForgeRenderContext(ISyncTerminalBackend backend) : this(backend, null)
+    {
+    }
+
+    /// <summary>
+    ///     Internal logging seam: the renderer passes its logger so a failed
+    ///     console-size probe stops being a silent 0×0 fallback. Public
+    ///     constructors keep their signatures (public API freeze).
+    /// </summary>
+    internal CellForgeRenderContext(ILogger? logger) : this(new StdoutBackend(), logger)
+    {
+    }
+
+    internal CellForgeRenderContext(ISyncTerminalBackend backend, ILogger? logger)
     {
         _writer = new AnsiWriter(backend);
+        _logger = logger;
     }
 
     // The writer is NOT exposed (issue #494). A `public AnsiWriter Writer`
@@ -483,8 +498,14 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
             {
                 return Console.WindowWidth;
             }
-            catch
+            catch (Exception ex)
             {
+                // Frame path: Trace + IsEnabled only. Never Info/Warn per cell.
+                if (_logger is { } logger && logger.IsEnabled(LogLevel.Trace))
+                {
+                    CellForgeRenderContextLog.ConsoleSizeUnavailable(logger, ex, "Width");
+                }
+
                 return 0;
             }
         }
@@ -498,8 +519,13 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
             {
                 return Console.WindowHeight;
             }
-            catch
+            catch (Exception ex)
             {
+                if (_logger is { } logger && logger.IsEnabled(LogLevel.Trace))
+                {
+                    CellForgeRenderContextLog.ConsoleSizeUnavailable(logger, ex, "Height");
+                }
+
                 return 0;
             }
         }
@@ -603,4 +629,15 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
         if (style.HasFlag(TuiStyle.Reverse)) attrs |= EngineCells.StyleAttr.Reverse;
         return new EngineCells.CellStyle(color, default, attrs);
     }
+}
+
+/// <summary>
+///     SG: BCL <c>[LoggerMessage]</c> delegates for
+///     <see cref="CellForgeRenderContext" />. Trace only, guarded by
+///     <c>IsEnabled(LogLevel.Trace)</c>: Width/Height are read on the frame path.
+/// </summary>
+internal static partial class CellForgeRenderContextLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Trace, Message = "CellForge console {Dimension} probe failed; using 0")]
+    public static partial void ConsoleSizeUnavailable(ILogger logger, Exception ex, string dimension);
 }
