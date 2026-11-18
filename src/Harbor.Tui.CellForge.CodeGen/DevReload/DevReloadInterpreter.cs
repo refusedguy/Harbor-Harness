@@ -379,7 +379,9 @@ public sealed class DevReloadInterpreter
                 return true;
         }
 
-        return oldNodes.Count != newNodes.Count;
+        // A different node count is a TEMPLATE change, not a logic change. The
+        // template signature already catches it and triggers a plain rebuild.
+        return false;
     }
 
     private static IReadOnlyList<string> LogicValues(SpecNode node)
