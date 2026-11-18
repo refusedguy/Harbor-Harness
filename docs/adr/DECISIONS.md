@@ -836,3 +836,23 @@ Issue [#2694](https://github.com/refusedguy/Harbor-Harness/issues/2694)
 
 - Полное сравнение по пунктам и границы проверки:
   [ADR-028](ADR-028-avalonia-declarative-xaml-dsl-verdict.md).
+## ADR-029: gpui-kit: переносимые паттерны уже в Harbor
+
+Issue [#2701](https://github.com/refusedguy/Harbor-Harness/issues/2701) прислал
+полный отчёт competitor research по gpui-kit (part 1/1). Проверка через
+`gh pr list --search` показала, что все семь переносимых идей отчёта уже влиты
+отдельными PR: приоритет стилей (#2385), типизированные part (#2393), delegate
+для виртуализованных списков (#2387), ключевая идентичность (#2392), normalize
+layout и reconciliation по id (#2388), один handle на viewport (#2391) и время
+жизни подписок (#2390). `StylePriority.cs` прямо ссылается на gpui-kit коммит
+`249a963`, который исследовал отчёт.
+
+Решение: код не писать. Повторная реализация любой идеи создала бы второй
+источник истины там, где отчёт требует одного владельца. Оставшаяся часть
+отчёта описывает GPU-механику, hitboxes, DPI, анимации, AccessKit, IME и
+pointer drag, которых в терминале нет. Отдельно отклонены `actions!` как второй
+keymap, `Entity<State>` вместо `UiStore` и ещё один глобал темы. Issue #2701
+остаётся источником сравнения, пересмотр возможен при новом факте.
+
+- Полный текст, таблица соответствия идей влитым PR и список неприменимого:
+  [ADR-029](ADR-029-gpui-kit-patterns-already-shipped.md).
