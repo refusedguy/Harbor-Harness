@@ -428,7 +428,7 @@ public static class ChangeSetFreezer
             return added.ConvertFailure<StagedDiff>();
         if (added.Value.ExitCode != 0)
             return Result.Failure<StagedDiff>(
-                $"Freeze of run '{runId}' failed at stage 'add': {WorkspaceMaterializer.Clip(added.Value.Stderr)}");
+                $"Freeze of run '{runId}' failed at stage 'add': {StringTruncation.Clip(added.Value.Stderr, WorkspaceMaterializer.MaxStderrInError)}");
 
         Result<IReadOnlyList<NameStatus>> names =
             await DiffNameStatusAsync(worktree, baseRevision, ct).ConfigureAwait(false);
@@ -584,7 +584,7 @@ public static class ChangeSetFreezer
         return (await WorkspaceMaterializer.RunGitAsync(worktree, argv, ProbeTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<string>(
-                    $"Freeze failed at stage 'status': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                    $"Freeze failed at stage 'status': {StringTruncation.Clip(o.Stderr, WorkspaceMaterializer.MaxStderrInError)}")
                 : Result.Success(o.Stdout));
     }
 
@@ -597,7 +597,7 @@ public static class ChangeSetFreezer
                 DiffTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<IReadOnlyList<NameStatus>>(
-                    $"Freeze failed at stage 'inventory': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                    $"Freeze failed at stage 'inventory': {StringTruncation.Clip(o.Stderr, WorkspaceMaterializer.MaxStderrInError)}")
                 : ParseNameStatus(o.Stdout));
     }
 
@@ -663,7 +663,7 @@ public static class ChangeSetFreezer
                 DiffTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<IReadOnlyList<NumStat>>(
-                    $"Freeze failed at stage 'inventory': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                    $"Freeze failed at stage 'inventory': {StringTruncation.Clip(o.Stderr, WorkspaceMaterializer.MaxStderrInError)}")
                 : ParseNumstat(o.Stdout));
     }
 
@@ -728,7 +728,7 @@ public static class ChangeSetFreezer
         return (await WorkspaceMaterializer.RunGitAsync(worktree, argv, DiffTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<byte[]>(
-                    $"Freeze failed at stage 'diff': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                    $"Freeze failed at stage 'diff': {StringTruncation.Clip(o.Stderr, WorkspaceMaterializer.MaxStderrInError)}")
                 : Result.Success(System.Text.Encoding.UTF8.GetBytes(o.Stdout)));
     }
 
@@ -737,7 +737,7 @@ public static class ChangeSetFreezer
         return (await WorkspaceMaterializer.RunGitAsync(worktree, ["rev-parse", "HEAD"], ProbeTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<string>(
-                    $"Freeze failed at stage 'head': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                    $"Freeze failed at stage 'head': {StringTruncation.Clip(o.Stderr, WorkspaceMaterializer.MaxStderrInError)}")
                 : Result.Success(o.Stdout.Trim()))
             .Ensure(head => head.Length > 0, "Freeze failed at stage 'head': git reports an empty HEAD.");
     }
@@ -756,7 +756,7 @@ public static class ChangeSetFreezer
         return await (await WorkspaceMaterializer.RunGitAsync(worktree, argv, CommitTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<WorkspaceMaterializer.GitOutput>(
-                    $"Freeze of run '{runId}' failed at stage 'commit': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                    $"Freeze of run '{runId}' failed at stage 'commit': {StringTruncation.Clip(o.Stderr, WorkspaceMaterializer.MaxStderrInError)}")
                 : Result.Success(o))
             .Bind(_ => RevParseHeadAsync(worktree, ct)).ConfigureAwait(false);
     }

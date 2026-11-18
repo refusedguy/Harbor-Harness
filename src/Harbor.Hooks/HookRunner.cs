@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -452,7 +453,7 @@ public sealed class HookRunner : IHookRunner
             return exitCode == 0
                 ? new HookAttempt(new HookVerdict(HookDecision.Allow, null, null), null, stdout, stderr)
                 : new HookAttempt(null,
-                    $"Hook '{entry.Command}' exited with code {exitCode} and no verdict. Stderr: {Clip(stderr)}",
+                    $"Hook '{entry.Command}' exited with code {exitCode} and no verdict. Stderr: {StringTruncation.Clip(stderr, MaxStderrInReason)}",
                     stdout, stderr);
         }
 
@@ -464,7 +465,7 @@ public sealed class HookRunner : IHookRunner
         catch (JsonException ex)
         {
             return new HookAttempt(null,
-                $"Hook '{entry.Command}' printed invalid verdict JSON: {ex.Message}. Stderr: {Clip(stderr)}",
+                $"Hook '{entry.Command}' printed invalid verdict JSON: {ex.Message}. Stderr: {StringTruncation.Clip(stderr, MaxStderrInReason)}",
                 stdout, stderr);
         }
 
@@ -522,7 +523,7 @@ public sealed class HookRunner : IHookRunner
         }
 
         return new HookAttempt(null,
-            $"Hook '{entry.Command}' returned unknown decision '{dto.Decision}'. Stderr: {Clip(stderr)}",
+            $"Hook '{entry.Command}' returned unknown decision '{dto.Decision}'. Stderr: {StringTruncation.Clip(stderr, MaxStderrInReason)}",
             stdout, stderr);
     }
 
@@ -539,17 +540,6 @@ public sealed class HookRunner : IHookRunner
             // could not be killed.
             HookRunnerLog.HookKillFailed(_logger, ex, command);
         }
-    }
-
-    private static string Clip(string text)
-    {
-        string t = text.Trim();
-        if (t.Length == 0)
-        {
-            return "(no stderr)";
-        }
-
-        return t.Length <= MaxStderrInReason ? t : t[..MaxStderrInReason] + "…";
     }
 
     /// <summary>Outcome of one hook process execution.</summary>

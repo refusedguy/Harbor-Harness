@@ -101,4 +101,40 @@ public class StringTruncationTests
         await Assert.That(body.TruncateWithDropCount(1000, detail: "showing first 1000"))
             .IsEqualTo(new string('z', 1000) + "\n…[truncated 5 chars; showing first 1000]");
     }
+
+    // #2583: Clip replaced four per-assembly copies. These pin the legacy
+    // output byte-for-byte, including the ellipsis sitting beyond the budget.
+
+    [Test]
+    public async Task Clip_TrimsAndPassesThrough()
+    {
+        await Assert.That(StringTruncation.Clip("  abc  ", 5)).IsEqualTo("abc");
+        await Assert.That(StringTruncation.Clip("abc", 3)).IsEqualTo("abc");
+    }
+
+    [Test]
+    public async Task Clip_Blank_NoStderrPlaceholder()
+    {
+        await Assert.That(StringTruncation.Clip("   ", 5)).IsEqualTo("(no stderr)");
+        await Assert.That(StringTruncation.Clip("\n\t", 5)).IsEqualTo("(no stderr)");
+    }
+
+    [Test]
+    public async Task Clip_Over_EllipsisBeyondBudget()
+    {
+        string cut = StringTruncation.Clip("abcdef", 4);
+
+        await Assert.That(cut).IsEqualTo("abcd…");
+        await Assert.That(cut.Length).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task Clip_AtCap_500Shape()
+    {
+        string text = new('x', 501);
+        string cut = StringTruncation.Clip(text, 500);
+
+        await Assert.That(cut).IsEqualTo(new string('x', 500) + "…");
+        await Assert.That(cut.Length).IsEqualTo(501);
+    }
 }
