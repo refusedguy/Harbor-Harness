@@ -35,6 +35,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- #2494: BracketPair/BracketPairResult stay internal (no PublicAPI change);
+         DocumentView in Harbor.Tui.CellForge consumes them through friend access. -->
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
 
