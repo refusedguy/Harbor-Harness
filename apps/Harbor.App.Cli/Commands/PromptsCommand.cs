@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Commands;
@@ -131,7 +132,7 @@ public sealed partial class PromptsCommand
     {
         bool force = args.Contains("--force", StringComparer.Ordinal);
         bool toProject = args.Contains("--project", StringComparer.Ordinal);
-        string? source = args.FirstOrDefault(a => !a.StartsWith('-'));
+        string? source = args.TryFirst(a => !a.StartsWith('-')).GetValueOrDefault();
         if (source is null)
             return await Usage("Usage: harbor prompt install <prompt.md> [--project] [--force]").ConfigureAwait(false);
 
@@ -170,7 +171,7 @@ public sealed partial class PromptsCommand
 
     private async Task<int> UninstallAsync(string[] args)
     {
-        string? name = args.FirstOrDefault(a => !a.StartsWith('-'));
+        string? name = args.TryFirst(a => !a.StartsWith('-')).GetValueOrDefault();
         if (name is null || !PlainPromptName().IsMatch(name))
             return await Usage("Usage: harbor prompt uninstall <name>").ConfigureAwait(false);
 
