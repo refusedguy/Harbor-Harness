@@ -98,7 +98,25 @@
                                  with the scanner that builds it; the vm: prefix no
                                  longer resolves it. -->
                             <TreeDataTemplate DataType="{x:Type svc:FileTreeNode}" ItemsSource="{Binding Children}">
-                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="4"
+                                            PointerReleased="FileTreeRow_PointerReleased">
+                                    <!-- #2682 Z20: the three path references a row
+                                         can put on the clipboard. Declared on the
+                                         realized row, so a bare-constructed rail
+                                         (a11y tests) has no menu items to see. -->
+                                    <StackPanel.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Copy absolute path"
+                                                      AutomationProperties.Name="Copy absolute path"
+                                                      Click="CopyAbsolutePath_Click"/>
+                                            <MenuItem Header="Copy relative path"
+                                                      AutomationProperties.Name="Copy relative path"
+                                                      Click="CopyRelativePath_Click"/>
+                                            <MenuItem Header="Copy file permalink"
+                                                      AutomationProperties.Name="Copy file permalink"
+                                                      Click="CopyFilePermalink_Click"/>
+                                        </ContextMenu>
+                                    </StackPanel.ContextMenu>
                                     <PathIcon Width="16" Height="16">
                                         <PathIcon.Data>
                                             <Binding Path="." Converter="{x:Static shell:FileTypeToGeometryConverter.Instance}"/>
