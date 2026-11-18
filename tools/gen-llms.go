@@ -1,0 +1,228 @@
+// gen-llms writes the agent-facing documentation files at the repository root:
+// llms.txt (a short index) and llms-full.txt (the canonical docs concatenated
+// into one file). The files are artifacts, not manuscripts: edit the source
+// lists below and regenerate, rather than patching the outputs.
+//
+// WHY GO: the owner's requirement for issue #2670. This is a repository tool,
+// not a CI gate, so it deliberately lives outside tools/gates/ and is not a
+// subcommand of harbor-gates. It uses only the standard library, needs no
+// module and no third-party package, and never runs in CI: the generated
+// files are committed. The policy that makes python gates python (they must
+// run without an SDK) does not apply to a tool a human runs after editing docs.
+//
+// Usage, from anywhere under the repository:
+//
+//	go run tools/gen-llms.go           # write both files
+//	go run tools/gen-llms.go --check   # exit 1 if a committed file is stale
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type entry struct {
+	title string
+	path  string
+	desc  string
+}
+
+type generatedFile struct {
+	name string
+	text string
+}
+
+// The reading order an agent should follow, not an alphabetical sort.
+var indexEntries = []entry{
+	{"README", "README.md", "What Harbor is, how to install it, and the CLI surface."},
+	{"Getting started", "docs/GETTING_STARTED.md", "First session, provider setup, and the REPL."},
+	{"Contributing", "CONTRIBUTING.md", "How to propose and land a change."},
+	{"Agent guide", "AGENTS.md", "Operational guide for AI agents, with the full decision tree."},
+	{"Code conventions", "CLAUDE.md", "Naming, layering, and the code review checklist."},
+	{"Architecture", "docs/ARCHITECTURE.md", "Concrete code flow, sequence diagrams, and the agent loop."},
+	{"Architecture layers", "docs/ARCHITECTURE_LAYERS.md", "The Clean/Hexagonal/Onion layering rules and the reference matrix."},
+	{"Development workflow", "docs/DEVELOPMENT.md", "Build, per-project tests, docs checks, and debugging recipes."},
+	{"Patterns", "docs/PATTERNS.md", "Nine repository patterns with real code."},
+	{"Antipatterns", "docs/ANTIPATTERNS.md", "Forty forbidden patterns with before/after code."},
+	{"Examples", "docs/EXAMPLES.md", "Task-oriented recipes: tools, providers, agents, TUI views, permissions."},
+	{"Tools catalog", "docs/TOOLS_CATALOG.md", "Every builtin tool's arguments, examples, and design walkthrough."},
+	{"Plugin development", "docs/PLUGIN_DEVELOPMENT.md", "Write a DLL or C#-source plugin; the available plugin seams."},
+	{"Plugin system", "docs/PLUGIN_SYSTEM.md", "Caching, debugging, and security of the plugin host."},
+	{"Component catalog", "docs/COMPONENT_CATALOG.md", "Reusable UI components across Avalonia, Blazor, and WPF."},
+	{"CI gates", "docs/CI_GATES.md", "The table of every CI gate and why each is a stdlib python script."},
+	{"Benchmarks", "docs/BENCHMARKS.md", "Measured numbers and the methodology behind them."},
+	{"Roadmap", "docs/ROADMAP.md", "Priorities, current state, and the technical-debt backlog."},
+	{"Session format", "docs/SESSION_FORMAT.md", "The JSONL session schema and storage backends."},
+	{"E2E testing", "docs/E2E_TESTING.md", "Full-pipeline tests against the Kilocode free model."},
+	{"Evals", "docs/EVALS.md", "Task-solving quality runs and their fixtures."},
+}
+
+// Narrower than the whole docs/ tree on purpose: archived sprint notes,
+// specs and audit snapshots are dated records, not current documentation.
+var fullSources = []string{
+	"README.md",
+	"CONTRIBUTING.md",
+	"SECURITY.md",
+	"AGENTS.md",
+	"CLAUDE.md",
+	"docs/GETTING_STARTED.md",
+	"docs/ARCHITECTURE.md",
+	"docs/ARCHITECTURE_LAYERS.md",
+	"docs/DEVELOPMENT.md",
+	"docs/PATTERNS.md",
+	"docs/ANTIPATTERNS.md",
+	"docs/EXAMPLES.md",
+	"docs/TOOLS_CATALOG.md",
+	"docs/PLUGIN_DEVELOPMENT.md",
+	"docs/PLUGIN_SYSTEM.md",
+	"docs/COMPONENT_CATALOG.md",
+	"docs/CONFIGURATION.md",
+	"docs/SESSION_FORMAT.md",
+	"docs/CI_GATES.md",
+	"docs/BENCHMARKS.md",
+	"docs/ROADMAP.md",
+	"docs/E2E_TESTING.md",
+	"docs/EVALS.md",
+	".harbor/skills/harbor-dev/SKILL.md",
+}
+
+const generator = "tools/gen-llms.go"
+
+// repoRoot walks up from the working directory until it finds this file.
+// It makes `go run tools/gen-llms.go` work from the root and from any subdir.
+func repoRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		candidate := filepath.Join(dir, "tools", "gen-llms.go")
+		if info, statErr := os.Stat(candidate); statErr == nil && !info.IsDir() {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("cannot find repository root from %s", dir)
+		}
+		dir = parent
+	}
+}
+
+func buildIndex() string {
+	lines := []string{
+		"# Harbor",
+		"",
+		"> Harbor is a modular .NET 10 AI coding harness. Every concern sits behind an interface, the core is NativeAOT-ready, and extensions are plugins. This is a short index for agents; the full text is in llms-full.txt.",
+		"",
+		"> Generated by `" + generator + "`. Do not edit this file by hand.",
+		"",
+		"## Read first",
+		"",
+	}
+	for _, e := range indexEntries[:6] {
+		lines = append(lines, fmt.Sprintf("- [%s](%s): %s", e.title, e.path, e.desc))
+	}
+	lines = append(lines, "", "## Architecture and development", "")
+	for _, e := range indexEntries[6:15] {
+		lines = append(lines, fmt.Sprintf("- [%s](%s): %s", e.title, e.path, e.desc))
+	}
+	lines = append(lines, "", "## Reference", "")
+	for _, e := range indexEntries[15:] {
+		lines = append(lines, fmt.Sprintf("- [%s](%s): %s", e.title, e.path, e.desc))
+	}
+	lines = append(lines,
+		"",
+		"## Full text",
+		"",
+		"- [llms-full.txt](llms-full.txt): the canonical documents above, concatenated into one file for agents that cannot follow links.",
+		"- [harbor-dev skill](.harbor/skills/harbor-dev/SKILL.md): an in-repo agent skill for working on Harbor itself.",
+		"",
+	)
+	return strings.Join(lines, "\n")
+}
+
+func buildFull(root string) (string, error) {
+	lines := []string{
+		"# Harbor full documentation",
+		"",
+		"> Generated by `" + generator + "` from the sources listed below. For a short index, see llms.txt. Each source is reproduced verbatim between its BEGIN and END markers so its provenance stays visible.",
+		"",
+		"Sources, in order:",
+		"",
+	}
+	for _, rel := range fullSources {
+		lines = append(lines, "- "+rel)
+	}
+	lines = append(lines, "")
+	for _, rel := range fullSources {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", rel, err)
+		}
+		body := strings.TrimRight(string(data), "\n")
+		lines = append(lines,
+			"---",
+			"",
+			"<!-- BEGIN SOURCE: "+rel+" -->",
+			"",
+			body,
+			"",
+			"<!-- END SOURCE: "+rel+" -->",
+			"",
+		)
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+func main() {
+	check := false
+	for _, arg := range os.Args[1:] {
+		if arg == "--check" {
+			check = true
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "unknown argument: %s\n", arg)
+		os.Exit(2)
+	}
+
+	root, err := repoRoot()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	full, err := buildFull(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot generate:", err)
+		os.Exit(1)
+	}
+	outputs := []generatedFile{
+		{name: "llms.txt", text: buildIndex()},
+		{name: "llms-full.txt", text: full},
+	}
+
+	if check {
+		var stale []string
+		for _, out := range outputs {
+			data, readErr := os.ReadFile(filepath.Join(root, out.name))
+			if readErr != nil || string(data) != out.text {
+				stale = append(stale, out.name)
+			}
+		}
+		if len(stale) > 0 {
+			fmt.Fprintf(os.Stderr, "stale generated files: %s (run go run %s)\n",
+				strings.Join(stale, ", "), generator)
+			os.Exit(1)
+		}
+		fmt.Println("OK: llms.txt and llms-full.txt are up to date.")
+		return
+	}
+	for _, out := range outputs {
+		if err := os.WriteFile(filepath.Join(root, out.name), []byte(out.text), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, "cannot write:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("wrote %s (%d bytes)\n", out.name, len(out.text))
+	}
+}
