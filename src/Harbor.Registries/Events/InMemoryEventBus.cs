@@ -416,14 +416,31 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     ///     Run the optional-sink pipeline on the fast path (#47/S3). No
     ///     subscriber, no scrollback and no mandatory sink can observe the
     ///     publish, so the optional sinks are the only consumers left and they
-    ///     still run — losing the event to a sampler costs observability, but
-    ///     the bus does not get to make that choice on their behalf. An
-    ///     explicit <c>false</c> (or a throw) is counted in
+    ///     still run. An explicit <c>false</c> (or a throw) is counted in
     ///     <see cref="OptionalSinkDropCount" />, so even a drop is visible.
+    ///     The pipeline itself lives in <see cref="RunSinksAsync" /> (#2575).
     /// </summary>
     private async Task DrainOptionalSinksAsync(
         AgentEvent @event,
         IReadOnlyList<IEventBusMiddleware> sinks,
+        CancellationToken ct)
+    {
+        // Optional sinks are the only callers that count drops.
+        _ = await RunSinksAsync(sinks, @event, countDrops: true, SinkLogFamily.OptionalSink, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     The single sink pipeline shared by both publish paths (#2575). One
+    ///     loop and one drop/throw policy for optional sinks and middleware;
+    ///     the caller selects whether drops increment the counter and which
+    ///     log family reports them. The (possibly replaced) event and the
+    ///     continue flag flow back to the caller unchanged.
+    /// </summary>
+    private async ValueTask<(bool Continue, AgentEvent Event)> RunSinksAsync(
+        IReadOnlyList<IEventBusMiddleware> sinks,
+        AgentEvent @event,
+        bool countDrops,
+        SinkLogFamily logFamily,
         CancellationToken ct)
     {
         for (int i = 0; i < sinks.Count; i++)
@@ -434,26 +451,65 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                 bool continuePipeline = await sink.ProcessAsync(ref @event, ct).ConfigureAwait(false);
                 if (!continuePipeline)
                 {
-                    Interlocked.Increment(ref _optionalSinkDropCount);
+                    if (countDrops)
+                    {
+                        Interlocked.Increment(ref _optionalSinkDropCount);
+                    }
 
                     // IsEnabled guard (#47): the drop path is cold, but the
                     // params array + GetType().Name evaluate eagerly even when
                     // Trace is off.
                     if (_logger.IsEnabled(LogLevel.Trace))
                     {
-                        InMemoryEventBusLog.OptionalSinkDropped(_logger, @event.GetType().Name, sink.Name);
+                        LogSinkDropped(logFamily, @event.GetType().Name, sink.Name);
                     }
 
-                    return;
+                    return (false, @event);
                 }
             }
             catch (Exception ex)
             {
-                Interlocked.Increment(ref _optionalSinkDropCount);
-                InMemoryEventBusLog.OptionalSinkThrew(_logger, ex, sink.Name);
-                return;
+                if (countDrops)
+                {
+                    Interlocked.Increment(ref _optionalSinkDropCount);
+                }
+
+                LogSinkThrew(logFamily, ex, sink.Name);
+                return (false, @event);
             }
         }
+
+        return (true, @event);
+    }
+
+    private void LogSinkDropped(SinkLogFamily logFamily, string eventType, string middleware)
+    {
+        if (logFamily == SinkLogFamily.OptionalSink)
+        {
+            InMemoryEventBusLog.OptionalSinkDropped(_logger, eventType, middleware);
+        }
+        else
+        {
+            InMemoryEventBusLog.MiddlewareDropped(_logger, eventType, middleware);
+        }
+    }
+
+    private void LogSinkThrew(SinkLogFamily logFamily, Exception ex, string middleware)
+    {
+        if (logFamily == SinkLogFamily.OptionalSink)
+        {
+            InMemoryEventBusLog.OptionalSinkThrew(_logger, ex, middleware);
+        }
+        else
+        {
+            InMemoryEventBusLog.MiddlewareThrew(_logger, ex, middleware);
+        }
+    }
+
+    private enum SinkLogFamily : byte
+    {
+        OptionalSink,
+        Middleware,
     }
 
     /// <summary>
@@ -812,39 +868,13 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     ///     Run the middleware pipeline. Returns whether the event continues
     ///     to scrollback + fan-out, plus the (possibly replaced) event.
     ///     Dropped events never reach scrollback or subscribers.
+    ///     Delegates to <see cref="RunSinksAsync" /> (#2575).
     /// </summary>
     private async Task<(bool Continue, AgentEvent Event)> RunMiddlewareAsync(AgentEvent @event, CancellationToken ct)
     {
-        if (_middlewares.Count > 0)
-        {
-            foreach (var mw in _middlewares)
-            {
-                try
-                {
-                    bool continuePipeline = await mw.ProcessAsync(ref @event, ct).ConfigureAwait(false);
-                    if (!continuePipeline)
-                    {
-                        // IsEnabled guard (#47): the drop path is cold, but
-                        // the params array + GetType().Name evaluate eagerly
-                        // even when Trace is off — the same pitfall as the
-                        // #97 Debug log above.
-                        if (_logger.IsEnabled(LogLevel.Trace))
-                        {
-                            InMemoryEventBusLog.MiddlewareDropped(_logger, @event.GetType().Name, mw.Name);
-                        }
-
-                        return (false, @event);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    InMemoryEventBusLog.MiddlewareThrew(_logger, ex, mw.Name);
-                    return (false, @event);
-                }
-            }
-        }
-
-        return (true, @event);
+        // Slow-path middleware drops are logged but not added to the
+        // optional-sink counter: they are a different population.
+        return await RunSinksAsync(_middlewares, @event, countDrops: false, SinkLogFamily.Middleware, ct).ConfigureAwait(false);
     }
 
     /// <summary>How one subscriber dispatch resolved.</summary>
