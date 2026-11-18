@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Repl.Commands;
 using Microsoft.Extensions.Logging;
 using Harbor.Registries.Providers;
@@ -23,6 +24,22 @@ namespace Harbor.App.Cli.Repl;
 internal sealed class SessionTitleService(IReplHost host, ILogger logger)
 {
     private readonly HashSet<string> _autoTitledSessions = new();
+
+    /// <summary>
+    ///     Regenerate the current session's title from the sessions menu
+    ///     (issue #2684 S06). Kept here, next to the one-shot auto-title, so
+    ///     both paths share the host surface already measured for this file.
+    /// </summary>
+    public static Task<Result<string>> RegenerateForHostAsync(IReplHost host, CancellationToken ct)
+    {
+        if (host.SessionStore is not { } store)
+        {
+            return Task.FromResult(Result.Failure<string>("хост без хранилища сессий"));
+        }
+
+        return SessionTitleRegenerator.RegenerateAsync(
+            store, host.ProviderRegistry, host.SessionModel.Id, ct);
+    }
 
     public async Task MaybeAutoTitleAsync(CancellationToken ct)
     {
