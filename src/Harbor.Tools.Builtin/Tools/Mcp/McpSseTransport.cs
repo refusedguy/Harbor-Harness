@@ -34,7 +34,10 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
     private readonly McpHttpClientFactory _clients;
-    private bool _disposed;
+
+    // The cached transport is reused by overlapping calls, so disposal must
+    // be one-shot under contention rather than a check-then-write race.
+    private int _disposed;
 
     public McpSseTransport(
         Uri endpoint,
@@ -74,7 +77,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         int? expectedId = null,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         var sw = Stopwatch.StartNew();
         HttpClient client = _clients.Client;
         // ROP-A ПР.11: serialize the JSON-RPC envelope straight to UTF-8 bytes.
@@ -145,12 +148,11 @@ public sealed class McpSseTransport : IMcpRemoteTransport
 
     public ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return ValueTask.CompletedTask;
         }
 
-        _disposed = true;
         _clients.Dispose();
         return ValueTask.CompletedTask;
     }
