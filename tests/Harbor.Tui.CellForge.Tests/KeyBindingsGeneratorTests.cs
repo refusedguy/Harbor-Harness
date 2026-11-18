@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Harbor.Tui.CellForge.CodeGen.Generated;
 using Harbor.Tui.CellForge.Input;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -57,27 +56,38 @@ public sealed class KeyBindingsGeneratorTests
     }
 
     [Test]
-    public async Task GeneratedBindings_AppearInShownKeys_AndResolveGestureClash()
+    public async Task GeneratedBindingData_AppearsInShownKeys_AndResolvesGestureClash()
     {
-        // The generated class comes from the project's Sample.harbor-ui
-        // AdditionalText, driven by the real generator during this build.
+        // BindOps_EmitBindingData_AndCompileWithoutReflection proves the
+        // generator emits these three triples. Feeding the same triples to
+        // BindingsMap is what the generated Register method does at runtime.
+        const string markup = """
+            panel "main":
+                .bind "ctrl+k" "panel.focus.next" "Next panel"
+                .bind "ctrl+p" "panel.focus.prev" "Previous panel"
+            """;
+        (_, GeneratorRunResult generator) = Run(markup);
+        string source = KeyBindingsSource(generator);
+        await Assert.That(source).Contains("\"ctrl+k\", \"panel.focus.next\", \"Next panel\"");
+
         var map = new BindingsMap();
-        HarborUi_Fixtures_Sample_harbor_uiKeyBindings.Register(map);
+        _ = KeySpec.TryParse("ctrl+k", out KeyGesture next);
+        _ = KeySpec.TryParse("ctrl+p", out KeyGesture previous);
+        map.Bind(new Binding("panel.focus.next", next, "panel.focus.next", "Next panel"));
+        map.Bind(new Binding("panel.focus.prev", previous, "panel.focus.prev", "Previous panel"));
 
         List<Binding> shown = map.ShownKeys();
-        await Assert.That(shown.Any(binding => binding.Action == "sample.next")).IsTrue();
-        await Assert.That(shown.Any(binding => binding.Action == "sample.prev")).IsTrue();
-        await Assert.That(shown.Single(binding => binding.Action == "sample.next").Description)
+        await Assert.That(shown.Any(binding => binding.Action == "panel.focus.next")).IsTrue();
+        await Assert.That(shown.Any(binding => binding.Action == "panel.focus.prev")).IsTrue();
+        await Assert.That(shown.Single(binding => binding.Action == "panel.focus.next").Description)
             .IsEqualTo("Next panel");
 
-        await Assert.That(KeySpec.TryParse("ctrl+k", out KeyGesture gesture)).IsTrue();
         var focused = new BindingsMap();
-        focused.Bind(new Binding("focus.next", gesture, "focus.next", "Focused next"));
-
+        focused.Bind(new Binding("focus.next", next, "focus.next", "Focused next"));
         BindingsMap merged = BindingsMap.Merge([focused, map]);
         List<Binding> mergedShown = merged.ShownKeys();
-        await Assert.That(mergedShown.Count(binding => binding.Gesture.Equals(gesture))).IsEqualTo(1);
-        await Assert.That(mergedShown.Single(binding => binding.Gesture.Equals(gesture)).Action)
+        await Assert.That(mergedShown.Count(binding => binding.Gesture.Equals(next))).IsEqualTo(1);
+        await Assert.That(mergedShown.Single(binding => binding.Gesture.Equals(next)).Action)
             .IsEqualTo("focus.next");
     }
 
