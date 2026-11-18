@@ -400,22 +400,23 @@ public sealed class SettingsPanel : Harbor.Tui.CellForge.Input.IFocusTarget
 
     private string NextChoice(SettingEntry entry)
     {
-        int count = entry.Options?.Count ?? 0;
-        if (count == 0)
+        var options = entry.Options;
+        if (options is null || options.Count == 0)
         {
             return CurrentValue;
         }
+        int count = options.Count;
         int current = -1;
         for (int i = 0; i < count; i++)
         {
-            if (string.Equals(entry.Options[i], CurrentValue, StringComparison.Ordinal))
+            if (string.Equals(options[i], CurrentValue, StringComparison.Ordinal))
             {
                 current = i;
                 break;
             }
         }
         int next = (current + 1) % count;
-        return entry.Options[next] ?? string.Empty;
+        return options[next] ?? string.Empty;
     }
 
     private bool TryCommit(string next)
