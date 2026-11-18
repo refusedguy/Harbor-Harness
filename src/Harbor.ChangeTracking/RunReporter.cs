@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.ChangeTracking;
 
@@ -233,7 +234,7 @@ public static class RunReporter
             .Bind(status => status.ExitCode != 0
                 ? Result.Failure<bool>(
                     $"Cannot inspect worktree at '{worktreePath}': " +
-                    $"{WorkspaceMaterializer.Clip(status.Stderr)}")
+                    $"{StringTruncation.Clip(status.Stderr, WorkspaceMaterializer.MaxStderrInError)}")
                 : Result.Success(status.Stdout.Trim().Length > 0));
     }
 

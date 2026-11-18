@@ -51,7 +51,7 @@ public static class WorkspaceInspector
             return headRes.ConvertFailure<WorkspaceContract>();
         if (headRes.Value.ExitCode != 0)
             return Result.Failure<WorkspaceContract>(
-                $"Not a git repository at '{root}': git rev-parse HEAD failed: {Clip(headRes.Value.Stderr)}");
+                $"Not a git repository at '{root}': git rev-parse HEAD failed: {StringTruncation.Clip(headRes.Value.Stderr, MaxStderrInError)}");
         string sha = headRes.Value.Stdout.Trim();
         if (sha.Length == 0)
             return Result.Failure<WorkspaceContract>(
@@ -62,7 +62,7 @@ public static class WorkspaceInspector
             return branchRes.ConvertFailure<WorkspaceContract>();
         if (branchRes.Value.ExitCode != 0)
             return Result.Failure<WorkspaceContract>(
-                $"git branch --show-current failed in '{root}': {Clip(branchRes.Value.Stderr)}");
+                $"git branch --show-current failed in '{root}': {StringTruncation.Clip(branchRes.Value.Stderr, MaxStderrInError)}");
         string branchRaw = branchRes.Value.Stdout.Trim();
         string? branch = branchRaw.Length == 0 ? null : branchRaw;
 
@@ -71,7 +71,7 @@ public static class WorkspaceInspector
             return statusRes.ConvertFailure<WorkspaceContract>();
         if (statusRes.Value.ExitCode != 0)
             return Result.Failure<WorkspaceContract>(
-                $"git status failed in '{root}': {Clip(statusRes.Value.Stderr)}");
+                $"git status failed in '{root}': {StringTruncation.Clip(statusRes.Value.Stderr, MaxStderrInError)}");
 
         var tracked = new List<string>();
         bool untracked = false;
@@ -202,13 +202,5 @@ public static class WorkspaceInspector
         if (tracked.Count > show)
             sb.Builder.Append(" (+").Append(tracked.Count - show).Append(" more)");
         return sb.ToString();
-    }
-
-    private static string Clip(string text)
-    {
-        string t = text.Trim();
-        if (t.Length == 0)
-            return "(no stderr)";
-        return t.Length <= MaxStderrInError ? t : t[..MaxStderrInError] + "…";
     }
 }

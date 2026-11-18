@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.ChangeTracking;
 
@@ -38,7 +39,7 @@ public static class WorkspaceMaterializer
     private static readonly TimeSpan AddTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RemoveTimeout = TimeSpan.FromSeconds(30);
-    private const int MaxStderrInError = 500;
+    internal const int MaxStderrInError = 500;
 
     /// <summary>
     ///     Materialize an isolated worktree for <paramref name="contract" />,
@@ -140,7 +141,7 @@ public static class WorkspaceMaterializer
         {
             await CleanupAsync(contract.RepoRoot, worktreePath, runDir).ConfigureAwait(false);
             return Result.Failure<IsolatedWorkspace>(
-                $"git worktree add failed for run '{runId.Value}': {Clip(addStderr)}");
+                $"git worktree add failed for run '{runId.Value}': {StringTruncation.Clip(addStderr, MaxStderrInError)}");
         }
 
         Result<GitOutput> verified;
@@ -287,7 +288,7 @@ public static class WorkspaceMaterializer
             string removeStderr = removed.Value.Stderr;
             if (removeExitCode != 0)
                 return Result.Failure<RunManifest>(
-                    $"Failed to release worktree at '{manifest.WorktreePath}': {Clip(removeStderr)}");
+                    $"Failed to release worktree at '{manifest.WorktreePath}': {StringTruncation.Clip(removeStderr, MaxStderrInError)}");
         }
 
         var released = manifest with { State = RunState.Released };
@@ -588,13 +589,5 @@ public static class WorkspaceMaterializer
         string stdout = await stdoutTask.ConfigureAwait(false);
         string stderr = await stderrTask.ConfigureAwait(false);
         return Result.Success(new GitOutput(proc.ExitCode, stdout, stderr));
-    }
-
-    internal static string Clip(string text)
-    {
-        string t = text.Trim();
-        if (t.Length == 0)
-            return "(no stderr)";
-        return t.Length <= MaxStderrInError ? t : t[..MaxStderrInError] + "…";
     }
 }
