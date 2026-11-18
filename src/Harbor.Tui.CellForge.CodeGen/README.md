@@ -5,18 +5,23 @@ Build-time Roslyn component for the CellForge markup DSL (issue #2424). It sits 
 ## Public API
 
 - `MarkupGenerator` is the `[Generator]` entry point with one member, `Initialize(IncrementalGeneratorInitializationContext)`.
+- `PanelDescriptorGenerator` is the second `[Generator]`. It reports `HUI006` on a class that implements `IPanelDescriptor` without declaring a `StateType` property.
 - `MarkupParser.Parse(string)` reads `.harbor-ui` text into a `MarkupParseResult`. The result carries a `SpecArena`, an optional `state:` type, and a list of `MarkupDiagnostic` values with line and column.
 - `MarkupParseResult` and `MarkupDiagnostic` are the value types returned by the parser.
 - `TypedBindingsEmitter` resolves `{Binding ...}` paths against the state type through Roslyn symbols and emits typed delegates.
 - The emitted contract, declarations, `BuildRoot` and binding delegates live in the consuming compilation under `Harbor.Tui.CellForge.CodeGen.Generated`; the emitters (`BuildRootEmitter` and `TypedBindingsEmitter`) are internal to this assembly.
 
-`SpecArena`, `SpecNode`, `SpecOp`, `SpecValue`, `SpecKind`, `SpecValueKind`, `SpecTreeDumper` and `SpecNodeReuseException` live in `Harbor.Abstractions.Contracts` under `Harbor.Abstractions.Dsl`.
+`SpecArena`, `SpecNode`, `SpecOp`, `SpecValue`, `SpecKind`, `SpecValueKind`, `SpecTreeDumper`, `SpecNodeReuseException` and `IPanelDescriptor` live in `Harbor.Abstractions.Contracts` under `Harbor.Abstractions.Dsl`.
 
 Every `SpecNode` carries a 1-based `SourceLine` and `SourceColumn`; every `SpecOp` carries the same pair.
 The parser fills them from the indentation of the declaration or operation line, and the older two-argument
 constructors remain for callers that do not have a source location. `arena.DebugTree()`, `node.DebugTree()` and
 `SpecTreeDumper.DebugTree(...)` render the IR as a deterministic LF-terminated text tree (kind, operations,
 children, claim state). The dump needs no renderer, so snapshot tests can compare it directly.
+
+## Panel descriptors
+
+`IPanelDescriptor` declares `StateType`, `Match(object)` and `Build(object)`. `Harbor.Ui.Framework.Projection` holds `PanelDescriptorRegistry`, which resolves a state by trying local rules, then global rules, then a fallback. `PanelDescriptorProjector` calls the matched rule's `Build` instead of switching on the state type. Rule matching uses declared types only, so the chain needs no dynamic code under AOT.
 
 ## Grammar
 
