@@ -9,7 +9,7 @@ namespace Harbor.Config.Tests;
 ///     #823: every write here is process-wide state that
 ///     <see cref="AuthStore" /> reads back, and two of them are read by something
 ///     wider than this class — <c>ListApiKeysAsync</c> enumerates the ENTIRE
-///     process environment (AuthStore.cs:140, re-anchored after the #1625
+///     process environment (AuthStore.cs:167, re-anchored after the #1625
 ///     extraction to Harbor.PolicyConfig) and synthesises a provider entry for
 ///     every <c>*_API_KEY</c> it finds. <c>OnboardingWizardTests</c> is in this
 ///     same assembly, writes 32 of the same variables, and is not in #823's list of
@@ -40,6 +40,7 @@ public class AuthStoreTests
     private string? _ambientAnthropicApiKey;
     private string? _ambientUnknownProviderApiKey;
     private string? _ambientListTestProviderApiKey;
+    private string? _ambientKiloApiKey;
 
     [Before(Test)]
     public void SaveAmbientProviderKeys()
@@ -47,6 +48,7 @@ public class AuthStoreTests
         _ambientAnthropicApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         _ambientUnknownProviderApiKey = Environment.GetEnvironmentVariable("UNKNOWNPROVIDER_API_KEY");
         _ambientListTestProviderApiKey = Environment.GetEnvironmentVariable("LISTTESTPROVIDER_API_KEY");
+        _ambientKiloApiKey = Environment.GetEnvironmentVariable("KILO_API_KEY");
     }
 
     [After(Test)]
@@ -55,6 +57,7 @@ public class AuthStoreTests
         Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", _ambientAnthropicApiKey);
         Environment.SetEnvironmentVariable("UNKNOWNPROVIDER_API_KEY", _ambientUnknownProviderApiKey);
         Environment.SetEnvironmentVariable("LISTTESTPROVIDER_API_KEY", _ambientListTestProviderApiKey);
+        Environment.SetEnvironmentVariable("KILO_API_KEY", _ambientKiloApiKey);
     }
 
     private static string NewTempConfigPath() =>
@@ -246,7 +249,7 @@ public class AuthStoreTests
         (var auth, _, string path) = CreateAuthStore();
         string envName = "ENVLISTPROVIDER_API_KEY";
         // #847: this is the one that mattered most — ListApiKeysAsync enumerates the
-        // ENTIRE process environment (AuthStore.cs:140, re-anchored after the
+        // ENTIRE process environment (AuthStore.cs:167, re-anchored after the
         // #1625 extraction to Harbor.PolicyConfig), so a key destroyed here is
         // gone from a set this very class reads back.
         string? previousEnv = Environment.GetEnvironmentVariable(envName);
@@ -262,6 +265,31 @@ public class AuthStoreTests
         finally
         {
             Environment.SetEnvironmentVariable(envName, previousEnv);
+            if (File.Exists(path)) File.Delete(path);
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Test]
+    public async Task ListApiKeysAsync_ResolvesPresetEnvVarToPresetId()
+    {
+        (var auth, _, string path) = CreateAuthStore();
+        // "kilocode" declares KILO_API_KEY. Reverse-parsing that name used to
+        // invent a phantom provider "kilo" and never mark "kilocode" (#2560).
+        Environment.SetEnvironmentVariable("KILO_API_KEY", "kilo-from-env");
+        try
+        {
+            var result = await auth.ListApiKeysAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.ContainsKey("kilocode")).IsTrue();
+            await Assert.That(result.Value["kilocode"]).IsTrue();
+            await Assert.That(result.Value.ContainsKey("kilo")).IsFalse();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KILO_API_KEY", _ambientKiloApiKey);
             if (File.Exists(path)) File.Delete(path);
             string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);

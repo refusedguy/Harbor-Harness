@@ -122,7 +122,7 @@ One list, one dispatch loop, one place to fix.
 The agent's promise is narrower than the bus's in exactly one respect, and the
 difference is deliberate: a listener that throws is LOGGED and kept, where the
 bus evicts a subscriber whose handler threw
-(`src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:316-334`). A listener that had
+(`src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:390-410`). A listener that had
 one bad day must not silently stop receiving events.
 
 ### The two UI seams — state this to yourself before writing a renderer

@@ -140,6 +140,48 @@ public class PermissionRulesetTests
         await Assert.That(rule.MatchesPattern("other/a.cs")).IsFalse();
     }
 
+    [Test]
+    public async Task Evaluate_Dispatches_AppliesTo_Once_Per_Policy()
+    {
+        var counting = new CountingPolicy("mytool");
+        var ruleset = new PermissionRuleset(
+            new[]
+            {
+                new PermissionRule("mytool", "one", PermissionAction.Allow),
+                new PermissionRule("mytool", "two", PermissionAction.Allow),
+                new PermissionRule("mytool", "three", PermissionAction.Allow)
+            },
+            new IArgSafetyPolicy[] { counting });
+
+        var action = ruleset.Evaluate("mytool", "none");
+
+        // Three Allow rules miss their patterns, so the old SuppressAllow called
+        // AppliesTo once per rule on top of the first pass (four calls total).
+        await Assert.That(action).IsEqualTo(PermissionAction.Ask);
+        await Assert.That(counting.AppliesToCalls).IsEqualTo(1);
+    }
+
+    private sealed class CountingPolicy : IArgSafetyPolicy
+    {
+        private readonly string _permission;
+
+        public CountingPolicy(string permission) => _permission = permission;
+
+        public int AppliesToCalls { get; private set; }
+
+        public bool AppliesTo(string permission)
+        {
+            AppliesToCalls++;
+            return string.Equals(permission, _permission, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public PermissionAction? PreEvaluate(string argPath) => null;
+
+        public IReadOnlyList<string>? GetExtraDenyTargets(string argPath) => null;
+
+        public bool SuppressAllow(string rulePattern, string argPath) => false;
+    }
+
     private sealed class DenyMyToolPolicy : IArgSafetyPolicy
     {
         public bool AppliesTo(string permission) =>

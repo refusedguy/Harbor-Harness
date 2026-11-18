@@ -295,16 +295,18 @@ public sealed record PermissionRuleset
         var rules = _sortedRules;
         var effectivePolicies = policies ?? _safetyPolicies;
 
-        // Hoist per-call policy work (argv parsing) out of the rule loop: run
-        // pre-walk short-circuits and collect extra deny targets once. Applicable
-        // policies are usually 0-1, so this stays allocation-free in practice.
+        // Hoist per-call policy work out of the rule loop: run pre-walk short-circuits,
+        // collect extra deny targets once, and record which policies apply. The rule
+        // loop reuses that set instead of dispatching AppliesTo again per Allow rule.
+        // No applicable policy means no list allocation (the common case for policies
+        // that guard only a few tools).
         IReadOnlyList<string>? extraDenyTargets = null;
-        bool hasApplicablePolicy = false;
+        List<IArgSafetyPolicy>? applicablePolicies = null;
         for (int p = 0; p < effectivePolicies.Count; p++)
         {
             var policy = effectivePolicies[p];
             if (!policy.AppliesTo(permission)) continue;
-            hasApplicablePolicy = true;
+            (applicablePolicies ??= new List<IArgSafetyPolicy>()).Add(policy);
 
             var pre = policy.PreEvaluate(argPath);
             if (pre.HasValue) return pre.Value;
@@ -327,8 +329,8 @@ public sealed record PermissionRuleset
             }
 
             if (rule.Action == PermissionAction.Allow
-                && hasApplicablePolicy
-                && SuppressAllow(effectivePolicies, permission, rule.Pattern, argPath))
+                && applicablePolicies is not null
+                && SuppressAllow(applicablePolicies, rule.Pattern, argPath))
             {
                 continue; // Allow must not match; anything else falls through to Ask.
             }
@@ -381,20 +383,19 @@ public sealed record PermissionRuleset
     }
 
     /// <summary>
-    ///     Returns <see langword="true" /> when any policy applicable to
-    ///     <paramref name="permission" /> suppresses the Allow rule with the given pattern
-    ///     for this argument.
+    ///     Returns <see langword="true" /> when any policy already identified as applicable
+    ///     suppresses the Allow rule with the given pattern for this argument. The caller
+    ///     collects the set in its single policy pass, so <see cref="IArgSafetyPolicy.AppliesTo" />
+    ///     runs once per evaluation instead of once per Allow rule.
     /// </summary>
     private static bool SuppressAllow(
-        IReadOnlyList<IArgSafetyPolicy> policies,
-        string permission,
+        IReadOnlyList<IArgSafetyPolicy> applicablePolicies,
         string rulePattern,
         string argPath)
     {
-        for (int p = 0; p < policies.Count; p++)
+        for (int p = 0; p < applicablePolicies.Count; p++)
         {
-            var policy = policies[p];
-            if (policy.AppliesTo(permission) && policy.SuppressAllow(rulePattern, argPath))
+            if (applicablePolicies[p].SuppressAllow(rulePattern, argPath))
                 return true;
         }
 
