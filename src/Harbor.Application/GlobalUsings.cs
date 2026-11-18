@@ -9,6 +9,11 @@ global using System.Text.Json.Serialization;
 global using System.Threading;
 global using System.Threading.Tasks;
 global using CSharpFunctionalExtensions;
+// #1626: the image-attachment leaf moved to Harbor.Intelligence took the last
+// explicit `using Microsoft.Extensions.Logging.Abstractions;` with it. The
+// remaining ILogger<T>/LogLevel consumers here still bind that package, so the
+// namespace stays in the layer's global set.
+global using Microsoft.Extensions.Logging.Abstractions;
 global using Harbor.Abstractions.Agents;
 global using Harbor.Abstractions.Events;
 global using Harbor.Abstractions.Models;
