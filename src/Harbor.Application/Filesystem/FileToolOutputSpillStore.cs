@@ -23,12 +23,12 @@ namespace Harbor.Application.Filesystem;
 ///         the second is a lie told to the model.
 ///     </para>
 ///     <para>
-///         <b>Cleanup.</b> The area is swept when a new session directory is
-///         created — the one moment the store knows it is about to add to the
-///         area — and every session directory whose last write is older than
-///         the time-to-live is removed. The full output also lives in the
-///         session log, so the file is a scratch pad for the run, not an
-///         archive.
+///         <b>Cleanup.</b> A sweep is scheduled when a new session directory is
+///         created, the one moment the store knows it is about to add to the
+///         area. It removes every session directory whose last write is older
+///         than the time-to-live and runs off the first-write path. The full
+///         output also lives in the session log, so the file is a scratch pad
+///         for the run, not an archive.
 ///     </para>
 /// </remarks>
 public sealed class FileToolOutputSpillStore : IToolOutputSpillStore
@@ -92,15 +92,12 @@ public sealed class FileToolOutputSpillStore : IToolOutputSpillStore
                 Directory.CreateDirectory(directory);
                 // The cleanup policy rides the creation of a session directory:
                 // the one moment the store knows it is about to add to the area.
-                // Observe the sweep's Result instead of discarding it: a cleanup
-                // failure must not fail the write — the spill matters more than
-                // housekeeping — but it is logged here with the session that
-                // triggered it so it is not silently swallowed.
-                Result<int> sweep = Sweep();
-                if (sweep.IsFailure)
-                {
-                    FileToolOutputSpillStoreLog.SweepFailedOnSpill(_logger, sweep.Error, sessionId);
-                }
+                // The sweep enumerates and may recursively delete directories,
+                // so running it here made the first write wait for housekeeping.
+                // Hand it to the thread pool, but still observe both its Result
+                // and any unexpected fault. A cleanup failure must not fail the
+                // write, yet it is logged with the session that triggered it.
+                StartBackgroundSweep(sessionId);
             }
 
             File.WriteAllText(path, content, Utf8NoBom);
@@ -111,6 +108,29 @@ public sealed class FileToolOutputSpillStore : IToolOutputSpillStore
         {
             FileToolOutputSpillStoreLog.SpillFailed(_logger, ex, sessionId);
             return Result.Failure<ToolOutputSpill>($"Cannot spill the tool output: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Run the TTL sweep off the first-write path. The returned
+    ///     <see cref="Result{TValue}" /> is observed by <see cref="ObserveSweepAsync" />,
+    ///     and an unexpected fault reaches the same sink through
+    ///     <see cref="TaskFireAndForget.Forget" />.
+    /// </summary>
+    private void StartBackgroundSweep(string sessionId)
+    {
+        Task<Result<int>> sweep = Task.Run(Sweep);
+        TaskFireAndForget.Forget(
+            ObserveSweepAsync(sweep, sessionId),
+            ex => FileToolOutputSpillStoreLog.SweepFailedOnSpill(_logger, ex.Message, sessionId));
+    }
+
+    private async Task ObserveSweepAsync(Task<Result<int>> sweep, string sessionId)
+    {
+        Result<int> result = await sweep.ConfigureAwait(false);
+        if (result.IsFailure)
+        {
+            FileToolOutputSpillStoreLog.SweepFailedOnSpill(_logger, result.Error, sessionId);
         }
     }
 
