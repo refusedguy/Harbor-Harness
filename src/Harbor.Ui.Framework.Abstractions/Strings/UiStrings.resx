@@ -90,4 +90,10 @@
   <data name="Cli_NoSessions" xml:space="preserve">
     <value>No sessions.</value>
   </data>
+  <!-- Issue #434, extraction slice: StarNagCard's single toast text (one UI
+       component). The trailing "s/n" are the keyboard hints for the card's two
+       actions and stay literal in every locale. -->
+  <data name="StarNag_Message" xml:space="preserve">
+    <value>Star Harbor on GitHub? s/n</value>
+  </data>
 </root>

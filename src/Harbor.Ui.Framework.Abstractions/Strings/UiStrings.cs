@@ -75,6 +75,7 @@ public static class UiStrings
         "Cli_Usage",
         "Cli_NewSession",
         "Cli_NoSessions",
+        "StarNag_Message",
     ];
 
     // Forwarder target (issue #1573): the shared default instance the migrated

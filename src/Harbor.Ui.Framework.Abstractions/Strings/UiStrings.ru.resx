@@ -76,4 +76,8 @@
   <data name="Cli_NoSessions" xml:space="preserve">
     <value>Нет сессий.</value>
   </data>
+  <!-- Issue #434, extraction slice: StarNagCard toast. "s/n" are key hints. -->
+  <data name="StarNag_Message" xml:space="preserve">
+    <value>Оцените Harbor на GitHub? s/n</value>
+  </data>
 </root>
