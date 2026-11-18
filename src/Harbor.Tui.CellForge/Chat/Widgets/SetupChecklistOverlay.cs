@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.Strings;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -30,13 +31,28 @@ public sealed class SetupChecklistOverlay
     private const int Padding = 1;
     private const int Chrome = 2 + (Padding * 2);
 
-    /// <summary>Title shown in the modal header.</summary>
-    internal const string Title = "Setup guide";
+    /// <summary>Catalogue key for the modal header (issue #434, one-component slice).</summary>
+    internal const string TitleKey = "SetupGuide_Title";
+
+    /// <summary>Catalogue key for the footer dismiss hint (issue #434).</summary>
+    internal const string FooterKey = "SetupGuide_FooterHint";
+
+    private readonly IUiStrings _strings;
+    private SetupChecklistModel _model = SetupChecklistModel.Empty;
+
+    /// <summary>
+    ///     Creates the overlay. The catalogue is injectable so a test can pin a
+    ///     locale (<see cref="UiStringsCatalog" />, the #1573 seam)
+    ///     without mutating <c>HARBOR_LOCALE</c> or ambient culture.
+    /// </summary>
+    /// <param name="strings">UI strings; null uses the shared current-locale catalogue.</param>
+    public SetupChecklistOverlay(IUiStrings? strings = null) => _strings = strings ?? new UiStringsCatalog();
+
+    /// <summary>Title shown in the modal header, resolved from the shared catalogue.</summary>
+    internal string Title => _strings.Get(TitleKey);
 
     /// <summary>Footer hint naming the dismiss key and the re-entry command.</summary>
-    internal const string FooterHint = "Esc to close · /setup to reopen";
-
-    private SetupChecklistModel _model = SetupChecklistModel.Empty;
+    internal string FooterHint => _strings.Get(FooterKey);
 
     /// <summary>True while the checklist owns the screen.</summary>
     public bool Visible { get; private set; }

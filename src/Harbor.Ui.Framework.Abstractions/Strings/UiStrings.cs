@@ -76,6 +76,8 @@ public static class UiStrings
         "Cli_NewSession",
         "Cli_NoSessions",
         "StarNag_Message",
+        "SetupGuide_Title",
+        "SetupGuide_FooterHint",
     ];
 
     // Forwarder target (issue #1573): the shared default instance the migrated

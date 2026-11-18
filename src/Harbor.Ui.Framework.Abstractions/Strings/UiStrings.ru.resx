@@ -80,4 +80,11 @@
   <data name="StarNag_Message" xml:space="preserve">
     <value>Оцените Harbor на GitHub? s/n</value>
   </data>
+  <!-- Issue #434, one-component extraction slice: SetupChecklistOverlay modal. -->
+  <data name="SetupGuide_Title" xml:space="preserve">
+    <value>Руководство по настройке</value>
+  </data>
+  <data name="SetupGuide_FooterHint" xml:space="preserve">
+    <value>Esc — закрыть · /setup — открыть снова</value>
+  </data>
 </root>
