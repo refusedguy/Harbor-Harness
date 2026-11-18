@@ -66,8 +66,9 @@ public class TwoPaneStateTests
         await Assert.That(state.SourceCursor).IsEqualTo(1);
         await Assert.That(state.TargetCursor).IsEqualTo(1);
 
-        // Bounds clamp instead of wrapping around.
-        await Assert.That(state.MoveCursor(PaneId.Target, 10)).IsTrue();
+        // Bounds clamp instead of wrapping around; a clamp that lands on the
+        // current row is a no-op, not a move.
+        await Assert.That(state.MoveCursor(PaneId.Target, 10)).IsFalse();
         await Assert.That(state.TargetCursor).IsEqualTo(1);
         await Assert.That(state.MoveCursor(PaneId.Target, -10)).IsTrue();
         await Assert.That(state.TargetCursor).IsEqualTo(0);
