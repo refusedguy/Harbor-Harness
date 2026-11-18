@@ -14,8 +14,8 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// (query, candidate) LRU cache (4096), substring fast-path (×1.5, ×2.0 when
 /// equal — skips the per-character scan), and first-letter bonus + group-count
 /// scoring. Boundary/consecutive base was already here.
-/// Cache lookups are locked but allocation-light (struct key, no boxing);
-/// scoring itself allocates nothing.
+/// Cache lookups are lock-free and allocation-light (struct key, no boxing,
+/// thread-local); scoring itself allocates nothing.
 /// </summary>
 public static class FuzzyMatcher
 {
@@ -49,36 +49,69 @@ public static class FuzzyMatcher
 
     private readonly record struct CacheKey(string Query, string Candidate);
 
-    private static readonly object _sync = new();
-    private static readonly Dictionary<CacheKey, LinkedListNode<(CacheKey Key, int? Value)>> _entries = new();
-    private static readonly LinkedList<(CacheKey Key, int? Value)> _lru = new();
+    // The score cache used to be process-global behind one _sync, taken twice
+    // per miss and once per hit on every Score call. AutocompleteFilter.Filter,
+    // FilterList, the command palette and the file picker all call Score for
+    // every candidate on every keystroke, so typing in one palette serialised
+    // against every other renderer in the process. Same fix as
+    // UnicodeWidth.t_widthCache: the LRU is [ThreadStatic], so a thread owns
+    // its slots outright — no monitor, no contention, no shared write. Score
+    // is a pure function of (query, candidate), so a thread-local memo returns
+    // exactly what the shared one did; only the (bounded) storage is per
+    // thread. ClearCache is thread-local too — it can no longer drop another
+    // renderer's entries.
+    [ThreadStatic]
+    private static LruCache? t_cache;
 
-    /// <summary>Number of cached (query, candidate) entries (≤ 4096).</summary>
-    public static int CacheCount
+    private sealed class LruCache
     {
-        get
-        {
-            lock (_sync)
-            {
-                return _entries.Count;
-            }
-        }
-    }
+        private readonly Dictionary<CacheKey, LinkedListNode<(CacheKey Key, int? Value)>> _entries = new();
+        private readonly LinkedList<(CacheKey Key, int? Value)> _lru = new();
 
-    /// <summary>Clears the score cache — tests and benchmarks only.</summary>
-    public static void ClearCache()
-    {
-        lock (_sync)
+        public int Count => _entries.Count;
+
+        public void Clear()
         {
             _entries.Clear();
             _lru.Clear();
         }
+
+        public bool TryGet(CacheKey key, out int? value)
+        {
+            if (_entries.TryGetValue(key, out var node))
+            {
+                _lru.Remove(node);
+                _lru.AddLast(node);
+                value = node.Value.Value;
+                return true;
+            }
+
+            value = null;
+            return false;
+        }
+
+        public void Add(CacheKey key, int? result)
+        {
+            LinkedListNode<(CacheKey Key, int? Value)> node = _lru.AddLast((key, result));
+            _entries[key] = node;
+            while (_entries.Count > CacheCapacity && _lru.First is not null)
+            {
+                _entries.Remove(_lru.First.Value.Key);
+                _lru.RemoveFirst();
+            }
+        }
     }
+
+    /// <summary>Number of cached (query, candidate) entries on this thread (≤ 4096).</summary>
+    public static int CacheCount => t_cache?.Count ?? 0;
+
+    /// <summary>Clears this thread's score cache — tests and benchmarks only.</summary>
+    public static void ClearCache() => t_cache?.Clear();
 
     /// <summary>
     /// Scores <paramref name="candidate" /> against <paramref name="query" />.
     /// null = not a subsequence match; higher = better.
-    /// Results (including misses) are cached per (query, candidate).
+    /// Results (including misses) are cached per (query, candidate) per thread.
     /// </summary>
     public static int? Score(string query, string candidate)
     {
@@ -93,36 +126,14 @@ public static class FuzzyMatcher
         }
 
         var key = new CacheKey(query, candidate);
-        lock (_sync)
+        LruCache cache = t_cache ??= new LruCache();
+        if (cache.TryGet(key, out int? cached))
         {
-            if (_entries.TryGetValue(key, out var node))
-            {
-                _lru.Remove(node);
-                _lru.AddLast(node);
-                return node.Value.Value;
-            }
+            return cached;
         }
 
         int? result = ScoreCore(query, candidate);
-
-        lock (_sync)
-        {
-            if (_entries.TryGetValue(key, out var existing))
-            {
-                _lru.Remove(existing);
-                _lru.AddLast(existing);
-                return existing.Value.Value;
-            }
-
-            LinkedListNode<(CacheKey Key, int? Value)> node = _lru.AddLast((key, result));
-            _entries[key] = node;
-            while (_entries.Count > CacheCapacity && _lru.First is not null)
-            {
-                _entries.Remove(_lru.First.Value.Key);
-                _lru.RemoveFirst();
-            }
-        }
-
+        cache.Add(key, result);
         return result;
     }
 
