@@ -98,6 +98,9 @@ public sealed partial class TelemetryTextExporter : IDisposable
     private long _truncatedBytes;
     private long _dropEvents;
 
+    // Listener callbacks run on arbitrary producer threads while Dispose writes
+    // this flag. Every access goes through Volatile so a callback can never
+    // keep observing a stale false after disposal.
     private bool _disposed;
 
     /// <summary>
@@ -212,7 +215,7 @@ public sealed partial class TelemetryTextExporter : IDisposable
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(attributes);
 
-        if (_disposed || _activityListener is null)
+        if (Volatile.Read(ref _disposed) || _activityListener is null)
         {
             return false;
         }
@@ -256,12 +259,12 @@ public sealed partial class TelemetryTextExporter : IDisposable
     /// <summary>Stop the listeners, flush what is buffered and release the file.</summary>
     public void Dispose()
     {
-        if (_disposed)
+        if (Volatile.Read(ref _disposed))
         {
             return;
         }
 
-        _disposed = true;
+        Volatile.Write(ref _disposed, true);
 
         CancellationTokenSource? shutdown = _shutdown;
         _shutdown = null;
@@ -419,7 +422,7 @@ public sealed partial class TelemetryTextExporter : IDisposable
     /// <summary>A finished span becomes one exported record.</summary>
     private void OnActivityStopped(Activity activity)
     {
-        if (_disposed || !_options.IncludeActivities)
+        if (Volatile.Read(ref _disposed) || !_options.IncludeActivities)
         {
             return;
         }
@@ -442,7 +445,7 @@ public sealed partial class TelemetryTextExporter : IDisposable
     private void OnMeasurement<T>(Instrument instrument, T value, ReadOnlySpan<KeyValuePair<string, object?>> tags)
         where T : struct
     {
-        if (_disposed || !_options.IncludeMetrics)
+        if (Volatile.Read(ref _disposed) || !_options.IncludeMetrics)
         {
             return;
         }
