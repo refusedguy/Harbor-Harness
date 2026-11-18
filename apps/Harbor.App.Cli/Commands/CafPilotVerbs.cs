@@ -9,7 +9,7 @@ namespace Harbor.App.Cli.Commands;
 ///     <c>providers</c>, <c>models</c>, <c>auth</c>, <c>config</c>,
 ///     <c>daemon</c>, <c>status</c>, <c>serve</c>, <c>mcp</c>,
 ///     <c>setup</c>, <c>tui</c>, <c>demo</c>, <c>logs</c>, <c>ask</c>,
-///     <c>events</c>, <c>headless</c>, <c>ide</c>, <c>plugin</c>,
+///     <c>events</c>, <c>headless</c>, <c>ide</c>, <c>plugin</c>, <c>prompt</c>,
 ///     <c>skill</c>, <c>doctor</c> and <c>help</c>. The hand-rolled dispatcher is gone:
 ///     <c>Program</c> keeps only the no-args/unknown → interactive fallback;
 ///     Spectre.Console.Cli / System.CommandLine stay forbidden.
@@ -37,7 +37,7 @@ namespace Harbor.App.Cli.Commands;
 ///         CAF-B adds providers/models/auth/config; CAF-D adds
 ///         daemon/status/serve/mcp; CAF-E adds setup/tui/demo — with typed
 ///         flags, since those verbs ARE flags — and slice 2 adds ask/events/
-///         headless/ide/plugin/skill/help; CAF-C adds logs — with typed
+///         headless/ide/plugin/skill/prompt/help; CAF-C adds logs — with typed
 ///         flags, since that verb IS flags; CAF-F completes the issue's
 ///         title scope — sessions with a typed <c>--session</c> flag and
 ///         storage with an ignored positional tail).
@@ -79,6 +79,7 @@ internal static class CafPilotVerbs
 #endif
         app.Add("plugin", CafPluginCommands.Plugin);
         app.Add("skill", CafSkillCommands.Skill);
+        app.Add("prompt", CafPromptCommands.Prompt);
         app.Add("doctor", CafDoctorCommands.Doctor);
         app.Add("help", CafHelpCommands.Help);
         app.Add("completions", CafCompletionCommands.Completions);
