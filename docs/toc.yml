@@ -150,6 +150,8 @@
   href: TOOL_ERROR_CODES.md
 - name: Tools Catalog
   href: TOOLS_CATALOG.md
+- name: Troubleshooting
+  href: TROUBLESHOOTING.md
 - name: Tui Ux Plan
   href: TUI_UX_PLAN.md
 - name: Testkit Expansion Report
