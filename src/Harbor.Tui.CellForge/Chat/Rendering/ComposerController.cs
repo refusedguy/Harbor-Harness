@@ -1,4 +1,6 @@
 using System.Text;
+using Harbor.Abstractions.Speech;
+using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Ui.Framework.Rendering.Input;
 
 namespace Harbor.Tui.CellForge.Rendering;
@@ -17,6 +19,9 @@ public enum ComposerAction : byte
 
     /// <summary>Ctrl+C on empty buffer — abort signal (caller quits/cancels).</summary>
     Aborted = 3,
+
+    /// <summary>Ctrl+D — start or stop dictation (host runs the async toggle).</summary>
+    DictationToggle = 4,
 }
 
 /// <summary>
@@ -152,13 +157,40 @@ public sealed class ComposerController
         _ = Buffer.InsertText(text);
     }
 
+    // ── Dictation (#2541) ───────────────────────────────────────────────────
+    // The buffer from #2504 owns the text rules; this controller owns the
+    // session lifetime and mirrors Dictation.Text into PromptBuffer so every
+    // existing submit/paint path reads the same draft. The backend is a seam:
+    // production uses the offline placeholder until a real one is wired.
+    private readonly ISpeechToText _speechToText;
+    private readonly DictationBuffer _dictation = new();
+    private CancellationTokenSource? _dictationCts;
+    private Task? _dictationTask;
+
+    /// <summary>Live transcript buffer; status chrome reads <see cref="DictationBuffer.StatusLabel"/>.</summary>
+    public DictationBuffer Dictation => _dictation;
+
+    /// <summary>The backend driving dictation. Exposed so the host can report "offline".</summary>
+    public ISpeechToText SpeechToText => _speechToText;
+
+    /// <summary>Refusal reason from the last <see cref="ToggleDictationAsync"/> start attempt; null on success.</summary>
+    public string? DictationRejection { get; private set; }
+
     /// <summary>Key-family dispatch table (#197): a new key family adds a handler, never an edit here.</summary>
     private readonly IKeyHandler[] _handlers;
 
-    public ComposerController()
+    /// <summary>Composer with the offline (no-audio) dictation placeholder.</summary>
+    public ComposerController() : this(new OfflineSpeechToText())
     {
+    }
+
+    /// <summary>Composer with an injected recognition backend.</summary>
+    public ComposerController(ISpeechToText speechToText)
+    {
+        _speechToText = speechToText ?? throw new ArgumentNullException(nameof(speechToText));
         _handlers =
         [
+            new DictationHandler(this),
             new EnterHandler(this),
             new CharHandler(this),
             new HistoryHandler(this),
@@ -200,6 +232,22 @@ public sealed class ComposerController
     {
         bool Matches(in KeyEvent key);
         ComposerAction Handle(in KeyEvent key);
+    }
+
+    /// <summary>
+    /// Ctrl+D is a command chord, not text: exact Ctrl, press-only so a held key
+    /// cannot toggle twice. The host performs the async toggle; the state machine
+    /// only names the gesture (the same split it uses for Submit/Abort).
+    /// </summary>
+    private sealed class DictationHandler(ComposerController owner) : IKeyHandler
+    {
+        public bool Matches(in KeyEvent key) =>
+            key.EventType == KeyEventType.Press
+            && key.Key == KeyCode.Char
+            && (key.Character.Value == 'd' || key.Character.Value == 'D')
+            && key.Modifiers == KeyModifiers.Ctrl;
+
+        public ComposerAction Handle(in KeyEvent key) => ComposerAction.DictationToggle;
     }
 
     private sealed class EnterHandler(ComposerController owner) : IKeyHandler
@@ -488,5 +536,132 @@ public sealed class ComposerController
                 entry = string.Empty;
                 return false;
         }
+    }
+
+    // ── Dictation session (#2541) ───────────────────────────────────────────
+
+    /// <summary>
+    /// Ctrl+D entry point: starts a session while idle, stops the running one
+    /// otherwise. Returns true when the session changed state, false when the
+    /// start was refused (see <see cref="DictationRejection"/>). A start does not
+    /// await the backend; a stop awaits it so a late final cannot be lost.
+    /// </summary>
+    /// <param name="agentStreaming">True while the agent streams; dictation is refused then.</param>
+    /// <param name="callerToken">Outer cancellation, e.g. host shutdown.</param>
+    public async Task<bool> ToggleDictationAsync(bool agentStreaming, CancellationToken callerToken = default)
+    {
+        DictationRejection = null;
+
+        if (_dictation.IsActive)
+        {
+            await RetireSessionAsync().ConfigureAwait(false);
+            // A stop without a final is a half utterance: restore the draft.
+            if (_dictation.IsActive)
+            {
+                _dictation.Cancel();
+                SyncDictationText();
+            }
+
+            return true;
+        }
+
+        // A backend may have delivered its final and gone idle while its task is
+        // still unwinding. Retire it before a new session overwrites the fields.
+        await RetireSessionAsync().ConfigureAwait(false);
+
+        if (!_dictation.TryStart(Buffer.SnapshotText(), agentStreaming, out var rejection))
+        {
+            DictationRejection = rejection;
+            return false;
+        }
+
+        _dictationCts = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+        _dictationTask = RunSessionAsync(_dictationCts.Token);
+        SyncDictationText();
+        return true;
+    }
+
+    /// <summary>
+    /// Cancel: drop the in-flight partial and restore the exact pre-dictation
+    /// text. The buffer is cancelled BEFORE the backend is signalled, so a final
+    /// delivered during shutdown is ignored rather than committed.
+    /// </summary>
+    public async Task CancelDictationAsync()
+    {
+        if (!_dictation.IsActive && _dictation.Status != DictationStatus.Error)
+        {
+            return;
+        }
+
+        _dictation.Cancel();
+        SyncDictationText();
+        await RetireSessionAsync().ConfigureAwait(false);
+    }
+
+    private async Task RetireSessionAsync()
+    {
+        var cts = _dictationCts;
+        if (cts is null)
+        {
+            return;
+        }
+
+        var task = _dictationTask;
+        _dictationCts = null;
+        _dictationTask = null;
+        cts.Cancel();
+        if (task is not null)
+        {
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // A backend ending on its cancellation token is normal.
+            }
+        }
+
+        cts.Dispose();
+    }
+
+    private async Task RunSessionAsync(CancellationToken ct)
+    {
+        try
+        {
+            await _speechToText.StartAsync(OnDictationPartial, OnDictationFinal, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Stop / cancel asked for this; the buffer decides commit vs restore.
+        }
+        catch (Exception ex)
+        {
+            _dictation.Fail(ex.Message);
+            SyncDictationText();
+        }
+    }
+
+    private void OnDictationPartial(string transcript)
+    {
+        _dictation.AcceptPartial(transcript);
+        SyncDictationText();
+    }
+
+    private void OnDictationFinal(string transcript)
+    {
+        _dictation.AcceptFinal(transcript);
+        SyncDictationText();
+    }
+
+    /// <summary>
+    /// The buffer is the single source of truth; the composer buffer is a mirror
+    /// so submit, history and painting keep reading the same text.
+    /// </summary>
+    private void SyncDictationText()
+    {
+        Buffer.Clear();
+        _ = Buffer.InsertText(_dictation.Text);
+        _ = Buffer.MoveTo(Buffer.Length);
     }
 }

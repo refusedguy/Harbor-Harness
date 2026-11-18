@@ -403,6 +403,12 @@ public class KeyGateFamilyRules
         new("ReplInputLoop(ctrl+p palette)", KeyGateFamily.Command, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
         new("ReplInputLoop(ctrl+j jump, #857)", KeyGateFamily.Command, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
 
+        // #2541: Ctrl+D toggles dictation. It is an EXACT Ctrl chord on a press,
+        // never text — the same command gate as the palette chords above — inside
+        // the composer file that is otherwise a BUFFER site. Fifth widget to wear
+        // both families; the assertion above counts the named three by name.
+        new("ComposerController(ctrl+d dictation)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs"),
+
         // Neither of these holds a text buffer, yet both ADMIT Shift — and they
         // are right to. DiffViewerOverlay binds `G` (DiffViewerOverlay.HandleKey) and
         // ImageViewerOverlay binds `_` (ImageViewerOverlay.HandleKey), so Shift+<rune>

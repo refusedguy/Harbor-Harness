@@ -610,9 +610,39 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             }
         }
 
+        // Esc cancels a live dictation session and restores the exact draft that
+        // was in the composer before Ctrl+D. After the modal barriers, before the
+        // composer: the cancel key must not edit text or open a panel.
+        if (host._composer.Dictation.IsActive
+            && key.Key == KeyCode.Escape
+            && key.EventType == KeyEventType.Press)
+        {
+            await host._composer.CancelDictationAsync().ConfigureAwait(false);
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
         var action = host._vim.HandleKey(key, host._composer);
         switch (action)
         {
+            case ComposerAction.DictationToggle:
+            {
+                bool started = await host._composer
+                    .ToggleDictationAsync(host.Agent.IsRunning(), ct).ConfigureAwait(false);
+                if (host._composer.DictationRejection is { } rejection)
+                {
+                    host.Bridge.AppendSystemLine($"⚠ {rejection}");
+                }
+                else if (started && !host._composer.SpeechToText.IsAvailable)
+                {
+                    host.Bridge.AppendSystemLine(
+                        "◉ dictation started — offline backend captures no audio; Ctrl+D again to stop, Esc to cancel.");
+                }
+
+                host._wake.Writer.TryWrite(null);
+                break;
+            }
+
             case ComposerAction.Submitted:
                 await host.Pipeline.SubmitAsync(ct).ConfigureAwait(false);
                 break;
