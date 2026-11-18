@@ -159,6 +159,35 @@ public class SlashCommandRegistryConsistencyTests
     }
 
     /// <summary>
+    /// #2686 Q06: /help shows each command's provenance from the registry, so a
+    /// provider- or skill-sourced command would be labelled instead of passing as
+    /// a builtin. Every shipped command is a builtin today, hence the builtin tag.
+    /// </summary>
+    [Test]
+    public async Task Help_LabelsEveryCommandWithItsSource()
+    {
+        var dispatcher = CreateDispatcher();
+        var written = new List<string>();
+
+        await dispatcher.HandleCoreAsync(
+            "/help",
+            line => written.Add(line),
+            _ => Task.FromResult(string.Empty),
+            CreateAgent(),
+            new FakeAgentRegistry(),
+            new JsonConfigStore(),
+            new AuthStore(new JsonConfigStore()),
+            new FakeProviderRegistry(new ScriptedLlmClient()),
+            Session.Create("/tmp/harbor-tests", "code", "test-provider", "test-model"));
+
+        string help = string.Join(" ", written);
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            await Assert.That(help).Contains($"{def.Invocation}[{def.SourceLabel}]");
+        }
+    }
+
+    /// <summary>
     /// The same invariant from the user's side: an unknown command is the one thing the
     /// dispatcher will now never say about a command it advertises.
     /// </summary>

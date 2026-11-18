@@ -353,7 +353,12 @@ internal sealed class SlashCommandDispatcher
             // (like /vim and /panels), resolved by the composer submit path
             // rather than by this dispatcher, so it is not slash-dispatch
             // vocabulary and is not advertised to hosts that cannot run it.
-            ctx.Writer("Commands: " + string.Join(" ", SlashCommandCatalog.Invocations));
+            // #2686 Q06: /help is derived from the one registry, and now says where
+            // each command came from. A provider- or skill-sourced command is tagged
+            // in the same line instead of being indistinguishable from a builtin.
+            ctx.Writer("Commands: " + string.Join(
+                " ",
+                SlashCommandCatalog.All.Select(d => $"{d.Invocation}[{d.SourceLabel}]")));
             return Task.FromResult(Result.Success());
         });
 
