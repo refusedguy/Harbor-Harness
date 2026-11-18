@@ -298,15 +298,26 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         }
 
         // SSE-bodied response: pick the first message frame answering expectedId.
-        string text = Encoding.UTF8.GetString(payload);
+        // #2611: walk the body as a span and hand one line at a time to the
+        // incremental reader. string.Split would allocate the line array plus
+        // every substring up front, even when the first frame already matches.
+        // The loop feeds the same sequence Split produced, including the final
+        // empty line for a body that ends with '\n'. Feed still trims '\r'.
+        ReadOnlySpan<char> remaining = Encoding.UTF8.GetString(payload);
         var reader = new SseEventReader();
-        foreach (string line in text.Split('\n'))
+        while (true)
         {
-            if (reader.Feed(line) is { Event: "message" } ev
+            int newline = remaining.IndexOf('\n');
+            ReadOnlySpan<char> line = newline < 0 ? remaining : remaining[..newline];
+            if (reader.Feed(line.ToString()) is { Event: "message" } ev
                 && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
             {
                 return Result.Success(Maybe<JsonElement>.From(doc));
             }
+
+            if (newline < 0)
+                break;
+            remaining = remaining[(newline + 1)..];
         }
 
         return Result.Failure<Maybe<JsonElement>>("SSE response carried no matching JSON-RPC frame.");
