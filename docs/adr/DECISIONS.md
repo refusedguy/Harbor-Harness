@@ -836,6 +836,24 @@ Issue [#2694](https://github.com/refusedguy/Harbor-Harness/issues/2694)
 
 - Полное сравнение по пунктам и границы проверки:
   [ADR-028](ADR-028-avalonia-declarative-xaml-dsl-verdict.md).
+## ADR-036: Blazor declarative UI и Hot Reload vs Harbor DSL. Сравнение и вердикт
+
+Issue [#2695](https://github.com/refusedguy/Harbor-Harness/issues/2695) прислал
+competitor research по декларативному UI и Hot Reload в Blazor с восемью идеями для
+`.harbor-ui`. Проверка `gh pr list --search 2695` и дерева `origin/dev` (`09a673bc`)
+показала: все применимые пункты уже влиты цепочкой #2424-#2441 и #2688. Это
+двухфазный `MarkupGenerator` с кэшем по `(TargetPath, text)`, sequence numbers в
+`BuildRoot`, правило `HasRemovedDirectParameters` в `BuildRootOverrideCoordinator`,
+изолированный dev-reload с `ReloadResult.Rejected`, checksum и диагностики с
+1-based позицией. Прямой `MetadataUpdateHandler` отклонён: он требует JIT и не
+работает под AOT, а граница `HarborWithDslDev` жёстче AppContext-выключателя.
+
+Decided: код не писать, гейты и пороги не менять, issue оставить OPEN как источник
+сравнения. Пересмотр только по новому факту, например измеримой выгоде IL-дельты в
+JIT-only dev-сборке.
+
+- Полное сравнение по восьми пунктам и границы проверки:
+  [ADR-036](ADR-036-blazor-declarative-hotreload-verdict.md).
 ## ADR-029: gpui-kit: переносимые паттерны уже в Harbor
 
 Issue [#2701](https://github.com/refusedguy/Harbor-Harness/issues/2701) прислал
