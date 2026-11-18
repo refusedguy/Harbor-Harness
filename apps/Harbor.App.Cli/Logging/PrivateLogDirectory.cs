@@ -14,8 +14,8 @@ namespace Harbor.App.Cli.Logging;
 ///     </para>
 ///     <para>
 ///         Two guards run before a single byte is written.
-///         <see cref="FileSystemInfo.ResolveLinkTarget" /> rejects a symlink,
-///         including a chain that ends in a directory;
+///         <see cref="FileSystemInfo.LinkTarget" /> rejects a symlink without
+///         requiring the path to exist yet;
 ///         <see cref="File.GetUnixFileMode" /> tightens an existing directory to
 ///         owner-only. A directory created here starts at 0700 on Unix.
 ///     </para>
@@ -43,20 +43,20 @@ internal static class PrivateLogDirectory
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        FileSystemInfo? link = new DirectoryInfo(path).ResolveLinkTarget(returnFinalTarget: true);
-        if (link is not null)
-        {
-            throw new IOException(
-                $"Refusing to write logs through symlink '{path}' -> '{link.FullName}'.");
-        }
+        RejectIfSymlink(path);
 
         if (OperatingSystem.IsWindows())
         {
             Directory.CreateDirectory(path);
+            RejectIfSymlink(path);
             return path;
         }
 
         Directory.CreateDirectory(path, OwnerOnly);
+
+        // Close the window between the first check and the create: someone
+        // could have planted a link at the path in the meantime.
+        RejectIfSymlink(path);
 
         UnixFileMode mode = File.GetUnixFileMode(path);
         if ((mode & NonOwnerBits) != 0)
@@ -68,5 +68,16 @@ internal static class PrivateLogDirectory
         }
 
         return path;
+    }
+
+    private static void RejectIfSymlink(string path)
+    {
+        // LinkTarget does not stat the target, so it works before the directory
+        // exists and for a dangling link alike.
+        string? link = new DirectoryInfo(path).LinkTarget;
+        if (link is not null)
+        {
+            throw new IOException($"Refusing to write logs through symlink '{path}' -> '{link}'.");
+        }
     }
 }
