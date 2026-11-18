@@ -113,6 +113,106 @@ public sealed class ConfigHalfPairWriteRules
     /// <summary>A file, a 1-based line number, and the offending line.</summary>
     private sealed record WriteSite(string RelativePath, int Line, string Text);
 
+    // MECHANISM (#1086, step 2, conveyor slice)
+    // -----------------------------------------
+    // The ban is a ScanRule: the two forbidden spellings as one documented
+    // Forbidden row, and the eight same-shape scan/assert controls from
+    // Rule_FiresOnTheRealShape_AndStaysSilentOnTheLegalOnes as ScanControl rows.
+    // Enumeration, matching, the control verdict and the discovery verdict are
+    // ScanRunner's; this file keeps the issue prose, the original matcher and
+    // the original test names. NOTHING is removed: the original assertions stay
+    // and the engine verdicts are additional, so a regression in either path is
+    // red.
+    //
+    // The verdict runs through the Func-overload (CustomParse), carrying the
+    // original SelfDecided matcher verbatim. It cannot be a tabular line regex:
+    // the rule splits the assignment at its match and tests the VALUE side for
+    // the emptiness predicate, which a single whole-line regex cannot express
+    // (the same reason UiConfigDefaultsRule grades through CustomParse). The
+    // Forbidden row below documents the anchor shape and carries the failure
+    // text; the engine does not execute it, the CustomParse does.
+    //
+    // SCOPE PARITY. Trees ["src", "apps"] with the default "*.cs" glob is
+    // exactly SourceScan.EnumerateProductCsFiles() (ProductTrees is the same
+    // pair), which is what the original Perimeter()/FindSelfDecidedHalves walk.
+    // The original scan filtered to files that ASSIGN a half; this one scans
+    // the whole product tree, but a self-decided line always carries a half
+    // assignment, so the two produce the SAME sites. The equivalence test below
+    // proves that over the live tree rather than assuming it.
+    private const string SelfDecidedSubId = "SELF-DECIDED-HALF";
+
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "ConfigHalfPairWrite",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SelfDecidedSubId,
+                HalfAssignment,
+                "the config names one provider/model pair or nothing, so a writer must not test a half "
+                + "in order to decide that same half. ModelRef.Qualify is the one function that makes the "
+                + "pair whole. See issues #453, #598 and #894."),
+        ],
+        Controls =
+        [
+            // The two real #894 lines: a half assigned from a test of itself.
+            new ScanControl(
+                "Planned/Provider.cs",
+                "    DefaultProvider = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultProvider) ? provider : cfg.DefaultProvider,",
+                SelfDecidedSubId),
+            new ScanControl(
+                "Planned/Model.cs",
+                "    DefaultModel = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultModel) ? model : cfg.DefaultModel,",
+                SelfDecidedSubId),
+            // Legal writes: the value arrives whole, or is only read back.
+            new ScanControl(
+                "Legal/WholeValue.cs",
+                "    return cfg with { DefaultProvider = model.ProviderId, DefaultModel = model.Id };",
+                null),
+            new ScanControl(
+                "Legal/RestoreLocal.cs",
+                "    DefaultProvider = _common.DefaultProvider ?? string.Empty;",
+                null),
+            new ScanControl(
+                "Legal/PickedDefault.cs",
+                "    DefaultModel = SelectedProvider.DefaultModel;",
+                null),
+            // A comment or a doc quote is prose about the shape, not a write.
+            new ScanControl(
+                "Prose/LineComment.cs",
+                "    // DefaultProvider = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultProvider) ? a : b",
+                null),
+            new ScanControl(
+                "Prose/DocQuote.cs",
+                "    /// <c>DefaultProvider = ... string.IsNullOrEmpty(cfg.DefaultProvider)</c> in the docs.",
+                null),
+        ],
+        // The product walk yields well over 500 files; a smaller count means the
+        // walk broke rather than the tree is clean. The writer the issue is about
+        // must still be in scope, or the live verdict grades nothing.
+        MinHits = 500,
+        MustContain =
+        [
+            "src/Harbor.Desktop.ViewModels/ViewModels/OnboardingViewModel.cs",
+        ],
+        CustomParse = ParseHalfPairWrites,
+    };
+
+    /// <summary>
+    ///     The custom parser: the original line scan over one file's RAW source,
+    ///     carried verbatim. SelfDecided already skips comment lines itself, so
+    ///     the raw source is the same input FindSelfDecidedHalves handed it.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseHalfPairWrites(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource.Split('\n').Select(static l => l.TrimEnd('\r')).ToArray();
+        foreach (int index in SelfDecided(lines))
+        {
+            yield return new ScanHit(SelfDecidedSubId, displayPath, index + 1, lines[index].Trim());
+        }
+    }
+
     // ── Rule 1: no half is decided on its own ─────────────────────────────────
 
     [Test]
@@ -258,6 +358,76 @@ public sealed class ConfigHalfPairWriteRules
         await Assert.That(SelfDecided(["/// <c>DefaultProvider = ... string.IsNullOrEmpty(cfg.DefaultProvider)</c> in the docs."]).Count)
             .IsEqualTo(0)
             .Because("doc-comment lines are prose too");
+    }
+
+    // ── #1086: the engine drives the SAME matcher ─────────────────────────────
+
+    /// <summary>
+    ///     The planted controls drive the real rule through ScanRunner: the two
+    ///     self-decided halves are reported under their sub-id, and every legal
+    ///     write, read-back and prose mention stays silent. A rule that stopped
+    ///     grading through the engine would go green while enforcing nothing;
+    ///     the original matcher assertions above are kept as the other half.
+    /// </summary>
+    [Test]
+    public async Task Rule_ControlsDriveTheRealMatcher()
+    {
+        List<string> failures = ScanRunner.CheckControls(Rule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the eight planted controls must agree with the matcher cases above through the "
+                + "ScanRule's own verdict — otherwise the engine path guards nothing, or forbids "
+                + "the fix. " + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     The engine's tree walk really sees the product trees and the writer
+    ///     the rule is about. A scope that found no files satisfies every matcher;
+    ///     this fails loudly if that happens instead of reporting a clean tree.
+    /// </summary>
+    [Test]
+    public async Task Rule_Discovery_SeesTheWriter()
+    {
+        List<string> failures = ScanRunner.CheckDiscovery(Rule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the walk has to yield a non-trivial product scope and still contain the onboarding "
+                + "writer, or the live verdict above is a pass over nothing. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     EQUIVALENCE, proved over the live tree: the engine's CustomParse path
+    ///     finds exactly the same (file, line) sites as the original perimeter +
+    ///     FindSelfDecidedHalves scan. A rule whose verdict moved is invisible in
+    ///     a green suite; comparing the two paths on every product file is what
+    ///     makes "no behavior change" a measurement rather than a claim.
+    /// </summary>
+    [Test]
+    public async Task Rule_FindsExactlyWhatTheOriginalScanFinds()
+    {
+        string root = RequireRepoRoot();
+
+        string[] engineSites = ScanRunner.Collect(Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)))
+            .Select(static h => $"{h.File}:{h.Line}")
+            .OrderBy(static s => s, StringComparer.Ordinal)
+            .ToArray();
+
+        string[] originalSites = FindSelfDecidedHalves(root)
+            .Select(static s => $"{s.RelativePath}:{s.Line}")
+            .OrderBy(static s => s, StringComparer.Ordinal)
+            .ToArray();
+
+        await Assert.That(engineSites).IsEquivalentTo(originalSites)
+            .Because(
+                "the ScanRule path must locate the same self-decided writes, in the same files at the "
+                + "same lines, as the original scan. The original scanned only files on the derived "
+                + "perimeter; the engine scans the whole product tree — equal here because a "
+                + "self-decided line always carries a half assignment, which is what put the file on "
+                + "the perimeter. Engine: " + (engineSites.Length == 0 ? "(none)" : string.Join(", ", engineSites))
+                + ". Original: " + (originalSites.Length == 0 ? "(none)" : string.Join(", ", originalSites)));
     }
 
     /// <summary>
