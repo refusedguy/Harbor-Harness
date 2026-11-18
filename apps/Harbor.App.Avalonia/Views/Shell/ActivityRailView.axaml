@@ -103,7 +103,9 @@
                                     <!-- #2682 Z20: the three path references a row
                                          can put on the clipboard. Declared on the
                                          realized row, so a bare-constructed rail
-                                         (a11y tests) has no menu items to see. -->
+                                         (a11y tests) has no menu items to see.
+                                         Z22 adds the terminal action to the same
+                                         menu. -->
                                     <StackPanel.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Copy absolute path"
@@ -115,6 +117,10 @@
                                             <MenuItem Header="Copy file permalink"
                                                       AutomationProperties.Name="Copy file permalink"
                                                       Click="CopyFilePermalink_Click"/>
+                                            <Separator/>
+                                            <MenuItem Header="Open in terminal"
+                                                      AutomationProperties.Name="Open in terminal"
+                                                      Click="OpenInTerminal_Click"/>
                                         </ContextMenu>
                                     </StackPanel.ContextMenu>
                                     <PathIcon Width="16" Height="16">
