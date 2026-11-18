@@ -9,6 +9,9 @@ namespace Harbor.Tools.Mcp;
 /// over an <see cref="ArrayBufferWriter{T}"/> and parsed once from UTF-8 —
 /// no string-interpolated JSON, no <c>JsonSerializer.Serialize</c> inside
 /// interpolation, and no intermediate UTF-16 transcode of the envelope.
+/// A <c>tools/call</c> builder may add one <c>_meta.traceparent</c> member when
+/// the caller supplies a trace parent (#2678 item 113); without one the wire
+/// shape is byte-identical to the historical envelope.
 /// The returned element is self-contained (the buffer is not retained),
 /// so callers use it directly with no disposal. Behavior is byte-compatible with the previous
 /// interpolate-then-parse construction (same members, same order, same
@@ -68,7 +71,13 @@ internal static class McpJsonRpc
     }
 
     /// <summary>Build <c>tools/call</c> params. Missing arguments become <c>{}</c>.</summary>
-    public static JsonElement BuildToolCallParams(string toolName, JsonElement arguments)
+    /// <remarks>
+    ///     #2678 item 113: a non-empty <paramref name="traceparent"/> is written
+    ///     to <c>_meta.traceparent</c> so an out-of-process MCP server can join
+    ///     the agent's trace. When it is absent the wire shape is unchanged:
+    ///     no <c>_meta</c> member, same bytes as before this option existed.
+    /// </remarks>
+    public static JsonElement BuildToolCallParams(string toolName, JsonElement arguments, string? traceparent = null)
     {
         var buffer = new ArrayBufferWriter<byte>(128);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -77,6 +86,13 @@ internal static class McpJsonRpc
             writer.WriteString("name", toolName);
             writer.WritePropertyName("arguments");
             WriteArgumentsOrEmpty(writer, arguments);
+            if (!string.IsNullOrEmpty(traceparent))
+            {
+                writer.WritePropertyName("_meta");
+                writer.WriteStartObject();
+                writer.WriteString("traceparent", traceparent);
+                writer.WriteEndObject();
+            }
             writer.WriteEndObject();
         }
 
