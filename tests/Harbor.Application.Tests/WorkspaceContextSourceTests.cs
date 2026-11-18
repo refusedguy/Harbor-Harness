@@ -96,6 +96,29 @@ public class WorkspaceContextSourceTests : IDisposable
     }
 
     /// <summary>
+    ///     #2591: the composition-time logger attachment stays off the
+    ///     constructor path but must publish safely. Once attached, a load
+    ///     sees the new logger and routes budget warnings through it.
+    /// </summary>
+    [Test]
+    public async Task SetLogger_AfterConstruction_WarningsReachAttachedLogger()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_dir, "AGENTS.md"),
+            new string('A', WorkspaceContextService.MaxContextBytes + 100));
+        await File.WriteAllTextAsync(Path.Combine(_dir, "CLAUDE.md"), "small tail");
+        var source = new WorkspaceContextService();
+        var logger = new CapturingLogger<WorkspaceContextService>();
+
+        source.SetLogger(logger);
+        var files = source.LoadContextFiles(_dir);
+
+        await Assert.That(files.Count).IsEqualTo(1);
+        await Assert.That(logger.Warnings.Count).IsEqualTo(2);
+        await Assert.That(logger.Warnings[0]).Contains("truncated");
+        await Assert.That(logger.Warnings[1]).Contains("skipped");
+    }
+
+    /// <summary>
     ///     #2230: the snapshot key covers file CONTENTS, not just mtime. A
     ///     same-length edit with the mtime restored must still invalidate.
     /// </summary>
