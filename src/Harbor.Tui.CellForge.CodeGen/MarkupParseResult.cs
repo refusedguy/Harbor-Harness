@@ -24,5 +24,5 @@ public sealed class MarkupParseResult
     public IReadOnlyList<MarkupDiagnostic> Diagnostics { get; }
 
     /// <summary>Whether the parser accepted the whole file.</summary>
-    public bool IsSuccess => Diagnostics.Count == 0;
+    public bool IsValid => Diagnostics.Count == 0;
 }

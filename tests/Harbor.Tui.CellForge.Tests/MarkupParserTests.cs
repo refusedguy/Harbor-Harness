@@ -25,7 +25,7 @@ public class MarkupParserTests
 
         var result = MarkupParser.Parse(markup);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.IsValid).IsTrue();
         await Assert.That(result.Arena.Roots.Count).IsEqualTo(1);
         await Assert.That(result.Arena.Nodes.Count).IsEqualTo(3);
 
@@ -59,11 +59,11 @@ public class MarkupParserTests
                 i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
             var snakeResult = MarkupParser.Parse($"{snake} \"x\"");
-            await Assert.That(snakeResult.IsSuccess).IsTrue();
+            await Assert.That(snakeResult.IsValid).IsTrue();
             await Assert.That(snakeResult.Arena.Roots[0].Kind).IsEqualTo(kind);
 
             var pascalResult = MarkupParser.Parse($"{name} \"x\"");
-            await Assert.That(pascalResult.IsSuccess).IsTrue();
+            await Assert.That(pascalResult.IsValid).IsTrue();
             await Assert.That(pascalResult.Arena.Roots[0].Kind).IsEqualTo(kind);
         }
     }
@@ -73,7 +73,7 @@ public class MarkupParserTests
     {
         var result = MarkupParser.Parse("not_a_widget \"x\"");
 
-        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.IsValid).IsFalse();
         await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
         await Assert.That(result.Diagnostics[0].Line).IsEqualTo(1);
         await Assert.That(result.Diagnostics[0].Column).IsEqualTo(1);
