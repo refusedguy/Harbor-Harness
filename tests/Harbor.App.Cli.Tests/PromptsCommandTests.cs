@@ -185,30 +185,34 @@ public class PromptsCommandTests : IDisposable
     }
 
     [Test]
-    public async Task Install_FlatFile_ProjectFlag_TargetsProjectScope()
+    public async Task Install_ChoosesScopeFromTheFlag()
     {
-        string source = Path.Combine(_base, "notes.md");
-        await File.WriteAllTextAsync(source, "# Notes\n");
+        var source = Path.Combine(_base, "scope.md");
+        await File.WriteAllTextAsync(source, "scope body");
 
-        int exit = await CreateCommand().ExecuteAsync(["install", source, "--project"]);
+        int toGlobal = await CreateCommand().ExecuteAsync(["install", source]);
+        await Assert.That(toGlobal).IsEqualTo(0);
+        await Assert.That(File.Exists(Path.Combine(_homeRoot, "scope.md"))).IsTrue();
 
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(File.Exists(Path.Combine(_projectRoot, "notes.md"))).IsTrue();
-        await Assert.That(File.Exists(Path.Combine(_homeRoot, "notes.md"))).IsFalse();
+        _out.GetStringBuilder().Clear();
+        int toProject = await CreateCommand().ExecuteAsync(["install", source, "--project"]);
+        await Assert.That(toProject).IsEqualTo(0);
+        await Assert.That(File.Exists(Path.Combine(_projectRoot, "scope.md"))).IsTrue();
     }
 
     [Test]
-    public async Task Install_Existing_WithoutForce_Fails()
+    public async Task Install_WithoutForce_RejectsOverwrite()
     {
-        string source = Path.Combine(_base, "dup.md");
-        await File.WriteAllTextAsync(source, "# Dup\n");
-        await Assert.That(await CreateCommand().ExecuteAsync(["install", source])).IsEqualTo(0);
+        var source = Path.Combine(_base, "dup.md");
+        await File.WriteAllTextAsync(source, "first");
+        int first = await CreateCommand().ExecuteAsync(["install", source]);
+        await Assert.That(first).IsEqualTo(0);
 
         _err.GetStringBuilder().Clear();
-        int exit = await CreateCommand().ExecuteAsync(["install", source]);
-
-        await Assert.That(exit).IsEqualTo(1);
+        int second = await CreateCommand().ExecuteAsync(["install", source]);
+        await Assert.That(second).IsEqualTo(1);
         await Assert.That(_err.ToString()).Contains("--force");
+        await Assert.That(await File.ReadAllTextAsync(Path.Combine(_homeRoot, "dup.md"))).IsEqualTo("first");
     }
 
     [Test]

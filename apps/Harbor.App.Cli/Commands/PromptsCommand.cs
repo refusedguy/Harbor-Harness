@@ -95,11 +95,11 @@ public sealed partial class PromptsCommand
     private async Task<int> ShowAsync(string[] args)
     {
         if (args.Length == 0 || !PlainPromptName().IsMatch(args[0]))
-            return Usage("Usage: harbor prompt show <name>");
+            return await Usage("Usage: harbor prompt show <name>").ConfigureAwait(false);
 
         var doc = await ResolveAsync(args[0]).ConfigureAwait(false);
         if (doc is null)
-            return NoSuchPrompt(args[0]);
+            return await NoSuchPrompt(args[0]).ConfigureAwait(false);
 
         _output.WriteLine(doc.Body);
         return 0;
@@ -108,11 +108,11 @@ public sealed partial class PromptsCommand
     private async Task<int> SendAsync(string[] args)
     {
         if (args.Length == 0 || !PlainPromptName().IsMatch(args[0]))
-            return Usage("Usage: harbor prompt send <name> [args...]");
+            return await Usage("Usage: harbor prompt send <name> [args...]").ConfigureAwait(false);
 
         var doc = await ResolveAsync(args[0]).ConfigureAwait(false);
         if (doc is null)
-            return NoSuchPrompt(args[0]);
+            return await NoSuchPrompt(args[0]).ConfigureAwait(false);
 
         string[] extra = args.Skip(1).ToArray();
         string prompt = Substitute(doc.Body, extra);
@@ -133,7 +133,7 @@ public sealed partial class PromptsCommand
         bool toProject = args.Contains("--project", StringComparer.Ordinal);
         string? source = args.FirstOrDefault(a => !a.StartsWith('-'));
         if (source is null)
-            return Usage("Usage: harbor prompt install <prompt.md> [--project] [--force]");
+            return await Usage("Usage: harbor prompt install <prompt.md> [--project] [--force]").ConfigureAwait(false);
 
         if (!".md".Equals(Path.GetExtension(source), StringComparison.OrdinalIgnoreCase) || !File.Exists(source))
         {
@@ -172,7 +172,7 @@ public sealed partial class PromptsCommand
     {
         string? name = args.FirstOrDefault(a => !a.StartsWith('-'));
         if (name is null || !PlainPromptName().IsMatch(name))
-            return Usage("Usage: harbor prompt uninstall <name>");
+            return await Usage("Usage: harbor prompt uninstall <name>").ConfigureAwait(false);
 
         foreach (string root in new[] { _projectRoot, _globalRoot })
         {
