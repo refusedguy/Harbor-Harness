@@ -97,7 +97,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
         var markers = PluginAxisMarkers.Of(plugin.Instance);
         Result compatibility = _compatibilityGate.Check(plugin, markers);
         if (compatibility.IsFailure)
-            return Result.Failure<IPluginRun>(compatibility.Error);
+            return compatibility.ConvertFailure<IPluginRun>();
 
         // #1734: the plugin's own configuration section, checked against the
         // schema the plugin declared. The check happens HERE, before the

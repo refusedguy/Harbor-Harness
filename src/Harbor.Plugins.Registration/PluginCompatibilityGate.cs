@@ -57,7 +57,7 @@ internal sealed class PluginCompatibilityGate
                 "Plugin {DisplayName} is not compatible with this Harbor: {Reason}",
                 plugin.DisplayName,
                 compatibility.Error);
-            return Result.Failure(compatibility.Error);
+            return compatibility;
         }
 
         // #1739: the manifest is the plugin's own declaration, and it is checked
