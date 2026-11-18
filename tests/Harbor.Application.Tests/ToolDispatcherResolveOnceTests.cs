@@ -318,7 +318,7 @@ public class ToolDispatcherResolveOnceTests
     // ZLinq drop-in extensions and breaks LINQ resolution in this assembly.
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static Result<ITool> OldResolveChain(IToolRegistry tools, string rawName) =>
+    private static Result<ITool> OldResolveChain(CountingRegistry tools, string rawName) =>
         ToolName.TryCreate(rawName)
             .MapError(e => $"Invalid tool name: {e}")
             .Bind(name => tools.GetTool(name).MapError(_ => $"Unknown tool: '{rawName}'."));

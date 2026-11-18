@@ -346,8 +346,8 @@ public sealed class ToolDispatcher(
     /// </summary>
     private Result<ITool> ResolveTool(string rawName)
     {
-        var parsed = ToolName.TryCreate(rawName);
-        if (!parsed.IsSuccess) return Result.Failure<ITool>($"Invalid tool name: {parsed.Error}");
+        var parsed = ToolName.TryCreate(rawName).MapError(e => $"Invalid tool name: {e}");
+        if (!parsed.IsSuccess) return parsed.ConvertFailure<ITool>();
         var resolved = tools.GetTool(parsed.Value);
         return resolved.IsSuccess ? resolved : Result.Failure<ITool>(UnknownToolDiagnostic(rawName));
     }
