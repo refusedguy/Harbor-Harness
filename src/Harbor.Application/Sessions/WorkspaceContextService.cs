@@ -48,11 +48,19 @@ namespace Harbor.Application.Sessions;
 ///         suppressed. The value participates in the snapshot version so a
 ///         change takes effect without a process restart.
 ///     </para>
+///     <para>
+///         #2675 item 070: candidates now come from
+///         <see cref="GuidanceFileDiscovery"/>, so guidance files in ancestor
+///         directories up to the user's home are always included and
+///         <c>AGENT.md</c> is accepted as a fallback spelling. Ancestors are
+///         labelled with their relative <c>../</c> path; working-directory
+///         files keep their bare name for backward compatibility.
+///     </para>
 /// </remarks>
 public sealed class WorkspaceContextService : IWorkspaceContextSource
 {
-    /// <summary>Project context files probed in the working directory.</summary>
-    public static readonly string[] ContextFileNames = ["AGENTS.md", "CLAUDE.md"];
+    /// <summary>Project context files probed in each directory.</summary>
+    public static readonly string[] ContextFileNames = GuidanceFileDiscovery.FileNames;
 
     private const string ProjectSkillsDir = ".harbor/skills";
     private const string SkillFileName = "SKILL.md";
@@ -155,14 +163,16 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
             AppendChars(hash, ignored);
             hash.AppendData(Separator); // exclusion policy participates in the cache key
 
-            foreach (string name in ContextFileNames)
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            foreach (GuidanceFileDiscovery.GuidanceFile candidate in GuidanceFileDiscovery.Discover(workingDirectory, home))
             {
+                string name = Path.GetFileName(candidate.FullPath) ?? candidate.Label;
                 if (IsIgnored(name, ignored))
                     continue;
 
-                AppendChars(hash, name);
+                AppendChars(hash, candidate.Label);
                 hash.AppendData(Separator); // field separator
-                string path = Path.Combine(workingDirectory, name);
+                string path = candidate.FullPath;
                 if (File.Exists(path))
                 {
                     using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -177,10 +187,9 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
             string projectSkillsDir = Path.Combine(workingDirectory, ProjectSkillsDir);
             if (Directory.Exists(projectSkillsDir))
                 AppendLong(hash, new DirectoryInfo(projectSkillsDir).LastWriteTimeUtc.Ticks, scratch);
-            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (!string.IsNullOrEmpty(userProfile))
+            if (!string.IsNullOrEmpty(home))
             {
-                string globalSkillsDir = Path.Combine(userProfile, ProjectSkillsDir);
+                string globalSkillsDir = Path.Combine(home, ProjectSkillsDir);
                 if (Directory.Exists(globalSkillsDir))
                     AppendLong(hash, new DirectoryInfo(globalSkillsDir).LastWriteTimeUtc.Ticks, scratch);
             }
@@ -258,25 +267,24 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     /// </summary>
     public IReadOnlyList<ContextFile> LoadContextFiles(string workingDirectory)
     {
-        var files = new List<ContextFile>(ContextFileNames.Length);
+        var files = new List<ContextFile>(ContextFileNames.Length * 2);
         int remaining = MaxContextBytes;
         string ignored = IgnoreGuidanceFilesValue;
-        foreach (string name in ContextFileNames)
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        foreach (GuidanceFileDiscovery.GuidanceFile candidate in GuidanceFileDiscovery.Discover(workingDirectory, home))
         {
+            string name = Path.GetFileName(candidate.FullPath) ?? candidate.Label;
             if (IsIgnored(name, ignored))
                 continue;
 
-            string path = Path.Combine(workingDirectory, name);
-            if (!File.Exists(path))
-            {
-                continue;
-            }
+            string label = candidate.Label;
+            string path = candidate.FullPath;
 
             if (remaining <= 0)
             {
                 Logger?.LogWarning(
-                    "Project context budget: skipped '{File}' because the combined {Budget}-byte budget is already exhausted. Trim AGENTS.md/CLAUDE.md or move content into a skill.",
-                    name, MaxContextBytes);
+                    "Project context budget: skipped '{File}' because the combined {Budget}-byte budget is already exhausted. Trim the guidance files or move content into a skill.",
+                    label, MaxContextBytes);
                 continue;
             }
 
@@ -292,8 +300,8 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
                 if (bytes.Length > remaining)
                 {
                     Logger?.LogWarning(
-                        "Project context budget: truncated '{File}' to {Kept} of {Total} bytes under the combined {Budget}-byte budget. Trim AGENTS.md/CLAUDE.md or move content into a skill.",
-                        name, remaining, bytes.Length, MaxContextBytes);
+                        "Project context budget: truncated '{File}' to {Kept} of {Total} bytes under the combined {Budget}-byte budget. Trim the guidance files or move content into a skill.",
+                        label, remaining, bytes.Length, MaxContextBytes);
                     bytes = bytes[..remaining];
                     remaining = 0;
                 }
@@ -302,7 +310,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
                     remaining -= bytes.Length;
                 }
 
-                files.Add(new ContextFile(name, Decode(bytes)));
+                files.Add(new ContextFile(label, Decode(bytes)));
             }
             catch (IOException ex)
             {
