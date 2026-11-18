@@ -62,6 +62,14 @@ public static class ToolResultContextTrim
     /// </returns>
     public static string Trim(string output, ToolOutputSpillRequest? spill, int maxInlineChars)
     {
+        // #2679 F041 — HARBOR_DISABLE_PRUNE keeps the full tool-result text on
+        // the model path. The domain message is never trimmed either way; this
+        // only suppresses the inline preview/spill rewrite.
+        if (PruneDisabled)
+        {
+            return output;
+        }
+
         if (output.Length <= maxInlineChars)
         {
             return output;
@@ -105,5 +113,20 @@ public static class ToolResultContextTrim
         return output.Length <= maxInlineChars
             ? string.Concat(output, note)
             : string.Concat(output.AsSpan(0, maxInlineChars), note);
+    }
+
+    /// <summary>
+    ///     Whether context pruning was disabled for this process. Only an
+    ///     explicit truthy value ("1" or "true", case-insensitive) counts; unset
+    ///     keeps the historical cap so a stray variable cannot change what the
+    ///     model sees.
+    /// </summary>
+    private static bool PruneDisabled
+    {
+        get
+        {
+            string? value = Environment.GetEnvironmentVariable("HARBOR_DISABLE_PRUNE");
+            return value is "1" || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }
