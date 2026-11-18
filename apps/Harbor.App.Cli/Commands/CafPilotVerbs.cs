@@ -87,6 +87,8 @@ internal static class CafPilotVerbs
         app.Add("issue", CafIssueCommands.Issue);
         app.Add("pr list", CafPrForgeCommands.List);
         app.Add("pr view", CafPrForgeCommands.View);
+        app.Add("pr link", CafPrLinkCommands.Link);
+        app.Add("pr links", CafPrLinkCommands.Links);
         app.Add("pr checks", CafPrWatchCommands.Checks);
         app.Add("pr watch", CafPrWatchCommands.Watch);
         app.Add("help", CafHelpCommands.Help);
