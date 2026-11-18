@@ -72,7 +72,7 @@ public sealed class DevReloadInterpreter
         interpreter = new DevReloadInterpreter(
             applier,
             parsed,
-            TemplateSignature(parsed.Arena),
+            ComputeTemplateSignature(parsed.Arena),
             MarkupChecksum.Compute(markup ?? string.Empty));
         error = string.Empty;
         return true;
@@ -138,7 +138,7 @@ public sealed class DevReloadInterpreter
                 _checksum,
                 "parse rejected: " + Describe(fresh));
 
-        var signature = TemplateSignature(fresh.Arena);
+        var signature = ComputeTemplateSignature(fresh.Arena);
         var checksum = MarkupChecksum.Compute(markup ?? string.Empty);
         bool logicChanged = LogicChanged(_current, fresh);
 
@@ -200,7 +200,7 @@ public sealed class DevReloadInterpreter
     ///     already removed by <see cref="StripComments"/> and the parser, so
     ///     the signature changes only when the shape or the operation set does.
     /// </summary>
-    internal static string TemplateSignature(SpecArena arena)
+    internal static string ComputeTemplateSignature(SpecArena arena)
     {
         var output = new StringBuilder();
         foreach (var root in arena.Roots)
