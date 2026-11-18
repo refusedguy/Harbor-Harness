@@ -23,11 +23,25 @@
     <PackageTags>harbor;ipc;server;messagepack;rpc;named-pipe;unix-socket</PackageTags>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004</NoWarn>
+    <!--
+      #2596: Harbor.CodeGen.HarborRequestCensusGenerator emits the
+      HarborRequest union census at compile time. It is off by default in the
+      generator project so other consumers of Harbor.CodeGen are unaffected.
+    -->
+    <HarborGenerateIpcRequestCensus>true</HarborGenerateIpcRequestCensus>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!--
+      #2596: build-time analyzer only. No runtime edge to the generator.
+    -->
+    <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <!-- #2596: make the generator switch visible as build_property.*. -->
+    <CompilerVisibleProperty Include="HarborGenerateIpcRequestCensus"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -35,7 +35,7 @@ internal readonly record struct RequestHandlerEntry(
 ///         new request type is one handler class plus one line in that array —
 ///         and forgetting the line does not compile into a silent server, it
 ///         throws at startup, because <see cref="UnhandledRequestTypes" /> is
-///         checked by the dispatcher's constructor against the reflection
+///         checked by the dispatcher's constructor against the compile-time
 ///         census in <see cref="HarborRequestTypes" />.
 ///     </para>
 ///     <para>

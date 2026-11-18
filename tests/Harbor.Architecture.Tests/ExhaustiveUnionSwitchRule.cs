@@ -697,7 +697,7 @@ public sealed class ExhaustiveUnionSwitchRule
         // Deleting the row IS the fix. What took over the half of the rule this
         // scan provably cannot do — a MISSING arm with no default, which is
         // invisible to a scan keyed on the default arm, and is precisely the
-        // shape #485 was — is the reflection census in
+        // shape #485 was — is the compile-time-generated census in
         // `src/Harbor.Ipc.Server/Protocol/HarborRequestTypes.cs`, which
         // RequestDispatcher's constructor refuses to start without.
     };

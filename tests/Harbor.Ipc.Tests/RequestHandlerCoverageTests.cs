@@ -35,9 +35,9 @@ public class RequestHandlerCoverageTests
     /// </summary>
     /// <remarks>
     ///     It carries no MessagePack <c>[Union(n, typeof(T))]</c> tag and lives
-    ///     in this assembly, so <see cref="HarborRequestTypes.All" /> — which
-    ///     scans <c>typeof(HarborRequest).Assembly</c> — cannot see it, and no
-    ///     handler can be registered for it. That is the honest way to reach
+    ///     in this assembly, so <see cref="HarborRequestTypes.All" /> — the
+    ///     compile-time census of the declaring assembly — cannot see it, and
+    ///     no handler can be registered for it. That is the honest way to reach
     ///     the dispatch-time branch: a client speaking a protocol the server
     ///     does not have.
     /// </remarks>
@@ -126,8 +126,8 @@ public class RequestHandlerCoverageTests
     public async Task RequestTypeCensus_IsLive()
     {
         await Assert.That(HarborRequestTypes.All.Count).IsGreaterThan(0).Because(
-            "typeof(HarborRequest).Assembly must be loadable and must contain the union's members; "
-            + "an empty census makes every registry look complete");
+            "the generated census must name the union's members; an empty census makes every "
+            + "registry look complete");
 
         List<string> names = [.. HarborRequestTypes.All.Select(t => t.Name)];
 

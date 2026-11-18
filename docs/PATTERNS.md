@@ -549,7 +549,7 @@ not produce a switch with every arm named — it produced no switch at all:
 
 | piece | where | what it guarantees |
 |---|---|---|
-| the census | `src/Harbor.Ipc.Server/Protocol/HarborRequestTypes.cs` | the union's member set, by reflection over `typeof(HarborRequest).Assembly` |
+| the census | `src/Harbor.Ipc.Server/Protocol/HarborRequestTypes.cs` | the union's member set, emitted at compile time by `Harbor.CodeGen.HarborRequestCensusGenerator` as `typeof(T)` references (#2596) |
 | the composition boundary | `RequestDispatcher`'s constructor | **throws**, naming the missing types, if a member has no handler — a new request type without one is a startup failure |
 | the upstream exception | `HarborRequestTypes.HandledBeforeDispatch` | `PskAuthRequest` is consumed by `MessagePackRpcServer.ApplyPskGateAsync` before dispatch, and is **named** rather than special-cased, so a second such seam must be declared too |
 | the wire boundary | `RequestDispatcher.Unhandled` | a request outside the tagged union is logged, counted on `UnhandledRequestCount`, and refused with `NO_HANDLER:<Type>: …` echoing the request id — rule 2, not silence |
@@ -559,7 +559,9 @@ The lesson generalises past IPC. For a union that crosses a **process**
 boundary, a wildcard arm is the smaller half of the problem: the check that
 actually matters is at composition time, because a member with no handler is
 otherwise indistinguishable from a member with the wrong handler. Enumerate the
-union by reflection and **refuse to start** when coverage is incomplete.
+union from the type system and **refuse to start** when coverage is incomplete.
+In a product assembly that enumeration belongs at compile time; reflection in
+the running server can be trimmed into a partial census that looks complete.
 
 **Guard:** `tests/Harbor.Architecture.Tests/ExhaustiveUnionSwitchRule.cs` — the
 union census comes from reflection, the wildcard-arm scan runs over
