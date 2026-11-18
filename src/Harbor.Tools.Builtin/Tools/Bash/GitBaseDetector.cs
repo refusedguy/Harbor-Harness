@@ -18,13 +18,14 @@ namespace Harbor.Tools.Builtin;
 ///     </para>
 ///     <para>
 ///         Local branches must match exactly (<c>main</c> or
-///         <c>refs/heads/main</c>). Remote-tracking branches may use the full
-///         <c>refs/remotes/&lt;remote&gt;/&lt;name&gt;</c> /
-///         <c>remotes/&lt;remote&gt;/&lt;name&gt;</c> forms or the short
-///         <c>&lt;remote&gt;/&lt;name&gt;</c> form used by <c>git branch -r</c>;
-///         for the short form the remote must be <c>origin</c> or
-///         <c>upstream</c>. A nested local branch such as <c>feature/main</c>
-///         is therefore never mistaken for the base branch <c>main</c>.
+///         <c>refs/heads/main</c>). Remote-tracking branches are recognised in
+///         the short <c>origin/main</c> form used by <c>git branch -r</c> and in
+///         the full <c>refs/remotes/origin/main</c> /
+///         <c>remotes/upstream/main</c> forms, for the <c>origin</c> and
+///         <c>upstream</c> remotes. A nested local branch such as
+///         <c>feature/main</c> is therefore never mistaken for the base branch
+///         <c>main</c>. Only canonical names are looked up in a set: no string
+///         is split or scanned for a separator.
 ///     </para>
 ///     <para>
 ///         Matching is case-sensitive, as git ref names are.
@@ -35,11 +36,8 @@ public static class GitBaseDetector
     /// <summary>Default base branches, in the priority order used by review.</summary>
     public static readonly IReadOnlyList<string> DefaultCandidates = new[] { "main", "master", "develop" };
 
-    /// <summary>Short remote prefixes accepted without a <c>refs/remotes/</c> qualifier.</summary>
-    private static readonly HashSet<string> ShorthandRemotes = new(StringComparer.Ordinal)
-    {
-        "origin", "upstream"
-    };
+    /// <summary>Remotes whose tracking refs are recognised.</summary>
+    private static readonly string[] KnownRemotes = ["origin", "upstream"];
 
     /// <summary>
     ///     Returns the highest-priority default base branch present in
@@ -96,41 +94,14 @@ public static class GitBaseDetector
         if (refs.Contains(candidate)) return true;
         if (refs.Contains("refs/heads/" + candidate)) return true;
 
-        foreach (string reference in refs)
+        for (int i = 0; i < KnownRemotes.Length; i++)
         {
-            if (IsRemoteTrackingOf(reference, candidate)) return true;
+            string remote = KnownRemotes[i];
+            if (refs.Contains(remote + "/" + candidate)) return true;
+            if (refs.Contains("refs/remotes/" + remote + "/" + candidate)) return true;
+            if (refs.Contains("remotes/" + remote + "/" + candidate)) return true;
         }
 
         return false;
-    }
-
-    private static bool IsRemoteTrackingOf(string reference, string candidate)
-    {
-        string rest;
-        bool qualified;
-
-        if (reference.StartsWith("refs/remotes/", StringComparison.Ordinal))
-        {
-            rest = reference["refs/remotes/".Length..];
-            qualified = true;
-        }
-        else if (reference.StartsWith("remotes/", StringComparison.Ordinal))
-        {
-            rest = reference["remotes/".Length..];
-            qualified = true;
-        }
-        else
-        {
-            rest = reference;
-            qualified = false;
-        }
-
-        int slash = rest.IndexOf('/');
-        if (slash <= 0 || slash == rest.Length - 1) return false;
-
-        string remote = rest[..slash];
-        if (!qualified && !ShorthandRemotes.Contains(remote)) return false;
-
-        return string.Equals(rest[(slash + 1)..], candidate, StringComparison.Ordinal);
     }
 }
