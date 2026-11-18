@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      #2424. Build-time Roslyn component, not a shipped library: the markup
+      generator runs inside the compiler and emits construction code into its
+      consumer. The three declarations match src/Harbor.CodeGen.
+    -->
+    <IsPackable>false</IsPackable>
+    <IsRoslynComponentPackage>true</IsRoslynComponentPackage>
+    <RoslynComponent>Harbor.Tui.CellForge.CodeGen</RoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <Description>Roslyn incremental generator for the CellForge markup DSL (issue #2424).</Description>
+    <!--
+      Same suppressions, same reasons as src/Harbor.CodeGen: RS1041 asks a
+      compiler extension to target netstandard2.0 although global.json pins
+      the SDK that loads it; RS2008 asks for release tracking on a package
+      that is never published; S1944 is the emitted-code field pattern.
+    -->
+    <NoWarn>$(NoWarn);RS1041;RS2008;S1944</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      PrivateAssets=all: the generator runs in the compiler, which hosts
+      Roslyn; no Roslyn type reaches a consumer at run time. Proj0037 is
+      scoped here for the same reason as in src/Harbor.CodeGen: the local
+      Roslyn copy is what loads the generator against the version it was
+      compiled against.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" NoWarn="Proj0037"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      #2424. The generator works against the IR of the markup DSL, whose
+      contracts live here. There is deliberately NO reference to
+      Harbor.CodeGen (a different generator domain) or to Harbor.Tui.CellForge
+      (runtime widgets): a generator binds neither.
+
+      The slice-0 stub below binds no contract type yet, so the edge is
+      currently unused; tools/reference-trimmer-baseline.txt records why it
+      stays until the IR slices (#2426/#2428) bind it for real.
+    -->
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+  </ItemGroup>
+
+</Project>
