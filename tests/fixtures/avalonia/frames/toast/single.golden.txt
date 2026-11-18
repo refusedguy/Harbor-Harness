@@ -19,4 +19,11 @@ Window bg=#FF1E1E2E
                           StackPanel
                             TextBlock text="Avalonia.Media.StreamGeometry" fg=#FF89B4FA font="Inter" size=14
                             TextBlock text="Info" fg=#FF89B4FA font="Inter" size=11
+                            Button bg=ImmutableSolidColorBrush
+                              ContentPresenter bg=#33FFFFFF
+                                PathIcon bg=ImmutableSolidColorBrush
+                                  Border bg=ImmutableSolidColorBrush
+                                    Viewbox
+                                      ViewboxContainer
+                                        Path
                           TextBlock text="Info: connection established." fg=#FFCDD6F4 font="Inter" size=13
