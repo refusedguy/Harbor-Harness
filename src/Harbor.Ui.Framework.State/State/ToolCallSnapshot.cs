@@ -72,26 +72,21 @@ public sealed record ToolCallSnapshot(
         string? glyph,
         string argsJson)
     {
-        // An absent/undefined argument payload arrives as an empty string from a
-        // host that never populated one; deserializing "" throws JsonException, and
-        // the card must still render.
-        if (string.IsNullOrWhiteSpace(argsJson))
-        {
-            argsJson = "{}";
-        }
-
         // Qualified: this record declares its own DiffPreview property, which would
         // otherwise shadow the static helper of the same name (CS0120).
         // The payload is one Maybe, so the flag and the three diff fields cannot
         // disagree: a card flagged as a diff always carries the full payload,
         // and a non-diff call carries none (#1101).
+        // Absent arguments stay absent: this used to replace them with "{}" so
+        // the extractor could parse a document that never existed. ExtractDiff
+        // now owns the absence branch, so no fake object is invented here.
         Maybe<DiffPayload> diff = State.DiffPreview.ExtractDiff(toolName, argsJson);
 
         return new ToolCallSnapshot(
             id,
             toolName,
             string.IsNullOrEmpty(glyph) ? ToolGlyphs.Default : glyph,
-            string.IsNullOrEmpty(argsJson) || argsJson == "{}" ? string.Empty : argsJson,
+            string.IsNullOrWhiteSpace(argsJson) || argsJson == "{}" ? string.Empty : argsJson,
             ToolCallState.Running,
             string.Empty,
             diff.HasValue,
