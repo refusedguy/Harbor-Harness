@@ -70,9 +70,12 @@ M:System.Runtime.CompilerServices.ConfigurableTaskAwaitable`1.ConfigurableTaskAw
 #   apps/Harbor.App.Avalonia/Program.cs                   BuildAsync().GetAwaiter().GetResult()
 #   apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs  CliConfig eager load
 #   src/Harbor.Hosting/Modules/ConfigurationModule.cs     Common+Harbor config eager load
+#   src/Harbor.Hosting/Modules/ToolsCatalog.cs            MCP tools/list discovery at composition root
 #   Reason: Main/module Configure are sync; no SynchronizationContext exists
 #   yet, so the blocking wait cannot deadlock. Making them async would push
 #   async through the whole host-builder chain for zero benefit at t=0.
+#   ToolsCatalog runs before any UI context too, and McpToolDiscovery's awaits
+#   are ConfigureAwait(false), so no continuation resumes on a blocked context.
 # --- <57>
 # Class 2 — UI-thread marshaling contract:
 #   apps/Harbor.App.Avalonia/Services/AvaloniaDispatcherAdapter.cs Invoke<T>()

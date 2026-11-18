@@ -16,6 +16,13 @@ using Harbor.Registries.Tools;
 // composition into, and that name is one constant (#1722).
 using Harbor.Plugins.Hosting;
 
+// RS0030: the composition root builds the tool registry synchronously, before
+// any UI SynchronizationContext exists; MCP tool discovery uses
+// ConfigureAwait(false) all the way down, so blocking here cannot deadlock.
+// This is the second sanctioned sync-over-async site (the first is
+// HostBuilder.Build); catalogued in BannedSymbols.txt + docs/ANTIPATTERNS.md #15.
+#pragma warning disable RS0030
+
 namespace Harbor.Hosting;
 
 internal static class ToolsCatalog
@@ -305,9 +312,13 @@ internal static class ToolsCatalog
             // a real ITool before Freeze(), with the safety profile the adapter
             // declares and an exact permission grant on every registered agent.
             // The composition root is synchronous (cf. ConfigurationModule's eager
-            // loads); the wait happens before any UI synchronization context exists.
+            // loads); the wait happens before any UI SynchronizationContext exists,
+            // and RegisterAsync/DiscoverAsync use ConfigureAwait(false) throughout,
+            // so no continuation posts back to a context we would block.
+            // GetAwaiter().GetResult() (not .Result) propagates the original fault
+            // instead of wrapping it in AggregateException.
             int discovered = McpToolDiscovery.RegisterAsync(
-                mcpRegistry, registry, agentRegistry, ctx.LoggerFactory, ctx.Logger).Result;
+                mcpRegistry, registry, agentRegistry, ctx.LoggerFactory, ctx.Logger).GetAwaiter().GetResult();
             if (discovered > 0)
                 ToolsCatalogLog.McpToolsRegistered(ctx.Logger, discovered);
         }
