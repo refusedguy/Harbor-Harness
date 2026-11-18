@@ -57,7 +57,7 @@ public sealed class DropdownButton : IFocusTarget
     /// <summary>Visible button text.</summary>
     public string Label => _label;
 
-    /// <summary>The anchored menu, for hosts that need the selection</summary>
+    /// <summary>The anchored menu, for hosts that need the selection.</summary>
     public AnchoredMenu Menu => _menu;
 
     /// <summary>Resolved popup rect.</summary>
