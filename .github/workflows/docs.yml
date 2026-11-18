@@ -189,6 +189,10 @@ on:
       # verdict about the tree depends on what those files say.
       - 'tools/check-gate-policy.py'
       - 'tools/gates/test-skips/**'
+      # #433. The contrast gate reads the real theme dictionaries, so a PR
+      # that edits a palette, the gate or its table entry must run it.
+      - 'tools/check-contrast.py'
+      - 'apps/Harbor.App.Avalonia/Themes/*.axaml'
       # #1558. The result-chain census scans `src/` and `apps/` for the
       # `if (x.IsFailure)` guard sites and ratchets the count of chain
       # candidates, so a PR that edits the gate or the baseline must run it —
@@ -1439,6 +1443,26 @@ jobs:
   # The JOB is gone: the gate is compiled into the binary, it is in the list
   # of the tree runner (tools/gates/all/gates.go), and the `tree` job above
   # runs it with the same floors: `--min-files 2523 --min-interfaces 191`.
+
+  # #433. The measured half of the WCAG 2.1 AA contrast audit. The C# test in
+  # Harbor.DesignSystem.Tests pins hex literals, so a palette edit in Dark.axaml
+  # or Light.axaml cannot break it. This gate reads those dictionaries instead
+  # and computes the ratio for every pair the audit table declares; a pair that
+  # drops below 4.5:1 (body) or 3:1 (large/UI) fails the job. The second step
+  # plants a low-contrast pair, a missing token and a narrowed scan, so a gate
+  # that stopped finding anything cannot stay green.
+  contrast:
+    name: theme contrast
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Measure the WCAG 2.1 AA theme token pairs
+        run: python3 tools/check-contrast.py --min-pairs 8
+      - name: Prove the contrast gate fires on a planted violation
+        run: python3 tools/check-contrast.py --self-test
 
   # #1888. Eleventh question, and the only one about the gates themselves:
   # not "do the links resolve" and not "is the file shaped right" and not

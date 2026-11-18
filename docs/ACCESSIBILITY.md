@@ -219,6 +219,15 @@ Notes:
   half proves the gate discriminates: a pair moved into a body-text test
   would fail CI.
 
+`tools/check-contrast.py` (CI job `contrast` in `.github/workflows/docs.yml`)
+closes the gap in that table: the C# test pins hex literals, so an edit of a
+`<Color x:Key>` in `Dark.axaml` or `Light.axaml` cannot break it. The gate
+reads those dictionaries, recomputes the eight pairs above from the values the
+app actually ships, and fails a pair below its tier. A missing token or a scan
+below its `--min-pairs 8` floor fails as well. Its `--self-test` plants two
+low-contrast pairs, a missing token and a narrowed scan, so a gate that
+stopped finding anything cannot stay green.
+
 ### 5.2 Name gate
 
 `tests/Harbor.App.Avalonia.Tests/AccessibilityNamesTests.cs` inflates four
