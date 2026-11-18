@@ -115,6 +115,33 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _storageBackend = string.Empty;
 
+    /// <summary>
+    ///     Settings search text (K29). Empty means "show every section". This
+    ///     is view state only: it is never persisted and Cancel clears it.
+    /// </summary>
+    [ObservableProperty]
+    private string _searchQuery = string.Empty;
+
+    /// <summary>
+    ///     Whether the current <see cref="SearchQuery" /> finds at least one
+    ///     section. Drives the no-results state in the view.
+    /// </summary>
+    public bool HasSearchResults => SettingsSearch.HasMatches(SearchQuery);
+
+    /// <summary>Whether a search filter is currently active.</summary>
+    public bool IsFiltering => !string.IsNullOrWhiteSpace(SearchQuery);
+
+    /// <summary>Keep the computed filter flags in step with the search text.</summary>
+    partial void OnSearchQueryChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasSearchResults));
+        OnPropertyChanged(nameof(IsFiltering));
+    }
+
+    /// <summary>Clear the search box and restore the full settings list.</summary>
+    [RelayCommand]
+    private void ClearSearch() => SearchQuery = string.Empty;
+
     /// <summary>Construct the settings view-model and load the persisted config.</summary>
     /// <param name="themeReader">Read-only view of the active theme (for <c>ThemeSettings</c>).</param>
     /// <param name="themeApplier">Theme applier forwarded to <c>ThemeSettings</c>.</param>
@@ -325,6 +352,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Cancel()
     {
+        // Search is view state, not config: a cancelled dialog returns to the
+        // full, unfiltered list as well as to the last-saved values.
+        SearchQuery = string.Empty;
         ThemeSettings.Restore(_common.Theme);
         DefaultProvider = _common.DefaultProvider ?? string.Empty;
         DefaultModel = _common.DefaultModel ?? string.Empty;

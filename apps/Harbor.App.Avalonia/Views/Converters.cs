@@ -4,6 +4,7 @@ using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Harbor.Abstractions.Models;
+using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.Converters;
 namespace Harbor.App.Avalonia.Views;
@@ -279,4 +280,18 @@ public sealed class StringNullOrEmptyToBoolConverter : OneWayConverterBase<Strin
 {
     /// <inheritdoc />
     public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => string.IsNullOrEmpty(value?.ToString());
+}
+
+/// <summary>
+///     Returns whether a Settings section should be visible for the current
+///     search query (K29). The bound value is <c>SettingsViewModel.SearchQuery</c>
+///     and the parameter is one of the alias strings in
+///     <see cref="SettingsSearch" />, so the view and the view-model's
+///     no-results flag cannot disagree about what "matching" means.
+/// </summary>
+public sealed class SettingsSectionVisibleConverter : OneWayConverterBase<SettingsSectionVisibleConverter>
+{
+    /// <inheritdoc />
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        SettingsSearch.IsMatch(parameter?.ToString(), value?.ToString());
 }

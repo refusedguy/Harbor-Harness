@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.SettingsView">
 
     <!--
@@ -10,7 +11,9 @@
         Layout:
           • Backdrop: 50% black scrim that captures clicks (so a click
             outside the card reads as "dismiss").
-          • Card: 640×560, padded, rounded, surface-tinted background.
+          • Card: 760×640, padded, rounded, surface-tinted background.
+          • Search row: TextBox + Clear button; filters the sections below
+            by title and shows an empty state when nothing matches (K29).
           • Sections, each a labeled StackPanel:
               - Theme (dark / light / system) — ComboBox, applied immediately
                 on selection AND on Save.
@@ -37,7 +40,7 @@
                 Width="760" Height="640" Padding="20"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 BoxShadow="0 16 40 0 #80000000">
-            <Grid RowDefinitions="Auto,*,Auto">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
 
                 <!-- Header -->
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
@@ -52,12 +55,34 @@
                             Click="Close_Click" ToolTip.Tip="Close (Esc)" />
                 </Grid>
 
+                <!--
+                    K29: filter settings by section title. The query is view
+                    state only (never persisted); each section below binds its
+                    IsVisible to the same alias string the view-model uses to
+                    compute HasSearchResults, so the two cannot disagree.
+                -->
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+                    <TextBox Grid.Column="0"
+                             Text="{Binding SearchQuery, Mode=TwoWay}"
+                             PlaceholderText="Search settings…"
+                             AutomationProperties.Name="Search settings"
+                             ToolTip.Tip="Filter settings by section name, e.g. theme, model, API key." />
+                    <Button Grid.Column="1" Classes="Subtle" Content="Clear"
+                            Margin="8,0,0,0" Padding="10,4"
+                            IsVisible="{Binding IsFiltering}"
+                            Command="{Binding ClearSearchCommand}"
+                            AutomationProperties.Name="Clear settings search" />
+                </Grid>
+
+                <Grid Grid.Row="2">
                 <!-- Scrollable settings -->
-                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                              IsVisible="{Binding HasSearchResults}">
                     <StackPanel Spacing="14">
 
                         <!-- Theme -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.ThemeAliases}}">
                             <TextBlock Text="Theme" Classes="Label" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180"
@@ -110,10 +135,11 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <Separator Margin="0,2" />
+                        <Separator Margin="0,2" IsVisible="{Binding !IsFiltering}" />
 
                         <!-- Default provider -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.DefaultProviderAliases}}">
                             <TextBlock Text="Default provider" Classes="Label" />
                             <TextBox Text="{Binding DefaultProvider, Mode=TwoWay}"
                                      AutomationProperties.Name="Default provider"
@@ -121,7 +147,8 @@
                         </StackPanel>
 
                         <!-- Default model -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.DefaultModelAliases}}">
                             <TextBlock Text="Default model" Classes="Label" />
                             <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
                                      AutomationProperties.Name="Default model"
@@ -129,14 +156,16 @@
                         </StackPanel>
 
                         <!-- Font family -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.FontFamilyAliases}}">
                             <TextBlock Text="Font family" Classes="Label" />
                             <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter"
                                      AutomationProperties.Name="Font family" />
                         </StackPanel>
 
                         <!-- Storage backend -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.StorageBackendAliases}}">
                             <TextBlock Text="Storage backend" Classes="Label" />
                             <!-- #677: an empty selection is a real state, not a bug — it
                                  means "not chosen", and the composition preset decides
@@ -153,7 +182,8 @@
                         </StackPanel>
 
                         <!-- Log level -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.LogLevelAliases}}">
                             <TextBlock Text="Log level" Classes="Label" />
                             <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180"
                                       AutomationProperties.Name="Log level">
@@ -170,7 +200,8 @@
                              composes, so this screen could never change a running
                              app — it used to appear to, by writing the process
                              environment and showing a "Settings saved" toast. -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.OllamaHostAliases}}">
                             <TextBlock Text="Ollama host" Classes="Label" />
                             <TextBox Text="{Binding OllamaHost, Mode=OneWay}" IsReadOnly="True"
                                      AutomationProperties.Name="Ollama host"
@@ -178,20 +209,22 @@
                                      ToolTip.Tip="Read from OLLAMA_HOST when Harbor starts. Set the environment variable before launching to change it." />
                         </StackPanel>
 
-                        <Separator Margin="0,2" />
+                        <Separator Margin="0,2" IsVisible="{Binding !IsFiltering}" />
 
                         <!-- Onboarding -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.OnboardingAliases}}">
                             <TextBlock Text="Onboarding" Classes="Label" />
                             <Button Classes="Subtle" Content="Re-run setup wizard"
                                     Command="{Binding RerunOnboardingCommand}"
                                     ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard." />
                         </StackPanel>
 
-                        <Separator Margin="0,4" />
+                        <Separator Margin="0,4" IsVisible="{Binding !IsFiltering}" />
 
                         <!-- ════════════ Provider Configuration (per-provider API keys + model browser) ════════════ -->
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="6"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.ProviderConfigurationAliases}}">
                             <TextBlock Text="Provider Configuration" Classes="Label" />
                             <TextBlock Text="Set an API key per provider, then click Test to verify the connection."
                                        FontSize="11" Foreground="{StaticResource TextMutedBrush}"
@@ -251,10 +284,11 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <Separator Margin="0,4" />
+                        <Separator Margin="0,4" IsVisible="{Binding !IsFiltering}" />
 
                         <!-- Model browser (embeds the picker control) -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.BrowseModelsAliases}}">
                             <TextBlock Text="Browse Models" Classes="Label" />
                             <TextBlock Text="Pick a model to make it the active session's model."
                                        FontSize="11" Foreground="{StaticResource TextMutedBrush}"
@@ -265,8 +299,26 @@
                     </StackPanel>
                 </ScrollViewer>
 
+                <!--
+                    K29: an explicit empty state. Without it a query that
+                    matches nothing leaves a blank scroll area, which reads as
+                    "the settings disappeared" rather than "no match".
+                -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Spacing="8" Margin="24"
+                            IsVisible="{Binding !HasSearchResults}">
+                    <TextBlock Text="No settings match this search"
+                               FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource MochaBlue}"
+                               TextAlignment="Center" />
+                    <TextBlock Text="Try a section name such as theme, model, storage or API key."
+                               FontSize="12" Foreground="{StaticResource TextMutedBrush}"
+                               TextAlignment="Center" TextWrapping="Wrap" />
+                </StackPanel>
+                </Grid>
+
                 <!-- Footer -->
-                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                             Spacing="8" Margin="0,12,0,0">
                     <Button Classes="Subtle" Content="Cancel" Click="Cancel_Click" />
                     <Button Classes="Primary" Content="Save" Command="{Binding SaveCommand}" Click="Close_Click" />
