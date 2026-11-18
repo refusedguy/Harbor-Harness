@@ -130,7 +130,7 @@ CLI verbs (see `help`): `ask <prompt> | run | demo | setup | auth | config | pro
 
 > **Env var note**: Kilocode uses `KILO_API_KEY` (not `KILOCODE_API_KEY`). Get a free key at <https://kilo.ai>.
 
-See [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md) for the full guide and [docs/BUILD.md](./docs/BUILD.md) for build variants (granular feature flags such as `no-plugins` / `no-all-providers` via the NUKE build).
+See [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md) for the full guide and [docs/BUILD.md](./docs/BUILD.md) for build variants (granular feature flags such as `no-plugins` / `no-all-providers` via the build orchestrator).
 
 ## E2E verified — Kilocode free model
 

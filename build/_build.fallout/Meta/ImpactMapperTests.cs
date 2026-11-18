@@ -40,7 +40,7 @@ public static class ImpactMapperSelfTest
             Check(
                 Targets(global).SequenceEqual(["Compile", "Test", "ArchitectureTests"], StringComparer.Ordinal),
                 $"global trigger must plan the full cycle, got [{string.Join(", ", Targets(global))}]");
-            var buildTool = Analyze(plainInput, "build/_build/Meta/NewFile.cs");
+            var buildTool = Analyze(plainInput, "build/_build.fallout/Meta/NewFile.cs");
             Check(buildTool.Commands.Count == 0 && buildTool.Notes.Count > 0,
                 "build/ change must yield the self-rebuild note");
             var conditionalInput = new ImpactInput(sandbox,

@@ -177,11 +177,10 @@ Harbor has three MSBuild files at the repo root that work together. They are eas
 Harbor's `Directory.Packages.props` now carries **80 `<PackageVersion>` entries**
 — the original migration shipped 41; the desktop/UI sprint added the rest.
 
-**Two projects are outside this file.** The build orchestrator projects under
-`build/` turn CPM off for themselves and pin their own dependency chains inline:
-`build/_build.fallout/_build.fallout.csproj` (primary since #2180) and
-`build/_build.csproj` (legacy NUKE path, kept until step 4). Their versions live
-in those files, not here. See [§4.4](#44-the-build-orchestrator-projects-outside-cpm).
+**One project is outside this file.** The build orchestrator under `build/`
+turns CPM off for itself and pins its own dependency chain inline, in
+`build/_build.fallout/_build.fallout.csproj`. Its versions live in that file,
+not here. See [§4.4](#44-the-build-orchestrator-project-outside-cpm).
 
 ### 3.4 Evaluation order
 
@@ -203,7 +202,7 @@ When you run `dotnet build src/Harbor.Application/Harbor.Application.csproj`, MS
 |----------------|---------------|
 | Add a new NuGet package to one project | The project's `.csproj` (add `<PackageReference Include="X"/>` — **no Version**) **AND** `Directory.Packages.props` (add `<PackageVersion Include="X" Version="..."/>`) |
 | Upgrade a package version | `Directory.Packages.props` (change the `Version` attribute) — that's it |
-| Upgrade a package a **build orchestrator** consumes | `build/_build.fallout/_build.fallout.csproj` (primary) or `build/_build.csproj` (legacy NUKE, until step 4); change the `Version` attribute there, CPM has no say; see [§4.4](#44-the-build-orchestrator-projects-outside-cpm) |
+| Upgrade a package the **build orchestrator** consumes | `build/_build.fallout/_build.fallout.csproj`; change the `Version` attribute there, CPM has no say; see [§4.4](#44-the-build-orchestrator-project-outside-cpm) |
 | Remove a package from one project | The project's `.csproj` (delete the `<PackageReference>`) — leave `Directory.Packages.props` alone (it's harmless to keep an unused `PackageVersion`) |
 | Change a build property (target framework, nullable, etc.) | `Directory.Build.props` |
 | Add a test-only setting | `Directory.Build.targets` (since it depends on `$(IsTestProject)`) |
@@ -266,45 +265,40 @@ file's own, recounted; the rows sum to the total at the bottom):
 | Reference hygiene | 1 | `ReferenceTrimmer` (build-time only, #1853) |
 | **Total (at migration time; now 80)** | **80** | |
 
-### 4.4 The build orchestrator projects outside CPM
+### 4.4 The build orchestrator project outside CPM
 
-Two projects are **not** governed by `Directory.Packages.props`, and that is
-deliberate. Both live under `build/`:
+One project is **not** governed by `Directory.Packages.props`, and that is
+deliberate: `build/_build.fallout/_build.fallout.csproj`, the Fallout entry
+point built by `build/build.sh` / `build.ps1`, which run `_build.fallout.dll`.
+The retired second orchestrator was removed in #2183 step 4.
 
-| Project | Role | Status |
-|---|---|---|
-| `build/_build.fallout/_build.fallout.csproj` | Fallout entry point, primary since #2180 | built by `build/build.sh` / `build.ps1`, which run `_build.fallout.dll` |
-| `build/_build.csproj` | NUKE entry point | legacy path, kept until step 4 |
-
-**Why.** `build/Directory.Build.props` applies to every project under `build/`,
-and each project file repeats the same two properties:
+**Why.** `build/Directory.Build.props` applies to the project under `build/`,
+and the project file repeats the same two properties:
 
 ```xml
 <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
 <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
 ```
 
-The copies in the project files are the ones that decide, for the same import
+The copy in the project file is the one that decides, for the same import
 order as before: the SDK imports `Directory.Build.props` first and
 `Directory.Packages.props` second (`Microsoft.Common.props` imports
 `NuGet.props`, which imports the central file). The root file's
 `ManagePackageVersionsCentrally=true` therefore lands AFTER the local
-`build/Directory.Build.props` set it to `false`, and only each project file's
+`build/Directory.Build.props` set it to `false`, and only the project file's
 own PropertyGroup, evaluated after both imports, survives.
 
-`build/Directory.Build.props` gives both projects a permissive environment
+`build/Directory.Build.props` gives the project a permissive environment
 (analyzers off, `TreatWarningsAsErrors` off, no import of the solution-wide
-parent) because the orchestrator is a tool, not a shipped assembly. It also
-notes that the NUKE-era `NukeTelemetryVersion` property is absent there: Fallout
-has no telemetry layer, and the legacy NUKE project keeps its own copy in
-`build/_build.csproj` until step 4.
+parent) because the orchestrator is a tool, not a shipped assembly. Fallout has
+no telemetry layer, so there is no telemetry-version property.
 
 **The rule that follows, and it is the whole point.** A version lives in
 exactly one place. Because CPM is off for these projects, the versions they
 consume are decided in their own project files and NOWHERE ELSE.
 
-Primary copy, `build/_build.fallout/_build.fallout.csproj` (Fallout.Common
-10.4.0 per ADR-023):
+`build/_build.fallout/_build.fallout.csproj` (Fallout.Common 10.4.0 per
+ADR-023):
 
 | Package | Version | Decided in |
 |---|---|---|
@@ -315,43 +309,25 @@ Primary copy, `build/_build.fallout/_build.fallout.csproj` (Fallout.Common
 | `Microsoft.Build.Utilities.Core` | 18.0.2 | `build/_build.fallout/_build.fallout.csproj` |
 | `NuGet.Packaging` | 6.14.3 | `build/_build.fallout/_build.fallout.csproj` |
 
-Legacy NUKE copy, `build/_build.csproj`, kept until step 4:
-
-| Package | Version | Decided in |
-|---|---|---|
-| `Nuke.Common` | 10.1.0 | `build/_build.csproj` |
-| `System.Security.Cryptography.Xml` | 10.0.13 | `build/_build.csproj` |
-| `Microsoft.Build` | 18.0.2 | `build/_build.csproj` |
-| `Microsoft.Build.Tasks.Core` | 18.0.2 | `build/_build.csproj` |
-| `Microsoft.Build.Utilities.Core` | 18.0.2 | `build/_build.csproj` |
-| `NuGet.Packaging` | 6.12.5 | `build/_build.csproj` |
-
-The two copies differ in their orchestrator package and in `NuGet.Packaging`:
-`Fallout.Tooling 10.4.0` requires 6.14.3, so leaving the NUKE-era 6.12.5 pin
-would be NU1605 under CPM-off restore. `Microsoft.Build*` stays at 18.0.2 in
-both, matching their ProjectModel packages, and
-`System.Security.Cryptography.Xml` stays at 10.0.13.
-
-There is deliberately **no** `Nuke.Common` or `Fallout.Common` entry in
-`Directory.Packages.props`. `Nuke.Common` used to be there, and it was dead:
-with CPM off for the only project that referenced it, the entry never took
-part in any restore, while the comment next to it claimed a version that was
-not the one the build used, two contradictory answers to the same question in
-one file. #1896 removed it; `Fallout.Common` is absent for the same reason.
+There is deliberately **no** `Fallout.Common` entry in
+`Directory.Packages.props`. With CPM off for the only project that references
+it, such an entry would never take part in any restore, while the comment next
+to it would claim a version that is not the one the build uses. #1896 removed a
+dead entry for exactly this reason; `Fallout.Common` is absent for the same
+reason.
 
 **Why the pins exist at all.** `CentralPackageTransitivePinningEnabled` is off
-for both projects, so nothing lifts the orchestrator's transitive tree to a
-patched version. Each pin holds a specific line:
+for the orchestrator, so nothing lifts its transitive tree to a patched
+version. Each pin holds a specific line:
 
-- `System.Security.Cryptography.Xml 10.0.13`: the orchestrator's tree pulls
-  9.0.x (9.0.0 for NUKE, 10.0.10 for Fallout.Tooling), inside 11 advisory
-  ranges. Removing the pin re-opens all 11.
-- `Microsoft.Build* 18.0.2`: the floor the ProjectModel package requires for
-  `net10.0` (Nuke.ProjectModel 10.1.0, Fallout.ProjectModel 10.4.0). A pin
-  below it is NU1605 ("Detected package downgrade"), an error rather than a
-  warning; 18.10.1 and later ship net11.0 assets and fail with NU1202.
-- `NuGet.Packaging`: 6.12.5 for NUKE, 6.14.3 for Fallout; both close
-  GHSA-g4vj-cjjj-v7hg and sit above what the respective tooling asks for.
+- `System.Security.Cryptography.Xml 10.0.13`: Fallout.Tooling pulls 10.0.10,
+  inside 11 advisory ranges. Removing the pin re-opens all 11.
+- `Microsoft.Build* 18.0.2`: the floor Fallout.ProjectModel 10.4.0 requires for
+  `net10.0`. A pin below it is NU1605 ("Detected package downgrade"), an error
+  rather than a warning; 18.10.1 and later ship net11.0 assets and fail with
+  NU1202.
+- `NuGet.Packaging 6.14.3`: closes GHSA-g4vj-cjjj-v7hg and sits above what
+  Fallout.Tooling asks for.
 
 ### 4.5 Note on `Markdig` version
 
@@ -932,7 +908,7 @@ Set <NuGetAuditMode> to all` on the dev build of 2026-10-20, because the
 analyzer could not see the pin from `src/`.
 
 The two places the pin does NOT reach, so the claim is not read as covering
-them: `build/` (the NUKE tool, which declares that it does not inherit
+them: `build/` (the Fallout tool, which declares that it does not inherit
 solution-wide strictness. It audits at the SDK default of `all`/`low`,
 which is WIDER than the repository's gate) and `contrib/` (not built by CI).
 

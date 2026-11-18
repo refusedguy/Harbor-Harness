@@ -2,11 +2,11 @@
 <!--
   build/Directory.Build.props — overrides for the build orchestrator projects.
 
-  This file is picked up ONLY by projects under build/: _build.csproj (the
-  NUKE path, kept until step 4) and _build.fallout/_build.fallout.csproj
-  (the Fallout path that becomes the primary copy in #2180 step 1). It
-  overrides the solution-wide Directory.Build.props to give the orchestrator
-  a permissive build environment:
+  This file is picked up ONLY by the project under build/:
+  _build.fallout/_build.fallout.csproj, the single build orchestrator after
+  the step-4 removal of the legacy path (#2183). It overrides the
+  solution-wide Directory.Build.props to give the orchestrator a permissive
+  build environment:
 
     - TreatWarningsAsErrors=false   (generated code triggers CS0649 / CS0169)
     - GenerateDocumentationFile=false (bootstrap tool, not shipped)
@@ -33,16 +33,13 @@
     <NoWarn>$(NoWarn);CS0649;CS0169;CS1591;CA1416</NoWarn>
 
     <!-- Don't let CPM reject the orchestrator's transitive deps. The copy of
-         this property in each build csproj is the one that decides (the SDK
-         imports Directory.Build.props first and Directory.Packages.props
+         this property in _build.fallout.csproj is the one that decides (the
+         SDK imports Directory.Build.props first and Directory.Packages.props
          second, so the root file turns CPM back on after this file set it
          off) — keep all copies in step when any of them changes. -->
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
 
-    <!-- The telemetry-version property from the NUKE era is intentionally
-         absent here: Fallout has no telemetry layer, and the NUKE project
-         still carries its own copy in build/_build.csproj until step 4. -->
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <RunAnalyzers>false</RunAnalyzers>
     <AnalysisLevel>none</AnalysisLevel>

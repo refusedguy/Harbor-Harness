@@ -245,8 +245,8 @@ stripped profile, not the plugin surface.
 other recipe: the two build different programs, so an inventory from one
 silently does not describe the other.
 
-Note also that the NUKE `PublishAot` target
-([`build/_build/Components/PublishVariantBuilder.cs`](../build/_build/Components/PublishVariantBuilder.cs))
+Note also that the orchestrator's `PublishAot` target
+([`build/_build.fallout/Components/PublishVariantBuilder.cs`](../build/_build.fallout/Components/PublishVariantBuilder.cs))
 sets the raw MSBuild property `PublishAot=true` rather than `HarborWithAot`, so
 it does **not** evaluate the csproj's AOT block at all — and it would hit the
 same `NETSDK1102`. Recorded because it means the csproj block has exactly one
@@ -437,7 +437,7 @@ in `Harbor.App.Cli.csproj` as a project-level property that never reaches
 `Harbor.Hosting` (only global `-p` properties flow to `ProjectReference`s),
 and `JsonProviderDiscovery` skips their JSON files because the factories own
 those ids. First measured on the #1055 slice-3 branch: a `dotnet`-built CLI
-lists 11 ids, no `anthropic`/`openai`. Only a NUKE build, which sets the flag
+lists 11 ids, no `anthropic`/`openai`. Only an orchestrator build, which sets the flag
 globally, carries them. Under the stripped recipe even `ollama` would
 legitimately disappear — the recipe section above says which recipe this job
 uses and why.

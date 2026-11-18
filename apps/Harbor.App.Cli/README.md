@@ -110,7 +110,7 @@ HARBOR_TUI=razor       harbor     # .razor components, hot reload (full builds o
 ```
 
 `spectre*`, `terminal-gui`, `termina`, `razor` are compiled from `contrib/tui/*` only
-when `Harbor.Hosting` is built with `HarborWithSpectreTui=true` (NUKE/distro builds or
+when `Harbor.Hosting` is built with `HarborWithSpectreTui=true` (distro builds or
 `-p:HarborWithSpectreTui=true`; plain `dotnet build` / `dotnet run` does NOT include
 them — those ids fall back to `plain`). `sixel`, `wpf`, `avalonia`, `maui`, `blazor`
 and `notifications` are never compiled into the CLI.

@@ -5,8 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/harbor-sh/harbor/dev/dist/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/harbor-sh/harbor/dev/dist/install.sh | sh -s -- --tag v0.7.0
 #
-# What it does: downloads the .tar.gz published by the NUKE Release target
-# (see build/_build/Targets/ReleaseTarget.cs — 3 variants x TarGz) and
+# What it does: downloads the .tar.gz published by the orchestrator's Release
+# target (see build/_build.fallout/Targets/ReleaseTarget.cs — 3 variants x TarGz) and
 # installs it into $PREFIX/lib/harbor plus a $PREFIX/bin/harbor shim
 # (default PREFIX=/usr/local). No native package manager required.
 #
@@ -17,7 +17,7 @@
 #   --tag TAG       release tag, e.g. v0.7.0 (default: latest release)
 #   --repo OWNER/NAME
 #                   GitHub repo (default: harbor-sh/harbor — same default as
-#                   the NUKE Release target's --release-repo)
+#                   the orchestrator's Release target --release-repo)
 #   --variant V     FrameworkDependent | SelfContained | SingleFileSelfContained
 #                   (default: SelfContained — runs without a dotnet runtime)
 #   --rid RID       runtime id, e.g. linux-x64 (default: auto-detected)
@@ -57,7 +57,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 # Variant slug must stay in sync with
-# build/_build/Components/ArtifactPathResolver.cs (GetVariantDirName).
+# build/_build.fallout/Components/ArtifactPathResolver.cs (GetVariantDirName).
 case "$VARIANT" in
     FrameworkDependent) SLUG="framework-dependent" ;;
     SelfContained) SLUG="self-contained" ;;
@@ -65,7 +65,7 @@ case "$VARIANT" in
     *) echo "install.sh: unknown --variant '$VARIANT' (want FrameworkDependent|SelfContained|SingleFileSelfContained)" >&2; exit 2 ;;
 esac
 
-# RID slug: NUKE replaces '-' with '_' in the archive name
+# RID slug: the orchestrator replaces '-' with '_' in the archive name
 # (GetArchiveBaseName), e.g. linux-x64 -> linux_x64.
 if [ -z "$RID" ]; then
     OS="$(uname -s)"; ARCH="$(uname -m)"

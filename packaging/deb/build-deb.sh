@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-deb.sh — build a .deb for the Harbor CLI from a release archive.
 #
-# The .deb is a thin repackaging of the .tar.gz produced by the NUKE
+# The .deb is a thin repackaging of the .tar.gz produced by the build orchestrator
 # PublishArchive/Release targets (NOT a second build): same binaries, plus
 # DEBIAN/control metadata and a /usr/bin/harbor shim. For an unmanaged
 # install use dist/install.sh instead.

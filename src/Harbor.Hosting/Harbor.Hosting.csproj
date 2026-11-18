@@ -8,7 +8,8 @@
     HarborComposeOptions. Call order is fixed (see ADR-007 sibling design doc)
     and covered by HostBuilderDiTests / AppHostDiTests.
 
-    Feature flags: the HarborWith* MSBuild switches (fed by the NUKE build) are
+    Feature flags: the HarborWith* MSBuild switches (fed by the build
+    orchestrator) are
     declared here — this project owns the conditional ProjectReferences and the
     HARBOR_WITH_* / HARBOR_MINIMAL DefineConstants. The rest of the code branches
     on #if only inside Modules/.
@@ -31,8 +32,9 @@
   </ItemGroup>
 
   <!--
-    Feature-flag plumbing (moved from Harbor.App.Cli.csproj, F2.2): NUKE
-    FeatureFlags -> MSBuild properties HarborWith* -> DefineConstants.
+    Feature-flag plumbing (moved from Harbor.App.Cli.csproj, F2.2):
+    orchestrator FeatureFlags -> MSBuild properties HarborWith* ->
+    DefineConstants.
   -->
   <PropertyGroup>
     <DefineConstants Condition="'$(HarborWithPlugins)' == 'true'">$(DefineConstants);HARBOR_WITH_PLUGINS</DefineConstants>

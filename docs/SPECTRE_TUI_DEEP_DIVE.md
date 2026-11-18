@@ -9,7 +9,7 @@
 > но обычный `dotnet build`/`dotnet run` не передаёт его в `Harbor.Hosting`, поэтому шесть
 > фабрик в `TuiBackendRegistry.cs` остаются за закрытым `#if`, а id `spectre`/`fullscreen`/
 > `spectre-tui` откатываются на `plain`. Активация — `-p:HarborWithSpectreTui=true`
-> (или NUKE/distro-сборка); подробности в [docs/ALTERNATIVE_UIS.md](./ALTERNATIVE_UIS.md).
+> (или distro-сборка); подробности в [docs/ALTERNATIVE_UIS.md](./ALTERNATIVE_UIS.md).
 > CI этот флаг не передаёт. Вторая интерактивная оболочка — **`src/Harbor.Tui.CellForge/`**
 > (raw-mode вход, cell-diff вывод, виртуализированный таймлайн; включение —
 > `HARBOR_TUI=cellforge`, см. README проекта). Этот документ полезен и как источник

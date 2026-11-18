@@ -24,7 +24,7 @@ public sealed class GitHubReleaseUploader
     ///     Construct an uploader. <paramref name="userAgent" /> is sent as the
     ///     <c>User-Agent</c> header (GitHub requires it).
     /// </summary>
-    public GitHubReleaseUploader(string userAgent = "harbor-nuke-build")
+    public GitHubReleaseUploader(string userAgent = "harbor-fallout-build")
     {
         _userAgent = userAgent;
     }

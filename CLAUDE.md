@@ -79,7 +79,7 @@ apps/Harbor.App.Avalonia/              — cross-platform desktop GUI
 contrib/tui/                           — extra interactive shells, NOT compiled into the default CLI build:
                                          Harbor.Hosting.csproj:166-172 references six of them behind
                                          HarborWithSpectreTui=true (activate with -p:HarborWithSpectreTui=true
-                                         or a NUKE/distro build). The CLI sets the flag's default to true
+                                         or a distro build). The CLI sets the flag's default to true
                                          (Harbor.App.Cli.csproj:107-108) and defines HARBOR_WITH_SPECTRE_TUI
                                          (:121), but a plain dotnet build/run does not pass it to Harbor.Hosting,
                                          so these shells stay out and the spectre ids fall back to plain.

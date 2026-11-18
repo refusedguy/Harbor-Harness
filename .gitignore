@@ -137,7 +137,6 @@ e2e/
 *.received.*
 .avalonia-build-tasks/
 *.wpftmp.csproj
-build/_build/Configuration/
 BenchmarkDotNet.Artifacts/
 .opencode/
 .agent/

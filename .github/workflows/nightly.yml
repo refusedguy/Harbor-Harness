@@ -252,7 +252,7 @@ jobs:
           # DLL. With no PDB there is nothing to instrument: run 39508517419
           # produced 20 EMPTY cobertura files and "Total - Line: N/A" in
           # every suite, and the summary said "No cobertura files produced".
-          # The same build as the NUKE one (dotnet build of Harbor.slnx, the
+          # The same build as the main one (dotnet build of Harbor.slnx, the
           # properties CompileTarget passes) plus the two that keep the PDBs.
           dotnet build Harbor.slnx -c Release --nologo \
             -p:DebugType=portable \

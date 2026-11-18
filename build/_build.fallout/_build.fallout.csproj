@@ -1,26 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    _build.fallout.csproj — PRIMARY Fallout build entry point (#2180 step 1).
+    _build.fallout.csproj — the single build entry point.
 
-    This is the canonical Fallout port of the 32-file orchestrator that used
-    to live only in build/_build/. It started as the step-0 pilot (issue
-    #2179), rewritten once by `fallout-migrate` in dry-run mode
+    This is the Fallout orchestrator. It started as the step-0 pilot (issue
+    #2179), was made primary in #2180 step 1, and became the only build path
+    when the retired second orchestrator was removed in #2183 step 4. The
+    port was produced by `fallout-migrate` in dry-run mode
     (Fallout.Migrate 10.4.0) and hand-checked:
 
-        NUKE.Common 10.1.0    => Fallout.Common 10.4.0
-        NUKEBuild             => FalloutBuild
-        using NUKE.*          => using Fallout.*  (ProjectModel => Fallout.Solutions)
+        Fallout.Common 10.4.0, FalloutBuild, using Fallout.*
+        (ProjectModel => Fallout.Solutions)
 
-    Step 1 fixes this copy as primary: the pins below are the ADR-023 pins,
-    the root marker is .fallout/, and .github/workflows/fallout-pilot.yml is
-    the CI verifier (15-target argv/exit-code parity and the AOT/R9 publish).
+    The pins below are the ADR-023 pins. The root marker is .fallout/, and
+    .github/workflows/fallout-pilot.yml is the CI verifier (15-target argv
+    and exit-code checks plus the AOT/R9 publish).
 
-    build/_build/ and build/_build.csproj are NOT touched until step 4, so the
-    "NUKE diff empty" acceptance criterion still holds. The project sits in
-    its OWN directory so its obj/ and bin/ cannot collide with the NUKE
-    project's, and so `build/Directory.Build.props` (permissive, no parent
-    import, CPM off) still applies to it.
+    The project sits in its own directory so `build/Directory.Build.props`
+    (permissive, no parent import, CPM off) applies to it alone.
   -->
 
   <PropertyGroup>
@@ -46,10 +43,10 @@
       fallout-migrate does NOT rewrite the transitive pins, and its real
       run drops the System.Security.Cryptography.Xml pin outright. We keep
       the pin here: Fallout.Tooling asks for 10.0.10, which is inside the
-      11 advisory ranges 10.0.13 closes. NuGet.Packaging moves 6.12.5 =>
-      6.14.3 because Fallout.Tooling 10.4.0 requires 6.14.3; leaving the
-      NUKE-era pin would be NU1605 (restore error) with CPM off.
-      Microsoft.Build* stay at 18.0.2, matching Fallout.ProjectModel.
+      11 advisory ranges 10.0.13 closes. NuGet.Packaging is 6.14.3 because
+      Fallout.Tooling 10.4.0 requires it; an older pin would be NU1605
+      (restore error) with CPM off. Microsoft.Build* stay at 18.0.2,
+      matching Fallout.ProjectModel.
     -->
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>

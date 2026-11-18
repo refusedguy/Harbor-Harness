@@ -141,7 +141,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [x] Hot-reload via `FileSystemWatcher` — `DebouncedPluginWatcher` (generational debounce, last-event-wins) → `PluginReloadService` re-runs the startup pipeline into live registries; `/plugins reload` in REPL + auto-reload gated by `tooling.autoReloadPlugins`; edited/removed plugins still need a restart to fully rebind (unregister tracking is follow-up)
 - [x] `harbor plugin install/list/uninstall` CLI commands
 - [x] Agent-facing plugin management with a per-change approval gate (#1738) — the `plugin_manager` tool reads the plugin inventory (one `IPluginInventory` shared with the `/plugins` panel) and PROPOSES install/uninstall/enable/disable; the change happens only after the user approves that one call, and the approval never changes the session's permission mode
-- [x] Build flag default: plain `dotnet build` now defines `HarborWithPlugins=true` (root `Directory.Build.props`) — previously the whole pipeline was dead code outside NUKE builds ("Feature flags: plugins=False")
+- [x] Build flag default: plain `dotnet build` now defines `HarborWithPlugins=true` (root `Directory.Build.props`) — previously the whole pipeline was dead code outside orchestrator builds ("Feature flags: plugins=False")
 
 **Sub-agent execution** *(частично: TaskTool валидирует sub-agent, но не запускает его — `src/Harbor.Tools.Builtin/Tools/Task/TaskTool.cs`: «does NOT run it yet… execution fails with an explicit "not implemented" error»)*
 - [x] Wire `TaskTool` to agent registry — Tool внедряет `IAgentRegistry`, проверяет `IsSubAgent` (G4)

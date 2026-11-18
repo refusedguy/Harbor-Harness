@@ -72,9 +72,10 @@ and not a claim.
 Two of the solution's rows were **not** analysed, and both for a stated
 reason rather than by accident:
 
-- `build/_build.csproj` and `tests/Harbor.Benchmarks/Harbor.Benchmarks.csproj`
-  each have a `Directory.Build.props` of their own that does **not** import the
-  repository root, so the analyzer package never reaches them.
+- `build/_build.fallout/_build.fallout.csproj` and
+  `tests/Harbor.Benchmarks/Harbor.Benchmarks.csproj` each have a
+  `Directory.Build.props` of their own that does **not** import the repository
+  root, so the analyzer package never reaches them.
 
 Two projects were analysed that are **not** rows of the solution, because the
 solution pulls them in through a `<ProjectReference>`:
@@ -270,7 +271,7 @@ Measured on CI run 39445229686 (the same run as the coverage numbers):
 | Job | Wall clock |
 |-----|-----------|
 | `unused references (ReferenceTrimmer)` | **4 min 12 s** (restore + Release build of the whole solution with the analyzer + coverage list + gate) |
-| `build` (NUKE compile, pack, pack validation, smoke) | 7 min 18 s |
+| `build` (orchestrator compile, pack, pack validation, smoke) | 7 min 18 s |
 
 The issue asked for a measurement before the tool goes into a gate, on the
 theory that `GetUsedAssemblyReferences` would cost more than 10 % of the
@@ -296,8 +297,8 @@ Since #2108 the analyzer runs inside the `build` job's ONE compile:
   compiler's warnings to, which is the file the gate reads.
 
 Both arguments reach MSBuild as raw switches (`SetProcessAdditionalArguments`
-in `build/_build/Targets/CompileTarget.cs`): `-p:GenerateDocumentationFile=true`
-and `-flp:logfile=<path>;warningsonly`. NUKE's own `Loggers` setting was
+in `build/_build.fallout/Targets/CompileTarget.cs`): `-p:GenerateDocumentationFile=true`
+and `-flp:logfile=<path>;warningsonly`. The orchestrator's own `Loggers` setting was
 tried first and does not work — it renders `/logger:{value}`, and MSBuild
 reads a single word there as an ASSEMBLY name ("MSB1021: Cannot create an
 instance of the logger flp").

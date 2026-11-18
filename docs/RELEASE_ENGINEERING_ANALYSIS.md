@@ -31,7 +31,7 @@
 **Self-contained publish (folder/archive):**
 - Pros: No SDK/runtime dependency, trivial to host on GitHub Releases, works on any OS with a binary, simplest for end-users.
 - Cons: Large (~80 MB per RID), no built-in update mechanism, user must manually replace binary.
-- Harbor's NUKE build already produces these via `ReleaseTarget`.
+- Harbor's build orchestrator already produces these via `ReleaseTarget`.
 
 **RID-specific .NET 10 tools:**
 - `.NET 10` introduces `ToolPackageRuntimeIdentifiers` and `PublishAot` support for tools.
@@ -93,11 +93,11 @@ For CLI tools, SemVer applies to the **public interface**: flags, exit codes, JS
 
 - **`Nerdbank.GitVersioning`** or **`GitVersion`**: derive version from git tags automatically.
 - **`release-please`** (Google): Conventional Commits → auto-generated changelog + version bump + GitHub Release.
-- **Simpler alternative:** Keep version in `Directory.Build.props`, bump manually via NUKE target, tag with `v0.5.0`.
+- **Simpler alternative:** Keep version in `Directory.Build.props`, bump manually via an orchestrator target, tag with `v0.5.0`.
 
 **Recommendation for v0.5–v1.0:**
 - Use **Conventional Commits** (`feat:`, `fix:`, `BREAKING CHANGE:`) from day one.
-- Add a NUKE target `./build.sh Version` that reads the last tag and bumps based on commit messages (or use `release-please`).
+- Add an orchestrator target `./build.sh Version` that reads the last tag and bumps based on commit messages (or use `release-please`).
 - Automate changelog generation from commit history.
 
 ---
@@ -227,7 +227,7 @@ CLI tools have a fundamental update problem: **the binary is locked while runnin
 
 ### 5.1 Current Harbor Build System
 
-Harbor uses **NUKE** (`build/_build/`) with:
+Harbor uses a **Fallout build orchestrator** (`build/_build.fallout/`) with:
 - `PublishTarget`: runs `dotnet publish` with variant-specific settings.
 - `ArchiveTarget`: compresses publish output (TarGz, Zip).
 - `ReleaseTarget`: orchestrates Publish → Archive → Upload.
@@ -295,7 +295,7 @@ jobs:
 |---|---|---|
 | **Packaging** | Ship self-contained single-file archives per RID on GitHub Releases. | Zero-runtime dependency, simplest UX. |
 | **Versioning** | Move version to `0.5.0` (drop `-alpha`). Start Conventional Commits. | Signal maturity; enable automated tooling. |
-| **CI/CD** | Add `.github/workflows/release.yml` using the existing NUKE `ReleaseTarget`. | Automate the matrix build + GitHub Release upload. |
+| **CI/CD** | Add `.github/workflows/release.yml` using the existing `ReleaseTarget`. | Automate the matrix build + GitHub Release upload. |
 | **Package Managers** | Create `harbor-sh/homebrew-tap` (formula) + `harbor-sh/scoop-bucket` (manifest). | Reach macOS/Linuxbrew and Windows dev users. |
 | **Docs** | Update `README.md` and `docs/BUILD.md` with install commands for all channels. | Users need a single source of truth. |
 | **Update Mechanism** | None. Document manual update path. | Premature optimization; focus on stability. |
@@ -305,7 +305,7 @@ jobs:
 | Area | Action | Rationale |
 |---|---|---|
 | **Packaging** | Add framework-dependent zip for developers. Add Chocolatey package. | Reduce friction for .NET devs and Windows enterprise. |
-| **Versioning** | Add `release-please` or custom NUKE target for automated changelog + tagging. | Reduce release overhead. |
+| **Versioning** | Add `release-please` or a custom orchestrator target for automated changelog + tagging. | Reduce release overhead. |
 | **Native AOT** | Produce `linux-x64` and `win-x64` AOT builds as a separate "fast" download. | Benchmark and promote the performance story. |
 | **RID-specific tools** | Experiment with `ToolPackageRuntimeIdentifiers` + publish to GitHub Packages. | .NET 10 ecosystem is stabilizing; get early feedback. |
 | **Code Signing** | Sign Windows binaries; notarize macOS `.app`. | Required for trust and some distribution channels. |
@@ -338,11 +338,11 @@ jobs:
 
 ## 7. Concrete Next Steps (Action Items)
 
-1. **Add `.github/workflows/release.yml`** using NUKE's `ReleaseTarget` for a 5-RID matrix build.
+1. **Add `.github/workflows/release.yml`** using the orchestrator's `ReleaseTarget` for a 5-RID matrix build.
 2. **Create `harbor-sh/homebrew-tap`** repo with a formula for `harbor` CLI.
 3. **Create `harbor-sh/scoop-bucket`** repo with a manifest for `harbor` CLI.
 4. **Bump version to `0.5.0`** in `Directory.Build.props`.
-5. **Add Conventional Commits enforcement** (e.g., `commitlint` in CI or NUKE check).
+5. **Add Conventional Commits enforcement** (e.g., `commitlint` in CI or an orchestrator check).
 6. **Document install commands** for all channels in `README.md` and a new `docs/DISTRIBUTION.md`.
 7. **Prototype `harbor upgrade`** as a spike in `Harbor.Tools.Builtin` or a separate `Harbor.Tools.Update` project.
 

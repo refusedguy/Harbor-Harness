@@ -13,8 +13,9 @@
 
     ── Feature-flag conditional build ─────────────────────────────────────
     Pass granular MSBuild properties (or set them as env vars) to selectively
-    exclude categories of ProjectReferences. The NUKE build (`build/_build/`)
-    exposes these as command-line flags: no-plugins, no-scripting,
+    exclude categories of ProjectReferences. The build orchestrator
+    (`build/build.sh` / `_build.fallout`) exposes these as command-line flags:
+    no-plugins, no-scripting,
     no-spectre-tui, no-all-providers, minimal. Each is spelled with a
     double-hyphen prefix on the CLI (the literal prefix is omitted here
     because XML comments disallow consecutive hyphens).
@@ -31,7 +32,8 @@
                                            start degrades to a clear error via the headless
                                            verb; PublishIpcServer/Client fail fast)
       * `HarborWithRenderer=all|cellforge|ansiplain` (default
-        `all`, global default in Directory.Build.props, NUKE with-renderer flag) —
+        `all`, global default in Directory.Build.props, orchestrator
+        with-renderer flag) —
         build-time renderer-backend selection (slice A, #1144). It currently
         excludes NOTHING: the one backend it could leave out was the vendored
         SharpConsoleUI renderer, and that backend left the product for
@@ -381,8 +383,8 @@
   </ItemGroup>
 
   <!--
-    HarborMode MSBuild property — used by the NUKE PublishIpcServer /
-    PublishIpcClient targets to tag the published binary with the intended
+    HarborMode MSBuild property — used by the PublishIpcServer /
+    PublishIpcClient orchestrator targets to tag the published binary with the intended
     mode. The CLI itself reads HARBOR_MODE at runtime, so this property is
     informational only (it does NOT exclude any of the three IPC projects
     above). Defaults to 'inprocess'.
