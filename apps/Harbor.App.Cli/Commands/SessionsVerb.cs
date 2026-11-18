@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Hosting;
@@ -68,6 +69,8 @@ internal static class SessionsVerb
                                           sessions export-md <id> [file]  export session as a Markdown document (default: harbor-session-<id>.md)
                                           sessions export-json <id> [file] export session as a JSON document (default: harbor-session-<id>.json)
                                           sessions import <file>          import an exported file as a NEW session
+                                          sessions import [--from claude|codex] <file>
+                                                                          import a Claude Code / Codex JSONL history as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
                                           sessions usage <id>                        report session cost and token usage
                                           sessions revert <id> <message-id>          rewind session to the given message
@@ -262,17 +265,48 @@ internal static class SessionsVerb
 
     internal static async Task<int> RunImportSessionAsync(ILogger logger, string[] args)
     {
-        if (args.Length < 1)
+        string? source = null;
+        var positional = new List<string>();
+        for (int i = 0; i < args.Length; i++)
         {
-            Console.Error.WriteLine("Usage: harbor sessions import <file>");
+            string token = args[i];
+            if (token == "--from" && i + 1 < args.Length)
+            {
+                source = args[++i];
+                continue;
+            }
+
+            if (token.StartsWith('-'))
+            {
+                Console.Error.WriteLine($"harbor sessions import: unknown option '{token}'.");
+                return 2;
+            }
+
+            positional.Add(token);
+        }
+
+        if (positional.Count < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions import [--from claude|codex] <file>");
             return 2;
         }
 
-        string path = args[0];
+        string path = positional[0];
         if (!File.Exists(path))
         {
             Console.Error.WriteLine($"File not found: {path}");
             return 1;
+        }
+
+        if (source is not null)
+        {
+            if (source != ForeignSessionImport.Claude && source != ForeignSessionImport.Codex)
+            {
+                Console.Error.WriteLine("harbor sessions import: --from must be 'claude' or 'codex'.");
+                return 2;
+            }
+
+            return await RunImportForeignAsync(logger, source, path).ConfigureAwait(false);
         }
 
         using var host = HostBuilder.Build();
@@ -293,6 +327,75 @@ internal static class SessionsVerb
         var created = await host.Services.GetRequiredService<ISessionStore>().GetAsync(newId).ConfigureAwait(false);
         string title = created.IsSuccess ? created.Value.Title : "?";
         Console.WriteLine($"Imported {Path.GetFileName(path)} → new session {newId} \"{title}\"");
+        return 0;
+    }
+
+    /// <summary>
+    ///     Create a fresh Harbor session and fill it with the conversation
+    ///     projected from a Claude Code or Codex JSONL file (#2674 F13).
+    /// </summary>
+    private static async Task<int> RunImportForeignAsync(ILogger logger, string source, string path)
+    {
+        string jsonl;
+        try
+        {
+            jsonl = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+        }
+        catch (IOException ex)
+        {
+            SessionsVerbLog.ImportFailed(logger, ex.Message);
+            Console.Error.WriteLine($"import: cannot read '{path}': {ex.Message}");
+            return 1;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SessionsVerbLog.ImportFailed(logger, ex.Message);
+            Console.Error.WriteLine($"import: cannot read '{path}': {ex.Message}");
+            return 1;
+        }
+
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        // An imported session is a read-only transcript of another agent: the
+        // source name travels as the model id and a neutral id as the provider.
+        var created = await store.CreateAsync(Environment.CurrentDirectory, "code", "imported", source)
+            .ConfigureAwait(false);
+        if (created.IsFailure)
+        {
+            SessionsVerbLog.ImportFailed(logger, created.Error);
+            Console.Error.WriteLine($"import: session creation failed: {created.Error}");
+            return 1;
+        }
+
+        string sessionId = created.Value.Id;
+        Result<ForeignSessionImport.ForeignImportResult> parsed =
+            ForeignSessionImport.Parse(source, jsonl, sessionId);
+        if (parsed.IsFailure)
+        {
+            SessionsVerbLog.ImportFailed(logger, parsed.Error);
+            Console.Error.WriteLine($"import: {parsed.Error}");
+            return 1;
+        }
+
+        if (parsed.Value.Messages.Count == 0)
+        {
+            Console.Error.WriteLine($"import: no conversation found in '{path}' for source '{source}'.");
+            return 1;
+        }
+
+        Result appended = await store.AppendMessagesBatchAsync(sessionId, parsed.Value.Messages)
+            .ConfigureAwait(false);
+        if (appended.IsFailure)
+        {
+            SessionsVerbLog.ImportFailed(logger, appended.Error);
+            Console.Error.WriteLine($"import: failed to store messages: {appended.Error}");
+            return 1;
+        }
+
+        Console.WriteLine(
+            $"Imported {parsed.Value.Imported} message(s) from {source} '{Path.GetFileName(path)}' " +
+            $"→ new session {sessionId} ({parsed.Value.Skipped} line(s) skipped).");
         return 0;
     }
 
