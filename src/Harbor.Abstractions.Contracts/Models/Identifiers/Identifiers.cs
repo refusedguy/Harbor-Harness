@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Harbor.Abstractions.Models.Identifiers;
 /// <summary>
 ///     Internal char-validation helpers for identifier normalization. Replaces per-call
@@ -60,6 +62,53 @@ internal static class IdentifierValidation
 }
 
 /// <summary>
+///     The single owner of the rules shared by the guid-backed identifier records in
+///     this file (<see cref="SessionId" />, <see cref="MessageId" />,
+///     <see cref="ToolCallId" /> and <see cref="RunId" />). The records keep their own
+///     public API and their own error text; only the rule lives here.
+/// </summary>
+internal static class GuidId
+{
+    /// <summary>
+    ///     Wrap a non-blank string as <typeparamref name="T" />, throwing when it is blank.
+    /// </summary>
+    /// <param name="value">The candidate string.</param>
+    /// <param name="factory">Wraps the validated string in the concrete id type.</param>
+    /// <param name="emptyMessage">The type-specific message used for a blank value.</param>
+    /// <returns>The wrapped identifier.</returns>
+    internal static T Parse<T>(string? value, Func<string, T> factory, string emptyMessage)
+    {
+        if (IsBlank(value))
+            throw new ArgumentException(emptyMessage, nameof(value));
+
+        return factory(value);
+    }
+
+    /// <summary>
+    ///     Non-throwing counterpart of <see cref="Parse{T}" />.
+    /// </summary>
+    /// <param name="value">The candidate string (may be null or blank).</param>
+    /// <param name="factory">Wraps the validated string in the concrete id type.</param>
+    /// <param name="emptyMessage">The type-specific message used for a blank value.</param>
+    /// <returns>Success with the wrapped id, or failure with <paramref name="emptyMessage" />.</returns>
+    internal static Result<T> TryParse<T>(string? value, Func<string, T> factory, string emptyMessage)
+    {
+        if (IsBlank(value))
+            return Result.Failure<T>(emptyMessage);
+
+        return Result.Success(factory(value));
+    }
+
+    /// <summary>
+    ///     The fresh N-form guid that every <c>New()</c> factory wraps.
+    /// </summary>
+    internal static string NewValue() => Guid.NewGuid().ToString("N");
+
+    private static bool IsBlank([NotNullWhen(false)] string? value)
+        => string.IsNullOrWhiteSpace(value);
+}
+
+/// <summary>
 ///     Strongly-typed identifier for a session.
 /// </summary>
 /// <remarks>
@@ -86,18 +135,13 @@ public sealed record SessionId
     /// <param name="value">The session id string.</param>
     /// <returns>A new <see cref="SessionId" />.</returns>
     public static SessionId Create(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException("Session ID cannot be empty", nameof(value));
-
-        return new SessionId(value);
-    }
+        => GuidId.Parse(value, static v => new SessionId(v), "Session ID cannot be empty");
 
     /// <summary>
     ///     Generate a brand-new <see cref="SessionId" /> backed by a fresh guid.
     /// </summary>
     /// <returns>A new <see cref="SessionId" />.</returns>
-    public static SessionId New() => Create(Guid.NewGuid().ToString("N"));
+    public static SessionId New() => Create(GuidId.NewValue());
 
     /// <summary>
     ///     Try to construct a <see cref="SessionId" /> without throwing.
@@ -105,12 +149,7 @@ public sealed record SessionId
     /// <param name="value">The candidate string (may be null/blank).</param>
     /// <returns>Success with the new id, or failure with an error message.</returns>
     public static Result<SessionId> TryCreate(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Result.Failure<SessionId>("Session ID cannot be empty");
-
-        return Result.Success(Create(value));
-    }
+        => GuidId.TryParse(value, static v => new SessionId(v), "Session ID cannot be empty");
 
     /// <inheritdoc />
     public override string ToString() => Value;
@@ -146,18 +185,13 @@ public sealed record MessageId
     /// <param name="value">The message id string.</param>
     /// <returns>A new <see cref="MessageId" />.</returns>
     public static MessageId Create(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException("Message ID cannot be empty", nameof(value));
-
-        return new MessageId(value);
-    }
+        => GuidId.Parse(value, static v => new MessageId(v), "Message ID cannot be empty");
 
     /// <summary>
     ///     Generate a brand-new <see cref="MessageId" /> backed by a fresh guid.
     /// </summary>
     /// <returns>A new <see cref="MessageId" />.</returns>
-    public static MessageId New() => Create(Guid.NewGuid().ToString("N"));
+    public static MessageId New() => Create(GuidId.NewValue());
 
     /// <summary>
     ///     Try to construct a <see cref="MessageId" /> without throwing.
@@ -165,12 +199,7 @@ public sealed record MessageId
     /// <param name="value">The candidate string (may be null/blank).</param>
     /// <returns>Success with the new id, or failure with an error message.</returns>
     public static Result<MessageId> TryCreate(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Result.Failure<MessageId>("Message ID cannot be empty");
-
-        return Result.Success(Create(value));
-    }
+        => GuidId.TryParse(value, static v => new MessageId(v), "Message ID cannot be empty");
 
     /// <inheritdoc />
     public override string ToString() => Value;
@@ -207,18 +236,21 @@ public sealed record ToolCallId
     /// <param name="value">The tool call id string.</param>
     /// <returns>A new <see cref="ToolCallId" />.</returns>
     public static ToolCallId Create(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException("Tool call ID cannot be empty", nameof(value));
-
-        return new ToolCallId(value);
-    }
+        => GuidId.Parse(value, static v => new ToolCallId(v), "Tool call ID cannot be empty");
 
     /// <summary>
     ///     Generate a brand-new <see cref="ToolCallId" /> backed by a fresh guid.
     /// </summary>
     /// <returns>A new <see cref="ToolCallId" />.</returns>
-    public static ToolCallId New() => Create(Guid.NewGuid().ToString("N"));
+    public static ToolCallId New() => Create(GuidId.NewValue());
+
+    /// <summary>
+    ///     Try to construct a <see cref="ToolCallId" /> without throwing.
+    /// </summary>
+    /// <param name="value">The candidate string (may be null/blank).</param>
+    /// <returns>Success with the new id, or failure with an error message.</returns>
+    public static Result<ToolCallId> TryCreate(string? value)
+        => GuidId.TryParse(value, static v => new ToolCallId(v), "Tool call ID cannot be empty");
 
     /// <inheritdoc />
     public override string ToString() => Value;
@@ -623,18 +655,13 @@ public sealed record RunId
     /// <param name="value">The run id string.</param>
     /// <returns>A new <see cref="RunId" />.</returns>
     public static RunId Create(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException("Run ID cannot be empty", nameof(value));
-
-        return new RunId(value);
-    }
+        => GuidId.Parse(value, static v => new RunId(v), "Run ID cannot be empty");
 
     /// <summary>
     ///     Generate a brand-new <see cref="RunId" /> backed by a fresh guid.
     /// </summary>
     /// <returns>A new <see cref="RunId" />.</returns>
-    public static RunId New() => Create(Guid.NewGuid().ToString("N"));
+    public static RunId New() => Create(GuidId.NewValue());
 
     /// <summary>
     ///     Try to construct a <see cref="RunId" /> without throwing.
@@ -642,12 +669,7 @@ public sealed record RunId
     /// <param name="value">The candidate string (may be null/blank).</param>
     /// <returns>Success with the new id, or failure with an error message.</returns>
     public static Result<RunId> TryCreate(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Result.Failure<RunId>("Run ID cannot be empty");
-
-        return Result.Success(Create(value));
-    }
+        => GuidId.TryParse(value, static v => new RunId(v), "Run ID cannot be empty");
 
     /// <inheritdoc />
     public override string ToString() => Value;

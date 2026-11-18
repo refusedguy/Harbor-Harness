@@ -183,4 +183,46 @@ public class IdentifiersTests
         await Assert.That(a.Equals(b)).IsTrue();
         await Assert.That(a.Equals(c)).IsFalse();
     }
+
+    [Test]
+    public async Task ToolCallId_TryCreate_Valid_Value()
+    {
+        var result = ToolCallId.TryCreate("call123");
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Value).IsEqualTo("call123");
+    }
+
+    [Test]
+    public async Task ToolCallId_TryCreate_Empty_ReturnsFailure()
+    {
+        var result = ToolCallId.TryCreate("");
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error).IsEqualTo("Tool call ID cannot be empty");
+    }
+
+    [Test]
+    public async Task GuidId_Blank_ErrorMessages_ArePreserved()
+    {
+        // The helper owns the rule; the four records must keep their own text,
+        // the "value" parameter name and the exact Result failure message.
+        var session = Assert.Throws<ArgumentException>(() => SessionId.Create(" "));
+        await Assert.That(session.ParamName).IsEqualTo("value");
+        await Assert.That(session.Message).StartsWith("Session ID cannot be empty");
+        await Assert.That(SessionId.TryCreate(" ").Error).IsEqualTo("Session ID cannot be empty");
+
+        var message = Assert.Throws<ArgumentException>(() => MessageId.Create(" "));
+        await Assert.That(message.ParamName).IsEqualTo("value");
+        await Assert.That(message.Message).StartsWith("Message ID cannot be empty");
+        await Assert.That(MessageId.TryCreate(" ").Error).IsEqualTo("Message ID cannot be empty");
+
+        var toolCall = Assert.Throws<ArgumentException>(() => ToolCallId.Create(" "));
+        await Assert.That(toolCall.ParamName).IsEqualTo("value");
+        await Assert.That(toolCall.Message).StartsWith("Tool call ID cannot be empty");
+        await Assert.That(ToolCallId.TryCreate(" ").Error).IsEqualTo("Tool call ID cannot be empty");
+
+        var run = Assert.Throws<ArgumentException>(() => RunId.Create(" "));
+        await Assert.That(run.ParamName).IsEqualTo("value");
+        await Assert.That(run.Message).StartsWith("Run ID cannot be empty");
+        await Assert.That(RunId.TryCreate(" ").Error).IsEqualTo("Run ID cannot be empty");
+    }
 }
