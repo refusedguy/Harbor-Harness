@@ -66,27 +66,36 @@ public static class SessionTitleRegenerator
             return Result.Failure<string>("A session id is required.");
         }
 
-        return await Result.Success(sessionId)
-            .Bind(async id => await (await store.GetAsync(id).ConfigureAwait(false))
-                .MapError(e => $"Cannot read session {id}: {e}"))
-            .Bind(async session => await (await LoadFirstPromptAsync(store, session, ct).ConfigureAwait(false))
-                .Bind(prompt => NameAndSaveAsync(providerRegistry, store, session, prompt, ct)))
+        var sessionResult = await Result.Success(sessionId)
+            .Bind(async id => await ReadSessionAsync(store, id).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
+        return await sessionResult
+            .Bind(async session => await (await ReadPromptAsync(store, session, ct).ConfigureAwait(false))
+                .Bind(async prompt => await NameAndSaveAsync(providerRegistry, store, session, prompt, ct).ConfigureAwait(false)))
             .ConfigureAwait(false);
     }
 
+    /// <summary>Read the session, keeping the store diagnostic on failure.</summary>
+    private static async Task<Result<Session>> ReadSessionAsync(ISessionStore store, string id)
+    {
+        var loaded = await store.GetAsync(id).ConfigureAwait(false);
+        return loaded.MapError(e => $"Cannot read session {id}: {e}");
+    }
+
     /// <summary>Read the first non-blank user message, or fail with a clear reason.</summary>
-    private static async Task<Result<string>> LoadFirstPromptAsync(
+    private static async Task<Result<string>> ReadPromptAsync(
         ISessionStore store,
         Session session,
         CancellationToken ct)
     {
-        return await (await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false))
+        var messages = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
+        return messages
             .MapError(e => $"Cannot read messages for session {session.Id}: {e}")
-            .Bind(messages => messages
+            .Bind(list => list
                 .TryFirst(m => m is UserMessage u && !string.IsNullOrWhiteSpace(u.Content))
                 .Map(m => ((UserMessage)m).Content)
-                .ToResult("The session has no user message to name."))
-            .ConfigureAwait(false);
+                .ToResult("The session has no user message to name."));
     }
 
     /// <summary>Resolve the provider, ask for a title, then persist it.</summary>
@@ -97,14 +106,24 @@ public static class SessionTitleRegenerator
         string firstPrompt,
         CancellationToken ct)
     {
-        return await providerRegistry.GetClient(ProviderId.Create(session.ProviderId))
-            .MapError(e => $"Cannot resolve provider {session.ProviderId}: {e}")
-            .Bind(client => AskAsync(client, session, firstPrompt, ct))
-            .Bind(async title => await (await store.UpdateAsync(session with { Title = title }, ct)
-                    .ConfigureAwait(false))
-                .MapError(e => $"Cannot persist the new title: {e}")
-                .Map(_ => title))
+        var client = providerRegistry.GetClient(ProviderId.Create(session.ProviderId))
+            .MapError(e => $"Cannot resolve provider {session.ProviderId}: {e}");
+
+        return await client
+            .Bind(async llm => await (await AskAsync(llm, session, firstPrompt, ct).ConfigureAwait(false))
+                .Bind(async title => await StoreTitleAsync(store, session, title, ct).ConfigureAwait(false)))
             .ConfigureAwait(false);
+    }
+
+    /// <summary>Persist a title-only update and hand the title back down the rail.</summary>
+    private static async Task<Result<string>> StoreTitleAsync(
+        ISessionStore store,
+        Session session,
+        string title,
+        CancellationToken ct)
+    {
+        var saved = await store.UpdateAsync(session with { Title = title }, ct).ConfigureAwait(false);
+        return saved.Map(() => title);
     }
 
     /// <summary>One bounded naming request. No tools, no agent loop.</summary>
