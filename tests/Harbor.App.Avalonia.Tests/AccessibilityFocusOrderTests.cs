@@ -33,7 +33,8 @@ public class AccessibilityFocusOrderTests
         await AssertFocusOrder(
             new Views.Shell.ActivityRailView(),
             "Rail_ToggleButton", "Rail_BoardButton", "Rail_SearchButton", "Rail_DiffButton",
-            "Refresh file tree", "FileTreeView", "Rail_ThemeButton", "Rail_SettingsButton");
+            "Expand all folders", "Collapse all folders", "Refresh file tree",
+            "FileTreeView", "Rail_ThemeButton", "Rail_SettingsButton");
 
     [Test]
     public async Task StatusBarView_FocusOrder_MatchesVisualOrder() =>

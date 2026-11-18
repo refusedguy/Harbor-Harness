@@ -130,6 +130,24 @@ public partial class ActivityRailView : UserControl
         await vm.RefreshFileTreeAsync();
     }
 
+    // #2682 Z15: the commands only flip flags on FileTreeNode; the two-way
+    // style binding in the XAML is what moves the expander glyphs.
+    private void ExpandFileTree_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.ExpandFileTree();
+        }
+    }
+
+    private void CollapseFileTree_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.CollapseFileTree();
+        }
+    }
+
     private async void FileTreeView_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is not TreeView treeView) return;
