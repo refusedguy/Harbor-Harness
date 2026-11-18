@@ -54,9 +54,9 @@ public sealed class CompactionService(
 
     // Ф8/A3: lazily resolved secondary client; successes are cached for the
     // service lifetime, failures are NOT cached (a transient provider outage
-    // must not pin the fallback forever). Reference writes are atomic, so two
-    // concurrent first calls may both resolve once (benign and idempotent),
-    // while every later call reads the cached pair without locking.
+    // must not pin the fallback forever). #2581: the resolution itself is now
+    // single-flight, so a burst of first compactions issues one catalog call
+    // instead of one per caller, while later calls take a volatile fast path.
     private readonly ModelRef? _secondaryRef = ParseSecondary(secondaryModel, logger);
 
     /// <summary>
@@ -90,13 +90,17 @@ public sealed class CompactionService(
         return parsed.Value;
     }
 
-    /// <summary>
-    ///     Cached secondary resolution, shared by concurrent compactions on
-    ///     this singleton. The volatile barrier stops a reader from seeing a
-    ///     reference published before its fields are visible. Two callers may
-    ///     still resolve the same model on a cold cache, which is harmless.
-    /// </summary>
+    // #2581: a successful resolution is the lifetime cache. A volatile field
+    // publishes it to every reader without a lock, so the hot path stays a plain
+    // read. The companion task below makes the FIRST resolution single-flight.
     private volatile ResolvedSecondary? _resolvedSecondary;
+
+    // #2581: CompactionService is an AddSingleton, so N simultaneous first
+    // compactions used to each call GetModelsAsync for the same secondary model.
+    // Interlocked elects one owner of the catalog lookup and every other caller
+    // awaits its task. An unresolved attempt clears the field so a transient
+    // outage never pins the primary fallback for the service lifetime.
+    private Task<ResolvedSecondary?>? _secondaryResolution;
 
     /// <summary>
     ///     The sessions whose compaction is running RIGHT NOW (#1767).
@@ -139,24 +143,64 @@ public sealed class CompactionService(
             return cached;
         }
 
-        ModelRef secondaryRef = _secondaryRef;
-        Result<ResolvedSecondary> outcome = await providers.GetClient(secondaryRef.ProviderId)
-            .Bind(client => client.GetModelsAsync(ct).Bind(models =>
-                MatchById(models, secondaryRef.ModelId)
-                    .ToResult($"model '{secondaryRef.ModelId}' is not in provider '{secondaryRef.ProviderId}' catalog")
-                    .Map(model => new ResolvedSecondary(client, model))))
-            .ConfigureAwait(false);
-
-        ResolvedSecondary? published = _resolvedSecondary;
-        if (published is not null)
+        // #2581: single-flight the miss path. The winner of the CompareExchange
+        // owns the catalog lookup; the others await the very same task instead
+        // of starting their own. Before this, a first-use burst produced one
+        // GetModelsAsync per caller and a slow catalog delayed all of them.
+        Task<ResolvedSecondary?>? pending = Volatile.Read(ref _secondaryResolution);
+        if (pending is not null)
         {
-            return published;
+            return await pending.ConfigureAwait(false);
         }
 
-        ResolvedSecondary? resolved = outcome
-            .Tap(r => _resolvedSecondary = r)
-            .Match(static r => (ResolvedSecondary?)r, _ => LogSecondaryFallback(primaryModel));
-        return resolved;
+        var completion = new TaskCompletionSource<ResolvedSecondary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<ResolvedSecondary?>? winner = Interlocked.CompareExchange(
+            ref _secondaryResolution, completion.Task, null);
+        if (winner is not null)
+        {
+            return await winner.ConfigureAwait(false);
+        }
+
+        ModelRef secondaryRef = _secondaryRef;
+        ResolvedSecondary? resolved;
+        try
+        {
+            Result<ResolvedSecondary> outcome = await providers.GetClient(secondaryRef.ProviderId)
+                .Bind(client => client.GetModelsAsync(ct).Bind(models =>
+                    MatchById(models, secondaryRef.ModelId)
+                        .ToResult($"model '{secondaryRef.ModelId}' is not in provider '{secondaryRef.ProviderId}' catalog")
+                        .Map(model => new ResolvedSecondary(client, model))))
+                .ConfigureAwait(false);
+
+            resolved = outcome
+                .Match(static r => (ResolvedSecondary?)r, _ => LogSecondaryFallback(primaryModel));
+        }
+        catch (Exception ex)
+        {
+            // Never leave the waiters hanging on a task whose owner threw.
+            // Release them with the same exception and let the next attempt
+            // retry, the same way the failure branch below does.
+            _ = Interlocked.CompareExchange(ref _secondaryResolution, null, completion.Task);
+            completion.TrySetException(ex);
+            throw;
+        }
+
+        if (resolved is not null)
+        {
+            // Publish the success before releasing the waiters. A caller that
+            // already grabbed the shared task sees the same resolved pair.
+            _resolvedSecondary = resolved;
+            completion.TrySetResult(resolved);
+            return resolved;
+        }
+
+        // Unresolved is deliberately NOT cached: a provider that was down at
+        // first use must be retried on the next compaction. Clear the task so
+        // the next caller can start a fresh resolution, then release this batch.
+        _ = Interlocked.CompareExchange(ref _secondaryResolution, null, completion.Task);
+        completion.TrySetResult(null);
+        return null;
     }
 
     private Maybe<ModelInfo> MatchById(IReadOnlyList<ModelInfo> models, string modelId)

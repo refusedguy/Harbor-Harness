@@ -96,7 +96,7 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | `ITool` | [`src/Harbor.Abstractions/Tools/ITool.cs`](../src/Harbor.Abstractions/Tools/ITool.cs) | `SandboxedPluginTool`, `TelemetryToolDecorator`, `AskUserQuestionTool`, `BashTool`, `EditTool` (+24 more) / `HelloTool (plugins-cs)`, `SessionBroadcastTool`, `SessionInboxTool` (+50 more) | 63 | none | 34 |
 | `IProviderRegistry` | [`src/Harbor.Abstractions/Providers/IProviderRegistry.cs`](../src/Harbor.Abstractions/Providers/IProviderRegistry.cs) | `ProviderRegistry (Harbor.Registries)`, `InstrumentedProviderRegistry` / `EmptyProviderRegistry`, `PricedModelRegistry`, `FakeRegistry (Harbor.App.Avalonia.Tests)` (+9 more) | 64 | a factory | 6 |
 | `IEventBus` | [`src/Harbor.Abstractions/Events/IEventBus.cs`](../src/Harbor.Abstractions/Events/IEventBus.cs) | `NullEventBus`, `InMemoryEventBus` / `CancelHonoringBus`, `CancelOnTurnStartBus`, `ThrowingUpdateBus` (+3 more) | 63 | none | 3 |
-| `ILlmClient` | [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs) | `RecordedSessionLlmClient`, `RetryLlmClientDecorator`, `OllamaLlmClient`, `InstrumentedLlmClient` / `FakeClient (Harbor.App.Avalonia.Tests)`, `HangingLlmClient (Harbor.Application.Tests)`, `TokenCapturingLlmClient` (+12 more) | 56 | none | 3 |
+| `ILlmClient` | [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs) | `RecordedSessionLlmClient`, `RetryLlmClientDecorator`, `OllamaLlmClient`, `InstrumentedLlmClient` / `FakeClient (Harbor.App.Avalonia.Tests)`, `HangingLlmClient (Harbor.Application.Tests)`, `TokenCapturingLlmClient` (+13 more) | 56 | none | 3 |
 | `IAgentRegistry` | [`src/Harbor.Abstractions/Agents/AgentDefinition.cs`](../src/Harbor.Abstractions/Agents/AgentDefinition.cs) | `AgentRegistry` / `FakeAgentRegistry (Harbor.App.Avalonia.Tests)`, `FixedRegistry`, `FixedOrderAgentRegistry` (+3 more) | 52 | a factory | 4 |
 | `IAgent` | [`src/Harbor.Abstractions/Agents/IAgent.cs`](../src/Harbor.Abstractions/Agents/IAgent.cs) | `DefaultAgent`, `TracingAgentProxy` / `FakeAgent (Harbor.App.Avalonia.Tests)`, `FakeAgent (Harbor.App.Cli.Tests)`, `ScriptedAgent` (+5 more) | 45 | a factory | 1 |
 | `IToolRegistry` | [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abstractions/Tools/IToolRegistry.cs) | `CompositeToolRegistry`, `ToolRegistry`, `InstrumentedToolRegistry` / `CountingRegistry`, `StableToolRegistry`, `BenchToolRegistry` (+2 more) | 41 | a factory | 5 |
@@ -169,7 +169,7 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `RetryLlmClientDecorator`, [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs)
   - `OllamaLlmClient`, [`src/Harbor.Providers.Ollama/OllamaLlmClient.cs`](../src/Harbor.Providers.Ollama/OllamaLlmClient.cs)
   - `InstrumentedLlmClient`, [`src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs`](../src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs)
-- **Out-of-tree implementations** (15):
+- **Out-of-tree implementations** (16):
   - `FakeClient (Harbor.App.Avalonia.Tests)`, [`tests/Harbor.App.Avalonia.Tests/OnboardingViewModelLiveModelsTests.cs`](../tests/Harbor.App.Avalonia.Tests/OnboardingViewModelLiveModelsTests.cs)
   - `HangingLlmClient (Harbor.Application.Tests)`, [`tests/Harbor.Application.Tests/ExecutionTreeTests.cs`](../tests/Harbor.Application.Tests/ExecutionTreeTests.cs)
   - `TokenCapturingLlmClient`, [`tests/Harbor.Application.Tests/RunBudgetTests.cs`](../tests/Harbor.Application.Tests/RunBudgetTests.cs)
@@ -181,6 +181,7 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `FakeCatalogClient`, [`tests/Harbor.Config.Tests/OnboardingWizardTests.cs`](../tests/Harbor.Config.Tests/OnboardingWizardTests.cs)
   - `ScriptedLlmClient (Harbor.Core.Tests)`, [`tests/Harbor.Core.Tests/CompactionSummaryRetryTests.cs`](../tests/Harbor.Core.Tests/CompactionSummaryRetryTests.cs)
   - `CapturingLlmClient`, [`tests/Harbor.Core.Tests/CompactionTestBase.cs`](../tests/Harbor.Core.Tests/CompactionTestBase.cs)
+  - `GatedCatalogLlmClient`, [`tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs`](../tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs)
   - `CatalogSource`, [`tests/Harbor.Registries.Tests/ProviderRegistryCatalogCacheTtlTests.cs`](../tests/Harbor.Registries.Tests/ProviderRegistryCatalogCacheTtlTests.cs)
   - `RateLimitedLlmClient`, [`tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs`](../tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs)
   - `ScriptedLlmClient (Harbor.TestKit)`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
