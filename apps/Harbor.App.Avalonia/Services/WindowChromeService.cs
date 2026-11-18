@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Harbor.App.Avalonia.ViewModels;
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
 ///     Encapsulates custom window-chrome behaviours for the main window —
@@ -52,4 +53,19 @@ public sealed class WindowChromeService
     /// <summary>Close the window via the standard <see cref="Window.Close" /> path.</summary>
     /// <param name="window">The window to close.</param>
     public void Close(Window window) => window.Close();
+
+    /// <summary>
+    ///     K17: clamp the width used while the right drawer is being dragged.
+    ///     The decision itself lives in <see cref="PanelSnapRule" /> so it can be
+    ///     tested without a window; this method is the shell's single entry point
+    ///     for the snap threshold.
+    /// </summary>
+    public double ClampDrawerDragWidth(double proposedWidth) =>
+        PanelSnapRule.ClampDragWidth(proposedWidth, PanelSnapRule.DrawerConstraints);
+
+    /// <summary>
+    ///     K17: final open/closed decision when a drawer drag is released.
+    /// </summary>
+    public PanelSnapResult ResolveDrawerSnap(double proposedWidth) =>
+        PanelSnapRule.Resolve(proposedWidth, PanelSnapRule.DrawerConstraints);
 }
