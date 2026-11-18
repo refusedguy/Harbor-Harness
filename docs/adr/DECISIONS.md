@@ -995,3 +995,23 @@ runtime-движок `CompiledBinding` остаются owner-decision. issue #2
 
 - Полный текст, таблица по восьми пунктам и условия пересмотра:
   [ADR-037](ADR-037-avalonia-xaml-declarative-verdict.md).
+## ADR-038: каталог компонентов gpui-kit (#2702) — нового slice нет
+
+Issue #2702 — self-contained отчёт по ~80 компонентам gpui-kit и их
+применимости к CellForge. Проверка `gh pr list --search 2702` и `origin/dev`
+(`f1dbd3a1`) показала: топ-5 отчёта уже покрыты — таблицы с сортировкой и
+фильтром (#2343, #2320), Tree (`GenericTreeView`, `TreeView`,
+`PanelIndex` #2743), fuzzy-пикер (`CommandPaletteView`, `FuzzyMatcher`), ratio-сплиты
+(`LayoutTree`, #2388) и ProgressEta (#2870). Пункт, названный «самой простой
+реально отсутствующей частью», Slider, влит PR #2397 ещё после снимка
+`c4c6b50d`, на который опирался отчёт. GPU-специфичные категории (SVG,
+изображения, hover, 120 FPS, AccessKit, WASM, мышиный drag) отвергнуты как
+несовместимые с BCL-only AOT-моделью и cell-diff рендером.
+
+Decided: код не писать. Golden-файлы, AOT-поведение, гейты и пороги не
+меняются; issue остаётся открытым источником сравнения. Пересмотр — по новому
+факту: владелец называет потребителя и измеримую цель для отсутствующего
+контракта, например сериализуемых сплитов.
+
+- Полный текст, таблица по топ-5 и условия пересмотра:
+  [ADR-038](ADR-038-gpui-kit-components-no-new-slice.md).
