@@ -203,6 +203,7 @@ public partial class ProviderConfigViewModel : ObservableObject
             }
             else
             {
+                ProviderConfigViewModelLog.ProbeFailed(_logger, row.Id, modelsResult.Error);
                 row.TestResult = $"✗ {modelsResult.Error}";
             }
         }
@@ -211,10 +212,12 @@ public partial class ProviderConfigViewModel : ObservableObject
             // The number comes from the budget that actually elapsed, so the
             // message cannot drift away from the behaviour.
             int seconds = (int)IProviderHealthCheck.DefaultTimeout.TotalSeconds;
+            ProviderConfigViewModelLog.ProbeTimedOut(_logger, row.Id, seconds);
             row.TestResult = $"✗ Timed out after {seconds}s — is the provider running?";
         }
         catch (Exception ex)
         {
+            ProviderConfigViewModelLog.ProbeThrew(_logger, ex, row.Id);
             row.TestResult = $"✗ {ex.Message}";
         }
         finally
@@ -251,4 +254,20 @@ public partial class ProviderConfigViewModel : ObservableObject
     /// <summary>CanExecute for <see cref="TestConnectionCommand" /> — disabled while a test is in flight.</summary>
     /// <returns>True when no test is currently running.</returns>
     private bool CanTestConnection() => !IsTesting;
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProviderConfigViewModel" />.
+///     Internal so the public API freeze stays untouched. Never logs the key.
+/// </summary>
+internal static partial class ProviderConfigViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Provider {Provider} model-list probe failed: {Error}")]
+    public static partial void ProbeFailed(ILogger logger, string provider, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Provider {Provider} model-list probe timed out after {Seconds}s")]
+    public static partial void ProbeTimedOut(ILogger logger, string provider, int seconds);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Provider {Provider} model-list probe threw")]
+    public static partial void ProbeThrew(ILogger logger, Exception ex, string provider);
 }

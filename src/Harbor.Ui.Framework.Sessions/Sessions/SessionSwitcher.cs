@@ -99,6 +99,12 @@ public sealed class SessionSwitcher
                 lines.Add(new ChatLine(role, text));
             }
         }
+        else
+        {
+            // The hydrate still runs so the store agrees with the session, but
+            // an empty transcript here is a lost history, not an empty session.
+            SessionLog.ReplayFailed(_logger, session.Id, messages.Error);
+        }
 
         // The status travels with the hydration: it is the core's own answer
         // for this session, and re-deriving one from the replayed lines is the

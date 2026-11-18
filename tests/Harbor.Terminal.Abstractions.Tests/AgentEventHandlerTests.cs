@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.Renderers;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -20,7 +21,9 @@ public class AgentEventHandlerRegistryTests
 {
     private sealed class HandlerTestRenderer : BaseTuiRenderer
     {
-        public HandlerTestRenderer() : base(NullLogger.Instance) { }
+        public HandlerTestRenderer() : this(NullLogger.Instance) { }
+
+        public HandlerTestRenderer(ILogger logger) : base(logger) { }
 
         public CaptureRenderContext Capture { get; } = new();
 
@@ -29,6 +32,9 @@ public class AgentEventHandlerRegistryTests
         public void Add(IAgentEventHandler handler) => RegisterHandler(handler);
 
         public Task Dispatch(AgentEvent @event) => DispatchToHandlersAsync(@event);
+
+        public Task<Result> Guarded(Action setup, string? detail = null) =>
+            InitializeGuardedAsync(setup, detail);
 
         public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
             => Task.FromResult(Maybe.From(string.Empty));
@@ -116,6 +122,38 @@ public class AgentEventHandlerRegistryTests
     {
         var renderer = new HandlerTestRenderer();
         await Assert.That(() => renderer.Add(null!)).Throws<ArgumentNullException>();
+    }
+
+    [Test]
+    public async Task GuardedSetup_WithoutBackendDetail_StillLogsTheFailure()
+    {
+        var logger = new CapturingLogger();
+        var renderer = new HandlerTestRenderer(logger);
+
+        Result result = await renderer.Guarded(static () => throw new InvalidOperationException("setup exploded"));
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(logger.Capture.DetailedEntries.Any(e =>
+                e.Level == LogLevel.Error && e.EventId == 1 && e.Message.Contains("initialization failed")))
+            .IsTrue()
+            .Because("the caller only sees Result.Failure(message); event 1 is the exception's only record");
+    }
+
+    [Test]
+    public async Task GuardedSetup_WithBackendDetail_LogsTheDetail()
+    {
+        var logger = new CapturingLogger();
+        var renderer = new HandlerTestRenderer(logger);
+
+        Result result = await renderer.Guarded(
+            static () => throw new InvalidOperationException("setup exploded"),
+            "backend prelude failed");
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(logger.Capture.DetailedEntries.Any(e =>
+                e.Level == LogLevel.Error && e.EventId == 2 && e.Message.Contains("backend prelude failed")))
+            .IsTrue()
+            .Because("the backend message is the extra detail, not the condition for logging at all");
     }
 
     private sealed class ExplodingCanHandleHandler : IAgentEventHandler

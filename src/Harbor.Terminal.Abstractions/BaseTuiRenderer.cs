@@ -132,9 +132,16 @@ public abstract class BaseTuiRenderer : ITuiRenderer
         }
         catch (Exception ex)
         {
+            // The backend-specific message is optional, but the failure is never:
+            // callers only see Result.Failure(ex.Message), so without this the
+            // reason for a guard trip exists nowhere in the log.
             if (errorLogMessage is not null)
             {
-                Logger.LogError(ex, errorLogMessage);
+                BaseTuiRendererLog.InitializationFailedWithDetail(Logger, ex, errorLogMessage);
+            }
+            else
+            {
+                BaseTuiRendererLog.InitializationFailed(Logger, ex);
             }
 
             return Task.FromResult(Result.Failure(ex.Message));
@@ -353,4 +360,17 @@ public abstract class BaseTuiRenderer : ITuiRenderer
 
         Context.Flush();
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="BaseTuiRenderer" />.
+///     Internal so the public API freeze stays untouched.
+/// </summary>
+internal static partial class BaseTuiRendererLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Renderer initialization failed")]
+    public static partial void InitializationFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Renderer initialization failed: {Detail}")]
+    public static partial void InitializationFailedWithDetail(ILogger logger, Exception ex, string detail);
 }

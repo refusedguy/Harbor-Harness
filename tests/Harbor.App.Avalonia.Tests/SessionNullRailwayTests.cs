@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
@@ -380,5 +381,25 @@ public class SessionNullRailwayTests
         await manager.EnsureDefaultSessionAsync().ConfigureAwait(false);
 
         await Assert.That(manager.Active).IsNull();
+    }
+
+    [Test]
+    public async Task Switcher_HistoryReadFailure_LogsTheLostReplay()
+    {
+        var store = new ControllableStore { FailGetMessages = true };
+        var agent = new FakeAgent();
+        var factory = new SessionFactory(
+            new FakeAgentRegistry(), agent, store, new SessionForkerAdapter(store), new FakeLogger<SessionFactory>());
+        var log = new CapturingLogger<SessionSwitcher>();
+        var switcher = new SessionSwitcher(agent, store, factory, log);
+        Session session = (await store.CreateAsync("/tmp", "code", "p", "m").ConfigureAwait(false)).Value;
+
+        bool opened = await switcher.OpenAsync(session, new UiStore()).ConfigureAwait(false);
+
+        await Assert.That(opened).IsTrue();
+        await Assert.That(log.Capture.DetailedEntries.Any(e =>
+                e.Level == LogLevel.Warning && e.EventId == 9 && e.Message.Contains("boom-history")))
+            .IsTrue()
+            .Because("an empty transcript after a failed history read is a lost replay, not an empty session");
     }
 }

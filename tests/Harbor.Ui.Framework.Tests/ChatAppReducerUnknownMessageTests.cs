@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
 using Harbor.TestKit;
+using TUnit.Core;
 
 namespace Harbor.Ui.Framework.Tests;
 /// <summary>
@@ -33,6 +34,8 @@ public class ChatAppReducerUnknownMessageTests
         NotSupportedException ex = Assert.Throws<NotSupportedException>(
             () => ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history))));
 
+        TestContext.Current?.Output.WriteLine("[replay-refusal] unknown message role: " + ex.Message);
+
         await Assert.That(ex.Message.Contains("RogueMessage", StringComparison.Ordinal)).IsTrue();
     }
 
@@ -44,6 +47,8 @@ public class ChatAppReducerUnknownMessageTests
 
         NotSupportedException ex = Assert.Throws<NotSupportedException>(
             () => ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history))));
+
+        TestContext.Current?.Output.WriteLine("[replay-refusal] unknown part kind: " + ex.Message);
 
         await Assert.That(ex.Message.Contains("RoguePart", StringComparison.Ordinal)).IsTrue();
     }
