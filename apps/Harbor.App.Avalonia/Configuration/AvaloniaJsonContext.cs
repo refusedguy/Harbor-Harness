@@ -27,9 +27,9 @@
 // `ImmutableList<string>` members need no converter: `IImmutableList<T>` is
 // listed as serializing AND deserializing in the supported-types table, and its
 // wire shape is the same JSON array the hand-written
-// `ImmutableListConverter<T>` in JsonAppConfigStore writes. The on-disk file is
-// unchanged, and that converter stays registered on the reflection path it
-// belongs to.
+// `ImmutableStringListConverter` in JsonAppConfigStore writes for CommonConfig.
+// The on-disk file is unchanged, and that converter is non-generic and AOT-safe
+// (#2623).
 
 using System.Text.Json.Serialization;
 

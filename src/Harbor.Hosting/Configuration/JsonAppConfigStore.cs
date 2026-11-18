@@ -197,46 +197,61 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
 }
 
 /// <summary>
-///     Minimal System.Text.Json converter for <see cref="ImmutableList{T}" />.
-///     System.Text.Json has no built-in immutable-collection support; this
-///     converter round-trips via a mutable <see cref="List{T}" /> and calls
-///     <see cref="ImmutableList.ToImmutableList{T}" /> / <see cref="ImmutableList{T}.Builder" />.
+///     AOT-safe System.Text.Json converter for <see cref="ImmutableList{T}" />
+///     of <see cref="string" />, the element type the config records use
+///     (<c>CommonConfig.AlwaysAllowTools</c> / <c>AlwaysDenyTools</c>).
 /// </summary>
-/// <typeparam name="T">Element type.</typeparam>
-internal sealed class ImmutableListConverter<T> : JsonConverter<ImmutableList<T>>
+/// <remarks>
+///     #2623: this used to be a generic <c>ImmutableListConverter&lt;T&gt;</c>
+///     whose Read/Write called <c>JsonSerializer.Deserialize&lt;T&gt;</c> /
+///     <c>JsonSerializer.Serialize(writer, item, options)</c>. Those generic
+///     overloads resolve their contract by reflection and emit IL2026/IL3050,
+///     which fail a trimmed publish. The only element type the config needs is
+///     <see cref="string" />, so the loop below reads and writes the tokens
+///     directly — no generic <c>JsonSerializer</c> call, no reflection, and the
+///     same JSON array shape as before.
+/// </remarks>
+internal sealed class ImmutableStringListConverter : JsonConverter<ImmutableList<string>>
 {
     /// <summary>Singleton instance — the converter is stateless.</summary>
-    public static readonly ImmutableListConverter<T> Instance = new();
+    public static readonly ImmutableStringListConverter Instance = new();
 
-    private ImmutableListConverter() { }
+    private ImmutableStringListConverter() { }
 
     /// <inheritdoc />
-    public override ImmutableList<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override ImmutableList<string> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Null)
         {
-            return ImmutableList<T>.Empty;
+            return ImmutableList<string>.Empty;
         }
         if (reader.TokenType != JsonTokenType.StartArray)
         {
-            throw new JsonException($"Expected StartArray token for ImmutableList<{typeof(T).Name}>, got {reader.TokenType}.");
+            throw new JsonException($"Expected StartArray token for ImmutableList<string>, got {reader.TokenType}.");
         }
 
-        var list = new List<T>();
+        var list = new List<string>();
         while (reader.Read())
         {
             if (reader.TokenType == JsonTokenType.EndArray)
             {
                 break;
             }
-            var value = JsonSerializer.Deserialize<T>(ref reader, options);
+            // Direct token reads replace the former generic
+            // JsonSerializer.Deserialize<string>(ref reader, options).
+            string? value = reader.TokenType switch
+            {
+                JsonTokenType.String => reader.GetString(),
+                JsonTokenType.Null => null,
+                var other => throw new JsonException($"Expected String token in ImmutableList<string>, got {other}.")
+            };
             list.Add(value!);
         }
         return list.ToImmutableList();
     }
 
     /// <inheritdoc />
-    public override void Write(Utf8JsonWriter writer, ImmutableList<T> value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, ImmutableList<string> value, JsonSerializerOptions options)
     {
         if (value is null)
         {
@@ -246,7 +261,9 @@ internal sealed class ImmutableListConverter<T> : JsonConverter<ImmutableList<T>
         writer.WriteStartArray();
         foreach (var item in value)
         {
-            JsonSerializer.Serialize(writer, item, options);
+            // WriteStringValue(string?) writes a JSON null for a null item,
+            // matching the former generic JsonSerializer.Serialize(writer, item, options).
+            writer.WriteStringValue(item);
         }
         writer.WriteEndArray();
     }
