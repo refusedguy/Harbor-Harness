@@ -74,8 +74,8 @@ public sealed class NotebookErrorScenarioTests : CellForgePtyScenarioBase
             answerKey: "a").ConfigureAwait(false);
         await Assert.That(approved).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 
-        // The failed call's args are on the settled timeline before the run
-        // ends; the helper already waited out the idle status above.
+        // The failed call's args are on the settled timeline; the helper's
+        // done-marker wait above already ended on the painted error glyph.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains(missingKey, StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
