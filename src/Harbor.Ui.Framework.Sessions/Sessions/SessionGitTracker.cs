@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Harbor.Ui.Framework.Services;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
@@ -11,8 +12,13 @@ namespace Harbor.Ui.Framework.Sessions;
 /// </summary>
 public sealed class SessionGitTracker
 {
-    /// <summary>Per-session git info.</summary>
-    private readonly Dictionary<string, GitSessionInfo> _gitInfo = new();
+    /// <summary>
+    ///     Per-session git info. Written from thread-pool continuations in
+    ///     <see cref="SessionLifecycleService.RefreshGitInfo" /> and read on the UI
+    ///     thread via <see cref="SessionManager.GetGitInfo" />, so the cache must
+    ///     tolerate concurrent readers and writers.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, GitSessionInfo> _gitInfo = new(StringComparer.Ordinal);
 
     /// <summary>Get the cached git info for a session.</summary>
     public GitSessionInfo Get(string sessionId)
