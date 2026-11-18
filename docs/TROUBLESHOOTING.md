@@ -4,7 +4,8 @@ This page maps a symptom you can observe to the check that resolves it. It is a
 short index over the longer guides:
 [getting started](./GETTING_STARTED.md#troubleshooting),
 [build](./BUILD.md#troubleshooting-build), and
-[development](./DEVELOPMENT.md#troubleshooting).
+[development](./DEVELOPMENT.md#troubleshooting). When you can quote the exact
+error text, search the [FAQ](./FAQ.md) instead.
 
 | Symptom | Check | Where to look |
 |---|---|---|
