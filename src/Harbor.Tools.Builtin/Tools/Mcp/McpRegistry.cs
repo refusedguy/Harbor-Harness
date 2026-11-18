@@ -484,7 +484,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     ///     Per-server lazy state. Sync ownership ([G9] #196): the outer
     ///     <c>_servers</c> map is a <c>ConcurrentDictionary</c> (lock-free
     ///     register/unregister/lookup); <c>_transportGate</c> guards only the
-    ///     lazy <c>_transport</c>/<c>_oauth</c> creation inside one entry;
+    ///     lazy <c>_transport</c>/<c>_oauthGate</c> creation inside one entry;
     ///     <c>_instructions</c> is volatile with first-writer-wins CAS
     ///     semantics via <c>TrySetInstructions</c>. Request ids live on the
     ///     outer registry and advance via <c>Interlocked</c>.
@@ -498,7 +498,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         private readonly object _transportGate = new();
         private McpProcessClient? _process;
         private IMcpRemoteTransport? _transport;
-        private McpOAuthHandler? _oauth;
+        private McpOAuthGate? _oauthGate;
         private volatile string? _instructions;
 
         public ServerEntry(
@@ -533,9 +533,10 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         ///     registered, or a factory that refuses to build, is a
         ///     <c>Failure</c> that names the cause.
         ///     OAuth: entries with an <c>auth</c> config get a per-server
-        ///     <see cref="McpOAuthHandler" /> (token cache + refresh + login hint);
-        ///     otherwise the legacy <c>HARBOR_MCP_OAUTH_TOKEN</c> environment
-        ///     variable is attached as a Bearer token by the transports.
+        ///     <see cref="McpOAuthGate" /> around the handler (token cache +
+        ///     refresh + login hint); otherwise the legacy
+        ///     <c>HARBOR_MCP_OAUTH_TOKEN</c> environment variable is attached as
+        ///     a Bearer token by the transports.
         /// </summary>
         public Result<IMcpRemoteTransport> GetTransport(ILogger? logger)
         {
@@ -563,15 +564,14 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 // distinct states all the way to the transport instead of being
                 // flattened to a null by a compat overload.
                 //
-                // The two branches differ in what absence MEANS, and that knowledge
-                // lives here, not in the handler or the transport:
-                //   - an `auth` block means the server is OAuth-protected, so an
-                //     absent token is fatal and the user needs the hint;
-                //   - the legacy env-var fallback is opportunistic, so an unset
-                //     var just means "send it unauthenticated" — an
-                //     anonymous-capable endpoint must still be reachable.
+                // The two branches differ in what absence MEANS. The gate owns
+                // the fatal case for a server with an `auth` block; the env-var
+                // fallback is opportunistic, so an unset var just means "send it
+                // unauthenticated" and an anonymous-capable endpoint must still
+                // be reachable.
+                McpOAuthGate gate = _oauthGate ??= new McpOAuthGate(_name, remote);
                 Func<CancellationToken, Task<Result<Maybe<string>>>> oauthTokenProvider = remote.OAuth is not null
-                    ? ct => RequireOAuthTokenAsync(OAuthFor(remote, logger), ct)
+                    ? ct => gate.RequireTokenAsync(logger, ct)
                     : (_ => Task.FromResult(Result.Success(
                         Maybe<string>.From(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN")))));
 
@@ -586,40 +586,6 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 _transport = created.Value;
                 return created;
             }
-        }
-
-        /// <summary>
-        ///     The registry's half of the #566 boundary. The handler reports "no
-        ///     token" as <c>Maybe.None</c> because it cannot know whether a missing
-        ///     token is fatal for the server; the registry registered the
-        ///     <c>auth</c> block, so it does know, and it converts absence into the
-        ///     actionable failure the user needs. A rejected grant is already a
-        ///     failure and passes through untouched.
-        /// </summary>
-        private static async Task<Result<Maybe<string>>> RequireOAuthTokenAsync(
-            McpOAuthHandler oauth,
-            CancellationToken cancellationToken)
-        {
-            Result<Maybe<string>> token = await oauth.TryGetAccessTokenResultAsync(cancellationToken).ConfigureAwait(false);
-            if (token.IsFailure)
-            {
-                return token;
-            }
-
-            return token.Value.HasValue
-                ? token
-                : Result.Failure<Maybe<string>>(oauth.LoginHint);
-        }
-
-        private McpOAuthHandler OAuthFor(McpRemoteEndpoint remote, ILogger? logger)
-        {
-            if (_oauth is null)
-            {
-                Uri endpoint = new(remote.Url, UriKind.Absolute);
-                _oauth = new McpOAuthHandler(_name, endpoint, remote.OAuth!, logger: logger);
-            }
-
-            return _oauth;
         }
 
         public void SetInstructions(string? instructions) => _instructions = instructions;
@@ -694,11 +660,11 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         public ValueTask DisposeAsync()
         {
-            // #1854: the OAuth handler owns the client it speaks over, so it is
-            // disposed with the entry that owns the handler — in BOTH branches,
-            // not only the one that has a process or a transport to tear down.
-            _oauth?.Dispose();
-            _oauth = null;
+            // #1854: the OAuth gate disposes the handler it owns, and the handler
+            // owns the client it speaks over. Do it in BOTH branches, not only
+            // the one that has a process or a transport to tear down.
+            _oauthGate?.Dispose();
+            _oauthGate = null;
 
             if (_process is not null)
                 return _process.DisposeAsync();
@@ -711,15 +677,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         ///     Synchronous teardown for sync contracts (e.g. <c>IMcpRegistry.Unregister</c>).
         ///     The stdio process is torn down synchronously; the remote transport is
         ///     abandoned (its HttpClient is finalized) — no sync-over-async bridging.
-        ///     The OAuth handler IS disposed here: its teardown is synchronous, so
+        ///     The OAuth gate IS disposed here: its teardown is synchronous, so
         ///     there is no bridging to avoid, and it owns the client it speaks over.
         /// </summary>
         public void DisposeSync()
         {
             _process?.DisposeSync();
             _transport = null;
-            _oauth?.Dispose();
-            _oauth = null;
+            _oauthGate?.Dispose();
+            _oauthGate = null;
         }
     }
 }
