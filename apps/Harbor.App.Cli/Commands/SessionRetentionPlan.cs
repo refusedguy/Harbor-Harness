@@ -99,6 +99,23 @@ internal static class SessionRetentionPlanner
     /// <summary>Maximum number of deletion lines in a rendered plan.</summary>
     internal const int RenderCap = 50;
 
+    /// <summary>The recognised flag names, as a table rather than a string ladder.</summary>
+    private enum Flag
+    {
+        Apply,
+        OlderThanDays,
+        KeepRecent
+    }
+
+    /// <summary>Flag spelling to parsed flag, one declaration per accepted token.</summary>
+    private static readonly IReadOnlyDictionary<string, Flag> FlagNames =
+        new Dictionary<string, Flag>(StringComparer.Ordinal)
+        {
+            ["--apply"] = Flag.Apply,
+            ["--older-than-days"] = Flag.OlderThanDays,
+            ["--keep-recent"] = Flag.KeepRecent,
+        };
+
     /// <summary>Parse the <c>sessions maintenance</c> flag tail, fail closed.</summary>
     /// <param name="tokens">Flags and their values, without the <c>maintenance</c> token.</param>
     /// <returns>The parsed options and apply flag, or the first validation error.</returns>
@@ -111,12 +128,18 @@ internal static class SessionRetentionPlanner
         for (int i = 0; i < tokens.Count; i++)
         {
             string token = tokens[i];
-            switch (token)
+            if (!FlagNames.TryGetValue(token, out Flag flag))
             {
-                case "--apply":
+                return Result.Failure<SessionMaintenanceArgs>(
+                    $"sessions maintenance: unknown argument '{token}'.");
+            }
+
+            switch (flag)
+            {
+                case Flag.Apply:
                     apply = true;
                     break;
-                case "--older-than-days":
+                case Flag.OlderThanDays:
                     if (++i >= tokens.Count
                         || !int.TryParse(tokens[i], NumberStyles.None, CultureInfo.InvariantCulture, out maxAgeDays))
                     {
@@ -124,7 +147,7 @@ internal static class SessionRetentionPlanner
                             "sessions maintenance: --older-than-days needs a positive integer.");
                     }
                     break;
-                case "--keep-recent":
+                case Flag.KeepRecent:
                     if (++i >= tokens.Count
                         || !int.TryParse(tokens[i], NumberStyles.None, CultureInfo.InvariantCulture, out keepRecent))
                     {
@@ -132,16 +155,11 @@ internal static class SessionRetentionPlanner
                             "sessions maintenance: --keep-recent needs a non-negative integer.");
                     }
                     break;
-                default:
-                    return Result.Failure<SessionMaintenanceArgs>(
-                        $"sessions maintenance: unknown argument '{token}'.");
             }
         }
 
-        Result<SessionRetentionOptions> options = Validate(maxAgeDays, keepRecent);
-        return options.IsFailure
-            ? Result.Failure<SessionMaintenanceArgs>(options.Error)
-            : Result.Success(new SessionMaintenanceArgs(options.Value, apply));
+        return Validate(maxAgeDays, keepRecent)
+            .Map(limits => new SessionMaintenanceArgs(limits, apply));
     }
 
     /// <summary>
@@ -156,11 +174,16 @@ internal static class SessionRetentionPlanner
     internal static Result<SessionRetentionPlan> Build(
         IReadOnlyList<Session> sessions,
         SessionRetentionOptions options,
+        DateTimeOffset now) =>
+        Validate(options.MaxAgeDays, options.KeepRecent)
+            .Map(limits => BuildPlan(sessions, limits, now));
+
+    /// <summary>Build the plan from thresholds that have already passed validation.</summary>
+    private static SessionRetentionPlan BuildPlan(
+        IReadOnlyList<Session> sessions,
+        SessionRetentionOptions limits,
         DateTimeOffset now)
     {
-        Result<SessionRetentionOptions> validated = Validate(options.MaxAgeDays, options.KeepRecent);
-        if (validated.IsFailure) return Result.Failure<SessionRetentionPlan>(validated.Error);
-
         Session[] ordered = sessions
             .OrderByDescending(static session => session.UpdatedAt)
             .ThenBy(static session => session.Id, StringComparer.Ordinal)
@@ -168,12 +191,12 @@ internal static class SessionRetentionPlanner
 
         var delete = new List<SessionRetentionDecision>();
         var keep = new List<SessionRetentionDecision>();
-        TimeSpan threshold = TimeSpan.FromDays(validated.Value.MaxAgeDays);
+        TimeSpan threshold = TimeSpan.FromDays(limits.MaxAgeDays);
 
         for (int i = 0; i < ordered.Length; i++)
         {
             Session session = ordered[i];
-            if (i < validated.Value.KeepRecent)
+            if (i < limits.KeepRecent)
             {
                 keep.Add(new SessionRetentionDecision(session, "recent"));
                 continue;
@@ -182,7 +205,7 @@ internal static class SessionRetentionPlanner
             if (now - session.UpdatedAt > threshold)
             {
                 string reason = "inactive > "
-                    + validated.Value.MaxAgeDays.ToString(CultureInfo.InvariantCulture)
+                    + limits.MaxAgeDays.ToString(CultureInfo.InvariantCulture)
                     + "d";
                 delete.Add(new SessionRetentionDecision(session, reason));
             }
@@ -190,7 +213,7 @@ internal static class SessionRetentionPlanner
                 keep.Add(new SessionRetentionDecision(session, "within retention window"));
         }
 
-        return Result.Success(new SessionRetentionPlan(delete, keep, validated.Value));
+        return new SessionRetentionPlan(delete, keep, limits);
     }
 
     /// <summary>Validate both thresholds with one set of bounds.</summary>
