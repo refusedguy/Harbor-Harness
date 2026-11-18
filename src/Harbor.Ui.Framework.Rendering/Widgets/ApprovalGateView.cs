@@ -1,5 +1,4 @@
 using System.Text;
-using Harbor.Abstractions.Extensions;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering;
 
@@ -58,12 +57,8 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
     public ApprovalGateView(string toolName, string detail, string? invocationId = null, int generation = 1)
     {
-        // #2678 item 100: tool name/detail come from the model. Strip ESC and
-        // bidi controls at the boundary so the card can never execute a
-        // sequence or reorder its own prompt text. Clean input is untouched.
-        string safeTool = TerminalTextSanitizer.SanitizeSingleLine(toolName);
-        ToolName = safeTool.Length == 0 ? "?" : safeTool;
-        _detailText = TerminalTextSanitizer.Sanitize(detail).Trim();
+        ToolName = SafeTool(toolName);
+        _detailText = Harbor.Abstractions.Extensions.TerminalTextSanitizer.Sanitize(detail).Trim();
         Decision = ApprovalChoice.None;
         InvocationId = invocationId;
         Generation = generation;
@@ -375,5 +370,16 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
         _wrapped = lines;
         _wrappedWidth = width;
+    }
+
+    /// <summary>
+    ///     Tool name for the header and audit stamp. #2678 item 100: the name
+    ///     comes from the model, so strip control and bidi characters before
+    ///     the terminal paints it. A name made only of controls becomes "?".
+    /// </summary>
+    private static string SafeTool(string? toolName)
+    {
+        string safe = Harbor.Abstractions.Extensions.TerminalTextSanitizer.SanitizeSingleLine(toolName);
+        return safe.Length == 0 ? "?" : safe;
     }
 }

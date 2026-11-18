@@ -1,5 +1,4 @@
 using System.Text;
-using Harbor.Abstractions.Extensions;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
@@ -306,15 +305,11 @@ public sealed partial class DialogOverlay
         Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
         Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         _kind = DialogKind.Approval;
-        // #2678 item 100: sanitize the model-supplied tool name, args summary
-        // and path at the confirmation boundary. The shared helper is a fast
-        // pass-through for clean text, so existing prompts paint identically.
-        string safeTool = TerminalTextSanitizer.SanitizeSingleLine(toolName);
-        _approvalTool = safeTool.Length == 0 ? "?" : safeTool;
+        _approvalTool = string.IsNullOrWhiteSpace(toolName) ? "?" : Harbor.Abstractions.Extensions.TerminalTextSanitizer.SanitizeSingleLine(toolName);
         _title = $"permission required · {_approvalTool}";
-        _message = TerminalTextSanitizer.Sanitize(detail);
+        _message = Harbor.Abstractions.Extensions.TerminalTextSanitizer.Sanitize(detail);
         _input = string.Empty;
-        _approvalFile = TerminalTextSanitizer.SanitizeSingleLine(filePath);
+        _approvalFile = Harbor.Abstractions.Extensions.TerminalTextSanitizer.SanitizeSingleLine(filePath);
         ParseApprovalDiff(diffText);
         _radio.SetOptions(ApprovalChoices, selectedIndex);
         _editor.SetText(string.Empty);

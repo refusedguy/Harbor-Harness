@@ -1,6 +1,5 @@
 namespace Harbor.Tui.AnsiPlain;
 
-using Harbor.Abstractions.Extensions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
@@ -151,13 +150,43 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         }
 
         /// <summary>
-        ///     Delegates to <see cref="TerminalTextSanitizer.Sanitize" />,
-        ///     which drops C0/C1 controls, DEL, and bidi controls while
-        ///     keeping <c>\n</c>/<c>\t</c> and printable text. The fast path
-        ///     returns plain JSON args untouched.
+        ///     Drops terminal control characters (C0 incl. ESC, DEL, C1) while
+        ///     keeping <c>\n</c>/<c>\t</c> and all printable text, so model-
+        ///     supplied args paint as inert text, never as escape sequences.
+        ///     Fast path returns the input untouched when there is nothing to
+        ///     strip (the common case — plain JSON args).
         /// </summary>
-        private static string SanitizeForTerminal(string text) =>
-            TerminalTextSanitizer.Sanitize(text);
+        private static string SanitizeForTerminal(string text)
+        {
+            int dirty = -1;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c != '\n' && c != '\t' && char.IsControl(c))
+                {
+                    dirty = i;
+                    break;
+                }
+            }
+
+            if (dirty < 0)
+            {
+                return text;
+            }
+
+            var sb = new StringBuilder(text.Length);
+            sb.Append(text, 0, dirty);
+            for (int i = dirty; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\n' || c == '\t' || !char.IsControl(c))
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
+        }
 
         /// <summary>Empty object/array payload without materializing
         /// <c>GetRawText</c> (struct-enumerator probe, zero allocation).

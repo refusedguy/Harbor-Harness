@@ -27,7 +27,7 @@ public class TerminalTextSanitizerTests
     {
         string raw = "bash\x1b[2J\u0000 \u007f\u0085 \"a\tb\"\nnext";
 
-        await Assert.That(TerminalTextSanitizer.Sanitize(raw)).IsEqualTo("bash[2J \"a\tb\"\nnext");
+        await Assert.That(TerminalTextSanitizer.Sanitize(raw)).IsEqualTo("bash[2J  \"a\tb\"\nnext");
     }
 
     [Test]
