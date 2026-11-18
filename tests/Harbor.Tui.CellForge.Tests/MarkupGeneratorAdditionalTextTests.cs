@@ -14,19 +14,14 @@ using Microsoft.CodeAnalysis.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-///     Issue #2425: the <c>.harbor-ui</c> file reaches the incremental
-///     generator as an <see cref="AdditionalText"/>, and the key it is cached
-///     under is the project-relative <c>TargetPath</c>, not the absolute path.
+///     Issue #2425 drives the generator from <see cref="AdditionalText"/>;
+///     issue #2428 adds the two-phase <c>BuildRoot</c> output. The cache key
+///     is the project-relative <c>TargetPath</c>, not the absolute path.
 /// </summary>
-/// <remarks>
-///     The driver half drives the real generator with the real sample file. A
-///     second run uses the same <c>TargetPath</c> under a different absolute
-///     checkout root; if the generator keyed on <see cref="AdditionalText.Path"/>
-///     the two outputs would differ, which is the regression this guards.
-/// </remarks>
 public class MarkupGeneratorAdditionalTextTests
 {
     private const string SampleTargetPath = "Fixtures/Sample.harbor-ui";
+    private const string ContractHint = "CellForgeRootContract.g.cs";
 
     private static readonly string SampleFullPath = Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", SampleTargetPath));
@@ -38,10 +33,10 @@ public class MarkupGeneratorAdditionalTextTests
         var run = Run(file, TestOptionsProvider.For(file, SampleTargetPath));
 
         await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
-        var sources = run.Results.SelectMany(r => r.GeneratedSources).ToImmutableArray();
-        await Assert.That(sources.Length).IsEqualTo(1);
-        await Assert.That(sources[0].SourceText.ToString())
-            .Contains("TargetPath = \"" + SampleTargetPath + "\"");
+        var declarations = Source(run, ".Declarations.g.cs");
+        await Assert.That(declarations).Contains("TargetPath = \"" + SampleTargetPath + "\"");
+        await Assert.That(SourceExists(run, ".BuildRoot.g.cs")).IsTrue();
+        await Assert.That(SourceExists(run, ContractHint)).IsTrue();
     }
 
     [Test]
@@ -54,15 +49,18 @@ public class MarkupGeneratorAdditionalTextTests
         var a = Run(first, TestOptionsProvider.For(first, SampleTargetPath));
         var b = Run(elsewhere, TestOptionsProvider.For(elsewhere, SampleTargetPath));
 
-        var sourcesA = a.Results.SelectMany(r => r.GeneratedSources).ToImmutableArray();
-        var sourcesB = b.Results.SelectMany(r => r.GeneratedSources).ToImmutableArray();
+        var sourcesA = Sources(a);
+        var sourcesB = Sources(b);
 
         await Assert.That(a.Diagnostics.Length).IsEqualTo(0);
         await Assert.That(b.Diagnostics.Length).IsEqualTo(0);
-        await Assert.That(sourcesA.Length).IsEqualTo(1);
-        await Assert.That(sourcesB.Length).IsEqualTo(1);
-        await Assert.That(sourcesA[0].HintName).IsEqualTo(sourcesB[0].HintName);
-        await Assert.That(sourcesA[0].SourceText.ContentEquals(sourcesB[0].SourceText)).IsTrue();
+        await Assert.That(sourcesA.Length).IsEqualTo(sourcesB.Length);
+        foreach (var source in sourcesA)
+        {
+            await Assert.That(sourcesB.Any(other =>
+                other.HintName == source.HintName
+                && other.SourceText.ContentEquals(source.SourceText))).IsTrue();
+        }
     }
 
     [Test]
@@ -72,7 +70,9 @@ public class MarkupGeneratorAdditionalTextTests
         var run = Run(file, TestOptionsProvider.For(file, "Schemas/pin.json"));
 
         await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
-        await Assert.That(run.Results.SelectMany(r => r.GeneratedSources).Count()).IsEqualTo(0);
+        // Only the shared root contract survives: no markup, no partial class.
+        await Assert.That(Sources(run).Length).IsEqualTo(1);
+        await Assert.That(SourceExists(run, ContractHint)).IsTrue();
     }
 
     [Test]
@@ -82,8 +82,8 @@ public class MarkupGeneratorAdditionalTextTests
         var validRun = Run(valid, TestOptionsProvider.For(valid, SampleTargetPath));
 
         await Assert.That(validRun.Diagnostics.Length).IsEqualTo(0);
-        var validSource = validRun.Results.SelectMany(r => r.GeneratedSources).Single().SourceText.ToString();
-        await Assert.That(validSource).Contains("RootCount = 1");
+        await Assert.That(Source(validRun, ".Declarations.g.cs")).Contains("RootCount = 1");
+        await Assert.That(Source(validRun, ".BuildRoot.g.cs")).Contains("root.Text(1, \"hello\")");
 
         var invalid = new TestAdditionalText("/checkout/one/Bad.harbor-ui", "widget \"x\"\n");
         var invalidRun = Run(invalid, TestOptionsProvider.For(invalid, "Bad.harbor-ui"));
@@ -91,6 +91,123 @@ public class MarkupGeneratorAdditionalTextTests
         await Assert.That(invalidRun.Diagnostics.Length).IsEqualTo(1);
         await Assert.That(invalidRun.Diagnostics[0].Id).IsEqualTo("HUI001");
         await Assert.That(invalidRun.Diagnostics[0].GetMessage()).Contains("Unknown node kind");
+        await Assert.That(SourceExists(invalidRun, ".Declarations.g.cs")).IsFalse();
+        await Assert.That(SourceExists(invalidRun, ".BuildRoot.g.cs")).IsFalse();
+    }
+
+    [Test]
+    public async Task Generator_EmitsRootContractOnce_BeforePerFileSources()
+    {
+        var run = RunText(
+            "panel \"outer\":\n    text \"a\"\n",
+            "Fixtures/Two.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var contracts = Sources(run).Where(s => s.HintName == ContractHint).ToArray();
+        await Assert.That(contracts.Length).IsEqualTo(1);
+
+        var contract = contracts[0].SourceText.ToString();
+        await Assert.That(contract).Contains("interface ICellForgeRoot");
+        await Assert.That(contract).Contains("void Begin(int sequence)");
+        await Assert.That(contract).Contains("void Text(int sequence, string text)");
+        await Assert.That(contract).Contains("void End()");
+    }
+
+    [Test]
+    public async Task Generator_TwoPhases_DeclarationsThenBuildRoot()
+    {
+        var run = RunText(
+            "panel \"outer\":\n    text \"a\"\n",
+            "Fixtures/Phases.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var declarations = Source(run, ".Declarations.g.cs");
+        await Assert.That(declarations).Contains("partial class HarborUi_Fixtures_Phases_harbor_ui");
+        await Assert.That(declarations).Contains("internal const string TargetPath");
+        await Assert.That(declarations).Contains("RootCount = 1");
+        await Assert.That(declarations).Contains("SequenceCount = 3");
+
+        var buildRoot = Source(run, ".BuildRoot.g.cs");
+        await Assert.That(buildRoot).Contains("partial class HarborUi_Fixtures_Phases_harbor_ui");
+        await Assert.That(buildRoot).Contains("internal static void BuildRoot(ICellForgeRoot root)");
+        await Assert.That(buildRoot).Contains("root.Begin(0)");
+        await Assert.That(buildRoot).Contains("root.Text(2, \"a\")");
+        await Assert.That(buildRoot).Contains("root.End()");
+    }
+
+    [Test]
+    public async Task BuildRoot_AssignsSequenceNumbersInPreOrder()
+    {
+        var markup = string.Join("\n",
+            "panel \"outer\":",
+            "    text \"a\"",
+            "    panel \"inner\":",
+            "        text \"b\"");
+        var run = RunText(markup, "Fixtures/Nested.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var buildRoot = Source(run, ".BuildRoot.g.cs");
+        var expected = string.Join("\n",
+            "        root.Begin(0); // Panel, line 1",
+            "        root.Begin(1); // Text, line 2",
+            "        root.Text(2, \"a\"); // Text, line 2",
+            "        root.End(); // Text, line 2",
+            "        root.Begin(3); // Panel, line 3",
+            "        root.Begin(4); // Text, line 4",
+            "        root.Text(5, \"b\"); // Text, line 4",
+            "        root.End(); // Text, line 4",
+            "        root.End(); // Panel, line 3",
+            "        root.End(); // Panel, line 1");
+        await Assert.That(buildRoot).Contains(expected);
+    }
+
+    [Test]
+    public async Task GeneratedOutput_IsPlainCSharp()
+    {
+        var run = RunText("panel \"x\":\n    text \"hi\\nthere\"\n", "Fixtures/Plain.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var buildRoot = Source(run, ".BuildRoot.g.cs");
+        await Assert.That(buildRoot).Contains("root.Text(2, \"hi\\nthere\")");
+        foreach (var source in Sources(run))
+        {
+            var code = source.SourceText.ToString();
+            await Assert.That(code.Contains("System.Reflection", StringComparison.Ordinal)).IsFalse();
+            await Assert.That(code.Contains("Reflection.Emit", StringComparison.Ordinal)).IsFalse();
+            await Assert.That(code.Contains("Activator.", StringComparison.Ordinal)).IsFalse();
+            await Assert.That(code.Contains("MethodInfo", StringComparison.Ordinal)).IsFalse();
+            await Assert.That(code.Contains("dynamic", StringComparison.Ordinal)).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task Generator_CachesOnFileInputs()
+    {
+        const string text = "text \"same\"\n";
+        var a = RunText(text, "Fixtures/Cache.harbor-ui");
+        var b = RunText(text, "Fixtures/Cache.harbor-ui");
+
+        await Assert.That(Sources(a).Length).IsEqualTo(Sources(b).Length);
+        foreach (var source in Sources(a))
+        {
+            await Assert.That(Sources(b).Any(other =>
+                other.HintName == source.HintName
+                && other.SourceText.ContentEquals(source.SourceText))).IsTrue();
+        }
+
+        var changedText = RunText("text \"different\"\n", "Fixtures/Cache.harbor-ui");
+        await Assert.That(Source(changedText, ".BuildRoot.g.cs"))
+            .IsNotEqualTo(Source(a, ".BuildRoot.g.cs"));
+
+        var otherPath = RunText(text, "Fixtures/Other.harbor-ui");
+        // The target path is part of the generated identifier, so both halves
+        // move with it; the sequence structure itself stays the same.
+        await Assert.That(Source(otherPath, ".BuildRoot.g.cs"))
+            .IsNotEqualTo(Source(a, ".BuildRoot.g.cs"));
+        await Assert.That(Source(otherPath, ".BuildRoot.g.cs"))
+            .Contains("root.Begin(0)");
+        await Assert.That(Source(otherPath, ".Declarations.g.cs"))
+            .Contains("TargetPath = \"Fixtures/Other.harbor-ui\"");
     }
 
     private static GeneratorDriverRunResult Run(AdditionalText file, AnalyzerConfigOptionsProvider options)
@@ -102,6 +219,22 @@ public class MarkupGeneratorAdditionalTextTests
             optionsProvider: options);
         return driver.RunGenerators(compilation).GetRunResult();
     }
+
+    private static GeneratorDriverRunResult RunText(string text, string targetPath)
+    {
+        var file = new TestAdditionalText("/checkout/one/" + targetPath, text);
+        return Run(file, TestOptionsProvider.For(file, targetPath));
+    }
+
+    private static ImmutableArray<GeneratedSourceResult> Sources(GeneratorDriverRunResult run) =>
+        run.Results.SelectMany(r => r.GeneratedSources).ToImmutableArray();
+
+    private static bool SourceExists(GeneratorDriverRunResult run, string hintSuffix) =>
+        Sources(run).Any(s => s.HintName.EndsWith(hintSuffix, StringComparison.Ordinal));
+
+    private static string Source(GeneratorDriverRunResult run, string hintSuffix) =>
+        Sources(run).Single(s => s.HintName.EndsWith(hintSuffix, StringComparison.Ordinal))
+            .SourceText.ToString();
 
     /// <summary>An AdditionalText whose text is fixed and whose path is synthetic.</summary>
     private sealed class TestAdditionalText : AdditionalText
