@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Harbor.App.Avalonia.Views;
+using Harbor.App.Avalonia.Views.Components;
 using Harbor.App.Avalonia.Views.Controls;
 using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.Services;
@@ -81,6 +82,14 @@ public abstract class GoldenTestBase : ComponentTestBase
             Status = status,
             Duration = TimeSpan.FromMilliseconds(340),
         },
+    };
+
+    /// <summary>A chat bubble with a fixed role label and body text.</summary>
+    protected static ChatBubble ChatBubbleView(string role, string text) => new()
+    {
+        RoleLabel = role,
+        Text = text,
+        BrushKey = "ChatUserBrush",
     };
 
     /// <summary>A toast surface carrying the given notifications.</summary>

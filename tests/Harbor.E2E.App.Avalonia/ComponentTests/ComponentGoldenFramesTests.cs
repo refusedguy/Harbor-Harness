@@ -64,6 +64,16 @@ public sealed class ComponentGoldenFramesTests : GoldenTestBase
     [Test]
     [Category("E2E")]
     [Category("Golden")]
+    public async Task Frames_ChatBubble_UserMessage()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+        var snapshot = CaptureFrame(() => ChatBubbleView("user", "Hello from golden"), 420, 100);
+        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/chatbubble/user.golden.txt", snapshot, "Hello from golden");
+    }
+
+    [Test]
+    [Category("E2E")]
+    [Category("Golden")]
     public async Task Frames_Toast_Single()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
