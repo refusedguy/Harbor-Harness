@@ -168,6 +168,84 @@ public partial class ActivityRailView : UserControl
             ActivityRailViewLog.OpenFileFailed(Logger, ex, node.FullPath);
         }
     }
+
+    // #2682 Z20: a right-click records the row the menu was opened on. The
+    // MenuItems live in the realized row template, so their Click handlers
+    // cannot bind to the view model; this field is the hand-off instead.
+    private FileTreeNode? _contextNode;
+
+    private void FileTreeRow_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != MouseButton.Right) return;
+        if (sender is not Control control) return;
+
+        Control? current = control;
+        while (current is not null)
+        {
+            if (current.DataContext is FileTreeNode node)
+            {
+                _contextNode = node;
+                return;
+            }
+
+            current = current.Parent as Control;
+        }
+    }
+
+    private async void CopyAbsolutePath_Click(object? sender, RoutedEventArgs e)
+    {
+        await CopyPathAsync(node => FileTreePathLinks.AbsolutePath(node));
+    }
+
+    private async void CopyRelativePath_Click(object? sender, RoutedEventArgs e)
+    {
+        string root = DataContext is MainViewModel vm ? vm.ProjectRootPath : string.Empty;
+        await CopyPathAsync(node => FileTreePathLinks.RelativePath(node, root));
+    }
+
+    private async void CopyFilePermalink_Click(object? sender, RoutedEventArgs e)
+    {
+        await CopyPathAsync(node => FileTreePathLinks.Permalink(node));
+    }
+
+    private async Task CopyPathAsync(Func<FileTreeNode, string> format)
+    {
+        FileTreeNode? node = _contextNode;
+        _contextNode = null;
+        if (node is null) return;
+
+        string text;
+        try
+        {
+            text = format(node);
+        }
+        catch (Exception ex)
+        {
+            ActivityRailViewLog.CopyPathFailed(Logger, ex, node.FullPath);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(text)) return;
+
+        try
+        {
+            // Avalonia 12.1 clipboard API (same shape as CodeBlock's copy
+            // button): a DataTransfer with one text item. Headless test runs
+            // have no clipboard, so the miss is deliberately not fatal.
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard is null) return;
+
+            var transfer = new DataTransfer();
+            var item = new DataTransferItem();
+            item.SetText(text);
+            transfer.Add(item);
+            await clipboard.SetDataAsync(transfer).ConfigureAwait(true);
+        }
+        catch
+        {
+            // No clipboard in headless CI — the copy is a no-op, not a crash.
+        }
+    }
 }
 
 /// <summary>
@@ -286,4 +364,7 @@ internal static partial class ActivityRailViewLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to open file: {Path}")]
     public static partial void OpenFileFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to format a copy-path reference for: {Path}")]
+    public static partial void CopyPathFailed(ILogger logger, Exception ex, string path);
 }
