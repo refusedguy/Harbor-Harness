@@ -941,3 +941,22 @@ Decided: код, тесты, гейты и пороги не меняются. I
 
 - Полный текст, таблица по восьми идеям и список неприменимого:
   [ADR-034](ADR-034-gpui-declarative-devtools-no-new-slice.md).
+
+## ADR-035: отчёт GPUIX (#2703), декларативный срез уже в дереве
+
+Issue #2703 — competitor research по декларативному терминальному UI GPUIX.
+Проверка `gh pr list --search 2703` и `origin/dev` (`f1dbd3a1`): все шесть
+заимствований из итогового списка уже влиты. Mutation batch IR, трёхфазный
+atomic apply, dirty/revision, event registry `(id, type)`, структурное сравнение
+до enqueue и dev reload с разделением хоста и дерева это PR #2530, #2727 и #2789.
+Automation-протокол с `getTree`, `testId`, clock и id-корреляцией это PR #2761.
+probe-дисциплина уже живёт в `CapabilityProber`.
+
+Decided: код не писать. Whole-surface kitty shm, inline RGBA, frame edits и
+fences не принимаются: они заменяют cell-diff Harbor растровым кадром, сам
+отчёт не рекомендует такую замену. `keystrokeId` не выделяется в отдельный
+slice без измеримой цели и критериев приёмки. Issue остаётся OPEN как отчёт,
+гейты и пороги не меняются.
+
+- Полный текст, таблица покрытия шести пунктов и список неприменимого:
+  [ADR-035](ADR-035-gpuix-declarative-terminal-no-new-slice.md).
