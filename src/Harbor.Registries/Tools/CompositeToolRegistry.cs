@@ -111,7 +111,7 @@ public sealed class CompositeToolRegistry : IToolRegistry
             }
         }
 
-        return builder.Count == 0 ? ImmutableArray<ITool>.Empty : builder.MoveToImmutable();
+        return builder.Count == 0 ? ImmutableArray<ITool>.Empty : builder.ToImmutable();
     }
 
     private void InvalidateFrozenSnapshot()
