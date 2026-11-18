@@ -15,8 +15,10 @@ namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
 ///     Issue #2425 drives the generator from <see cref="AdditionalText"/>;
-///     issue #2428 adds the two-phase <c>BuildRoot</c> output. The cache key
-///     is the project-relative <c>TargetPath</c>, not the absolute path.
+///     issue #2428 adds the two-phase <c>BuildRoot</c> output. Issue #2431
+///     adds build-breaking <c>HZ0001</c> diagnostics with a location, refuses
+///     any generated source for a document with diagnostics, and carries a
+///     source checksum and positional comments.
 /// </summary>
 public class MarkupGeneratorAdditionalTextTests
 {
@@ -89,10 +91,55 @@ public class MarkupGeneratorAdditionalTextTests
         var invalidRun = Run(invalid, TestOptionsProvider.For(invalid, "Bad.harbor-ui"));
 
         await Assert.That(invalidRun.Diagnostics.Length).IsEqualTo(1);
-        await Assert.That(invalidRun.Diagnostics[0].Id).IsEqualTo("HUI001");
+        await Assert.That(invalidRun.Diagnostics[0].Id).IsEqualTo("HZ0001");
         await Assert.That(invalidRun.Diagnostics[0].GetMessage()).Contains("Unknown node kind");
         await Assert.That(SourceExists(invalidRun, ".Declarations.g.cs")).IsFalse();
         await Assert.That(SourceExists(invalidRun, ".BuildRoot.g.cs")).IsFalse();
+    }
+
+    [Test]
+    public async Task Generator_BadMarkup_ReportsHZ0001_WithLineAndColumn_AndEmitsNoSources()
+    {
+        const string bad = "panel \"ok\"\n  not_a_widget \"x\"\n";
+        var file = new TestAdditionalText("/checkout/one/" + SampleTargetPath, bad);
+        var run = Run(file, TestOptionsProvider.For(file, SampleTargetPath));
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(1);
+        var diagnostic = run.Diagnostics[0];
+        await Assert.That(diagnostic.Id).IsEqualTo("HZ0001");
+        await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Error);
+
+        var position = diagnostic.Location.GetLineSpan().StartLinePosition;
+        await Assert.That(position.Line).IsEqualTo(1);
+        await Assert.That(position.Character).IsEqualTo(2);
+        await Assert.That(SourceExists(run, ".Declarations.g.cs")).IsFalse();
+        await Assert.That(SourceExists(run, ".BuildRoot.g.cs")).IsFalse();
+    }
+
+    [Test]
+    public async Task Generator_DocumentWithDiagnostics_GetsNoSource_WhileValidSiblingDoes()
+    {
+        var good = new TestAdditionalText("/checkout/one/Good.harbor-ui", "text \"ok\"\n");
+        var bad = new TestAdditionalText("/checkout/one/Bad.harbor-ui", "widget \"x\"\n");
+        var options = TestOptionsProvider.For(good, "Good.harbor-ui").With(bad, "Bad.harbor-ui");
+        var driver = CSharpGeneratorDriver.Create(
+            generators: [new MarkupGenerator().AsSourceGenerator()],
+            additionalTexts: [good, bad],
+            optionsProvider: options);
+        var run = driver.RunGenerators(CSharpCompilation.Create("MarkupWiring")).GetRunResult();
+
+        // The bad document reports an error and is filtered out of both source
+        // outputs. Its sibling still emits both halves: the incremental
+        // pipeline carries no generated type for a document that failed.
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(1);
+        await Assert.That(run.Diagnostics[0].Id).IsEqualTo("HZ0001");
+        var declarations = run.Results.SelectMany(r => r.GeneratedSources)
+            .Where(s => s.HintName.EndsWith(".Declarations.g.cs", StringComparison.Ordinal))
+            .ToImmutableArray();
+        await Assert.That(declarations.Length).IsEqualTo(1);
+        await Assert.That(declarations[0].SourceText.ToString()).Contains("TargetPath = \"Good.harbor-ui\"");
+        await Assert.That(run.Results.SelectMany(r => r.GeneratedSources)
+            .Count(s => s.HintName.EndsWith(".BuildRoot.g.cs", StringComparison.Ordinal))).IsEqualTo(1);
     }
 
     [Test]
@@ -159,6 +206,35 @@ public class MarkupGeneratorAdditionalTextTests
             "        root.End(); // Panel, line 3",
             "        root.End(); // Panel, line 1");
         await Assert.That(buildRoot).Contains(expected);
+    }
+
+    [Test]
+    public async Task Declarations_CarrySourceChecksum_ThatChangesWithText()
+    {
+        var first = RunText("text \"one\"\n", "Fixtures/Checksum.harbor-ui");
+        var second = RunText("text \"two\"\n", "Fixtures/Checksum.harbor-ui");
+
+        var sourceA = Source(first, ".Declarations.g.cs");
+        var sourceB = Source(second, ".Declarations.g.cs");
+
+        await Assert.That(sourceA).Contains("SourceChecksum = \"sha256:");
+        await Assert.That(sourceA).IsNotEqualTo(sourceB);
+    }
+
+    [Test]
+    public async Task GeneratedCode_CarriesNodeAndOperationPositions()
+    {
+        const string markup = """
+            panel "main":
+              .title "Files"
+            """;
+        var run = RunText(markup, "Fixtures/Positions.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var declarations = Source(run, ".Declarations.g.cs");
+        await Assert.That(declarations).Contains("// node Panel @ 1:1");
+        await Assert.That(declarations).Contains("// op new @ 1:1");
+        await Assert.That(declarations).Contains("// op title @ 2:4");
     }
 
     [Test]
@@ -268,12 +344,17 @@ public class MarkupGeneratorAdditionalTextTests
         internal static TestOptionsProvider For(AdditionalText file, string targetPath)
         {
             var provider = new TestOptionsProvider();
-            provider._perFile[file] = new TestOptions(new Dictionary<string, string>
+            return provider.With(file, targetPath);
+        }
+
+        internal TestOptionsProvider With(AdditionalText file, string targetPath)
+        {
+            _perFile[file] = new TestOptions(new Dictionary<string, string>
             {
                 ["build_metadata.AdditionalFiles.TargetPath"] =
                     Convert.ToBase64String(Encoding.UTF8.GetBytes(targetPath)),
             });
-            return provider;
+            return this;
         }
 
         public override AnalyzerConfigOptions GlobalOptions { get; }
