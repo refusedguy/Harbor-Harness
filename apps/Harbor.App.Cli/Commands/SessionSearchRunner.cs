@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 
@@ -27,6 +28,28 @@ public static class SessionSearchRunner
             return 2;
         }
 
+        // #2675 item 010: --session still accepts a plain id substring, and
+        // now also accepts key:value tokens (id:, label:, after:, ...). A bad
+        // filter fails the command instead of silently searching everything.
+        // The Match keeps the parse failure on the railway (no guard site).
+        return await SessionSearchFilter.Parse(sessionFilter)
+            .Match(
+                filter => RunWithFilterAsync(output, error, store, query, filter),
+                async reason =>
+                {
+                    await error.WriteLineAsync(reason).ConfigureAwait(false);
+                    return 2;
+                })
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<int> RunWithFilterAsync(
+        TextWriter output,
+        TextWriter error,
+        ISessionStore store,
+        string query,
+        SessionSearchFilter filter)
+    {
         var listed = await store.ListAsync().ConfigureAwait(false);
         if (listed.IsFailure)
         {
@@ -38,7 +61,7 @@ public static class SessionSearchRunner
         bool capped = false;
         foreach (var session in listed.Value)
         {
-            if (sessionFilter is not null && !session.Id.Contains(sessionFilter, StringComparison.Ordinal))
+            if (!filter.Matches(session))
                 continue;
 
             var messages = await store.GetMessagesAsync(session.Id).ConfigureAwait(false);

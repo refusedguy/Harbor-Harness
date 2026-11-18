@@ -71,7 +71,7 @@ internal static class SessionsVerb
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions import [--from claude|codex] <file>
                                                                           import a Claude Code / Codex JSONL history as a NEW session
-                                          sessions search <query> [--session <id>]   find messages by substring
+                                          sessions search <query> [--session <id>|--filter <expr>]  find messages; --filter takes key:value tokens (id,label,project,repo,parent,agent,model,provider,branch,status,kind,after,before)
                                           sessions usage <id>                        report session cost and token usage
                                           sessions revert <id> <message-id>          rewind session to the given message
                                           sessions checkpoint <id> <message-id> [label]  mark a checkpoint over the message
@@ -400,9 +400,12 @@ internal static class SessionsVerb
     }
 
     /// <summary>
-    ///     <c>harbor sessions search &lt;query&gt; [--session &lt;id&gt;]</c> —
+    ///     <c>harbor sessions search &lt;query&gt; [--session &lt;id&gt;|--filter &lt;expr&gt;]</c> —
     ///     case-insensitive substring scan over persisted messages; the core
-    ///     lives in <see cref="SessionSearchRunner" /> (read-only).
+    ///     lives in <see cref="SessionSearchRunner" /> (read-only). A bare
+    ///     <c>--session</c> value is the legacy id-substring filter; both flags
+    ///     feed <see cref="SessionSearchFilter"/>, so a <c>key:value</c>
+    ///     expression works with either.
     /// </summary>
     internal static async Task<int> RunSearchSessionsAsync(string[] args)
     {
@@ -411,7 +414,7 @@ internal static class SessionsVerb
         int i = 0;
         while (i < args.Length)
         {
-            if (args[i] is "--session" or "-s" && i + 1 < args.Length)
+            if (args[i] is "--session" or "-s" or "--filter" && i + 1 < args.Length)
             {
                 sessionFilter = args[i + 1];
                 i += 2;
@@ -425,8 +428,11 @@ internal static class SessionsVerb
         if (rest.Count == 0)
         {
             Console.Error.WriteLine("""
-                                    Usage: harbor sessions search <query> [--session <id>]
+                                    Usage: harbor sessions search <query> [--session <id>|--filter <expr>]
                                       Search all persisted messages (case-insensitive substring).
+                                      Filter tokens: id:, title:/label:, project:, repo:/dir:, parent:,
+                                      agent:, model:, provider:, branch:, status:, kind:, after:, before:.
+                                      Example: --filter 'label:"bug triage" after:2026-11-01 agent:code'
                                     """);
             return 2;
         }
