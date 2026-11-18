@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using CSharpFunctionalExtensions;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.ChangeTracking;
 
@@ -110,7 +111,7 @@ public sealed class FileClaimRegistry : IDisposable
     /// <param name="staleGrace">Minimum age of a dead-owner claim before another process may steal it.</param>
     public FileClaimRegistry(string directory, TimeSpan? staleGrace = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        Ensure.NotBlank(directory);
         _directory = directory;
         _staleGrace = staleGrace ?? TimeSpan.FromSeconds(5);
     }
@@ -122,7 +123,7 @@ public sealed class FileClaimRegistry : IDisposable
     /// </summary>
     public async Task<Result<FileClaim>> AcquireAsync(string scope, CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+        Ensure.NotBlank(scope);
 
         if (_active.ContainsKey(scope))
         {

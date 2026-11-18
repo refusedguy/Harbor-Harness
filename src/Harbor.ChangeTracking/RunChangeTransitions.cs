@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Extensions;
+
 namespace Harbor.ChangeTracking;
 
 /// <summary>
@@ -130,7 +132,7 @@ public sealed class RunTransitionTable
 
     public RunTransitionTable(IEnumerable<IRunState> states)
     {
-        ArgumentNullException.ThrowIfNull(states);
+        Ensure.NotNull(states);
         _states = states.ToDictionary(state => state.Value);
     }
 

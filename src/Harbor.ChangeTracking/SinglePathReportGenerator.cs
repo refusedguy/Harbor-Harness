@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.ChangeTracking;
 
@@ -103,8 +104,8 @@ public static class SinglePathReportGenerator
         int maxSteps,
         bool worktreeDirty)
     {
-        ArgumentNullException.ThrowIfNull(path);
-        ArgumentNullException.ThrowIfNull(checks);
+        Ensure.NotNull(path);
+        Ensure.NotNull(checks);
         return ChangeReport.Create(
             runId, baseRevision, headRevision,
             [path], checks, ignoredPathCount, timeoutSeconds, maxSteps, worktreeDirty);
