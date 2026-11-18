@@ -74,11 +74,11 @@ internal static class TypedBindingsEmitter
         foreach (var binding in bindings)
         {
             var resolution = ResolvePath(stateType, binding.Path);
-            if (resolution.Error is not null)
+            if (resolution.InvalidReason is not null)
             {
                 diagnostics.Add(new BindingDiagnosticData(
                     "HUI004",
-                    $"Property path '{binding.Path}' is invalid on state type '{parse.StateType}': {resolution.Error}",
+                    $"Property path '{binding.Path}' is invalid on state type '{parse.StateType}': {resolution.InvalidReason}",
                     binding.Line,
                     binding.Column));
                 continue;
@@ -276,7 +276,7 @@ internal static class TypedBindingsEmitter
     private readonly record struct PathResolution(
         ITypeSymbol? ValueType,
         string CSharpPath,
-        string? Error,
+        string? InvalidReason,
         bool CanWrite);
 }
 
