@@ -30,6 +30,10 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
     private readonly bool _ownsWriter;
     private readonly TextWriter _writer;
     private readonly UiStore _store;
+    // #2640: one owner of stdin for this renderer's lifetime. The source
+    // shared with CellForge (#2639) lets cancellation detach this caller
+    // without orphaning a second reader that steals the next prompt's line.
+    private readonly Lazy<StdinLineSource> _stdin = new(() => new StdinLineSource());
 
     private protected AnsiPlainTuiRenderer(
         TextWriter writer,
@@ -279,15 +283,22 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         }
     }
 
-    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    public override async Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         Context.ShowCursor();
-        Context.WriteColored(prompt, TuiColor.Green);
-        Context.Flush();
-        string? line = Console.ReadLine();
-        Context.HideCursor();
-        // EOF is absence, not failure: Maybe.None, not Success("") (#589).
-        return Task.FromResult(Maybe.From(line));
+        try
+        {
+            Context.WriteColored(prompt, TuiColor.Green);
+            Context.Flush();
+            // Prompt writing, cursor handling and the Maybe<string> EOF shape
+            // are unchanged (#589). Only the blocking read moves behind the
+            // shared, cancellation-aware stdin owner (#2639, #2640).
+            return await _stdin.Value.ReadLineAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            Context.HideCursor();
+        }
     }
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
@@ -321,6 +332,11 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         else
         {
             _writer.Flush();
+        }
+
+        if (_stdin.IsValueCreated)
+        {
+            _stdin.Value.Dispose();
         }
 
         base.Dispose();
