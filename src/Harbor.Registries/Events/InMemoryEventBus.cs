@@ -133,6 +133,25 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     /// <summary>Consecutive over-budget dispatches before a subscriber is evicted.</summary>
     private const int MaxSlowStrikes = 3;
 
+    /// <summary>
+    ///     Ring capacity for per-subscriber outcome bookkeeping (#2562). A power
+    ///     of two so the slot index is a mask. The three outcomes that decide a
+    ///     streak stay well clear of a late arrival from an older concurrent
+    ///     publish, and nothing is allocated per dispatch.
+    /// </summary>
+    private const int StrikeOutcomeRingCapacity = 8;
+
+    /// <summary>Mask for <see cref="StrikeOutcomeRingCapacity" />.</summary>
+    private const int StrikeOutcomeRingMask = StrikeOutcomeRingCapacity - 1;
+
+    /// <summary>
+    ///     Monotonic dispatch serial (#2562). Claimed once per publish that
+    ///     reaches fan-out and carried with the dispatch, so outcomes from
+    ///     parallel publishes can be ordered before a slow-streak is read.
+    ///     A 64-bit counter cannot wrap within a process lifetime.
+    /// </summary>
+    private long _dispatchSerial;
+
     /// <summary>Per-dispatch budget; TimeSpan.Zero disables the budget entirely.</summary>
     private readonly TimeSpan _handlerBudget;
 
@@ -586,7 +605,14 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             //    MaxSlowStrikes consecutive strikes the subscriber is evicted.
             //    Fast handlers — the overwhelmingly common case — complete
             //    synchronously and keep the exact publish-then-observe contract.
-            await DispatchToSubscribersAsync(snapshot, @event, ct).ConfigureAwait(false);
+            //
+            // #2562: claim the serial BEFORE fan-out. Every subscriber in this
+            // publish sees the same serial and parallel publishes get strictly
+            // increasing ones. The serial travels with each outcome so a fast
+            // dispatch from an earlier publish resets the streak even when its
+            // completion is recorded after a later publish's slow strike.
+            long dispatchSerial = Interlocked.Increment(ref _dispatchSerial);
+            await DispatchToSubscribersAsync(snapshot, @event, ct, dispatchSerial).ConfigureAwait(false);
         }
         finally
         {
@@ -890,7 +916,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     ///     the loop.
     /// </summary>
     private async Task DispatchToSubscribersAsync(
-        ImmutableArray<Subscription> snapshot, AgentEvent @event, CancellationToken ct)
+        ImmutableArray<Subscription> snapshot, AgentEvent @event, CancellationToken ct, long dispatchSerial)
     {
         Subscription[]? dead = null;
         int deadCount = 0;
@@ -932,7 +958,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
 
             async ValueTask RecordSlowStrikeAsync(Subscription sub, Task handlerTask)
             {
-                int strikes = sub.Strike();
+                int strikes = sub.RecordOutcome(dispatchSerial, slow: true);
                 InMemoryEventBusLog.SlowSubscriberStrike(_logger, _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
                 if (strikes >= MaxSlowStrikes)
                 {
@@ -957,7 +983,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                     }
                     else
                     {
-                        sub.ResetSlowStrikes();
+                        sub.RecordOutcome(dispatchSerial, slow: false);
                     }
                 }
                 catch (Exception ex)
@@ -1179,16 +1205,77 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     {
         public Func<AgentEvent, CancellationToken, ValueTask> Handler { get; }
 
-        private int _slowStrikes;
+        // #2562: outcomes are stored by dispatch serial, not accumulated into
+        // one shared counter. Interleaved publishes previously let a fast
+        // dispatch's reset run before the slow strikes it was meant to clear,
+        // so a healthy subscriber could be evicted under a parallel burst. The
+        // short lock keeps the ring write and the streak read one step; each
+        // dispatch pays it only for a handful of instructions, and different
+        // subscribers never contend on the same gate.
+        private readonly object _outcomeGate = new();
+        private readonly long[] _outcomes = new long[StrikeOutcomeRingCapacity];
+        private long _maxOutcomeSerial;
 
         public Subscription(Func<AgentEvent, CancellationToken, ValueTask> handler)
         {
             Handler = handler;
         }
 
-        public int Strike() => Interlocked.Increment(ref _slowStrikes);
+        /// <summary>
+        ///     Record this dispatch's outcome and return the current run of
+        ///     consecutive slow dispatches in publish order (#2562). Slots are
+        ///     placed by serial; the run is read backwards from the highest
+        ///     recorded one. A missing slot (a slower publish still in flight)
+        ///     or a fast outcome ends the run, so a late outcome from an older
+        ///     publish can neither inflate nor hide a streak.
+        /// </summary>
+        public int RecordOutcome(long serial, bool slow)
+        {
+            lock (_outcomeGate)
+            {
+                // An outcome older than the ring cannot affect the three slots
+                // that decide the streak, so drop it instead of overwriting one
+                // of them.
+                if (serial <= _maxOutcomeSerial - StrikeOutcomeRingCapacity)
+                {
+                    return CurrentStreak();
+                }
 
-        public void ResetSlowStrikes() => Interlocked.Exchange(ref _slowStrikes, 0);
+                // Slot 0 means empty; serials start at 1 and are 64-bit.
+                _outcomes[(int)(serial & StrikeOutcomeRingMask)] = (serial << 1) | (slow ? 1L : 0L);
+                if (serial > _maxOutcomeSerial)
+                {
+                    _maxOutcomeSerial = serial;
+                }
+
+                return CurrentStreak();
+            }
+        }
+
+        private int CurrentStreak()
+        {
+            int streak = 0;
+            for (int k = 0; k < MaxSlowStrikes; k++)
+            {
+                long serial = _maxOutcomeSerial - k;
+                if (serial <= 0)
+                {
+                    break;
+                }
+
+                long slot = _outcomes[(int)(serial & StrikeOutcomeRingMask)];
+                if ((slot >> 1) != serial || (slot & 1L) == 0)
+                {
+                    // No outcome for that publish has landed yet, or it was
+                    // fast — either way the consecutive run stops here.
+                    break;
+                }
+
+                streak++;
+            }
+
+            return streak;
+        }
     }
 
     private sealed class Unsubscriber : IDisposable

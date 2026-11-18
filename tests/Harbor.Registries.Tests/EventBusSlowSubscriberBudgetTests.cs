@@ -52,6 +52,61 @@ public class EventBusSlowSubscriberBudgetTests
     }
 
     /// <summary>
+    ///     #2562 regression: with parallel publishes, a fast dispatch from an
+    ///     earlier publish can have its outcome recorded AFTER two later slow
+    ///     strikes. The counter must still see that fast dispatch between them
+    ///     and keep the subscriber. The old single shared int let the slow
+    ///     strikes pile onto the first one and evict a healthy subscriber.
+    /// </summary>
+    [Test]
+    [Timeout(30_000)]
+    public async Task PublishAsync_LateFastOutcomeBetweenSlowStrikes_DoesNotEvictSubscriber()
+    {
+        var bus = new InMemoryEventBus(
+            NullLogger<InMemoryEventBus>.Instance,
+            maxScrollback: 0,
+            handlerBudget: TimeSpan.FromMinutes(1));
+        var fastGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int calls = 0;
+        bus.Subscribe((evt, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            if (((TurnStartEvent)evt).TurnIndex == 2)
+            {
+                // The fast dispatch. Its Completed outcome is recorded only
+                // after the gate is released, i.e. after the two slow strikes.
+                return AwaitGateAsync(fastGate.Task);
+            }
+
+            // An already-canceled dispatch takes the completed-handler shortcut
+            // and becomes a Slow strike immediately, without the budget timer.
+            return new ValueTask(Task.FromCanceled(new CancellationToken(canceled: true)));
+        });
+
+        static async ValueTask AwaitGateAsync(Task gate) => await gate.ConfigureAwait(false);
+
+        // Serial 1: slow (streak 1).
+        await bus.PublishAsync(TestEvents.TurnStart(1));
+
+        // Serial 2: fast, but held open so its outcome lands last.
+        Task gatedPublish = bus.PublishAsync(TestEvents.TurnStart(2));
+
+        // Serials 3 and 4: slow. With a shared counter these three slow outcomes
+        // reached the eviction threshold even though serial 2 was fast.
+        await bus.PublishAsync(TestEvents.TurnStart(3));
+        await bus.PublishAsync(TestEvents.TurnStart(4));
+
+        fastGate.SetResult();
+        await gatedPublish;
+
+        // The subscriber is still attached: a further publish reaches it.
+        int before = Volatile.Read(ref calls);
+        await bus.PublishAsync(TestEvents.TurnStart(5));
+        await Assert.That(Volatile.Read(ref calls)).IsEqualTo(before + 1)
+            .Because("a fast dispatch between slow strikes breaks the streak");
+    }
+
+    /// <summary>
     ///     The shortcut must not swallow a publisher teardown: with the outer
     ///     token already cancelled, a finished handler still resolves without
     ///     hanging the publisher.
