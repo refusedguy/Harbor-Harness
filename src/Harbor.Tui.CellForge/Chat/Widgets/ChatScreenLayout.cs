@@ -557,58 +557,51 @@ public sealed record ChatScreen(
     /// <summary>Rows the composer and status row refuse to give up.</summary>
     public int ChromeMinRows { get; init; } = 4;
 
-    /// <summary>Modal dialog state; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM2c).</summary>
-    public DialogOverlay Dialog { get; } = new();
+    /// <summary>Modal dialog state; seated by <see cref="SyncOverlays"/> (PRIM2c).</summary>
+    public DialogOverlay Dialog => OverlaySeats.Dialog;
 
-    /// <summary>Toast queue; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM2c).</summary>
-    public ToastOverlay Toasts { get; } = new();
+    /// <summary>Toast queue; seated by <see cref="SyncOverlays"/> (PRIM2c).</summary>
+    public ToastOverlay Toasts => OverlaySeats.Toasts;
 
-    /// <summary>Fullscreen diff viewer state; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM12 #308).</summary>
-    public DiffViewerOverlay DiffViewer { get; } = new();
+    /// <summary>Fullscreen diff viewer state; seated by <see cref="SyncOverlays"/> (PRIM12 #308).</summary>
+    public DiffViewerOverlay DiffViewer => OverlaySeats.DiffViewer;
 
     /// <summary>
     /// Setup-guide checklist (KILLER_FEATURES §2.7 Feature 9, issue #383);
-    /// seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/>.
+    /// seated by <see cref="SyncOverlays"/>.
     /// </summary>
-    public SetupChecklistOverlay SetupChecklist { get; } = new();
+    public SetupChecklistOverlay SetupChecklist => OverlaySeats.SetupChecklist;
 
     /// <summary>
     /// Fullscreen image zoom viewer (KILLER_FEATURES §2.7 Feature 12, issue
-    /// #387); seated on <see cref="LayoutTree.Overlays"/> by
-    /// <see cref="SyncOverlays"/>.
+    /// #387); seated by <see cref="SyncOverlays"/>.
     /// </summary>
-    public ImageViewerOverlay ImageViewer { get; } = new();
+    public ImageViewerOverlay ImageViewer => OverlaySeats.ImageViewer;
 
     /// <summary>
     /// Screenshot-markup overlay (KILLER_FEATURES §2.7 Feature 14, issue
-    /// #400 slice 1/2); seated on <see cref="LayoutTree.Overlays"/> by
-    /// <see cref="SyncOverlays"/>. The session lives in the store
-    /// (<c>Chat.Markup</c>); this object only paints the snapshot the host
-    /// pushes through <see cref="SyncMarkup"/> each frame.
+    /// #400 slice 1/2); seated by <see cref="SyncOverlays"/>. The session lives
+    /// in the store (<c>Chat.Markup</c>); this object only paints the snapshot
+    /// the host pushes through <see cref="SyncMarkup"/> each frame.
     /// </summary>
-    public MarkupOverlay Markup { get; } = new();
+    public MarkupOverlay Markup => OverlaySeats.Markup;
 
     /// <summary>
     /// Floating terminal pane (issue #1491). The attach/detach controller owns
     /// the live session; <see cref="SyncOverlays"/> seats its layer on the z-stack.
     /// </summary>
-    public FloatingTerminalController FloatingTerminal { get; } = new();
+    public FloatingTerminalController FloatingTerminal => OverlaySeats.FloatingTerminal;
 
     /// <summary>
     /// Edge sheet (issue #2376). The host owns its open/progress state;
     /// <see cref="SyncOverlays"/> seats its layer on the same z-stack as the
     /// other overlays, so no new overlay plane is introduced.
     /// </summary>
-    public SheetOverlay Sheet { get; } = new();
+    public SheetOverlay Sheet => OverlaySeats.Sheet;
 
-    private DialogOverlayLayer? _dialogLayer;
-    private ToastOverlayLayer? _toastLayer;
-    private DiffViewerOverlayLayer? _diffLayer;
-    private SetupChecklistOverlayLayer? _setupLayer;
-    private ImageViewerOverlayLayer? _imageLayer;
-    private MarkupOverlayLayer? _markupLayer;
-    private FloatingTerminalOverlayLayer? _floatingLayer;
-    private SheetOverlayLayer? _sheetLayer;
+    private OverlaySeatCoordinator? _overlaySeats;
+
+    private OverlaySeatCoordinator OverlaySeats => _overlaySeats ??= new(Tree);
 
     /// <summary>Ratio the tab-strip split was last driven to, so a frame that
     /// re-derives the SAME row count claims no damage it did not cause — the
@@ -618,115 +611,14 @@ public sealed record ChatScreen(
     private float _tabStripRatio = 1f;
 
     /// <summary>
-    /// PRIM2c seating: reconciles the dialog/toast overlay layers with
-    /// <paramref name="viewport"/> (typically the full screen). PRIM12 seats
-    /// the fullscreen diff viewer between them (dialog below, toasts on top);
-    /// the setup checklist (issue #383) sits above the diff viewer and below the
-    /// toasts. Visible layers
-    /// are pushed (dialog below, toast on top); hidden ones are removed so the
-    /// stack stays empty and frames paint byte-identically to the panels-only
-    /// path. Idempotent — safe to call every frame before
-    /// <see cref="LayoutTree.PaintAll"/>.
+    /// PRIM2c seating: reconciles the overlay layers with
+    /// <paramref name="viewport"/> (typically the full screen). Hidden layers
+    /// are removed so the stack stays empty and frames paint byte-identically
+    /// to the panels-only path; visible ones are pushed in the z-order declared
+    /// by <see cref="OverlaySeatCoordinator"/>. Idempotent — safe to call every
+    /// frame before <see cref="LayoutTree.PaintAll"/>.
     /// </summary>
-    public void SyncOverlays(Rect viewport)
-    {
-        _dialogLayer ??= new DialogOverlayLayer(Dialog);
-        _toastLayer ??= new ToastOverlayLayer(Toasts);
-        _diffLayer ??= new DiffViewerOverlayLayer(DiffViewer);
-        _setupLayer ??= new SetupChecklistOverlayLayer(SetupChecklist);
-        _imageLayer ??= new ImageViewerOverlayLayer(ImageViewer);
-        _markupLayer ??= new MarkupOverlayLayer(Markup);
-        _floatingLayer ??= new FloatingTerminalOverlayLayer(FloatingTerminal);
-        _sheetLayer ??= new SheetOverlayLayer(Sheet);
-        _dialogLayer.Sync(viewport);
-        _toastLayer.Sync(viewport);
-        _diffLayer.Sync(viewport);
-        _setupLayer.Sync(viewport);
-        _imageLayer.Sync(viewport);
-        _markupLayer.Sync(viewport);
-        _floatingLayer.Sync(viewport);
-        _sheetLayer.Sync(viewport);
-        if (_dialogLayer.Visible)
-        {
-            Tree.Overlays.Push(_dialogLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(DialogOverlayLayer.LayerId);
-        }
-        if (_diffLayer.Visible)
-        {
-            Tree.Overlays.Push(_diffLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(DiffViewerOverlayLayer.LayerId);
-        }
-        if (_setupLayer.Visible)
-        {
-            Tree.Overlays.Push(_setupLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(SetupChecklistOverlayLayer.LayerId);
-        }
-
-        // Image viewer (issue #387) sits above the diff viewer and the setup
-        // guide — it is a deliberate, user-driven fullscreen takeover — and
-        // below the toasts, which stay transient and transparent.
-        if (_imageLayer.Visible)
-        {
-            Tree.Overlays.Push(_imageLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(ImageViewerOverlayLayer.LayerId);
-        }
-
-        // Markup overlay (issue #400) sits above the image viewer: it opens
-        // from the viewer (which hides underneath) and carries the same
-        // fullscreen-takeover contract, still below the toasts.
-        if (_markupLayer.Visible)
-        {
-            Tree.Overlays.Push(_markupLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(MarkupOverlayLayer.LayerId);
-        }
-
-        // Floating terminal (issue #1491) sits above the fullscreen viewers:
-        // a user-driven attach takes input over the composer but leaves the
-        // transient toasts on top.
-        if (_floatingLayer.Visible)
-        {
-            Tree.Overlays.Push(_floatingLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(FloatingTerminalOverlayLayer.LayerId);
-        }
-
-        // The sheet (issue #2376) occupies the same modal plane as the floating
-        // pane; it paints above that pane and below the transient toasts.
-        if (_sheetLayer.Visible)
-        {
-            Tree.Overlays.Push(_sheetLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(SheetOverlayLayer.LayerId);
-        }
-
-        if (_toastLayer.Visible)
-        {
-            Tree.Overlays.Push(_toastLayer);
-        }
-        else
-        {
-            Tree.Overlays.Remove(ToastOverlayLayer.LayerId);
-        }
-    }
+    public void SyncOverlays(Rect viewport) => OverlaySeats.Sync(viewport);
 
     /// <summary>
     /// Assembles the chat screen. <paramref name="timeProvider"/> threads the
