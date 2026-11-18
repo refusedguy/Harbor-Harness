@@ -21,6 +21,13 @@ namespace Harbor.Application.Configuration;
 /// </remarks>
 public sealed class HarborConfig
 {
+    // #2568: the flat Provider / Model / Agent setters exist for backward
+    // compatibility and keep their silent-fallback behavior. They used to throw
+    // the TrySet* Result away; the reason is now kept here so a refused write is
+    // diagnosable instead of invisible. Code that can act on a refusal should
+    // call TrySet* and inspect the returned Result directly.
+    private readonly List<string> _setFailures = new();
+
     /// <summary>Provider / model / agent selection.</summary>
     public IdentityConfig Identity { get; set; } = IdentityConfig.Default;
 
@@ -87,7 +94,7 @@ public sealed class HarborConfig
     public string Provider
     {
         get => Identity.Provider?.Value ?? IdentityConfig.FallbackProvider;
-        set => _ = TrySetProvider(value);
+        set => RecordSetFailure(TrySetProvider(value));
     }
 
     /// <summary>
@@ -112,7 +119,7 @@ public sealed class HarborConfig
     public string Model
     {
         get => Identity.Model?.ToString() ?? IdentityConfig.FallbackModel;
-        set => _ = TrySetModel(value);
+        set => RecordSetFailure(TrySetModel(value));
     }
 
     /// <summary>
@@ -146,7 +153,7 @@ public sealed class HarborConfig
     public string Agent
     {
         get => Identity.Agent?.Value ?? IdentityConfig.FallbackAgent;
-        set => _ = TrySetAgent(value);
+        set => RecordSetFailure(TrySetAgent(value));
     }
 
     /// <summary>
@@ -164,6 +171,31 @@ public sealed class HarborConfig
             ? Identity with { Agent = r.Value }
             : Identity with { Agent = null };
         return r.IsSuccess ? Result.Success() : r.ConvertFailure();
+    }
+
+    /// <summary>
+    ///     Parse reasons refused by the compatibility setters
+    ///     (<see cref="Provider" />, <see cref="Model" />, <see cref="Agent" />)
+    ///     on this instance (#2568). These are the <see cref="Result" /> failures
+    ///     the setters used to discard: the setter still falls back to the
+    ///     built-in default, but the reason is now observable. New code should
+    ///     call <see cref="TrySetProvider" /> / <see cref="TrySetModel" /> /
+    ///     <see cref="TrySetAgent" /> and inspect the returned result instead.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> SetFailures => _setFailures.AsReadOnly();
+
+    /// <summary>
+    ///     Keep the failure side of a compatibility setter's <see cref="Result" />
+    ///     (#2568). A successful write adds nothing: this is an audit trail of
+    ///     refusals, not a snapshot of the last assignment.
+    /// </summary>
+    private void RecordSetFailure(Result result)
+    {
+        if (result.IsFailure)
+        {
+            _setFailures.Add(result.Error);
+        }
     }
 
     /// <summary>TUI renderer: ansi, plain, spectre.</summary>
