@@ -85,6 +85,7 @@ public class FocusTooltipTests
         var second = new Target("open");
         router.Add(second);
 
+        await Assert.That(tip.Tick()).IsFalse(); // the tooltip discovers focus on its first tick
         clock.AdvanceMs(200);
         await Assert.That(tip.Tick()).IsTrue();
         await Assert.That(tip.Text).IsEqualTo("Save the file");
@@ -106,6 +107,7 @@ public class FocusTooltipTests
     public async Task Blur_HidesAndCancelsBothVisibleAndPendingHints()
     {
         var (router, _, clock, tip) = Harness(delay: TimeSpan.FromMilliseconds(200));
+        await Assert.That(tip.Tick()).IsFalse();
         clock.AdvanceMs(200);
         await Assert.That(tip.Tick()).IsTrue();
 
@@ -125,6 +127,7 @@ public class FocusTooltipTests
             delay: TimeSpan.FromMilliseconds(200),
             timeout: TimeSpan.FromMilliseconds(300));
 
+        await Assert.That(tip.Tick()).IsFalse();
         clock.AdvanceMs(200);
         await Assert.That(tip.Tick()).IsTrue();
         clock.AdvanceMs(299);
@@ -151,6 +154,7 @@ public class FocusTooltipTests
         var second = new Target("other");
         router.Add(second);
 
+        await Assert.That(tip.Tick()).IsFalse();
         clock.AdvanceMs(200);
         await Assert.That(tip.Tick()).IsFalse();
         available = true;
@@ -193,6 +197,7 @@ public class FocusTooltipTests
         var second = new Target("other");
         router.Add(second);
 
+        await Assert.That(tip.Tick()).IsFalse();
         clock.AdvanceMs(200);
         await Assert.That(tip.Tick()).IsTrue();
         text = "Changed by host";
@@ -212,6 +217,7 @@ public class FocusTooltipTests
     public async Task Reset_CancelsPendingHint_AndRestartsDelay()
     {
         var (_, _, clock, tip) = Harness(delay: TimeSpan.FromMilliseconds(200));
+        await Assert.That(tip.Tick()).IsFalse();
         clock.AdvanceMs(200);
         await Assert.That(tip.Tick()).IsTrue();
 
@@ -237,6 +243,7 @@ public class FocusTooltipTests
         int changes = 0;
         tip.Changed += (_, _) => changes++;
 
+        await Assert.That(tip.Tick()).IsFalse();
         clock.AdvanceMs(200);
         await Assert.That(tip.Tick()).IsTrue();
         router.FocusById("open");
@@ -261,7 +268,7 @@ public class FocusTooltipTests
         tip.Paint(buffer, new Rect(0, 0, 24, 3));
 
         await Assert.That(ScreenFixtures.Row(buffer, 0, 24)).IsEqualTo("┌" + new string('─', 22) + "┐");
-        await Assert.That(ScreenFixtures.Row(buffer, 1, 24).TrimEnd()).IsEqualTo("│ Save the file │");
+        await Assert.That(ScreenFixtures.Row(buffer, 1, 24)).IsEqualTo("│ " + "Save the file".PadRight(20) + " │");
         await Assert.That(ScreenFixtures.Row(buffer, 2, 24)).IsEqualTo("└" + new string('─', 22) + "┘");
     }
 
