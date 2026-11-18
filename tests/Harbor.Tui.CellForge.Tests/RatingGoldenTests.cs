@@ -21,15 +21,7 @@ public class RatingGoldenTests
         var buffer = TestRender.Buffer(cols, rows);
         rating.Paint(buffer, new Rect(0, 0, cols, rows));
 
-        string[] raw = ScreenFixtures.Art(buffer).Split('\n');
-        var lines = new string[rows];
-        for (int i = 0; i < rows; i++)
-        {
-            lines[i] = (i < raw.Length ? raw[i] : string.Empty).TrimEnd();
-        }
-
-        string art = string.Join("\n", lines);
-        string document = $"# golden: {name} ({cols}x{rows})\n" + art + "\n";
+        string document = ScreenFixtures.GoldenDocument(name, buffer);
         string expected = Golden.VerifyText(FixtureDir(), name, document);
         await Assert.That(expected).IsEqualTo(document);
     }

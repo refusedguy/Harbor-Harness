@@ -1,0 +1,9 @@
+# golden: left-open (20x8)
+╭──────────╮
+│Details   │
+│> Files   │
+│  Git     │
+│body      │
+│          │
+│          │
+╰──────────╯

@@ -1,0 +1,9 @@
+# golden: right-partial (20x8)
+              ╭─────
+              │Detai
+              │> Fil
+              │  Git
+              │body
+              │
+              │
+              ╰─────

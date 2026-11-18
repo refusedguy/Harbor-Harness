@@ -248,6 +248,8 @@ internal sealed class CellForgeReplRunner(
     internal TerminalInputSource InputSource => screens.Input;
     /// <summary>Floating terminal attach/detach controller (issue #1491).</summary>
     internal FloatingTerminalController FloatingTerminal => screens.Screen.FloatingTerminal;
+    /// <summary>Edge sheet state (issue #2376), owned by the screen and shared with the input loop.</summary>
+    internal SheetOverlay Sheet => screens.Screen.Sheet;
     internal ITerminalModeController ModeController => modeController;
     internal ITerminalBackend Backend => screens.Backend;
     internal ILogger Log => core.Logger;
