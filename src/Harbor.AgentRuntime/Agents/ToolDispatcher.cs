@@ -136,10 +136,10 @@ public sealed class ToolDispatcher(
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly IHookRunner? _hooks = hookRunner;
 
-    // #1507 (#95 slice): validate/permission/retry chain lives in ToolRetryPolicy
-    // (verbatim move); this dispatcher keeps thin forwarders so the
-    // ExecuteSingleAsync call sites are untouched.
-    private readonly ToolRetryPolicy _retryPolicy = new(eventBus, permissions, logger, coordinator, retryDecider);
+    // #2579 (audit F2): the validate/permission/hook gate and the retry chain
+    // it forwards to live in ToolCallGate (verbatim move); this dispatcher
+    // keeps thin forwarders so the ExecuteSingleAsync call sites are untouched.
+    private readonly ToolCallGate _gate = new(permissions, eventBus, logger, coordinator, retryDecider, hookRunner);
 
     /// <summary>
     ///     Publish token for the TERMINAL event of a tool call (#401).
@@ -691,7 +691,7 @@ public sealed class ToolDispatcher(
             ToolCallPart effectiveCall = toolCall;
             if (_hooks is not null)
             {
-                HookGate gate = await ApplyPreToolHooksAsync(
+                ToolCallGate.HookGate gate = await ApplyPreToolHooksAsync(
                     toolCall, session.Session.Id, effectiveCt, ct, activity).ConfigureAwait(false);
                 if (gate.Refusal is not null)
                 {
@@ -785,18 +785,18 @@ public sealed class ToolDispatcher(
 
     /// <summary>
     ///     Validate tool arguments on the Result railway (#1515).
-    ///     Forwarder over <see cref="ToolRetryPolicy" /> (#1507, #95 slice: verbatim move).
+    ///     Forwarder over <see cref="ToolCallGate" /> (#2579).
     /// </summary>
     private Task<UnitResult<ToolResult>> ValidateArgumentsAsync(
         ITool tool,
         ToolCallPart toolCall,
         Activity? activity,
         CancellationToken ct) =>
-        _retryPolicy.ValidateArgumentsAsync(tool, toolCall, activity, ct);
+        _gate.ValidateArgumentsAsync(tool, toolCall, activity, ct);
 
     /// <summary>
     ///     Check permission for one tool call on the Result railway (#1515).
-    ///     Forwarder over <see cref="ToolRetryPolicy" /> (#1507, #95 slice: verbatim move).
+    ///     Forwarder over <see cref="ToolCallGate" /> (#2579).
     /// </summary>
     private Task<UnitResult<ToolResult>> CheckPermissionAsync(
         ToolCallPart toolCall,
@@ -804,118 +804,19 @@ public sealed class ToolDispatcher(
         CancellationToken effectiveCt,
         CancellationToken ct,
         Activity? activity) =>
-        _retryPolicy.CheckPermissionAsync(toolCall, agent, effectiveCt, ct, activity);
+        _gate.CheckPermissionAsync(toolCall, agent, effectiveCt, ct, activity);
 
     /// <summary>
-    ///     Outcome of the PreToolUse hook gate: the call to execute (possibly
-    ///     with hook-edited args) or a refusal entry that is already reported.
+    ///     Run the PreToolUse hook gate for one tool call (#PX4).
+    ///     Forwarder over <see cref="ToolCallGate" /> (#2579).
     /// </summary>
-    private sealed record HookGate(ToolCallPart Call, ToolResultEntry? Refusal);
-
-    /// <summary>
-    ///     Run user PreToolUse hooks for one tool call. Deny (including the
-    ///     runner's fail-closed deny on hook failure) and a declined ask
-    ///     publish the end event and return a refusal entry; an accepted ask
-    ///     and allow proceed, carrying any hook-edited args.
-    /// </summary>
-    private async Task<HookGate> ApplyPreToolHooksAsync(
+    private Task<ToolCallGate.HookGate> ApplyPreToolHooksAsync(
         ToolCallPart toolCall,
         string sessionId,
         CancellationToken effectiveCt,
         CancellationToken ct,
-        Activity? activity)
-    {
-        HookVerdict verdict;
-        try
-        {
-            verdict = await _hooks!.RunPreToolUseAsync(
-                toolCall.ToolName, toolCall.Args, sessionId, effectiveCt).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // The runner is contracted never to throw on its own; a failure
-            // here is a hooks-subsystem failure, which fails closed to deny
-            // exactly like the permission-subsystem failure (§G3).
-            ToolDispatcherLog.PreToolUseHooksFailed(logger, ex, toolCall.ToolName);
-            verdict = new HookVerdict(HookDecision.Deny, $"Hook execution failed: {ex.Message}", null);
-        }
-
-        return await ResolveHookVerdictAsync(toolCall, verdict, effectiveCt, ct, activity).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Fold one PreToolUse verdict into proceed/refuse. Ask routes to the
-    ///     permission asker (real prompt when interactive, deny when headless);
-    ///     an accepted ask proceeds with any hook-edited args.
-    /// </summary>
-    private async Task<HookGate> ResolveHookVerdictAsync(
-        ToolCallPart toolCall,
-        HookVerdict verdict,
-        CancellationToken effectiveCt,
-        CancellationToken ct,
-        Activity? activity)
-    {
-        if (verdict.Decision == HookDecision.Allow)
-        {
-            ToolCallPart call = verdict.EditedArgs is { } edited && edited.ValueKind == JsonValueKind.Object
-                ? toolCall with { Args = edited.Clone() }
-                : toolCall;
-            return new HookGate(call, null);
-        }
-
-        if (verdict.Decision == HookDecision.Ask)
-        {
-            Result<PermissionResponse> asked = await permissions.AskUserAsync(
-                new PermissionRequest(
-                    toolCall.ToolName,
-                    "hook",
-                    toolCall.Args,
-                    new[] { "allow", "deny" },
-                    toolCall.Id,
-                    1),
-                effectiveCt).ConfigureAwait(false);
-            if (asked.IsSuccess && asked.Value.Action == PermissionAction.Allow)
-            {
-                ToolCallPart call = verdict.EditedArgs is { } edited && edited.ValueKind == JsonValueKind.Object
-                    ? toolCall with { Args = edited.Clone() }
-                    : toolCall;
-                return new HookGate(call, null);
-            }
-
-            string askReason = asked.IsFailure
-                ? $"Hook requested confirmation and the ask failed: {asked.Error}"
-                : verdict.Reason ?? $"Hook '{toolCall.ToolName}' requested confirmation.";
-            return await RefuseHook(toolCall, askReason, activity).ConfigureAwait(false);
-        }
-
-        return await RefuseHook(toolCall, verdict.Reason ?? $"Hook denied tool '{toolCall.ToolName}'.", activity).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Build the refusal entry for a denied/declined hook verdict, with its
-    ///     terminal end event (mirrors the permission-deny path above).
-    /// </summary>
-    /// <remarks>
-    ///     #1760: a hook refusal is its own code
-    ///     (<see cref="ToolErrorCodes.HookDenied" />) and not the permission
-    ///     policy's — the two are decided by different parties and a user
-    ///     reacts to them differently.
-    /// </remarks>
-    private async Task<HookGate> RefuseHook(ToolCallPart toolCall, string reason, Activity? activity)
-    {
-        activity?.SetStatus(ActivityStatusCode.Error, "Hook denied");
-        ToolDispatcherLog.ToolRefusedByHook(logger, toolCall.ToolName, toolCall.Id, reason);
-        var refused = ToolResult.Failed(
-            reason,
-            ToolErrorCodes.Create(ToolErrorCodes.HookDenied, reason));
-        await eventBus.PublishAsync(new ToolExecutionEndEvent(
-            toolCall.Id, refused, true), TerminalEventToken).ConfigureAwait(false);
-        return new HookGate(toolCall, ToolResultEntry.From(toolCall.Id, toolCall.ToolName, refused));
-    }
+        Activity? activity) =>
+        _gate.ApplyPreToolHooksAsync(toolCall, sessionId, effectiveCt, ct, activity);
 
     /// <summary>
     ///     Build the <see cref="ToolContext" /> for one call, wiring progress
@@ -953,7 +854,7 @@ public sealed class ToolDispatcher(
         // byte-identical: the progress publish is still awaited with failures
         // only logged, and Ask still fails closed to Deny on any permission
         // failure.
-        ToolCallGates gates = new(eventBus, logger, permissions, toolCall);
+        ToolContextCallbacks gates = new(eventBus, logger, permissions, toolCall);
         return new ToolContext(
             session.Session.Id,
             partial.Id,
@@ -983,7 +884,7 @@ public sealed class ToolDispatcher(
     ///         Deny whenever the permission service itself fails.
     ///     </para>
     /// </summary>
-    private sealed class ToolCallGates(
+    private sealed class ToolContextCallbacks(
         IEventBus eventBus,
         ILogger logger,
         IPermissionService permissions,
@@ -1020,7 +921,7 @@ public sealed class ToolDispatcher(
         ///     capturing the event bus, the logger and the tool call).
         /// </summary>
         private static async Task ReportProgressCore(
-            ToolCallGates state,
+            ToolContextCallbacks state,
             ToolProgressUpdate update,
             CancellationToken c)
         {
@@ -1047,7 +948,7 @@ public sealed class ToolDispatcher(
         ///     capturing the permission service, the logger and the tool call).
         /// </summary>
         private static async Task<PermissionResponse> AskCore(
-            ToolCallGates state,
+            ToolContextCallbacks state,
             PermissionRequest req,
             CancellationToken c)
         {
@@ -1068,7 +969,8 @@ public sealed class ToolDispatcher(
 
     /// <summary>
     ///     Execute one tool call with the commit barrier and bounded retry (#49 PR2/PR3, #43).
-    ///     Forwarder over <see cref="ToolRetryPolicy" /> (#1507, #95 slice: verbatim move).
+    ///     Forwarder over <see cref="ToolCallGate" /> (#2579), which owns the
+    ///     <see cref="ToolRetryPolicy" /> it delegates to.
     /// </summary>
     private Task<ToolResultEntry> ExecuteWithRetryAsync(
         ITool tool,
@@ -1079,7 +981,7 @@ public sealed class ToolDispatcher(
         Activity? activity,
         CancellationToken effectiveCt,
         CancellationToken ct) =>
-        _retryPolicy.ExecuteWithRetryAsync(tool, toolCall, ctx, commitScope, attempts, activity, effectiveCt, ct);
+        _gate.ExecuteWithRetryAsync(tool, toolCall, ctx, commitScope, attempts, activity, effectiveCt, ct);
 }
 
 /// <summary>
