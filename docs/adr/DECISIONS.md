@@ -886,3 +886,21 @@ Decided: код не писать. Отчёт остаётся открытым 
 
 - Полный текст, таблица по восьми идеям и условия пересмотра:
   [ADR-031](ADR-031-steal-list-2026-11-no-new-slice.md).
+## ADR-032: отчёт demo-gifs-docs-decision (#2692), нового slice нет
+
+Issue #2692 — self-contained отчёт `demo-gifs-docs-decision` с вопросом, нужен
+ли отдельный файл состояний demo GIF, и четырьмя минимальными slice. Проверка
+`gh pr list --search 2692`, `gh pr list --search 2691` и `origin/dev`
+(`f26ceb7e`): P1 влит PR #2511 (таблица покрытия в `DEMO_GIFS.md`), P2 влит PR
+#2514 (`GIF_MIN_SCREENS_*` и `check-demo-screens.py` с self-test), P0 требует
+owner-dispatch с пушем бинарников, а P3 описан неверно: `screen-*.png` живут во
+временном каталоге, который `demo-repro normalize` удаляет. Смежные по #2691
+PR #2787 и #2879 уже в дереве.
+
+Decided: код не писать, отдельного `DEMO_GIF_STATES.md` не создавать, гейты,
+пороги и GIF не трогать. Issue остаётся открытым источником сравнения.
+Пересмотр по новому факту: владелец выполняет P0 или заказывает stills как
+артефакт отдельным issue.
+
+- Полный текст, таблица по четырём пунктам и условия пересмотра:
+  [ADR-032](ADR-032-demo-gifs-docs-decision-no-new-slice.md).
