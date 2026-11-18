@@ -152,6 +152,48 @@ internal static class IssueProjection
         return text.ToString();
     }
 
+    /// <summary>The issue a successful <c>gh issue create</c> reports.</summary>
+    internal sealed record IssueCreated(int Number, string Url);
+
+    /// <summary>
+    ///     Read the created issue's url and number from gh's plain stdout.
+    ///     <c>gh issue create</c> prints the url rather than JSON, so the last
+    ///     absolute http(s) line wins and the trailing path segment must be a
+    ///     positive integer.
+    /// </summary>
+    internal static Result<IssueCreated> ParseCreated(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return Result.Failure<IssueCreated>("issue create: gh returned no output.");
+
+        string? url = null;
+        foreach (string line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Uri.TryCreate(line, UriKind.Absolute, out Uri? parsed) && parsed.Scheme is "http" or "https")
+                url = line;
+        }
+
+        if (url is null)
+            return Result.Failure<IssueCreated>("issue create: gh did not return an issue url.");
+
+        string tail = url.TrimEnd('/');
+        int lastSlash = tail.LastIndexOf('/');
+        if (lastSlash < 0
+            || !int.TryParse(tail[(lastSlash + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out int number)
+            || number <= 0)
+            return Result.Failure<IssueCreated>("issue create: could not read the issue number from the url.");
+
+        return Result.Success(new IssueCreated(number, Truncate(url)));
+    }
+
+    /// <summary>One-line confirmation of a created issue.</summary>
+    internal static string FormatCreated(IssueCreated created) =>
+        $"Created #{created.Number.ToString(CultureInfo.InvariantCulture)}: {created.Url}\n";
+
+    /// <summary>One-line confirmation of an issue state change.</summary>
+    internal static string FormatState(int number, string state) =>
+        $"#{number.ToString(CultureInfo.InvariantCulture)} is now {state}.\n";
+
     private static JsonElement Required(JsonElement obj, string name) =>
         obj.TryGetProperty(name, out JsonElement value) ? value : default;
 
