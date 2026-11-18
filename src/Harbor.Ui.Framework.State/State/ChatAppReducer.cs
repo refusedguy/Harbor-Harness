@@ -183,6 +183,16 @@ public static class ChatAppReducer
         ChatAppMsg.MarkTabRead m => ReduceResult.NoOp(MarkTabRead(state, m.SessionId)),
         ChatAppMsg.HydrateTabStrip ht => HydrateTabStrip(state, ht),
 
+        // Inline question form (#2627): the reducer owns every answer byte.
+        ChatAppMsg.QuestionFormChanged qf => ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with { QuestionForm = qf.State }
+        }),
+        ChatAppMsg.QuestionSubmit qs => ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with { QuestionForm = state.Chat.QuestionForm.Submit(qs.Answers) }
+        }),
+
         // A clear-screen must not close the user's tabs — the strip is workspace
         // chrome, not transcript (#388), and UiState.ClearTranscript already
         // honours that for the key path.

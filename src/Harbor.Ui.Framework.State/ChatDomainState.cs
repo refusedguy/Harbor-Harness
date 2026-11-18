@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.Ui.Framework.State;
 
@@ -119,6 +120,15 @@ public sealed record ChatDomainState
     ///     <c>CloseTab</c> / <c>ReorderTab</c> / …) — nothing mutates it here.
     /// </summary>
     public TabStripState TabStrip { get; init; } = TabStripState.Empty;
+
+    /// <summary>
+    ///     Interactive answer state of the inline question form (#2627). Owns
+    ///     every cursor/selection/custom buffer the widget used to keep mutably,
+    ///     so one snapshot always paints the same card and replay works. The
+    ///     form's get/set delegates project this value; reducer arms in
+    ///     <see cref="ChatAppReducer" /> are its only writers.
+    /// </summary>
+    public QuestionFormState QuestionForm { get; init; } = QuestionFormState.Empty;
 
     /// <summary>Whether the session list is currently loading.</summary>
     public bool IsLoading { get; init; }
