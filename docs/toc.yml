@@ -146,6 +146,8 @@
   href: SPECTRE_TUI_DEEP_DIVE.md
 - name: State Ownership
   href: STATE_OWNERSHIP.md
+- name: Support
+  href: SUPPORT.md
 - name: Task Template
   href: TASK_TEMPLATE.md
 - name: Test Patterns
