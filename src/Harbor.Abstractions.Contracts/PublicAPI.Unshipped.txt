@@ -330,3 +330,6 @@ Harbor.Abstractions.Dsl.SpecValueKind.String = 0 -> Harbor.Abstractions.Dsl.Spec
 Harbor.Abstractions.Dsl.SpecValueKind.Number = 1 -> Harbor.Abstractions.Dsl.SpecValueKind
 Harbor.Abstractions.Dsl.SpecValueKind.Boolean = 2 -> Harbor.Abstractions.Dsl.SpecValueKind
 Harbor.Abstractions.Dsl.SpecValueKind.Identifier = 3 -> Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Extensions.UnicodeDisplayWidth
+static Harbor.Abstractions.Extensions.UnicodeDisplayWidth.Width(System.ReadOnlySpan<char> text) -> int
+static Harbor.Abstractions.Extensions.UnicodeDisplayWidth.Width(System.Text.Rune r) -> int
