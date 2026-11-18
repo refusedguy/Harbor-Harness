@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vma="clr-namespace:Harbor.Desktop.ViewModels;assembly=Harbor.Desktop.ViewModels"
+             xmlns:comp="clr-namespace:Harbor.App.Avalonia.Views.Components"
              x:Class="Harbor.App.Avalonia.Views.CommandPaletteView"
              Background="#60000000"
              PointerPressed="Backdrop_Click">
@@ -46,13 +47,18 @@
                      KeyDown="ResultsList_KeyDown">
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="vma:CommandResultViewModel">
-                        <Grid ColumnDefinitions="24,*,Auto" Margin="0,2">
+                        <Grid ColumnDefinitions="24,*,Auto,Auto" Margin="0,2">
                             <TextBlock Grid.Column="0" Text="{Binding Icon}"
                                        HorizontalAlignment="Center" FontFamily="{DynamicResource FontMono}" />
                             <TextBlock Grid.Column="1" Text="{Binding Label}" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding Hint}" FontSize="11"
                                        Foreground="{DynamicResource TextTertiaryBrush}" Margin="8,0,0,0" />
+                            <!-- #2682 Z06: the shell's real binding, not a label-only copy.
+                                 Rows without a global chord have no chip at all. -->
+                            <comp:Kbd Grid.Column="3" Keys="{Binding KeyText}"
+                                      IsVisible="{Binding HasKeyText}"
+                                      Margin="8,0,0,0" VerticalAlignment="Center" />
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

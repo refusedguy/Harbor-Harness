@@ -122,6 +122,10 @@ internal static class ServiceRegistration
         services.AddSingleton<IOverlayStack>(sp => sp.GetRequiredService<OverlayStackService>());
         services.AddSingleton<WindowChromeService>();
         services.AddSingleton<KeyboardShortcutService>();
+        // #2682 Z06: the palette reads binding chips through the narrow display
+        // port; one singleton backs both the dispatcher and the hint reader.
+        services.AddSingleton<IKeyboardShortcutService>(
+            sp => sp.GetRequiredService<KeyboardShortcutService>());
         // #672: the floating terminal pane no longer forks a shell itself. The
         // launch goes through ITerminalPaneLauncher, registered here against the
         // one implementation that consults PermissionRuleset first and refuses
