@@ -32,6 +32,7 @@ internal sealed class DispatchWindow
     private int _head;
     private int _count;
 
+    /// <summary>Create a window retaining <paramref name="capacity" /> samples.</summary>
     /// <param name="capacity">Number of retained samples. Must be a positive power of two.</param>
     public DispatchWindow(int capacity)
     {
