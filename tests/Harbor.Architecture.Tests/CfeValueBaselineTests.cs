@@ -130,7 +130,7 @@ public sealed class CfeValueBaselineTests
     [
         new("src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs", "PropagateUnderLockAsync",
             "if (IsFailure) { return; } else-branch access"),
-        new("src/Harbor.Application/Attachments/ImageAttachmentReader.cs", "CheckVisionAsync",
+        new("src/Harbor.Intelligence/Attachments/ImageAttachmentReader.cs", "CheckVisionAsync",
             "if (IsFailure) { log; return Result.Success(); } then early return"),
         new("src/Harbor.Onboarding/Onboarding/OnboardingWizard.cs", "TryFetchLiveModelsAsync",
             "if (IsFailure) { print reason; return null; } early return"),

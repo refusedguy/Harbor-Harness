@@ -14,6 +14,8 @@ verbatim out of `Harbor.Application` with their namespaces preserved:
 - **Skill-freshness seeder** (`Harbor.Application.Skills`): the BCL-only
   `SkillFreshnessSeeder` + `SkillFreshnessSnapshot` pair that hashes installed
   skills against `skills-lock.json` (fourth leaf).
+- **Image attachments** (`Harbor.Application.Attachments`): the magic-byte
+  `ImageProbe` and the vision-aware `ImageAttachmentReader` (fifth leaf).
 
 Application-layer sibling of `Harbor.Registries` and `Harbor.Hooks`, extractable
 and packable on its own.
@@ -26,9 +28,9 @@ Application. The layer matrix row is
 ## Public API
 
 Consumers bind `Harbor.Application.Git`, `Harbor.Application.Providers`,
-`Harbor.Application.Filesystem` and `Harbor.Application.Skills` types.
-The namespaces survive the extraction (verbatim slice move), so existing usings
-keep compiling:
+`Harbor.Application.Filesystem`, `Harbor.Application.Skills` and
+`Harbor.Application.Attachments` types. The namespaces survive the extraction
+(verbatim slice move), so existing usings keep compiling:
 
 ```csharp
 public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
@@ -66,12 +68,26 @@ public static class SkillFreshnessSeeder
     public static IReadOnlyList<SkillFreshnessSnapshot> Seed(
         string? projectSkillsDir, string? globalSkillsDir, string? lockFilePath);
 }
+
+public static class ImageProbe
+{
+    public const string PngMimeType = "image/png";
+    public static bool TryProbe(ReadOnlySpan<byte> data, out string mimeType, out int width, out int height);
+}
+
+public sealed class ImageAttachmentReader
+{
+    public const long MaxBytes = 5 * 1024 * 1024;
+    public ImageAttachmentReader(IProviderRegistry? providers = null, ILogger? logger = null);
+    public Task<Result<ImageAttachment>> ReadAsync(
+        string path, string providerId, string modelId, CancellationToken ct = default);
+}
 ```
 
-`IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo`, `IProviderHealthCheck` and
-`IFileTreePolicy` are declared in `Harbor.Abstractions` and stay there. The
-seeder binds no Harbor port at all: it is BCL-only (`System.Security.Cryptography`,
-`System.Text`), so no new `ProjectReference` was needed.
+`IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo`, `IProviderHealthCheck`,
+`IFileTreePolicy` and `IProviderRegistry` are declared in `Harbor.Abstractions`
+and stay there. The seeder and `ImageProbe` bind no Harbor port at all: both are
+BCL-only, so no new `ProjectReference` was needed for them.
 
 ## Wiring
 
@@ -88,8 +104,10 @@ is registered in `src/Harbor.Hosting/Modules/CoreModule.cs`, and
 `DefaultFileTreePolicy` in the Avalonia `ServiceRegistration.cs`. The seeder is
 not DI-registered: the CLI `SkillFreshnessStartup` calls the static `Seed` and
 maps the snapshots onto the shared freshness model (it reaches this assembly
-transitively through `Harbor.Hosting`). Every registering composition root
-holds a direct `ProjectReference` to this assembly.
+transitively through `Harbor.Hosting`). The CLI `/attach` command constructs
+`ImageAttachmentReader` directly in `apps/Harbor.App.Cli/Repl/` (no DI seam).
+Every consumer composition root holds a direct `ProjectReference` to this
+assembly.
 
 ## Usage
 
@@ -109,18 +127,19 @@ life of the process (#884).
 ## Dependencies
 
 - `Harbor.Abstractions` — `IGitQuery`, `GitWorkspaceStatus`, `GitWorktreeInfo`,
-  `IProviderHealthCheck`, `IProviderRegistry`, `ProviderHealth`, `IFileTreePolicy`.
+  `IProviderHealthCheck`, `IProviderRegistry`, `ProviderHealth`, `IFileTreePolicy`,
+  `ImageAttachment` and `ModelInfo`.
 - `Harbor.Extensions` — `StringBuilderPool` for the per-spawn stdout buffer.
 - `Microsoft.Extensions.Logging.Abstractions` — `ILogger<T>` and
   `[LoggerMessage]` delegates.
-- Referenced by `Harbor.Hosting`, `Harbor.App.Avalonia` and
+- Referenced by `Harbor.Hosting`, `Harbor.App.Avalonia`, `Harbor.App.Cli` and
   `Harbor.Application.Tests` (pinned by `tests/Harbor.Architecture.Tests`).
 
 ## Known limitations
 
-- This is a partial slice of #1626. Diagnostics, Attachments, Telemetry and the
-  rest of Skills (`SkillUpdater`) still live in `Harbor.Application` and move
-  into this assembly in later slices.
+- This is a partial slice of #1626. Diagnostics, Telemetry and the rest of Skills
+  (`SkillUpdater`) still live in `Harbor.Application` and move into this assembly
+  in later slices.
 - `SkillFreshnessSeeder` is BCL-only and keeps its `Harbor.Application.Skills`
   namespace. It carries a small BCL-only mirror of `Harbor.Application.FrontMatter`
   (issue #1580) because this leaf cannot take an Application edge; `FrontMatter.cs`
