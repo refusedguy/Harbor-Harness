@@ -1,0 +1,7 @@
+# golden: attachment-card-text (32x6)
+ ▣ report.pdf
+ application/pdf · 64 KB
+ pages=12
+ encrypted=no
+
+ [1] Open
