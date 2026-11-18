@@ -57,8 +57,8 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
     public ApprovalGateView(string toolName, string detail, string? invocationId = null, int generation = 1)
     {
-        ToolName = string.IsNullOrWhiteSpace(toolName) ? "?" : toolName.Trim();
-        _detailText = (detail ?? string.Empty).Trim();
+        ToolName = SafeTool(toolName);
+        _detailText = Harbor.Abstractions.Extensions.TerminalTextSanitizer.Sanitize(detail).Trim();
         Decision = ApprovalChoice.None;
         InvocationId = invocationId;
         Generation = generation;
@@ -370,5 +370,16 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
         _wrapped = lines;
         _wrappedWidth = width;
+    }
+
+    /// <summary>
+    ///     Tool name for the header and audit stamp. #2678 item 100: the name
+    ///     comes from the model, so strip control and bidi characters before
+    ///     the terminal paints it. A name made only of controls becomes "?".
+    /// </summary>
+    private static string SafeTool(string? toolName)
+    {
+        string safe = Harbor.Abstractions.Extensions.TerminalTextSanitizer.SanitizeSingleLine(toolName);
+        return safe.Length == 0 ? "?" : safe;
     }
 }

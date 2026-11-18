@@ -305,11 +305,11 @@ public sealed partial class DialogOverlay
         Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
         Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         _kind = DialogKind.Approval;
-        _approvalTool = string.IsNullOrWhiteSpace(toolName) ? "?" : toolName.Trim();
+        _approvalTool = string.IsNullOrWhiteSpace(toolName) ? "?" : Harbor.Abstractions.Extensions.TerminalTextSanitizer.SanitizeSingleLine(toolName);
         _title = $"permission required · {_approvalTool}";
-        _message = detail ?? string.Empty;
+        _message = Harbor.Abstractions.Extensions.TerminalTextSanitizer.Sanitize(detail);
         _input = string.Empty;
-        _approvalFile = string.IsNullOrWhiteSpace(filePath) ? string.Empty : filePath.Trim();
+        _approvalFile = Harbor.Abstractions.Extensions.TerminalTextSanitizer.SanitizeSingleLine(filePath);
         ParseApprovalDiff(diffText);
         _radio.SetOptions(ApprovalChoices, selectedIndex);
         _editor.SetText(string.Empty);

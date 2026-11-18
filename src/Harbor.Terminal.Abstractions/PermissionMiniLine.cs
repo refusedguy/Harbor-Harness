@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Terminal.Abstractions;
 
@@ -52,53 +53,13 @@ public static class PermissionMiniLine
     }
 
     /// <summary>
-    ///     Collapses arbitrary text onto one terminal-safe line: CR/LF/tab
-    ///     become spaces, other control characters (incl. ESC, so
-    ///     model-supplied args paint as inert text) are dropped. Mirrors the
-    ///     fast-path scan of the AnsiPlain tool-start sanitizer.
+    ///     Collapses arbitrary text onto one terminal-safe line. CR/LF/tab
+    ///     become spaces, other control characters and bidi controls are
+    ///     dropped. Uses the shared <see cref="TerminalTextSanitizer" /> so the
+    ///     mini line and the fullscreen gate card apply the same rule.
     /// </summary>
-    private static string SingleLine(string? text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        int dirty = -1;
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (c == '\n' || c == '\r' || c == '\t' || char.IsControl(c))
-            {
-                dirty = i;
-                break;
-            }
-        }
-
-        if (dirty < 0)
-        {
-            return text.Trim();
-        }
-
-        var sb = new StringBuilder(text.Length);
-        sb.Append(text, 0, dirty);
-        while (dirty < text.Length)
-        {
-            char c = text[dirty];
-            if (c == '\n' || c == '\r' || c == '\t')
-            {
-                sb.Append(' ');
-            }
-            else if (!char.IsControl(c))
-            {
-                sb.Append(c);
-            }
-
-            dirty++;
-        }
-
-        return sb.ToString().Trim();
-    }
+    private static string SingleLine(string? text) =>
+        TerminalTextSanitizer.SanitizeSingleLine(text);
 
     /// <summary>
     /// Truncates to <paramref name="maxWidth"/> <em>cells</em>, not chars:
