@@ -680,6 +680,17 @@ jobs:
       - name: No-NUKE gate fails on a planted Nuke.Common reference
         run: tools/bin/harbor-gates-linux-x64 check-no-nuke --self-test
       # END GENERATED SELFTEST STEPS
+
+      # #2509. The screen-coverage gate compares each recorded GIF with the
+      # distinct-screen floor in demo/toolchain.lock. A gate that reports
+      # "all states shown" for a GIF whose frames are all identical enforces
+      # nothing, so its self-test feeds it exactly that fixture and requires a
+      # red result with found vs minimum in the message. It sits here, outside
+      # the generated block, because demo.yml runs its own gate only on a push
+      # that records; a pull request editing the gate needs this signal too.
+      - name: Screen-coverage gate fails on a flattened recording
+        run: python3 tools/check-demo-screens.py --self-test
+
   rulesetchecks:
     name: ruleset checks
     runs-on: ubuntu-latest

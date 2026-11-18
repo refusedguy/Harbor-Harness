@@ -83,6 +83,18 @@ GIF_STATE_FRAMES=6
 GIF_TAIL_FRAMES=24
 GIF_FRAMES=432
 
+# Minimum DISTINCT screens each recorded scene must still show (issue #2509).
+# A scene that loses a state but keeps its frame count, duration and size passes
+# the drift gate; these floors are what fail it. They are pinned here next to
+# the frame budget, not read from assets/demo/baseline.json: the recording
+# workflow rewrites that manifest, so a floor read from it would follow a lost
+# state down. Change a floor only in the same commit that deliberately changes
+# the scene, and never to make a red run green.
+GIF_MIN_SCREENS_HERO=17
+GIF_MIN_SCREENS_MARKDOWN=16
+GIF_MIN_SCREENS_APPROVAL=25
+GIF_MIN_SCREENS_PLAIN=10
+
 DEMO_CHUNK_DELAY_MS=0
 DEMO_TAIL_SECONDS=3
 DEMO_END_MARKER="harbor demo finished"
