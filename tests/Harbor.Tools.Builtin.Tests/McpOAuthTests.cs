@@ -199,6 +199,21 @@ public class McpOAuthTests : IDisposable
     }
 
     [Test]
+    public async Task TokenCache_Save_FailureIsObserved()
+    {
+        // A file where the cache directory should be makes CreateDirectory
+        // throw. The old void Save swallowed it; the caller must now see it.
+        string blocked = Path.Combine(_root, "blocked-dir");
+        await File.WriteAllTextAsync(blocked, "not a directory");
+        var cache = new McpOAuthTokenCache(blocked);
+
+        Result saved = cache.Save("srv", new McpOAuthTokens("at", null, DateTimeOffset.UtcNow.AddHours(1)));
+
+        await Assert.That(saved.IsFailure).IsTrue();
+        await Assert.That(saved.Error).Contains("Cannot save cached OAuth tokens");
+    }
+
+    [Test]
     public async Task TokenCache_MissingOrCorrupt_ReturnsNull()
     {
         var cache = new McpOAuthTokenCache(_root);
@@ -359,6 +374,36 @@ public class McpOAuthTests : IDisposable
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.GetValueOrDefault()).IsEqualTo("fresh");
         await Assert.That(cache.Load("srv")!.AccessToken).IsEqualTo("fresh");
+    }
+
+    [Test]
+    public async Task Handler_Refresh_SaveFailure_IsPropagated()
+    {
+        var cache = new McpOAuthTokenCache(_root);
+        cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
+
+        // The Load above succeeded; break the cache between Load and Save so
+        // the write fails. The handler must report that instead of handing out
+        // a token that will vanish on the next start.
+        using var http = StubClient(_ =>
+        {
+            Directory.Delete(_root, recursive: true);
+            File.WriteAllText(_root, "blocked");
+            return Json(new McpOAuthTokenResponse("fresh", 3600));
+        });
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig
+            {
+                ClientId = "cid",
+                AuthorizationEndpoint = "https://x/authorize",
+                TokenEndpoint = "https://x/token",
+            },
+            cache, () => http);
+
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("could not be cached");
     }
 
     /// <summary>
