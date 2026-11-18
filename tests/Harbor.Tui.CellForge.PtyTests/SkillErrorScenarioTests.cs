@@ -18,10 +18,11 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     no follow-up completion is requested. The wait's done marker is the
 ///     error glyph <c>✖</c>, which paints only on the completed error card —
 ///     never in the pre-submit idle frame — so the wait ends after the failed
-///     execution has actually landed. The error body is deliberately not
-///     asserted: on the settled timeline it does not repaint behind the card
-///     (stale 1-row layout — #1137), so the header glyph plus the echoed skill
-///     name are the stable surface. Only tests; product code is untouched.
+///     execution has actually landed. Because <c>skill</c> has no approval
+///     gate, there is no gate row to echo the tool args, and the card body
+///     does not repaint on the settled timeline (#1137): the stable surface is
+///     the completed header (glyph, tool name, <c>[err]</c> marker) plus the
+///     read-only disk check. Only tests; product code is untouched.
 /// </summary>
 public sealed class SkillErrorScenarioTests : CellForgePtyScenarioBase
 {
@@ -62,28 +63,37 @@ public sealed class SkillErrorScenarioTests : CellForgePtyScenarioBase
         await Assert.That(errored.Length).IsGreaterThan(0)
             .Because($"the failed skill call never painted an error card:\n{ScreenText}");
 
-        // The card completed in the error state and echoed the requested name.
-        // Both are read from the raw stream: the name is the arg fragment that
-        // survives the card render, the glyph only paints after the failed call
-        // (the body itself does not repaint on the settled timeline — #1137).
+        // Let the single-turn run settle before reading the settled timeline.
+        // The error glyph above is the done marker; idle proves the loop ended
+        // on the maxSteps budget with no follow-up completion requested.
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+
+        // With no approval gate there is no gate row to echo the tool args, and
+        // the card body does not repaint on the settled timeline (#1137), so
+        // the stable surface is the completed header: error glyph, tool name
+        // and the [err] completion marker.
         string raw = Session.RawText;
         bool glyph = raw.Contains('✖');
-        bool echoed = raw.Contains(missingName, StringComparison.Ordinal);
-        await Assert.That(glyph && echoed).IsTrue()
-            .Because($"error glyph={glyph}, name echo={echoed}:\n{ScreenText}");
+        bool toolNamed = raw.Contains("skill", StringComparison.Ordinal);
+        bool errMark = raw.Contains("[err]", StringComparison.Ordinal);
+        await Assert.That(glyph && toolNamed && errMark).IsTrue()
+            .Because($"glyph={glyph}, tool name={toolNamed}, [err]={errMark}:\n{ScreenText}");
 
-        // The tool name survives on the settled timeline next to the card.
         string[] settled = NormalizedLines();
         await Assert.That(settled.Any(x => x.Contains("skill", StringComparison.Ordinal))).IsTrue()
             .Because($"the tool name must survive on the settled timeline:\n{ScreenText}");
 
-        // A failed get writes nothing under either skills root: no SKILL.md
-        // for the missing name may appear anywhere in the isolated home.
+        // A failed load writes nothing under either skills root: no file or
+        // directory named after the missing skill may appear in the home.
         string[] created = Directory.Exists(TempHome)
             ? Directory.GetFiles(TempHome, missingName + ".md", SearchOption.AllDirectories)
+                .Concat(Directory.GetDirectories(TempHome, missingName, SearchOption.AllDirectories))
+                .ToArray()
             : Array.Empty<string>();
         await Assert.That(created.Length).IsEqualTo(0)
-            .Because("a failed skill load must not persist a SKILL.md file");
+            .Because("a failed skill load must not persist a SKILL.md file or a skill directory");
 
         // One turn, no follow-up completion — the budget stopped the loop.
         await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(1)
