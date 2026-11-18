@@ -18,4 +18,6 @@ short index over the longer guides:
 | TUI falls back to plain output or paints nothing | `HARBOR_TUI` must name a registered backend. `cellforge` is the fullscreen renderer and `plain` is the pipes/CI renderer; an unknown value falls back with a warning in the log. Unset the variable to use the default. | [Alternative UIs](./ALTERNATIVE_UIS.md) |
 
 For failures that are not in this table, read the most recent log with
-`harbor logs --last` or the files under `~/.harbor/logs/`.
+`harbor logs --last` or the files under `~/.harbor/logs/`. If the checks here
+do not resolve the failure, [ask for help](./SUPPORT.md) with the version,
+environment, and log output listed there.

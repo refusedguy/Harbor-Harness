@@ -4,6 +4,10 @@ Harbor is a modular .NET 10 AI coding harness. Before changing anything, read
 [`AGENTS.md`](AGENTS.md) — it is the operational guide, and
 [`CLAUDE.md`](CLAUDE.md) carries the code conventions it cross-references.
 
+If you are stuck before you reach the build, see
+[Getting help](./docs/SUPPORT.md) for the support channel and the data to include
+in a report.
+
 ## Build and test
 
 ```bash
