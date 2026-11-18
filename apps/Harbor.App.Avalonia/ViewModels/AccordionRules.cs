@@ -89,8 +89,14 @@ public static class AccordionRules
     {
         ArgumentNullException.ThrowIfNull(ids);
 
-        if (mode == AccordionMode.Multiple)
-            return new HashSet<string>(ids, StringComparer.Ordinal);
+        var kept = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string id in ids)
+        {
+            // An empty id is never a section: carrying it into a restored set
+            // would leave an invisible "open" row no control can paint.
+            if (!string.IsNullOrEmpty(id)) kept.Add(id);
+        }
+        if (mode == AccordionMode.Multiple) return kept;
 
         foreach (string id in ids)
         {
