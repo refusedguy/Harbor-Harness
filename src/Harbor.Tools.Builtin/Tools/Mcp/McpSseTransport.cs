@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
@@ -76,7 +77,15 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         ObjectDisposedException.ThrowIf(_disposed, this);
         var sw = Stopwatch.StartNew();
         HttpClient client = _clients.Client;
-        string body = request.GetRawText();
+        // ROP-A ПР.11: serialize the JSON-RPC envelope straight to UTF-8 bytes.
+        // GetRawText() materialized a UTF-16 string that StringContent then
+        // re-encoded to UTF-8, one copy too many on the request path.
+        var bufferWriter = new ArrayBufferWriter<byte>(256);
+        using (var writer = new Utf8JsonWriter(bufferWriter))
+        {
+            request.WriteTo(writer);
+        }
+        byte[] body = bufferWriter.WrittenSpan.ToArray();
         int attempt = 1;
 
         while (true)
@@ -190,7 +199,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     /// </summary>
     private async Task<Attempt> TryRoundTripOnceAsync(
         HttpClient client,
-        string body,
+        byte[] body,
         int? expectedId,
         CancellationToken cancellationToken)
     {
@@ -246,8 +255,11 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         // 2. POST the JSON-RPC request to the announced endpoint.
         using HttpRequestMessage postRequest = new(HttpMethod.Post, postEndpoint)
         {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            Content = new ByteArrayContent(body),
         };
+        // Same wire header StringContent used to emit, so the bytes and the
+        // media type on the wire stay exactly as they were.
+        postRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
         ApplyHeaders(postRequest, oauthToken);
         using HttpResponseMessage postResponse = await client
             .SendAsync(postRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
