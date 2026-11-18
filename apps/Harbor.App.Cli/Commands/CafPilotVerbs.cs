@@ -82,6 +82,7 @@ internal static class CafPilotVerbs
         app.Add("prompt", CafPromptCommands.Prompt);
         app.Add("doctor", CafDoctorCommands.Doctor);
         app.Add("pr guide", CafPrCommands.Guide);
+        app.Add("handoff", CafHandoffCommands.Handoff);
         app.Add("issue", CafIssueCommands.Issue);
         app.Add("pr list", CafPrForgeCommands.List);
         app.Add("pr view", CafPrForgeCommands.View);
