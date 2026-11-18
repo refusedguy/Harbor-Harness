@@ -1,0 +1,18 @@
+# harbor-frame-snapshot v1
+frame 420x100
+Window bg=#FF1E1E2E
+  Panel
+    Border bg=#FF000000
+    Border bg=#FF1E1E2E
+    Panel bg=ImmutableSolidColorBrush
+    VisualLayerManager
+      ContentPresenter
+        ChatBubble
+          ContentPresenter
+            Grid
+              Border bg=#FF313244
+                TextBlock text="user" fg=#FF89DCEB font="JetBrains Mono" size=11
+              Border bg=#FF181825
+                Grid
+                  TextBlock text="Hello from golden" fg=#FF89DCEB font="Inter" size=14
+                  TextBlock text="" fg=#FF8B90A6 font="JetBrains Mono" size=10
