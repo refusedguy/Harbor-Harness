@@ -85,6 +85,7 @@ internal static class CafPilotVerbs
         // compiled out of the AOT build together with this symbol.
         app.Add("dsl check", DslDevCommands.Check);
         app.Add("dsl types", DslDevCommands.Types);
+        app.Add("dsl reload", DslDevCommands.Reload);
 #endif
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;

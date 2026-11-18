@@ -80,6 +80,17 @@ The generator calls `MarkupParser.Parse` before emitting a source. The dev inter
 
 The parser depends only on the BCL and `Harbor.Abstractions.Contracts`. It holds no Roslyn, CellForge runtime or renderer state, which keeps it usable from an AOT-safe generator and from a dev interpreter.
 
+## Dev interpreter (#2433)
+
+`Harbor.Tui.CellForge.CodeGen.DevReload.DevReloadInterpreter` is the DEV-only re-interpreter. It re-reads a `.harbor-ui` file with `MarkupParser.Parse`, strips full-line comments, and computes a template signature from the emptied IR (kinds, nesting and operation names, with every argument value dropped). The signature drives the Dioxus-style decision:
+
+- Same signature, changed values: lower a patch with the #2439 mutation batch (`MutationQueue` to `MutationBatchApplier`) and apply it to the retained tree. Element ids are the stable pre-order sequences, so a host's per-id view-model, focus and scroll state stays put on unchanged positions.
+- Different signature: rebuild the retained tree in place and drop per-id state.
+- Changed `state:` directive or binding/handler operation: rebuild and report `RestartRequired`; generated delegates would be stale.
+- Parse error: reject the step and leave the live tree untouched.
+
+The interpreter lives in this build-time tooling assembly, not in the runtime. The CLI references this assembly only with `HarborWithDslDev=true`; an AOT publish switches that flag and the `HARBOR_WITH_DSL_DEV` symbol off together, so no dev-interpreter code, JIT, Roslyn compilation or Subsecond engine reaches the AOT binary. The `harbor dsl reload <before> [<after>]` verb drives it interactively, behind the same dev-only symbol.
+
 ## Dependencies
 
 - `Microsoft.CodeAnalysis.CSharp` (private) - the compiler API the generator is compiled against.

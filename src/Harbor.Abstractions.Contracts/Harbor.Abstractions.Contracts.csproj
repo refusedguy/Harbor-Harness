@@ -39,13 +39,16 @@
   </ItemGroup>
 
   <!--
-    #2439: the mutation-batch IR is internal to the product; only the
-    CellForge test project drives the applier directly. The rest of the tree
-    reaches it through the codegen generator, which emits calls against the
-    internal factory methods in the same compilation.
+    #2439: the mutation-batch IR is internal to the product. Two in-tree
+    consumers drive the applier directly: the CellForge test project, and
+    #2433's DEV-ONLY re-interpreter in the CellForge CodeGen (build-time
+    tooling) assembly, which patches the retained tree after a template diff.
+    The rest of the tree reaches the IR through the codegen generator, which
+    emits calls against the internal factory methods in the same compilation.
   -->
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.CodeGen"/>
   </ItemGroup>
 
   <!--
