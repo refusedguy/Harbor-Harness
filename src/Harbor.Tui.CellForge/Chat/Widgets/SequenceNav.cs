@@ -269,14 +269,17 @@ public static class SequenceNav
     public static string Text(SequenceNavState state)
     {
         var text = new StringBuilder();
-        text.Append(PreviousGlyph).Append(' ');
-        foreach (var slot in Slots(state))
+        text.Append(PreviousGlyph);
+        int current = Number(state);
+        var slots = Slots(state);
+        foreach (var slot in slots)
         {
+            text.Append(' ');
             if (slot.IsGap)
             {
                 text.Append(GapGlyph);
             }
-            else if (slot.Number == Number(state))
+            else if (slot.Number == current)
             {
                 text.Append('[').Append(slot.Number).Append(']');
             }
@@ -284,7 +287,10 @@ public static class SequenceNav
             {
                 text.Append(slot.Number);
             }
+        }
 
+        if (slots.Count > 0)
+        {
             text.Append(' ');
         }
 
