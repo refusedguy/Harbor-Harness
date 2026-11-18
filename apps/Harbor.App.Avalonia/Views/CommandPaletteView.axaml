@@ -52,7 +52,7 @@
                                        HorizontalAlignment="Center" FontFamily="{DynamicResource FontMono}" />
                             <TextBlock Grid.Column="1" Text="{Binding Label}" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="2" Text="{Binding Hint}" FontSize="11"
+                            <TextBlock Grid.Column="2" Text="{Binding DisplayHint}" FontSize="11"
                                        Foreground="{DynamicResource TextTertiaryBrush}" Margin="8,0,0,0" />
                             <!-- #2682 Z06: the shell's real binding, not a label-only copy.
                                  Rows without a global chord have no chip at all. -->

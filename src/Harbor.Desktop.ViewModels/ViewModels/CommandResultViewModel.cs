@@ -16,6 +16,14 @@ public sealed record CommandResultViewModel(
     Action Action,
     string KeyText = "")
 {
+    /// <summary>
+    ///     #2682 Z09: the hint as shown in a result row. Built-in commands
+    ///     carry a technical key (<c>CodeEditorView</c>) in <see cref="Hint" />;
+    ///     humanize it for display while the raw value stays searchable. Slash
+    ///     rows carry an already-readable description, so they pass through.
+    /// </summary>
+    public string DisplayHint => Kind == "command" ? CommandNameHumanizer.Humanize(Hint) : Hint;
+
     /// <summary>Icon glyph based on kind.</summary>
     public string Icon => Kind switch
     {
