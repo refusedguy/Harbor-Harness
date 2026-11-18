@@ -73,6 +73,23 @@ public class SystemPromptBuilderTests
     }
 
     /// <summary>
+    ///     #2675 item 002: the one-task-per-session recommendation must reach
+    ///     the model on EVERY turn. A static hint that is present in one branch
+    ///     only would let context from a finished task steer a new one.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_IncludesSessionFocusGuidance()
+    {
+        var builder = new SystemPromptBuilder();
+        var ctx = Context(Agent(), Array.Empty<ToolDescriptor>());
+
+        string prompt = await builder.BuildAsync(ctx);
+
+        await Assert.That(prompt).Contains("One task per session");
+        await Assert.That(prompt).Contains("start a new session");
+    }
+
+    /// <summary>
     ///     #814: the environment block used to carry <c>- Today: </c>, read
     ///     from the wall clock inside <c>BuildAsync</c>. This asserts the line is
     ///     GONE, and says why, because the deletion is a decision and the next
