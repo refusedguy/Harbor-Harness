@@ -1,3 +1,5 @@
+namespace Harbor.Abstractions.Speech;
+
 /// <summary>
 ///     Backend-agnostic speech-to-text seam. Audio capture and recognition belong
 ///     to the implementation; nothing about a model, a device or a network client
@@ -13,13 +15,11 @@
 /// </para>
 /// <para>
 ///     The returned task completes when the session ends, normally or through
-///     the cancellation token. A backend must not throw for a
-///     cancellation it was asked to perform. A real backend marshals its callbacks
-///     onto the host's input thread: the composer buffer is not thread-safe.
+///     the cancellation token. A backend must not throw for a cancellation it was
+///     asked to perform. A real backend marshals its callbacks onto the host's
+///     input thread: the composer buffer is not thread-safe.
 /// </para>
 /// </remarks>
-namespace Harbor.Abstractions.Speech;
-
 public interface ISpeechToText
 {
     /// <summary>
