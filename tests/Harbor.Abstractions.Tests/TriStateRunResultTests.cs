@@ -37,14 +37,7 @@ public class TriStateRunResultTests
     private static readonly DateTimeOffset SealedAt = new(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan Took = TimeSpan.FromSeconds(3);
 
-    private static WorkspaceContract Contract() => new(
-        RepoRoot: "/proj",
-        BaseRevision: Pinned,
-        BaseBranch: "dev",
-        TrackedDirt: [],
-        UntrackedPresent: false,
-        Isolation: WorkspaceIsolation.Copy,
-        Limits: new WorkspaceLimits());
+    private static WorkspaceContract Contract() => TestContracts.Workspace(Pinned);
 
     private static RunVerificationRecord EmptyVerification() =>
         RunVerificationRecord.Pin(Contract(), SealedAt);

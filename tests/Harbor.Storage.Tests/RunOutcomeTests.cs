@@ -346,14 +346,7 @@ public class RunOutcomeTests
 
     private const string VerificationPinnedRevision = "1111111111111111111111111111111111111111";
 
-    private static WorkspaceContract VerificationContract() => new(
-        RepoRoot: "/proj",
-        BaseRevision: VerificationPinnedRevision,
-        BaseBranch: "dev",
-        TrackedDirt: [],
-        UntrackedPresent: false,
-        Isolation: WorkspaceIsolation.Copy,
-        Limits: new WorkspaceLimits());
+    private static WorkspaceContract VerificationContract() => TestContracts.Workspace(VerificationPinnedRevision);
 
     private static RunVerificationRecord PassedVerification() =>
         RunVerificationRecord.Pin(VerificationContract(), BaseTime).WithCheck(
