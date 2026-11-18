@@ -90,7 +90,7 @@ Cost is how often the rule needs a **manual repair** after an innocent change:
 |---:|---|---:|
 | 0 | never: the rule re-derives everything it grades. | 51 |
 | 1 | rarely: one manual edit of the rule or of one ledger row per relevant change. | 86 |
-| 2 | often: the rule carries a written-down number, a name list or a path table that every relevant change moves. | 21 |
+| 2 | often: the rule carries a written-down number, a name list or a path table that every relevant change moves. | 20 |
 
 The distribution is the headline of the second half of this audit: **more than half of the
 rules carry a ledger, a pinned number or a text anchor**, and that is what makes an innocent
