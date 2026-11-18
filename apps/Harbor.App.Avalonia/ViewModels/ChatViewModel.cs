@@ -6,6 +6,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Components;
 using Harbor.Desktop.ViewModels;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
 using Avalonia.Controls;
@@ -35,6 +36,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private readonly ISessionManager? _sessionManager;
     private readonly ISessionStore _sessionStore;
     private readonly IToastService _toasts;
+    private readonly SessionStatusTracker? _statusTracker;
     private UiStore _store;
 
     public ObservableCollection<Suggestion> ContextualSuggestions { get; } = new();
@@ -48,7 +50,8 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         IDispatcherAdapter dispatcher,
         ILogger<ChatViewModel> logger,
         IToastService toasts,
-        UiRenderEngine renderEngine)
+        UiRenderEngine renderEngine,
+        SessionStatusTracker? statusTracker = null)
         : base(dispatcher, logger)
     {
         _store = store;
@@ -57,6 +60,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         _sessionStore = sessionStore;
         _toasts = toasts;
         _renderEngine = renderEngine;
+        _statusTracker = statusTracker;
     }
 
     /// <summary>
@@ -134,6 +138,11 @@ public sealed partial class ChatViewModel : ChatViewModelBase
 
         if (_sessionManager?.Active is { } activeSession)
         {
+            // The tracker is a projection of this store's state (#2628): bind
+            // it to the active session so its status/count events follow the
+            // reducer's snapshots instead of an independently kept copy.
+            _statusTracker?.Bind(_store, activeSession.Id);
+
             // The status the reducer decided for this run — published, not
             // re-derived (#687). This is the last writer standing on the
             // tracker's value, so anything that recomputed a verdict here (it
