@@ -215,6 +215,60 @@ public class McpToolDiscoveryTests
         }
     }
 
+    [Test]
+    [Arguments("""{"name":"x"}""", false)]
+    [Arguments("""{"name":"x","_meta":{}}""", false)]
+    [Arguments("""{"name":"x","_meta":[]}""", false)]
+    [Arguments("""{"name":"x","_meta":null}""", false)]
+    [Arguments("""{"name":"x","_meta":{"anthropic/requiresUserInteraction":true}}""", true)]
+    [Arguments("""{"name":"x","_meta":{"anthropic/requiresUserInteraction":false}}""", false)]
+    [Arguments("""{"name":"x","_meta":{"anthropic/requiresUserInteraction":"true"}}""", false)]
+    [Arguments("""{"name":"x","_meta":{"anthropic/requiresUserInteraction":1}}""", false)]
+    [Arguments("[]", false)]
+    public async Task RequiresUserInteraction_OnlyJsonTrueOptsIn(string json, bool expected)
+    {
+        using var doc = JsonDocument.Parse(json);
+
+        await Assert.That(McpToolDiscovery.RequiresUserInteraction(doc.RootElement)).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task RegisterAsync_RequiresUserInteractionTool_IsGrantedAskFirst()
+    {
+        // #2675 item 103: a server-declared requiresUserInteraction tool must
+        // not inherit the default Allow grant. A malformed/string flag keeps the
+        // existing behaviour so a broken server cannot block on a human.
+        var mcp = new FakeMcpRegistry(["guarded"]);
+        mcp.Handler = (_, method, _) => method == "tools/list"
+            ? Result.Success("""
+            {"result":{"tools":[
+              {"name":"normal"},
+              {"name":"protected","_meta":{"anthropic/requiresUserInteraction":true}},
+              {"name":"string_flag","_meta":{"anthropic/requiresUserInteraction":"true"}}
+            ]}}
+            """)
+            : Result.Failure<string>("unexpected method");
+        var tools = new ToolRegistry();
+        var agents = new AgentRegistry();
+        agents.Register(AgentDefinition.CodeDefault("model", "provider"));
+
+        int added = await McpToolDiscovery.RegisterAsync(
+            mcp, tools, agents, NullLoggerFactory.Instance, NullLogger.Instance);
+
+        await Assert.That(added).IsEqualTo(3);
+        var agent = agents.GetAgent(AgentName.Create("code")).Value;
+
+        // Observable behaviour: the guarded tool asks, the others run.
+        await Assert.That(agent.Permission.Evaluate("mcp_guarded_normal", "*")).IsEqualTo(PermissionAction.Allow);
+        await Assert.That(agent.Permission.Evaluate("mcp_guarded_protected", "*")).IsEqualTo(PermissionAction.Ask);
+        await Assert.That(agent.Permission.Evaluate("mcp_guarded_string_flag", "*")).IsEqualTo(PermissionAction.Allow);
+
+        // The rule itself carries Ask, not just the no-rule fallback.
+        PermissionRule protectedRule = agent.Permission.Rules
+            .Single(r => r.Permission == "mcp_guarded_protected");
+        await Assert.That(protectedRule.Action).IsEqualTo(PermissionAction.Ask);
+    }
+
     /// <summary>Minimal registry with a configurable server list and invoke handler.</summary>
     private sealed class FakeMcpRegistry(IReadOnlyList<string> servers) : IMcpRegistry
     {

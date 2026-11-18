@@ -19,8 +19,10 @@ namespace Harbor.Tools.Mcp;
 ///         Each adapter declares <see cref="ToolSafetyProfile.Opaque"/> (its args are
 ///         a free-form MCP payload) and receives an exact Allow rule on every
 ///         registered agent, so the dispatcher and the prompt treat it like a
-///         builtin. A user rule with the same key overrides the grant through
-///         <see cref="PermissionRuleset.Merge"/>.
+///         builtin. A server can opt out of the default grant by marking a tool
+///         <c>_meta.anthropic/requiresUserInteraction</c>; those tools get Ask
+///         First instead (#2675 item 103). A user rule with the same key
+///         overrides the grant through <see cref="PermissionRuleset.Merge"/>.
 ///     </para>
 /// </remarks>
 internal static class McpToolDiscovery
@@ -31,7 +33,15 @@ internal static class McpToolDiscovery
     // the same hard bound the server applies to its own chain.
     internal const int MaxPagesPerServer = 64;
 
-    internal sealed record DiscoveredTool(string Server, string RemoteName, ToolName Name);
+    /// <param name="RequiresApproval">
+    ///     True when the server declared <c>_meta.anthropic/requiresUserInteraction</c>,
+    ///     in which case the discovery grant is Ask First rather than Allow.
+    /// </param>
+    internal sealed record DiscoveredTool(
+        string Server,
+        string RemoteName,
+        ToolName Name,
+        bool RequiresApproval);
 
     /// <summary>
     ///     Ask each registered server for its tools, following <c>nextCursor</c>
@@ -133,7 +143,11 @@ internal static class McpToolDiscovery
                             string? remoteName = nameElement.GetString();
                             if (string.IsNullOrWhiteSpace(remoteName)) continue;
 
-                            discovered.Add(new DiscoveredTool(server, remoteName, McpToolAdapter.BuildName(server, remoteName)));
+                            discovered.Add(new DiscoveredTool(
+                                server,
+                                remoteName,
+                                McpToolAdapter.BuildName(server, remoteName),
+                                RequiresUserInteraction(entry)));
                         }
                     }
 
@@ -206,6 +220,33 @@ internal static class McpToolDiscovery
     }
 
     /// <summary>
+    ///     MCP Ask-First declaration (#2675 item 103). A server can require a
+    ///     person to approve every call to one of its tools by setting
+    ///     <c>"anthropic/requiresUserInteraction": true</c> in the tool's
+    ///     <c>_meta</c> (the Claude Code convention Amp also honours). Discovery
+    ///     grants these tools Ask First instead of the default Allow.
+    /// </summary>
+    /// <remarks>
+    ///     Fail closed in the safe direction: only a JSON <see langword="true"/>
+    ///     opts in. A malformed <c>_meta</c>, a string "true", or a missing key
+    ///     all keep the existing default grant, so a broken server cannot make
+    ///     every tool block on a human. The sibling
+    ///     <see cref="IsVisibleToModel"/> parses the same <c>_meta</c> object.
+    /// </remarks>
+    internal static bool RequiresUserInteraction(JsonElement tool)
+    {
+        if (tool.ValueKind != JsonValueKind.Object
+            || !tool.TryGetProperty("_meta", out JsonElement meta)
+            || meta.ValueKind != JsonValueKind.Object
+            || !meta.TryGetProperty("anthropic/requiresUserInteraction", out JsonElement flag))
+        {
+            return false;
+        }
+
+        return flag.ValueKind == JsonValueKind.True;
+    }
+
+    /// <summary>
     ///     Discover and register in one step. Called once by the composition root,
     ///     before the tool registry is frozen.
     /// </summary>
@@ -232,7 +273,14 @@ internal static class McpToolDiscovery
                 continue;
             }
 
-            grants.Add(new PermissionRule(item.Name.Value, "*", PermissionAction.Allow));
+            // #2675 item 103: a server-declared requiresUserInteraction tool is
+            // Ask First, never an automatic Allow. The rule lands on every agent
+            // through Grant, so the prompt-facing catalog and the dispatcher
+            // agree on the same verdict.
+            grants.Add(new PermissionRule(
+                item.Name.Value,
+                "*",
+                item.RequiresApproval ? PermissionAction.Ask : PermissionAction.Allow));
         }
 
         Grant(agents, grants);
