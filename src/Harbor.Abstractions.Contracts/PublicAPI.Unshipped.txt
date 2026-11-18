@@ -342,3 +342,21 @@ Harbor.Abstractions.Events.AgentEvent.SchemaVersion.get -> int
 Harbor.Abstractions.Events.AgentEvent.SchemaVersion.init -> void
 Harbor.Abstractions.Events.AgentEvent.IsJournaled.get -> bool
 Harbor.Abstractions.Events.AgentEvent.IsJournaled.init -> void
+const Harbor.Abstractions.Models.RetainedOutput.MaxRetainedBytes = 1048576 -> int
+const Harbor.Abstractions.Models.RetainedOutput.ReadChunkBytes = 8192 -> int
+Harbor.Abstractions.Models.RetainedOutput
+Harbor.Abstractions.Models.RetainedOutput.<Clone>$() -> Harbor.Abstractions.Models.RetainedOutput!
+Harbor.Abstractions.Models.RetainedOutput.Equals(Harbor.Abstractions.Models.RetainedOutput? other) -> bool
+Harbor.Abstractions.Models.RetainedOutput.IsTruncated.get -> bool
+Harbor.Abstractions.Models.RetainedOutput.ReadChunk(int offsetBytes, int countBytes = 8192) -> string!
+Harbor.Abstractions.Models.RetainedOutput.RetainedBytes.get -> int
+Harbor.Abstractions.Models.RetainedOutput.RetainedOutput(string! toolCallId, string! text, long totalBytes) -> void
+Harbor.Abstractions.Models.RetainedOutput.Text.get -> string!
+Harbor.Abstractions.Models.RetainedOutput.ToolCallId.get -> string!
+Harbor.Abstractions.Models.RetainedOutput.TotalBytes.get -> long
+static Harbor.Abstractions.Models.RetainedOutput.Create(string! toolCallId, string! text, long? totalBytes = null) -> Harbor.Abstractions.Models.RetainedOutput!
+override Harbor.Abstractions.Models.RetainedOutput.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RetainedOutput.GetHashCode() -> int
+override Harbor.Abstractions.Models.RetainedOutput.ToString() -> string!
+static Harbor.Abstractions.Models.RetainedOutput.operator !=(Harbor.Abstractions.Models.RetainedOutput? left, Harbor.Abstractions.Models.RetainedOutput? right) -> bool
+static Harbor.Abstractions.Models.RetainedOutput.operator ==(Harbor.Abstractions.Models.RetainedOutput? left, Harbor.Abstractions.Models.RetainedOutput? right) -> bool
