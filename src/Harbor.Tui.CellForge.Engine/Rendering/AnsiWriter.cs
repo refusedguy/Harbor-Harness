@@ -21,33 +21,8 @@ namespace Harbor.Tui.CellForge.Rendering;
 ///     the tracked pen position already matches.</description></item>
 /// </list>
 /// </summary>
-public sealed class AnsiWriter : ITerminalControlBackend
+public sealed class AnsiWriter : ITerminalControlBackend, ISgrByteSink
 {
-    // Attribute on/off code pairs (§3.2). Bold and dim share the off code 22,
-    // which is why turning one of them off may re-emit the other's on code.
-    // Underline is deliberately absent: its ON code depends on the 3-bit style
-    // in StyleAttr bits 8..10 (single/double/curly/dotted/dashed), so SetStyle
-    // emits it through AppendUnderlineOn instead (#2219).
-    private static readonly (StyleAttr Flag, int On, int Off)[] AttrTable =
-    [
-        (StyleAttr.Bold, 1, 22),
-        (StyleAttr.Dim, 2, 22),
-        (StyleAttr.Italic, 3, 23),
-        (StyleAttr.Blink, 5, 25),
-        (StyleAttr.Reverse, 7, 27),
-        (StyleAttr.Hidden, 8, 28),
-        (StyleAttr.Strike, 9, 29),
-    ];
-
-    // A colon-form SGR parameter (4:3 curly underline, 4:4 dotted, 4:5 dashed)
-    // is stored in the int queue with this high bit set: bits 15..8 hold the
-    // first number, bits 7..0 the second. Keeps the queue allocation-free.
-    private const int ColonParamFlag = 1 << 16;
-
-    // Interned palette sequences (btop-style interning): \x1b[38;5;Nm / \x1b[48;5;Nm ×256.
-    private static readonly byte[][] PaletteFg = BuildPalette(38);
-    private static readonly byte[][] PaletteBg = BuildPalette(48);
-
     private const byte Esc = 0x1B;
 
     private readonly ITerminalBackend _backend;
@@ -57,30 +32,24 @@ public sealed class AnsiWriter : ITerminalControlBackend
     private readonly ISyncTerminalBackend? _syncBackend;
 
     private readonly bool _syncUpdates;
+
+    // Style deltas live in the extracted automaton (#2644); this class keeps
+    // the frame buffer, tracked pen position and backend I/O.
+    private readonly SgrAutomaton _sgr;
+
     private byte[] _buf = new byte[16 * 1024];
     private int _len;
-
-    // SGR automaton state — invalidated at BeginFrame (styles are not carried
-    // across frames because non-frame writers may touch the terminal too).
-    private PackedColor _fg;
-    private PackedColor _bg;
-    private StyleAttr _attrs;
-    private PackedColor _underlineColor;
-    private bool _styleKnown;
 
     // Tracked pen position for elision (-1 = unknown).
     private int _posX = -1;
     private int _posY = -1;
-
-    // Pending-SGR accumulation: consecutive numeric params merge into one CSI.
-    private int _sgrParams;
-    private readonly int[] _sgrParamValues = new int[16];
 
     public AnsiWriter(ITerminalBackend backend, bool syncUpdates = false)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _syncBackend = backend as ISyncTerminalBackend;
         _syncUpdates = syncUpdates;
+        _sgr = new SgrAutomaton(this);
     }
 
     /// <summary>Backend this writer frames through.</summary>
@@ -115,10 +84,9 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// <summary>Starts a new frame: buffer reuse + state invalidation + sync-on.</summary>
     public void BeginFrame()
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         _len = 0;
-        _styleKnown = false;
-        _underlineColor = default;
+        _sgr.Reset();
         _posX = -1;
         _posY = -1;
         if (_syncUpdates)
@@ -187,7 +155,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// <summary>Absolute cursor positioning with elision.</summary>
     public void MoveTo(int x, int y)
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         if (_posX == x && _posY == y)
         {
             return;
@@ -212,137 +180,11 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// (a side-table, not a Cell field) and is folded into the same SGR automaton:
     /// SGR 58 selects it, SGR 59 restores the default. Both are zero-width (#2219).
     /// </summary>
-    public void SetStyle(in CellStyle target, PackedColor underlineColor)
-    {
-        bool fgChanged = !_styleKnown || _fg != target.Fg;
-        bool bgChanged = !_styleKnown || _bg != target.Bg;
-        bool attrsChanged = !_styleKnown || _attrs != target.Attrs;
-        bool ulColorChanged = !_styleKnown || _underlineColor != underlineColor;
-        if (!fgChanged && !bgChanged && !attrsChanged && !ulColorChanged)
-        {
-            return;
-        }
-
-        // The generic table only knows the eight SGR bits (byte 0); the
-        // underline-style bits keep their own on/off codes below.
-        const StyleAttr NonUnderline = (StyleAttr)0xFF;
-
-        bool targetUnderline = (target.Attrs & StyleAttr.Underline) != 0;
-        bool prevUnderline = (_attrs & StyleAttr.Underline) != 0;
-        var targetStyle = UnderlineStyle.Decode(target.Attrs);
-        var prevStyle = UnderlineStyle.Decode(_attrs);
-        bool underlineChanged = targetUnderline != prevUnderline
-            || (targetUnderline && targetStyle != prevStyle);
-
-        // Plain target is always cheapest expressed as a single reset. SGR 0
-        // also clears the underline color, so this is only valid for a default one.
-        if (target.IsPlain && underlineColor.IsDefault)
-        {
-            ResetStyle();
-            return;
-        }
-
-        // Threshold stays at 3 (pin the pre-existing collapse contract): the
-        // underline-color group only participates when it actually changes, so
-        // the classic three-group transition still takes the reset path.
-        int groups = (fgChanged ? 1 : 0) + (bgChanged ? 1 : 0) + (attrsChanged ? 1 : 0);
-        if (!_styleKnown || groups >= 3)
-        {
-            // Reset + reapply beats three independent deltas. SGR 0 already
-            // restores both colors to default — re-emit only explicit ones.
-            ResetStyle();
-            AppendAttrs(target.Attrs);
-            if (targetUnderline)
-            {
-                AppendUnderlineOn(targetStyle);
-            }
-
-            if (!target.Fg.IsDefault)
-            {
-                AppendColor(target.Fg, isForeground: true);
-            }
-
-            if (!target.Bg.IsDefault)
-            {
-                AppendColor(target.Bg, isForeground: false);
-            }
-
-            if (!underlineColor.IsDefault)
-            {
-                AppendUnderlineColor(underlineColor);
-            }
-        }
-        else
-        {
-            if (attrsChanged)
-            {
-                // Off-params and on-params share one SGR (tcell-style pairing).
-                var turnedOff = (_attrs & NonUnderline) & ~(target.Attrs & NonUnderline);
-                var turnedOn = (target.Attrs & NonUnderline) & ~(_attrs & NonUnderline);
-                if (turnedOff != StyleAttr.None)
-                {
-                    QueueAttrOff(turnedOff, keep: target.Attrs & NonUnderline);
-                }
-
-                if (turnedOn != StyleAttr.None)
-                {
-                    QueueAttrs(turnedOn);
-                }
-            }
-
-            if (underlineChanged)
-            {
-                if (prevUnderline)
-                {
-                    // SGR 24 is the single off code for every underline style.
-                    AppendSgrParam(24);
-                }
-
-                if (targetUnderline)
-                {
-                    AppendUnderlineOn(targetStyle);
-                }
-            }
-
-            FlushPendingSgr();
-
-            if (fgChanged)
-            {
-                AppendColor(target.Fg, isForeground: true);
-            }
-
-            if (bgChanged)
-            {
-                AppendColor(target.Bg, isForeground: false);
-            }
-
-            if (ulColorChanged)
-            {
-                AppendUnderlineColor(underlineColor);
-            }
-        }
-
-        // A trailing underline on-code or 58/59 param must not survive into a
-        // later sequence: MoveTo/EndFrame do not flush pending SGR (#2219).
-        FlushPendingSgr();
-        _styleKnown = true;
-        _fg = target.Fg;
-        _bg = target.Bg;
-        _attrs = target.Attrs;
-        _underlineColor = underlineColor;
-    }
+    public void SetStyle(in CellStyle target, PackedColor underlineColor) =>
+        _sgr.SetStyle(in target, underlineColor);
 
     /// <summary>Resets to the plain style unconditionally (one SGR 0).</summary>
-    public void ResetStyle()
-    {
-        AppendSgrParam(0);
-        FlushPendingSgr();
-        _styleKnown = true;
-        _fg = default;
-        _bg = default;
-        _attrs = StyleAttr.None;
-        _underlineColor = default; // SGR 0 clears the underline color too
-    }
+    public void ResetStyle() => _sgr.ResetStyle();
 
     /// <summary>Writes one rune at the pen position; the pen advances by display width.</summary>
     public void PutRune(Rune rune)
@@ -427,7 +269,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// <summary>Moves up n lines and restarts the pen at column 0 (CUU + CR).</summary>
     public void MoveUpToColumnStart(int lines)
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         if (lines == 1)
         {
             AppendAscii("\x1B[A\r");
@@ -451,7 +293,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     public void EraseFromCursorDown()
     {
         ResetStyle();
-        FlushPendingSgr();
+        _sgr.FlushPending();
         AppendAscii("\x1B[0J");
     }
 
@@ -459,7 +301,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     public void EmitEraseInDisplay(int mode)
     {
         ResetStyle();
-        FlushPendingSgr();
+        _sgr.FlushPending();
         EnsureCapacity(6);
         AppendCsi();
         AppendDigits(mode);
@@ -470,7 +312,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     public void EraseEntireLine()
     {
         ResetStyle();
-        FlushPendingSgr();
+        _sgr.FlushPending();
         AppendAscii("\x1B[2K");
     }
 
@@ -508,7 +350,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// </summary>
     public void SaveCursor()
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         EnsureCapacity(2);
         _buf[_len++] = Esc;
         _buf[_len++] = (byte)'7';
@@ -520,7 +362,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// </summary>
     public void RestoreCursor()
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         EnsureCapacity(2);
         _buf[_len++] = Esc;
         _buf[_len++] = (byte)'8';
@@ -532,7 +374,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// <summary>Slim-trait scroll-region set (issue #1160): DECSTBM, not a <c>Raw</c> escape insert.</summary>
     public void SetScrollRegion(int topRow, int bottomRow)
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         EnsureCapacity(16);
         AppendCsi();
         AppendDigits(Math.Max(0, topRow) + 1);
@@ -545,7 +387,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// <summary>Slim-trait scroll-region reset (issue #1160): full screen, not a <c>Raw</c> escape insert.</summary>
     public void ResetScrollRegion()
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         AppendAscii("\x1B[r");
         InvalidateCursorPosition();
     }
@@ -553,7 +395,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// <summary>Slim-trait scroll-region up (issue #1160): SU, not a <c>Raw</c> escape insert.</summary>
     public void ScrollRegionUp(int lines)
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         EnsureCapacity(12);
         AppendCsi();
         AppendDigits(Math.Max(1, lines));
@@ -564,7 +406,7 @@ public sealed class AnsiWriter : ITerminalControlBackend
     /// <summary>Slim-trait scroll-region down (issue #1160): SD, not a <c>Raw</c> escape insert.</summary>
     public void ScrollRegionDown(int lines)
     {
-        FlushPendingSgr();
+        _sgr.FlushPending();
         EnsureCapacity(12);
         AppendCsi();
         AppendDigits(Math.Max(1, lines));
@@ -621,191 +463,25 @@ public sealed class AnsiWriter : ITerminalControlBackend
         }
     }
 
-    private void AppendAttrs(StyleAttr set)
+    // Explicit interface implementation: the extracted automaton can emit into
+    // this frame buffer without adding any new public member to AnsiWriter.
+    void ISgrByteSink.EnsureCapacity(int additional) => EnsureCapacity(additional);
+
+    void ISgrByteSink.AppendByte(byte value)
     {
-        QueueAttrs(set);
-        FlushPendingSgr();
+        EnsureCapacity(1);
+        _buf[_len++] = value;
     }
 
-    private void QueueAttrs(StyleAttr set)
+    void ISgrByteSink.AppendAscii(string value) => AppendAscii(value);
+
+    void ISgrByteSink.AppendDigits(int value) => AppendDigits(value);
+
+    void ISgrByteSink.AppendBytes(ReadOnlySpan<byte> value)
     {
-        foreach (var (flag, on, _) in AttrTable)
-        {
-            if ((set & flag) != 0)
-            {
-                AppendSgrParam(on);
-            }
-        }
-    }
-
-    private void QueueAttrOff(StyleAttr set, StyleAttr keep)
-    {
-        bool reapplyBold = false;
-        bool reapplyDim = false;
-        foreach (var (flag, _, off) in AttrTable)
-        {
-            if ((set & flag) == 0)
-            {
-                continue;
-            }
-
-            AppendSgrParam(off);
-            if (off == 22)
-            {
-                // 22 clears both bold and dim — re-apply whichever survives.
-                reapplyBold = (keep & StyleAttr.Bold) != 0;
-                reapplyDim = (keep & StyleAttr.Dim) != 0;
-            }
-        }
-
-        if (reapplyBold)
-        {
-            AppendSgrParam(1);
-        }
-
-        if (reapplyDim)
-        {
-            AppendSgrParam(2);
-        }
-    }
-
-    private void AppendSgrParam(int value)
-    {
-        if (_sgrParams == 0)
-        {
-            EnsureCapacity(4);
-            _buf[_len++] = Esc;
-            _buf[_len++] = (byte)'[';
-        }
-
-        _sgrParamValues[_sgrParams++] = value;
-    }
-
-    /// <summary>Queues a colon-form SGR parameter such as <c>4:3</c> (curly underline).</summary>
-    private void AppendSgrColon(int first, int second) =>
-        AppendSgrParam(ColonParamFlag | (first << 8) | second);
-
-    /// <summary>
-    /// ON code for an underline style. Single is the classic SGR 4; the four
-    /// extended styles use SGR 21 and the <c>4:n</c> colon form understood by
-    /// kitty, iTerm2, WezTerm, Ghostty and Windows Terminal (#2219).
-    /// </summary>
-    private void AppendUnderlineOn(UnderlineKind kind)
-    {
-        switch (kind)
-        {
-            case UnderlineKind.Double:
-                AppendSgrParam(21);
-                break;
-            case UnderlineKind.Curly:
-                AppendSgrColon(4, 3);
-                break;
-            case UnderlineKind.Dotted:
-                AppendSgrColon(4, 4);
-                break;
-            case UnderlineKind.Dashed:
-                AppendSgrColon(4, 5);
-                break;
-            default:
-                AppendSgrParam(4);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// SGR 58;5;n / 58;2;r;g;b selects the underline color; SGR 59 restores the
-    /// terminal default. Params join the pending SGR so one CSI carries the
-    /// whole style delta (#2219).
-    /// </summary>
-    private void AppendUnderlineColor(PackedColor color)
-    {
-        if (color.IsDefault)
-        {
-            AppendSgrParam(59);
-            return;
-        }
-
-        AppendSgrParam(58);
-        if (!color.IsRgb)
-        {
-            AppendSgrParam(5);
-            AppendSgrParam(color.Index);
-        }
-        else
-        {
-            var (r, g, b) = color.RgbChannels;
-            AppendSgrParam(2);
-            AppendSgrParam(r);
-            AppendSgrParam(g);
-            AppendSgrParam(b);
-        }
-    }
-
-    private void FlushPendingSgr()
-    {
-        if (_sgrParams == 0)
-        {
-            return;
-        }
-
-        // Colon params render as at most "NNN:NNN" (7 bytes); 8 is a safe cap.
-        EnsureCapacity((_sgrParams * 8) + 2);
-        for (int i = 0; i < _sgrParams; i++)
-        {
-            if (i > 0)
-            {
-                _buf[_len++] = (byte)';';
-            }
-
-            int value = _sgrParamValues[i];
-            if ((value & ColonParamFlag) != 0)
-            {
-                AppendDigits((value >> 8) & 0xFF);
-                _buf[_len++] = (byte)':';
-                AppendDigits(value & 0xFF);
-            }
-            else
-            {
-                AppendDigits(value);
-            }
-        }
-
-        _buf[_len++] = (byte)'m';
-        _sgrParams = 0;
-    }
-
-    private void AppendColor(PackedColor color, bool isForeground)
-    {
-        if (color.IsDefault)
-        {
-            AppendSgrParam(isForeground ? 39 : 49);
-            FlushPendingSgr();
-            return;
-        }
-
-        if (!color.IsRgb)
-        {
-            var interned = (isForeground ? PaletteFg : PaletteBg)[color.Index];
-            FlushPendingSgr();
-            EnsureCapacity(interned.Length);
-            interned.CopyTo(_buf, _len);
-            _len += interned.Length;
-            return;
-        }
-
-        var (r, g, b) = color.RgbChannels;
-        FlushPendingSgr();
-        EnsureCapacity(20);
-        _buf[_len++] = Esc;
-        _buf[_len++] = (byte)'[';
-        AppendDigits(isForeground ? 38 : 48);
-        AppendAscii(";2;");
-        AppendDigits(r);
-        _buf[_len++] = (byte)';';
-        AppendDigits(g);
-        _buf[_len++] = (byte)';';
-        AppendDigits(b);
-        _buf[_len++] = (byte)'m';
+        EnsureCapacity(value.Length);
+        value.CopyTo(_buf.AsSpan(_len));
+        _len += value.Length;
     }
 
     private void AppendCsi()
@@ -894,12 +570,4 @@ public sealed class AnsiWriter : ITerminalControlBackend
 
         Array.Resize(ref _buf, target);
     }
-
-    // One-time cost: runs once per process in the static initializers above
-    // (PaletteFg/PaletteBg), never per frame — the ToArray here builds the
-    // interned palette, it is not a snapshot copy.
-    private static byte[][] BuildPalette(int selector) =>
-        Enumerable.Range(0, 256)
-            .Select(i => Encoding.ASCII.GetBytes($"\x1B[{selector};5;{i}m"))
-            .ToArray();
 }
