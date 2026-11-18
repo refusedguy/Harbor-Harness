@@ -27,6 +27,7 @@ internal static class CliVerbCatalog
         "config",
         "doctor",
         "pr",
+        "handoff",
         "issue",
         "providers",
         "models",
