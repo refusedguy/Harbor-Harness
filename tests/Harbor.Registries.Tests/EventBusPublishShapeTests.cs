@@ -23,16 +23,16 @@ namespace Harbor.Registries.Tests;
 ///     <para>
 ///         <b>1. There is no state machine at the publish call at all.</b>
 ///         <see cref="InMemoryEventBus.PublishAsync" /> is <i>not</i> an <c>async</c>
-///         method (<c>InMemoryEventBus.cs:372</c>): it is a plain method with three
-///         returns — the cached <c>Task.CompletedTask</c> (fast path, :418),
-///         <c>DrainOptionalSinksAsync</c> (:442) and <c>PublishSlowAsync</c> (:540).
+///         method (<c>InMemoryEventBus.cs:345</c>): it is a plain method with three
+///         returns — the cached <c>Task.CompletedTask</c> (fast path, :391),
+///         <c>DrainOptionalSinksAsync</c> (:415) and <c>PublishSlowAsync</c> (:513).
 ///         A state machine has to exist before it can be boxed.
 ///     </para>
 ///     <para>
 ///         <b>2. Nothing on the synchronous path suspends, so nothing boxes.</b> For a
 ///         subscriber that returns an already-completed <c>ValueTask</c> — the common
 ///         real case — <c>DispatchToOneAsync</c> takes its
-///         <c>dispatch.IsCompletedSuccessfully</c> branch (<c>InMemoryEventBus.cs:1080</c>)
+///         <c>dispatch.IsCompletedSuccessfully</c> branch (<c>InMemoryEventBus.cs:944</c>)
 ///         and returns without awaiting a real suspension. An <c>async Task</c> method
 ///         that completes without ever suspending stays a struct on the stack and
 ///         returns the builder's cached completed task. This is what these tests pin,
@@ -46,11 +46,11 @@ namespace Harbor.Registries.Tests;
 ///         residue on the 1-subscriber path is <b>200 B/publish</b>, attributed
 ///         exhaustively in <c>docs/BENCHMARKS.md</c> §5.4.3: 80 B from
 ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c>
-///         (<c>RunMiddlewareAsync</c>, <c>InMemoryEventBus.cs:899</c>), 80 B
+///         (<c>RunMiddlewareAsync</c>, <c>InMemoryEventBus.cs:797</c>), 80 B
 ///         <i>per subscriber</i> from
 ///         <c>Task&lt;ValueTuple&lt;DispatchOutcome, Task?&gt;&gt;</c>
-///         (<c>DispatchToOneAsync</c>, :1065), and 40 B from the fan-out method's own
-///         <c>Task</c> (<c>DispatchToSubscribersAsync</c>, :918). All three are
+///         (<c>DispatchToOneAsync</c>, :929), and 40 B from the fan-out method's own
+///         <c>Task</c> (<c>DispatchToSubscribersAsync</c>, :816). All three are
 ///         <i>private</i> method results. Re-shaping <see cref="IEventBus" /> cannot
 ///         reach any of them; the same three signatures re-shaped in place would.
 ///     </para>
@@ -77,7 +77,7 @@ public class EventBusPublishShapeTests
 
     /// <summary>
     ///     Fast path (no subscriber, no sink, unarmed ring): the return is the
-    ///     <c>Task.CompletedTask</c> literal at <c>InMemoryEventBus.cs:418</c>, so two
+    ///     <c>Task.CompletedTask</c> literal at <c>InMemoryEventBus.cs:391</c>, so two
     ///     publishes hand back the <em>same</em> instance — proof that the call
     ///     allocates no task of its own.
     /// </summary>

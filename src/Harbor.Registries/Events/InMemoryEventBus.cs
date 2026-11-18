@@ -127,9 +127,6 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     /// </summary>
     public const int DispatchSampleWindowCapacity = 256;
 
-    /// <summary>Mask for the ring index (<see cref="DispatchSampleWindowCapacity" /> is a power of two).</summary>
-    private const int DispatchSampleMask = DispatchSampleWindowCapacity - 1;
-
     /// <summary>Consecutive over-budget dispatches before a subscriber is evicted.</summary>
     private const int MaxSlowStrikes = 3;
 
@@ -156,22 +153,11 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     private readonly TimeSpan _handlerBudget;
 
     /// <summary>
-    ///     Single-slot cache of spare budget <see cref="CancellationTokenSource" />
-    ///     instances (#249). The 1/N-subscriber publish path used to allocate a
-    ///     fresh CTS per publish even when every handler completed synchronously;
-    ///     publishes now rent this instance (allocating one on first use or
-    ///     contention) and return it through <c>TryReset</c>-gated caching. The
-    ///     cached instance is always unlinked — linkage to the publisher's token
-    ///     is emulated per publish with a registration (see
-    ///     <see cref="DispatchToSubscribersAsync" />) — and, since #391, it also
-    ///     never carries a pending budget timer: the timer is armed only for
-    ///     handlers that outlive their synchronous part (see
-    ///     <see cref="DispatchToOneAsync" />), which is what makes the instance
-    ///     genuinely reusable instead of being discarded on every publish.
-    ///     Exchanged with <c>Interlocked</c> only: contention losers dispose
-    ///     their spare instead of blocking.
+    ///     Single-slot CTS cache for per-handler dispatch budgets (#249).
+    ///     Rent/return and their TryReset discipline live in
+    ///     <see cref="BudgetCtsPool" /> (issue #2561).
     /// </summary>
-    private CancellationTokenSource? _pooledBudgetCts;
+    private readonly BudgetCtsPool _budgetCtsPool = new();
 
     private readonly ILogger<InMemoryEventBus> _logger;
 
@@ -246,24 +232,11 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     private long _optionalSinkDropCount;
 
     /// <summary>
-    ///     Bounded dispatch-duration window (#47/S2). A fixed-capacity ring of
-    ///     monotonic stopwatch ticks, allocated once — the percentile view the
-    ///     telemetry layer polls. Unlike the counters above it is guarded by a
-    ///     short lock: the write is a single slot store, and the read is a
-    ///     copy-then-sort that must not observe a half-updated window. O(1)
-    ///     retained samples, zero allocation per publish.
+    ///     Bounded dispatch-duration window (#47/S2). The ring, its lock and the
+    ///     percentile computation live in <see cref="DispatchWindow" /> (issue
+    ///     #2561); the bus delegates and keeps the same public counters.
     /// </summary>
-    private readonly long[] _dispatchWindowTicks = new long[DispatchSampleWindowCapacity];
-
-    /// <summary>Guards <see cref="_dispatchWindowTicks" />, <see cref="_dispatchWindowHead" />
-    /// and <see cref="_dispatchWindowCount" />.</summary>
-    private readonly object _dispatchWindowLock = new();
-
-    /// <summary>Next slot to write in <see cref="_dispatchWindowTicks" /> (wraps at the capacity).</summary>
-    private int _dispatchWindowHead;
-
-    /// <summary>Valid entries in the window, saturating at <see cref="DispatchSampleWindowCapacity" />.</summary>
-    private int _dispatchWindowCount;
+    private readonly DispatchWindow _dispatchWindow = new(DispatchSampleWindowCapacity);
 
     /// <summary>
     ///     Construct an <see cref="InMemoryEventBus" /> with a bounded scrollback buffer of the
@@ -740,86 +713,11 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     public int DispatchSampleCapacity => DispatchSampleWindowCapacity;
 
     /// <inheritdoc />
-    public int DispatchSampleCount
-    {
-        get
-        {
-            lock (_dispatchWindowLock)
-            {
-                return _dispatchWindowCount;
-            }
-        }
-    }
+    public int DispatchSampleCount => _dispatchWindow.Count;
 
     /// <inheritdoc />
-    public TimeSpan DispatchDurationPercentile(double quantile)
-    {
-        if (double.IsNaN(quantile) || quantile <= 0)
-        {
-            quantile = 0;
-        }
-        else if (quantile > 1)
-        {
-            quantile = 1;
-        }
-
-        // Pooled: the telemetry layer polls, the publish path never touches it.
-        long[] window = ArrayPool<long>.Shared.Rent(DispatchSampleWindowCapacity);
-        try
-        {
-            int count;
-            lock (_dispatchWindowLock)
-            {
-                count = _dispatchWindowCount;
-                if (count == 0)
-                {
-                    return TimeSpan.Zero;
-                }
-
-                // Copy under the lock; the order inside the window is irrelevant
-                // to a percentile, only the multiset matters.
-                Array.Copy(_dispatchWindowTicks, window, count);
-            }
-
-            Array.Sort(window, 0, count);
-
-            // Nearest-rank: index = ceil(q * n) - 1, clamped into the window.
-            int index = (int)Math.Ceiling(quantile * count) - 1;
-            if (index < 0)
-            {
-                index = 0;
-            }
-            else if (index >= count)
-            {
-                index = count - 1;
-            }
-
-            return StopwatchTicksToTimeSpan(window[index]);
-        }
-        finally
-        {
-            ArrayPool<long>.Shared.Return(window);
-        }
-    }
-
-    /// <summary>
-    ///     Fold one completed publish into the bounded window (#47/S2). Called
-    ///     from the same slow-path envelope as the max, so the fast path never
-    ///     enters the histogram. One slot store under a short lock — no
-    ///     allocation, no await, so it is safe inside <c>finally</c>.
-    /// </summary>
-    private void RecordDispatchSample(long elapsedTicks)
-    {
-        lock (_dispatchWindowLock)
-        {
-            _dispatchWindowTicks[_dispatchWindowHead] = elapsedTicks;
-            _dispatchWindowHead = (_dispatchWindowHead + 1) & DispatchSampleMask;
-            if (_dispatchWindowCount < DispatchSampleWindowCapacity)
-            {
-                _dispatchWindowCount++;
-            }
-        }
-    }
+    public TimeSpan DispatchDurationPercentile(double quantile) =>
+        StopwatchTicksToTimeSpan(_dispatchWindow.Percentile(quantile));
 
     /// <summary>
     ///     Record a submission timestamp as the oldest pending unless an older
@@ -859,7 +757,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             observedMax = Volatile.Read(ref _maxDispatchTicks);
         }
 
-        RecordDispatchSample(elapsed);
+        _dispatchWindow.Record(elapsed);
 
         if (Interlocked.Decrement(ref _inflightPublishCount) == 0)
         {
@@ -938,7 +836,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                 // the rented CTS behaves identically (the per-dispatch budget
                 // still applies) and skips the linked-cancellation allocation
                 // (#47).
-                budgetCts = RentBudgetCts();
+                budgetCts = _budgetCtsPool.Rent();
                 if (ct.CanBeCanceled)
                 {
                     budgetLink = ct.Register(
@@ -1007,11 +905,11 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // registration whose outer token already fired cancels the rented
             // source — and a cancelled source cannot be reset, which would
             // silently drain the pool. Disposing the link first keeps the reuse
-            // decision in ReturnBudgetCts where it can be observed.
+            // decision in BudgetCtsPool.Return where it can be observed.
             budgetLink.Dispose();
             if (budgetCts is not null)
             {
-                ReturnBudgetCts(budgetCts);
+                _budgetCtsPool.Return(budgetCts);
             }
 
             if (dead is not null)
@@ -1021,40 +919,6 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                 Array.Clear(dead, 0, deadCount);
                 ArrayPool<Subscription>.Shared.Return(dead);
             }
-        }
-    }
-
-    /// <summary>
-    ///     Rent a spare budget <see cref="CancellationTokenSource" /> (#249).
-    ///     Returns the cached instance when a previous publish left one behind,
-    ///     otherwise allocates. The rented instance is always unlinked, reset
-    ///     and free of a pending budget timer — ready for
-    ///     <c>CancelAfter</c> if a handler needs the budget, and untouched if
-    ///     not, which is what lets the next publish rent it again.
-    /// </summary>
-    private CancellationTokenSource RentBudgetCts() =>
-        Interlocked.Exchange(ref _pooledBudgetCts, null) ?? new CancellationTokenSource();
-
-    /// <summary>
-    ///     Return a rented budget <see cref="CancellationTokenSource" /> to the
-    ///     single-slot cache (#249). <c>TryReset</c> refuses a source that was
-    ///     cancelled (a non-cooperative orphan still holding the token, or the
-    ///     emulated link firing) — those are disposed instead of poisoning the
-    ///     pool. Everything else resets: leftover callback registrations are
-    ///     unregistered by the runtime, and a still-pending budget timer is
-    ///     disarmed (it only refuses once that timer reached <c>TimerQueue</c>'s
-    ///     fire loop, which a 250 ms budget returned on time never does — #513).
-    ///     On contention the spare is likewise disposed rather than retained.
-    /// </summary>
-    private void ReturnBudgetCts(CancellationTokenSource cts)
-    {
-        if (cts.TryReset())
-        {
-            Interlocked.Exchange(ref _pooledBudgetCts, cts)?.Dispose();
-        }
-        else
-        {
-            cts.Dispose();
         }
     }
 
@@ -1082,7 +946,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // #391 follow-up: the budget timer is deliberately NOT armed here.
             // A handler that already finished needs no cancellation, and arming
             // it anyway costs a timer arm + disarm per subscriber for nothing.
-            // A pristine source is what lets ReturnBudgetCts hand this instance
+            // A pristine source is what lets BudgetCtsPool.Return hand this instance
             // to the next publish.
             //
             // #513 correction: the earlier version of this comment claimed the
