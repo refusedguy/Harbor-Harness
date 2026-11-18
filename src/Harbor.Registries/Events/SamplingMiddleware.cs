@@ -25,6 +25,12 @@ namespace Harbor.Registries.Events;
 ///         (<c>InMemoryEventBus.OptionalSinkDrainCount</c>), so the cost of the
 ///         sampler never becomes a silent skip.
 ///     </para>
+///     <para>
+///         Middleware instances may be shared across concurrent publishers, so
+///         the generator is guarded by a lock: draws are serialized and the
+///         instance stays safe under parallel <c>PublishAsync</c> calls. The lock
+///         allocates no managed memory, keeping <c>ProcessAsync</c> allocation-free.
+///     </para>
 /// </remarks>
 public sealed class SamplingMiddleware : IEventBusMiddleware
 {
@@ -35,20 +41,25 @@ public sealed class SamplingMiddleware : IEventBusMiddleware
 
     private readonly ILogger _logger;
     private readonly double _rate;
-    private readonly Random _rnd;
+    private readonly object _rngGate = new();
+    private readonly Random _rng = new();
 
     public SamplingMiddleware(ILogger<SamplingMiddleware> logger, double rate = 0.1)
     {
         _logger = logger;
         _rate = rate;
-        _rnd = new Random();
     }
 
     public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
     {
         if (@event is MessageUpdateEvent)
         {
-            if (_rnd.NextDouble() > _rate)
+            double sample;
+            lock (_rngGate)
+            {
+                sample = _rng.NextDouble();
+            }
+            if (sample > _rate)
             {
                 SamplingMiddlewareLog.MessageUpdateSampledOut(_logger);
                 return ValueTask.FromResult(false);
