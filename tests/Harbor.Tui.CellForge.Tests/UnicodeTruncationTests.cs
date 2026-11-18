@@ -27,7 +27,10 @@ public class UnicodeTruncationTests
             .IsEqualTo("0123456…");
         await Assert.That(UnicodeTruncation.Truncate("abc", 1, UnicodeTruncation.Ellipsis))
             .IsEqualTo("…");
+        // A text that already fits is returned untouched — no marker is added.
         await Assert.That(UnicodeTruncation.Truncate("abc", 3, UnicodeTruncation.Ellipsis))
+            .IsEqualTo("abc");
+        await Assert.That(UnicodeTruncation.Truncate("abcd", 3, UnicodeTruncation.Ellipsis))
             .IsEqualTo("ab…");
     }
 
