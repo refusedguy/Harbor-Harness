@@ -1,5 +1,5 @@
-using System.Globalization;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -185,25 +185,13 @@ public class WordDiffPairRunTests
     }
 
     [Test]
+    [UseCulture("tr-TR")]
     public async Task Similarity_IgnoresCurrentCulture()
     {
-        // Token comparison is ordinal: a culture with different casing rules
-        // must not move the score.
-        int invariant = WordDiff.SimilarityPercent("FILE file", "file FILE");
-
-        var previous = CultureInfo.CurrentCulture;
-        int turkish;
-        try
-        {
-            CultureInfo.CurrentCulture = new CultureInfo("tr-TR");
-            turkish = WordDiff.SimilarityPercent("FILE file", "file FILE");
-        }
-        finally
-        {
-            CultureInfo.CurrentCulture = previous;
-        }
-
-        await Assert.That(turkish).IsEqualTo(invariant);
+        // Token comparison is ordinal: Turkish casing (I -> ı) must not move
+        // the score. The attribute pins the culture for this test and restores
+        // it afterwards, including when the assertion below fails (#2704 T05).
+        await Assert.That(WordDiff.SimilarityPercent("FILE file", "file FILE")).IsEqualTo(100);
     }
 
     [Test]
