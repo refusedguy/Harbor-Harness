@@ -12,11 +12,22 @@
             <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Lines, RelativeSource={RelativeSource AncestorType=UserControl}}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <TextBlock Text="{Binding Text}"
-                                   FontFamily="{DynamicResource FontMono}"
-                                   FontSize="11"
-                                   Foreground="{Binding Brush}"
-                                   TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding Runs}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Text}"
+                                               FontFamily="{DynamicResource FontMono}"
+                                               FontSize="11"
+                                               Foreground="{Binding Brush}"
+                                               TextWrapping="Wrap" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

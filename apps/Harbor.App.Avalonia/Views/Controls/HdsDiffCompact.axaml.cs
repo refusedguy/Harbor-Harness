@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Harbor.App.Avalonia.ViewModels;
 using System.Collections.ObjectModel;
 
 namespace Harbor.App.Avalonia.Views.Controls;
@@ -44,38 +45,52 @@ public sealed partial class HdsDiffCompact : UserControl
     private void UpdateLines()
     {
         Lines.Clear();
-        if (string.IsNullOrEmpty(DiffText))
-            return;
 
-        var text = DiffText;
-        var max = MaxLines;
-        var lines = text.Split('\n');
-        int count = 0;
+        IBrush secondary = TryGetBrush("TextSecondaryBrush") ?? FallbackBrush;
+        IBrush tertiary = TryGetBrush("TextTertiaryBrush") ?? FallbackBrush;
 
-        foreach (var raw in lines)
+        foreach (WordDiffLine display in WordDiffHighlight.Build(DiffText, MaxLines))
         {
-            if (count >= max)
+            if (string.Equals(display.RawText, WordDiffHighlight.TruncationText, StringComparison.Ordinal))
             {
-                Lines.Add(new DiffLine("… diff truncated", TryGetBrush("TextTertiaryBrush") ?? new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80))));
-                break;
+                Lines.Add(new DiffLine(
+                    display.RawText,
+                    tertiary,
+                    [new DiffRun(display.RawText, tertiary)]));
+                continue;
             }
 
-            string line = raw;
-            if (line.EndsWith("\r", StringComparison.Ordinal))
-                line = line[..^1];
-
-            IBrush brush = line.Length > 0 ? line[0] switch
+            IBrush lineBrush = LineBrush(display.RawText) ?? secondary;
+            var runs = new List<DiffRun>(display.Runs.Count);
+            foreach (WordDiffRun run in display.Runs)
             {
-                '+' => TryGetBrush("ChatToolResultBrush") ?? TryGetBrush("TextSecondaryBrush") ?? new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
-                '-' => TryGetBrush("ChatErrorBrush") ?? TryGetBrush("TextSecondaryBrush") ?? new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
-                '@' => TryGetBrush("AccentBrush") ?? TryGetBrush("TextSecondaryBrush") ?? new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
-                _ => TryGetBrush("TextSecondaryBrush") ?? new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80))
-            } : TryGetBrush("TextSecondaryBrush") ?? new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
+                // K13: a changed word keeps the line's colour; a shared word
+                // (and the row prefix) drops back to the neutral one.
+                runs.Add(new DiffRun(run.Text, run.Emphasized ? lineBrush : secondary));
+            }
 
-            Lines.Add(new DiffLine(line, brush));
-            count++;
+            Lines.Add(new DiffLine(display.RawText, lineBrush, runs));
         }
     }
+
+    private IBrush? LineBrush(string line)
+    {
+        if (line.Length == 0)
+        {
+            return TryGetBrush("TextSecondaryBrush");
+        }
+
+        return line[0] switch
+        {
+            '+' => TryGetBrush("ChatToolResultBrush") ?? TryGetBrush("TextSecondaryBrush"),
+            '-' => TryGetBrush("ChatErrorBrush") ?? TryGetBrush("TextSecondaryBrush"),
+            '@' => TryGetBrush("AccentBrush") ?? TryGetBrush("TextSecondaryBrush"),
+            _ => TryGetBrush("TextSecondaryBrush"),
+        };
+    }
+
+    private static SolidColorBrush FallbackBrush { get; } =
+        new(Color.FromRgb(0x80, 0x80, 0x80));
 
     private IBrush? TryGetBrush(string key) => ThemeBrushResolver.Resolve(key);
 
@@ -89,4 +104,8 @@ public sealed partial class HdsDiffCompact : UserControl
     }
 }
 
-public sealed record DiffLine(string Text, IBrush Brush);
+/// <summary>One display row of the compact diff.</summary>
+public sealed record DiffLine(string Text, IBrush Brush, IReadOnlyList<DiffRun> Runs);
+
+/// <summary>One coloured run inside a <see cref="DiffLine" /> (K13).</summary>
+public sealed record DiffRun(string Text, IBrush Brush);
