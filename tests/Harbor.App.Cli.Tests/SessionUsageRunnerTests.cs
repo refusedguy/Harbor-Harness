@@ -12,7 +12,7 @@ public class SessionUsageRunnerTests
 
     private async Task<string> SeedWithUsageAsync(decimal cost, bool costKnown, int input, int output)
     {
-        var session = await _store.CreateAsync("/tmp", "code", "test", "test-model").ConfigureAwait(false);
+        var session = (await _store.CreateAsync("/tmp", "code", "test", "test-model").ConfigureAwait(false)).Value;
         await _store.UpdateStatsAsync(session.Id, new SessionMetadata(
             Cost: cost,
             TokensInput: input,
