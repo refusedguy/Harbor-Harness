@@ -30,6 +30,8 @@
   href: BUILD.md
 - name: Buildsystem Study
   href: BUILDSYSTEM_STUDY.md
+- name: Cellforge Ui Primitives
+  href: CELLFORGE_UI_PRIMITIVES.md
 - name: Central Package Management
   href: CENTRAL_PACKAGE_MANAGEMENT.md
 - name: Citation Drift Measurement
