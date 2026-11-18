@@ -255,6 +255,320 @@ internal sealed class TurnRunner(
         // below; only the record of the boundary is unconditional.
         await eventBus.PublishAsync(new TurnStartEvent(turn, session.Session.Id), CancellationToken.None).ConfigureAwait(false);
 
+        TurnRequestPlan plan = await BuildTurnRequestAsync(
+            session, agent, model, turn, truncationFallback, ct).ConfigureAwait(false);
+        IReadOnlyList<AgentMessage> turnMessages = plan.TurnMessages;
+        truncationFallback = plan.TruncationFallback;
+        LlmRequest request = plan.Request;
+
+        // #1765: the durability checkpoint before the model request. The
+        // request carries everything the run has committed so far: the
+        // user's prompt, the previous turn's tool results, a steering
+        // message drained at the last boundary. If none of that survives a
+        // crash, the answer the model is about to produce is an answer to a
+        // history nobody can read back, and the run's own transcript is a
+        // fiction. The checkpoint is fail-closed: a failure ends the turn
+        // BEFORE the adapter is dispatched.
+        //
+        // This is also the "before the next agent step" boundary: in Harbor
+        // an agent step IS a model request, so the two are one checkpoint.
+        // Everything the preceding step committed, including the tool
+        // results, is covered by it.
+        Result checkpoint = await CheckpointBeforeModelRequestAsync(session, ct).ConfigureAwait(false);
+        if (checkpoint.IsFailure)
+        {
+            // The error is the run's terminal fact: the user has to know the
+            // session log is not durable, because that is why the run stopped.
+            // Published with None: a terminal record must not depend on the
+            // run token.
+            await eventBus.PublishAsync(
+                new AgentErrorEvent(checkpoint.Error), CancellationToken.None).ConfigureAwait(false);
+            TurnRunnerLog.DurabilityCheckpointFailed(logger, session.Session.Id, checkpoint.Error);
+            // No model request was made, so this turn produced no assistant
+            // message to close. Still routed through the one terminal path.
+            return await FinishTurnAsync(
+                new TurnStepResult(truncationFallback, EndRun: true, RunFailure: checkpoint.Error),
+                assistant: null, session, executedResults: null, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        // 6. Stream LLM — retry policy + reactive overflow recovery live in
+        // StreamWithOverflowRecoveryAsync; this method only reads the verdict.
+        TurnStreamAttempt attempt = await StreamWithOverflowRecoveryAsync(
+            client, model, session, turn, turnMessages, request, plan.RebuildRequest, budget, ct).ConfigureAwait(false);
+        Result<TurnStreamResult, StreamFailure> outcome = attempt.Outcome;
+        string? overflowNote = attempt.OverflowNote;
+        AssistantMessage? lastPartial = attempt.LastPartial;
+
+        if (outcome.IsFailure)
+        {
+            StreamFailure failure = outcome.Error;
+            if (RetryPolicy.IsTransient(failure.Kind))
+            {
+                // #270: the transient budget (minutes-scale for 429s) is exhausted.
+                // Degrade instead of dying terminally: persist whatever streamed
+                // before the failure and end the run gracefully, so the session
+                // stays resumable and (sub-)callers receive partial output.
+                AssistantMessage degraded = lastPartial ?? AssistantMessage.Empty(session.Session.Id, model.Id);
+                TurnRunnerLog.StreamBudgetExhausted(logger, failure.Message, turn, degraded.Parts.Count);
+                if (degraded.Parts.Count > 0)
+                {
+                    await session.AppendMessageAsync(degraded, ct).ConfigureAwait(false);
+                    tokenTracker.RecordAppendedMessage(degraded);
+                }
+                await eventBus.PublishAsync(new MessageEndEvent(degraded), ct).ConfigureAwait(false);
+                // #1751/#2549: the degraded turn can carry tool calls the
+                // dispatcher never reached. The one terminal path closes them
+                // and publishes TurnEnd with the closures before the collapsed
+                // error below, keeping message_* → tool_* → turn_end → error.
+                TurnStepResult degradedResult = await FinishTurnAsync(
+                    new TurnStepResult(truncationFallback, EndRun: true),
+                    degraded, session, executedResults: null, ct).ConfigureAwait(false);
+                // #259: single collapsed-card error for the exhausted budget —
+                // per-attempt publishes are suppressed above, so this is the only
+                // AgentErrorEvent for the storm (never N duplicates).
+                await eventBus.PublishAsync(new AgentErrorEvent(failure.Message, failure.Details), ct).ConfigureAwait(false);
+                return degradedResult;
+            }
+
+            // #1755: the context overflow is the one provider failure the turn
+            // reports ITSELF — the stream consumer stays silent for it (the
+            // turn may yet recover by compacting), so the error is published
+            // here, on the path that actually ends the run, with the recovery
+            // verdict attached.
+            if (ProviderErrors.IsContextOverflow(failure.Kind))
+            {
+                string message = overflowNote is null
+                    ? failure.Message
+                    : $"{failure.Message} (context overflow recovery: {overflowNote})";
+                await eventBus.PublishAsync(new AgentErrorEvent(message, failure.Details), ct).ConfigureAwait(false);
+                // The stream never completed, so there is no persisted
+                // assistant message to pair. The terminal path is a no-op here.
+                return await FinishTurnAsync(
+                    new TurnStepResult(truncationFallback, EndRun: true, RunFailure: message),
+                    assistant: null, session, executedResults: null, ct).ConfigureAwait(false);
+            }
+
+            // Terminal provider error — same outcome as the pre-extraction
+            // inline early-return: fail the run without appending the
+            // partial message or publishing turn/agent end events.
+            return await FinishTurnAsync(
+                new TurnStepResult(truncationFallback, EndRun: true, RunFailure: failure.Message),
+                assistant: null, session, executedResults: null, ct).ConfigureAwait(false);
+        }
+
+        TurnStreamResult streamed = outcome.Value;
+        var partial = streamed.Partial;
+        var toolCalls = streamed.ToolCalls;
+        var malformedCalls = streamed.MalformedCalls;
+        Usage? finalUsage = streamed.FinalUsage;
+        var stopReason = streamed.StopReason;
+
+        await PersistStreamedMessageAsync(session, partial, finalUsage, model).ConfigureAwait(false);
+
+        if (ct.IsCancellationRequested)
+        {
+            // #1103: the stop landed after the stream; the partial is persisted
+            // above. Close the turn and end the run — the loop's cancel path
+            // then publishes the Cancelled terminal event, and no tool executes
+            // after the stop.
+            logger.LogDebug("Turn {Turn} end (cancelled after stream)", turn);
+            // #1751/#2549: the partial is already persisted; the terminal path
+            // closes any tool call the dispatcher never reached and publishes
+            // TurnEnd with None, exactly as before.
+            return await FinishTurnAsync(
+                new TurnStepResult(truncationFallback, EndRun: true),
+                partial, session, executedResults: null, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        if (budget is not null)
+        {
+            // #404: fold the turn into the run's budget ledger. Reported
+            // usage prices into the tariff; a turn the provider did not
+            // meter falls back to the heuristic — recorded under
+            // LocalEstimate, never into the billed figure, and computed
+            // only when usage is absent, so a metered turn pays no
+            // estimate cost on top of the usage it already reported.
+            int estimate = finalUsage is null ? tokenTracker.EstimateMessage(partial) : 0;
+            budget.CompleteRequest(finalUsage, model.Pricing, estimate);
+        }
+
+        // 7. Turn-end decision. A run ends when the turn produced no
+        // tool activity, or the stream was aborted mid-flight (never
+        // execute tools for a cancelled run).
+        TurnRunnerLog.TurnStats(logger, turn, toolCalls.Count, malformedCalls.Count, stopReason);
+        if ((toolCalls.Count == 0 && malformedCalls.Count == 0) || stopReason == StopReason.Aborted)
+        {
+            TurnRunnerLog.TurnEndNoToolCalls(logger, turn);
+            // #404: a capped text-only turn is a limit stop, not a finish
+            // (the #403 shape on the budget axis). Cancel still wins: an
+            // aborted stream ends as a cancel, never as a cap. Both returns
+            // below go through the one terminal path, so an aborted turn's
+            // unanswered tool calls are closed whichever verdict wins.
+            if (budget is not null && stopReason != StopReason.Aborted)
+            {
+                // Absence is a Maybe (#1557): "no cap tripped" is a state of
+                // the ledger, not a missing value the caller has to guess at.
+                Maybe<RunLimitKind> earlyHit = budget.CheckCap();
+                if (earlyHit.HasValue)
+                {
+                    return await FinishTurnAsync(
+                        new TurnStepResult(truncationFallback, EndRun: true, Limit: earlyHit.Value),
+                        partial, session, executedResults: null, ct).ConfigureAwait(false);
+                }
+            }
+
+            // #1761: QUIESCENCE. The turn produced no tool activity, so the
+            // agent has nothing left to do on its own — the only moment at
+            // which "the agent went quiet" is a fact rather than a guess.
+            // The caller (the loop) uses this to decide whether a goal wants
+            // another round; an aborted stream is not quiescence, it is a
+            // cancel, and it never opens a round.
+            bool quiescent = toolCalls.Count == 0
+                             && malformedCalls.Count == 0
+                             && stopReason != StopReason.Aborted;
+            return await FinishTurnAsync(
+                new TurnStepResult(truncationFallback, EndRun: true, Quiescent: quiescent),
+                partial, session, executedResults: null, ct).ConfigureAwait(false);
+        }
+
+        // Some providers report a terminal finish_reason (stop / length)
+        // even when tool calls are present. Dropping them silently loses
+        // model intent — execute them through the normal path, persist
+        // the results, publish the turn end, then finish the run.
+        bool runEndsAfterExecution = stopReason is StopReason.Stop or StopReason.Length;
+
+        // 8. Execute tool calls (+ synthesize error results for malformed ones)
+        ToolExecutionOutcome execution = await ExecuteTurnToolCallsAsync(
+            toolCalls, malformedCalls, session, partial, agent, ct, repeatGuard, loopGuard).ConfigureAwait(false);
+        ToolResultMessage toolResults = execution.Results;
+
+        // Persist the tool results so the next turn can feed them back
+        // to the model (OpenAI requires a `tool` role message after a
+        // tool_call, otherwise the model loops calling the same tool).
+        await session.AppendMessageAsync(toolResults, ct).ConfigureAwait(false);
+        // B3: tool results are pure appends — extend the running estimate.
+        tokenTracker.RecordAppendedMessage(toolResults);
+
+        // Background-task ping ("boss, I'm done"): finished detached
+        // runs append as tool results so the NEXT turn picks them up.
+        await backgroundDrain.DrainAsync(session, ct).ConfigureAwait(false);
+
+        // Ф2/B2: mid-run steering injection INSIDE the turn. Drained
+        // right AFTER the tool results are persisted (never between
+        // the assistant tool_calls and their results — providers
+        // require that adjacency) so the NEXT LLM request of THIS run
+        // already carries the steering, not just the next turn.
+        await steering.DrainAsync(session, ct).ConfigureAwait(false);
+
+        TurnRunnerLog.TurnEndWithResults(logger, turn);
+        // The dispatcher's results are the baseline every post-execution exit
+        // publishes. The one terminal path merges any call the dispatcher left
+        // unanswered (a dropped result, a future stop reason) before TurnEnd.
+        IReadOnlyList<ToolResultMessage> executed = new[] { toolResults };
+
+        // #2212: HARD STOP for a windowed loop, but only when the host opted in.
+        // The turn is persisted with a paired transcript before the terminal
+        // path publishes turn-end, so ending here leaves no unanswered call
+        // behind. The reason rides AgentErrorEvent — every TUI already renders
+        // it, so no new union member or projector case is needed. Published
+        // with None: a stop is a terminal fact, not a cancel.
+        if (_hardStopOnLoop && execution.Loop is { } loop)
+        {
+            TurnRunnerLog.LoopDetected(logger, loop.ToolName, loop.Repeats, loop.WindowSize);
+            TurnStepResult loopResult = await FinishTurnAsync(
+                new TurnStepResult(truncationFallback, EndRun: true),
+                partial, session, executed, ct).ConfigureAwait(false);
+            await eventBus.PublishAsync(
+                new AgentErrorEvent(loop.Reason), CancellationToken.None).ConfigureAwait(false);
+            return loopResult;
+        }
+
+        // 9. Boundary steering drain — kept for runs that reach max
+        // steps or a terminal stop reason right after execution; on
+        // the normal path it is a no-op (B2 drained above).
+        await steering.DrainAsync(session, ct).ConfigureAwait(false);
+
+        // 10. Budget cap — the spend ceiling at the same safe boundary as
+        // the step ceiling below. Usage arrives AFTER the request that spent
+        // it, so the tripping turn's tools have already run and been
+        // persisted above: that is the modeled overshoot (LateUsage), not a
+        // leak. A spend ceiling outranks a step ceiling — money is the more
+        // specific bound — so this check comes first.
+        if (budget is not null)
+        {
+            // Absence is a Maybe (#1557): the cap names the limit that
+            // tripped, and "none tripped" is a state, not a null to
+            // pattern-match away.
+            Maybe<RunLimitKind> budgetHit = budget.CheckCap();
+            if (budgetHit.HasValue)
+            {
+                TurnRunnerLog.BudgetCapHit(logger, budgetHit.Value);
+                return await FinishTurnAsync(
+                    new TurnStepResult(truncationFallback, EndRun: true, Limit: budgetHit.Value),
+                    partial, session, executed, ct).ConfigureAwait(false);
+            }
+        }
+
+        // 11. Max steps — also honoured after a terminal stop reason.
+        if (MaxStepsBehavior.IsExhausted(turn, agent))
+        {
+            TurnRunnerLog.MaxStepsReached(logger, agent.MaxSteps);
+            // #403: EndRun alone cannot say WHY. Without this the loop published
+            // the same terminal event as a run that finished its work, and
+            // `SessionStatus.Done` was the user's answer for a run that was cut
+            // off with steps left to take. The limit is the fact; the bool is
+            // only the shape the loop iterates on.
+            return await FinishTurnAsync(
+                new TurnStepResult(truncationFallback, EndRun: true, Limit: RunLimitKind.MaxSteps),
+                partial, session, executed, ct).ConfigureAwait(false);
+        }
+
+        if (runEndsAfterExecution)
+        {
+            TurnRunnerLog.TerminalStopWithTools(logger, turn, stopReason);
+            return await FinishTurnAsync(
+                new TurnStepResult(truncationFallback, EndRun: true),
+                partial, session, executed, ct).ConfigureAwait(false);
+        }
+
+        return await FinishTurnAsync(
+            new TurnStepResult(truncationFallback, EndRun: false),
+            partial, session, executed, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     The request a turn sends, plus the rebuild delegate the reactive
+    ///     overflow recovery needs to re-derive it from a compacted view.
+    /// </summary>
+    private sealed record TurnRequestPlan(
+        IReadOnlyList<AgentMessage> TurnMessages,
+        LlmRequest Request,
+        Func<IReadOnlyList<AgentMessage>, LlmRequest> RebuildRequest,
+        bool TruncationFallback);
+
+    /// <summary>
+    ///     The stream verdict plus the two facts the terminal paths need:
+    ///     the recovery note (for the error message) and the last partial a
+    ///     failed attempt produced (for the degraded turn).
+    /// </summary>
+    private sealed record TurnStreamAttempt(
+        Result<TurnStreamResult, StreamFailure> Outcome,
+        string? OverflowNote,
+        AssistantMessage? LastPartial);
+
+    /// <summary>
+    ///     Shape the history, build the prompt and the first request for one
+    ///     turn. Pulled out of <see cref="RunTurnAsync" /> (#2549) so the turn
+    ///     method reads as a sequence of phases.
+    /// </summary>
+    private async Task<TurnRequestPlan> BuildTurnRequestAsync(
+        ISessionContext session,
+        AgentDefinition agent,
+        ModelInfo model,
+        int turn,
+        bool truncationFallback,
+        CancellationToken ct)
+    {
         // The compacted view of the history, not the raw append-only
         // list: after a summary was produced, ShouldCompact and the
         // request both see [summary] + kept tail, so compaction does
@@ -312,10 +626,10 @@ internal sealed class TurnRunner(
         // mid-run and A2 memoizes rebuilds), so every request is a prefix-cache
         // candidate — flag it Ephemeral for providers that support cache_control.
         //
-        // #1755: the request is built by a local function because the reactive
+        // #1755: the request is built by a delegate because the reactive
         // overflow recovery REBUILDS it from the compacted view — the system
         // prompt and the tool table do not change, only the history does.
-        LlmRequest BuildRequest(IReadOnlyList<AgentMessage> history)
+        LlmRequest RebuildRequest(IReadOnlyList<AgentMessage> history)
         {
             var historyMessages = messageConverter.ToLlmMessages(history);
             return LlmRequestBuilder.ForTurn(
@@ -328,34 +642,25 @@ internal sealed class TurnRunner(
                 agent.ReasoningEffort).Build();
         }
 
-        var request = BuildRequest(turnMessages);
+        return new TurnRequestPlan(turnMessages, RebuildRequest(turnMessages), RebuildRequest, truncationFallback);
+    }
 
-        // #1765: the durability checkpoint before the model request. The
-        // request carries everything the run has committed so far: the
-        // user's prompt, the previous turn's tool results, a steering
-        // message drained at the last boundary. If none of that survives a
-        // crash, the answer the model is about to produce is an answer to a
-        // history nobody can read back, and the run's own transcript is a
-        // fiction. The checkpoint is fail-closed: a failure ends the turn
-        // BEFORE the adapter is dispatched.
-        //
-        // This is also the "before the next agent step" boundary: in Harbor
-        // an agent step IS a model request, so the two are one checkpoint.
-        // Everything the preceding step committed, including the tool
-        // results, is covered by it.
-        Result checkpoint = await CheckpointBeforeModelRequestAsync(session, ct).ConfigureAwait(false);
-        if (checkpoint.IsFailure)
-        {
-            // The error is the run's terminal fact: the user has to know the
-            // session log is not durable, because that is why the run stopped.
-            // Published with None: a terminal record must not depend on the
-            // run token.
-            await eventBus.PublishAsync(
-                new AgentErrorEvent(checkpoint.Error), CancellationToken.None).ConfigureAwait(false);
-            TurnRunnerLog.DurabilityCheckpointFailed(logger, session.Session.Id, checkpoint.Error);
-            return new TurnStepResult(truncationFallback, EndRun: true, RunFailure: checkpoint.Error);
-        }
-
+    /// <summary>
+    ///     Stream one turn under the retry policy, then apply the bounded
+    ///     reactive overflow recovery. Extracted from <see cref="RunTurnAsync" />
+    ///     (#2549); no event or persistence behaviour changed.
+    /// </summary>
+    private async Task<TurnStreamAttempt> StreamWithOverflowRecoveryAsync(
+        ILlmClient client,
+        ModelInfo model,
+        ISessionContext session,
+        int turn,
+        IReadOnlyList<AgentMessage> turnMessages,
+        LlmRequest request,
+        Func<IReadOnlyList<AgentMessage>, LlmRequest> rebuildRequest,
+        RunBudgetTracker? budget,
+        CancellationToken ct)
+    {
         // 6. Stream LLM — wrapped in the retry policy (C7): transient provider
         //    failures (HTTP 429/5xx, network errors, timeouts) restart the
         //    whole stream attempt; fatal failures (auth/quota, caller
@@ -368,8 +673,7 @@ internal sealed class TurnRunner(
         //    travels back as a failed result carrying the transport
         //    classification, the policy reads that classification to decide
         //    whether another attempt is worth it, and the failure that ends
-        //    the turn is handled below as a value — no exception crosses the
-        //    attempt boundary for an expected provider failure.
+        //    the turn is handled by the caller as a value.
         AssistantMessage? lastPartial = null;
 
         async Task<Result<TurnStreamResult, StreamFailure>> StreamTurnAsync(LlmRequest turnRequest)
@@ -416,7 +720,7 @@ internal sealed class TurnRunner(
             }
 
             turnMessages = recovery.TurnMessages;
-            request = BuildRequest(turnMessages);
+            request = rebuildRequest(turnMessages);
             TurnRunnerLog.OverflowRetrying(logger, turn, overflowRetries, recovery.TokensBefore, recovery.TokensAfter);
             outcome = await StreamTurnAsync(request).ConfigureAwait(false);
         }
@@ -431,69 +735,23 @@ internal sealed class TurnRunner(
             overflowNote = $"the request still overflowed after {overflowRetries} compaction attempt(s)";
         }
 
-        if (outcome.IsFailure)
-        {
-            StreamFailure failure = outcome.Error;
-            if (RetryPolicy.IsTransient(failure.Kind))
-            {
-                // #270: the transient budget (minutes-scale for 429s) is exhausted.
-                // Degrade instead of dying terminally: persist whatever streamed
-                // before the failure and end the run gracefully, so the session
-                // stays resumable and (sub-)callers receive partial output.
-                AssistantMessage degraded = lastPartial ?? AssistantMessage.Empty(session.Session.Id, model.Id);
-                TurnRunnerLog.StreamBudgetExhausted(logger, failure.Message, turn, degraded.Parts.Count);
-                if (degraded.Parts.Count > 0)
-                {
-                    await session.AppendMessageAsync(degraded, ct).ConfigureAwait(false);
-                    tokenTracker.RecordAppendedMessage(degraded);
-                }
-                await eventBus.PublishAsync(new MessageEndEvent(degraded), ct).ConfigureAwait(false);
-                // #1751: the degraded turn can carry tool calls the dispatcher never
-                // reached. Close them here, or the transcript holds a tool_use with
-                // no tool_result — a provider 400 on the next turn and a session
-                // that cannot be resumed.
-                IReadOnlyList<ToolResultMessage> degradedResults = await CloseUnansweredCallsAsync(
-                    degraded, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
-                await eventBus.PublishAsync(
-                    new TurnEndEvent(degraded, degradedResults, session.Session.Id), ct).ConfigureAwait(false);
-                // #259: single collapsed-card error for the exhausted budget —
-                // per-attempt publishes are suppressed above, so this is the only
-                // AgentErrorEvent for the storm (never N duplicates).
-                await eventBus.PublishAsync(new AgentErrorEvent(failure.Message, failure.Details), ct).ConfigureAwait(false);
-                return new TurnStepResult(truncationFallback, EndRun: true);
-            }
+        return new TurnStreamAttempt(outcome, overflowNote, lastPartial);
+    }
 
-            // #1755: the context overflow is the one provider failure the turn
-            // reports ITSELF — the stream consumer stays silent for it (the
-            // turn may yet recover by compacting), so the error is published
-            // here, on the path that actually ends the run, with the recovery
-            // verdict attached.
-            if (ProviderErrors.IsContextOverflow(failure.Kind))
-            {
-                string message = overflowNote is null
-                    ? failure.Message
-                    : $"{failure.Message} (context overflow recovery: {overflowNote})";
-                await eventBus.PublishAsync(new AgentErrorEvent(message, failure.Details), ct).ConfigureAwait(false);
-                return new TurnStepResult(truncationFallback, EndRun: true, RunFailure: message);
-            }
-
-            // Terminal provider error — same outcome as the pre-extraction
-            // inline early-return: fail the run without appending the
-            // partial message or publishing turn/agent end events.
-            return new TurnStepResult(truncationFallback, EndRun: true, RunFailure: failure.Message);
-        }
-
-        TurnStreamResult streamed = outcome.Value;
-        var partial = streamed.Partial;
-        var toolCalls = streamed.ToolCalls;
-        var malformedCalls = streamed.MalformedCalls;
-        Usage? finalUsage = streamed.FinalUsage;
-        var stopReason = streamed.StopReason;
-
+    /// <summary>
+    ///     Persist the streamed assistant message and its metered usage before
+    ///     any tool runs. Extracted from <see cref="RunTurnAsync" /> (#2549).
+    /// </summary>
+    private async Task PersistStreamedMessageAsync(
+        ISessionContext session,
+        AssistantMessage partial,
+        Usage? finalUsage,
+        ModelInfo model)
+    {
         // #1103: the streamed output is already-produced work — it persists with
         // None so a cancel between stream and persist cannot throw OCE into the
-        // run and read as a provider error. Cancellation is honored explicitly
-        // right below: no tool runs for a cancelled run.
+        // run and read as a provider error. Cancellation is honored by the
+        // caller right after this returns: no tool runs for a cancelled run.
         await session.AppendMessageAsync(partial, CancellationToken.None).ConfigureAwait(false);
         // B3: feed the running token-estimate cache so ShouldCompact stays O(1).
         tokenTracker.RecordAppendedMessage(partial);
@@ -506,163 +764,6 @@ internal sealed class TurnRunner(
             // prices anything (CostPricedInCoreRules).
             await session.UpdateStatsAsync(finalUsage, model.Pricing, CancellationToken.None).ConfigureAwait(false);
         }
-
-        if (ct.IsCancellationRequested)
-        {
-            // #1103: the stop landed after the stream; the partial is persisted
-            // above. Close the turn and end the run — the loop's cancel path
-            // then publishes the Cancelled terminal event, and no tool executes
-            // after the stop.
-            logger.LogDebug("Turn {Turn} end (cancelled after stream)", turn);
-            // #1751: the cancelled turn can carry tool calls the dispatcher
-            // never reached — close them so the transcript stays paired.
-            IReadOnlyList<ToolResultMessage> cancelledResults = await CloseUnansweredCallsAsync(
-                partial, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
-            await eventBus.PublishAsync(
-                new TurnEndEvent(partial, cancelledResults, session.Session.Id),
-                CancellationToken.None).ConfigureAwait(false);
-            return new TurnStepResult(truncationFallback, EndRun: true);
-        }
-
-        if (budget is not null)
-        {
-            // #404: fold the turn into the run's budget ledger. Reported
-            // usage prices into the tariff; a turn the provider did not
-            // meter falls back to the heuristic — recorded under
-            // LocalEstimate, never into the billed figure, and computed
-            // only when usage is absent, so a metered turn pays no
-            // estimate cost on top of the usage it already reported.
-            int estimate = finalUsage is null ? tokenTracker.EstimateMessage(partial) : 0;
-            budget.CompleteRequest(finalUsage, model.Pricing, estimate);
-        }
-
-        // 7. Turn-end decision. A run ends when the turn produced no
-        // tool activity, or the stream was aborted mid-flight (never
-        // execute tools for a cancelled run).
-        TurnRunnerLog.TurnStats(logger, turn, toolCalls.Count, malformedCalls.Count, stopReason);
-        if ((toolCalls.Count == 0 && malformedCalls.Count == 0) || stopReason == StopReason.Aborted)
-        {
-            TurnRunnerLog.TurnEndNoToolCalls(logger, turn);
-            // #1751: an aborted turn can carry tool calls the dispatcher never
-            // reached — close them so the transcript stays paired.
-            IReadOnlyList<ToolResultMessage> abortedResults = await CloseUnansweredCallsAsync(
-                partial, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
-            await eventBus.PublishAsync(
-                new TurnEndEvent(partial, abortedResults, session.Session.Id), ct).ConfigureAwait(false);
-            // #404: a capped text-only turn is a limit stop, not a finish
-            // (the #403 shape on the budget axis). Cancel still wins: an
-            // aborted stream ends as a cancel, never as a cap.
-            if (budget is not null && stopReason != StopReason.Aborted)
-            {
-                // Absence is a Maybe (#1557): "no cap tripped" is a state of
-                // the ledger, not a missing value the caller has to guess at.
-                Maybe<RunLimitKind> earlyHit = budget.CheckCap();
-                if (earlyHit.HasValue)
-                    return new TurnStepResult(truncationFallback, EndRun: true, Limit: earlyHit.Value);
-            }
-
-            // #1761: QUIESCENCE. The turn produced no tool activity, so the
-            // agent has nothing left to do on its own — the only moment at
-            // which "the agent went quiet" is a fact rather than a guess.
-            // The caller (the loop) uses this to decide whether a goal wants
-            // another round; an aborted stream is not quiescence, it is a
-            // cancel, and it never opens a round.
-            bool quiescent = toolCalls.Count == 0
-                             && malformedCalls.Count == 0
-                             && stopReason != StopReason.Aborted;
-            return new TurnStepResult(truncationFallback, EndRun: true, Quiescent: quiescent);
-        }
-
-        // Some providers report a terminal finish_reason (stop / length)
-        // even when tool calls are present. Dropping them silently loses
-        // model intent — execute them through the normal path, persist
-        // the results, publish the turn end, then finish the run.
-        bool runEndsAfterExecution = stopReason is StopReason.Stop or StopReason.Length;
-
-        // 8. Execute tool calls (+ synthesize error results for malformed ones)
-        ToolExecutionOutcome execution = await ExecuteTurnToolCallsAsync(
-            toolCalls, malformedCalls, session, partial, agent, ct, repeatGuard, loopGuard).ConfigureAwait(false);
-        ToolResultMessage toolResults = execution.Results;
-
-        // Persist the tool results so the next turn can feed them back
-        // to the model (OpenAI requires a `tool` role message after a
-        // tool_call, otherwise the model loops calling the same tool).
-        await session.AppendMessageAsync(toolResults, ct).ConfigureAwait(false);
-        // B3: tool results are pure appends — extend the running estimate.
-        tokenTracker.RecordAppendedMessage(toolResults);
-
-        // Background-task ping ("boss, I'm done"): finished detached
-        // runs append as tool results so the NEXT turn picks them up.
-        await backgroundDrain.DrainAsync(session, ct).ConfigureAwait(false);
-
-        // Ф2/B2: mid-run steering injection INSIDE the turn. Drained
-        // right AFTER the tool results are persisted (never between
-        // the assistant tool_calls and their results — providers
-        // require that adjacency) so the NEXT LLM request of THIS run
-        // already carries the steering, not just the next turn.
-        await steering.DrainAsync(session, ct).ConfigureAwait(false);
-
-        TurnRunnerLog.TurnEndWithResults(logger, turn);
-        await eventBus.PublishAsync(
-            new TurnEndEvent(partial, new[] { toolResults }, session.Session.Id), ct).ConfigureAwait(false);
-
-        // #2212: HARD STOP for a windowed loop, but only when the host opted in.
-        // The turn is already closed and persisted (paired transcript, turn-end
-        // event), so ending here leaves no unanswered call behind. The reason
-        // rides the existing event bus as AgentErrorEvent — every TUI already
-        // renders that event, so no new union member or projector case is
-        // needed. Published with None: a stop is a terminal fact, not a cancel.
-        if (_hardStopOnLoop && execution.Loop is { } loop)
-        {
-            TurnRunnerLog.LoopDetected(logger, loop.ToolName, loop.Repeats, loop.WindowSize);
-            await eventBus.PublishAsync(
-                new AgentErrorEvent(loop.Reason), CancellationToken.None).ConfigureAwait(false);
-            return new TurnStepResult(truncationFallback, EndRun: true);
-        }
-
-        // 9. Boundary steering drain — kept for runs that reach max
-        // steps or a terminal stop reason right after execution; on
-        // the normal path it is a no-op (B2 drained above).
-        await steering.DrainAsync(session, ct).ConfigureAwait(false);
-
-        // 10. Budget cap — the spend ceiling at the same safe boundary as
-        // the step ceiling below. Usage arrives AFTER the request that spent
-        // it, so the tripping turn's tools have already run and been
-        // persisted above: that is the modeled overshoot (LateUsage), not a
-        // leak. A spend ceiling outranks a step ceiling — money is the more
-        // specific bound — so this check comes first.
-        if (budget is not null)
-        {
-            // Absence is a Maybe (#1557): the cap names the limit that
-            // tripped, and "none tripped" is a state, not a null to
-            // pattern-match away.
-            Maybe<RunLimitKind> budgetHit = budget.CheckCap();
-            if (budgetHit.HasValue)
-            {
-                TurnRunnerLog.BudgetCapHit(logger, budgetHit.Value);
-                return new TurnStepResult(truncationFallback, EndRun: true, Limit: budgetHit.Value);
-            }
-        }
-
-        // 11. Max steps — also honoured after a terminal stop reason.
-        if (MaxStepsBehavior.IsExhausted(turn, agent))
-        {
-            TurnRunnerLog.MaxStepsReached(logger, agent.MaxSteps);
-            // #403: EndRun alone cannot say WHY. Without this the loop published
-            // the same terminal event as a run that finished its work, and
-            // `SessionStatus.Done` was the user's answer for a run that was cut
-            // off with steps left to take. The limit is the fact; the bool is
-            // only the shape the loop iterates on.
-            return new TurnStepResult(truncationFallback, EndRun: true, Limit: RunLimitKind.MaxSteps);
-        }
-
-        if (runEndsAfterExecution)
-        {
-            TurnRunnerLog.TerminalStopWithTools(logger, turn, stopReason);
-            return new TurnStepResult(truncationFallback, EndRun: true);
-        }
-
-        return new TurnStepResult(truncationFallback, EndRun: false);
     }
 
     /// <summary>
@@ -1137,6 +1238,109 @@ internal sealed class TurnRunner(
     private static JsonElement EmptyJsonArgs() => EmptyMalformedArgsElement;
 
     /// <summary>
+    ///     The one terminal exit of a turn (#2549): close every tool call the
+    ///     assistant opened that nobody answered, publish the turn's end event
+    ///     with the merged results, and hand the run its step result.
+    /// </summary>
+    /// <remarks>
+    ///     Every exit of <see cref="RunTurnAsync" /> returns through here. The
+    ///     closure is derived from the transcript — the assistant's tool calls
+    ///     minus the ids the dispatcher already answered — so an exit whose
+    ///     calls were all executed closes nothing: a second tool_result is as
+    ///     invalid to a provider as a missing one. An exit that produced no
+    ///     assistant message of its own passes <see langword="null" /> and only
+    ///     carries the result through.
+    /// </remarks>
+    private async Task<TurnStepResult> FinishTurnAsync(
+        TurnStepResult result,
+        AssistantMessage? assistant,
+        ISessionContext session,
+        IReadOnlyList<ToolResultMessage>? executedResults,
+        CancellationToken endCt)
+    {
+        if (assistant is not null)
+        {
+            IReadOnlyList<ToolResultMessage> closure = await CloseUnansweredCallsAsync(
+                assistant, session, UnresolvedToolCall.NotStartedCode, executedResults).ConfigureAwait(false);
+            await eventBus.PublishAsync(
+                new TurnEndEvent(assistant, MergeResults(executedResults, closure), session.Session.Id),
+                endCt).ConfigureAwait(false);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Executed results first, then the closures for calls that never
+    ///     started. Neither input list is mutated.
+    /// </summary>
+    private static IReadOnlyList<ToolResultMessage> MergeResults(
+        IReadOnlyList<ToolResultMessage>? executed,
+        IReadOnlyList<ToolResultMessage> closure)
+    {
+        if (executed is null || executed.Count == 0)
+        {
+            return closure;
+        }
+
+        if (closure.Count == 0)
+        {
+            return executed;
+        }
+
+        var merged = new List<ToolResultMessage>(executed.Count + closure.Count);
+        merged.AddRange(executed);
+        merged.AddRange(closure);
+        return merged;
+    }
+
+    /// <summary>
+    ///     The assistant message with the already-answered tool calls removed,
+    ///     so the repair closes only the outstanding ones (#2549).
+    /// </summary>
+    private static AssistantMessage WithoutAnsweredCalls(
+        AssistantMessage assistant,
+        IReadOnlyList<ToolResultMessage>? executedResults)
+    {
+        if (executedResults is null || executedResults.Count == 0)
+        {
+            return assistant;
+        }
+
+        HashSet<string>? answered = null;
+        for (int m = 0; m < executedResults.Count; m++)
+        {
+            IReadOnlyList<ToolResultEntry> entries = executedResults[m].Results;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                answered ??= new HashSet<string>(StringComparer.Ordinal);
+                answered.Add(entries[i].ToolCallId);
+            }
+        }
+
+        if (answered is null)
+        {
+            return assistant;
+        }
+
+        var kept = new List<ContentPart>(assistant.Parts.Count);
+        bool skipped = false;
+        for (int i = 0; i < assistant.Parts.Count; i++)
+        {
+            ContentPart part = assistant.Parts[i];
+            if (part is ToolCallPart call && answered.Contains(call.Id))
+            {
+                skipped = true;
+                continue;
+            }
+
+            kept.Add(part);
+        }
+
+        return skipped ? assistant with { Parts = kept } : assistant;
+    }
+
+    /// <summary>
     ///     Close the tool calls an assistant message opened and the turn never
     ///     answered (#1751).
     /// </summary>
@@ -1167,17 +1371,24 @@ internal sealed class TurnRunner(
     /// <param name="assistant">The assistant message whose calls went unanswered.</param>
     /// <param name="session">The session the closure belongs to.</param>
     /// <param name="code">One of the <see cref="UnresolvedToolCall" /> codes.</param>
+    /// <param name="executedResults">
+    ///     Results the dispatcher already produced this turn, if any. Their
+    ///     call ids are excluded from the closure so a paired call is never
+    ///     answered twice (#2549).
+    /// </param>
     /// <returns>
     ///     The persisted closure — one tool-result message holding an error
-    ///     entry per unanswered call — or an empty list when the message asked
-    ///     for no tool at all (nothing to close).
+    ///     entry per outstanding call — or an empty list when every call was
+    ///     answered (or the message asked for no tool at all).
     /// </returns>
     private async Task<IReadOnlyList<ToolResultMessage>> CloseUnansweredCallsAsync(
         AssistantMessage assistant,
         ISessionContext session,
-        string code)
+        string code,
+        IReadOnlyList<ToolResultMessage>? executedResults = null)
     {
-        ToolResultMessage? closure = UnresolvedToolCallRepair.Close(assistant, code);
+        ToolResultMessage? closure = UnresolvedToolCallRepair.Close(
+            WithoutAnsweredCalls(assistant, executedResults), code);
         if (closure is null)
         {
             return Array.Empty<ToolResultMessage>();
