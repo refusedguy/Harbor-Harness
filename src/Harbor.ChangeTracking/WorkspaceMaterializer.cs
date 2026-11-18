@@ -195,7 +195,7 @@ public static class WorkspaceMaterializer
     /// </summary>
     public static Result<RunManifest> TryLoad(string? runIdValue)
     {
-        Result<string> id = ValidateRunId(runIdValue);
+        Result<string> id = RunIdValidation.ValidateRunId(runIdValue);
         if (id.IsFailure)
             return id.ConvertFailure<RunManifest>();
 
@@ -336,15 +336,6 @@ public static class WorkspaceMaterializer
     internal static string RunsRoot() => WorkspacePaths.Default.RunsRoot();
 
     internal static string RunDir(string runId) => WorkspacePaths.Default.RunDir(runId);
-
-    private static Result<string> ValidateRunId(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Result.Failure<string>("Run ID cannot be empty.");
-        if (value != Path.GetFileName(value) || value is "." or "..")
-            return Result.Failure<string>($"Invalid run id '{value}': path separators are not allowed.");
-        return Result.Success(value);
-    }
 
     private static async Task CleanupAsync(string repoRoot, string worktreePath, string runDir)
     {
