@@ -315,9 +315,11 @@ internal sealed class JsonFileConfigMechanism<T> where T : class
             return JsonSerializer.Deserialize(json, typeInfo);
         }
 
-        byte[] defaultsBytes = JsonSerializer.SerializeToUtf8Bytes(defaultConfig, typeInfo);
-        using var defaultsDoc = JsonDocument.Parse(defaultsBytes);
-        var defaultsNode = JsonNode.Parse(defaultsDoc.RootElement.GetRawText());
+        // One DOM over the serialized defaults. The old path built four:
+        // byte[], JsonDocument, the GetRawText() string and the JsonNode DOM.
+        // JsonNode.Parse reads the UTF-8 bytes directly, so the intermediate
+        // document and string are gone.
+        var defaultsNode = JsonNode.Parse(JsonSerializer.SerializeToUtf8Bytes(defaultConfig, typeInfo));
         if (defaultsNode is not JsonObject defaultsObject)
         {
             return JsonSerializer.Deserialize(json, typeInfo);
@@ -329,7 +331,10 @@ internal sealed class JsonFileConfigMechanism<T> where T : class
         // choice); keys missing from the file keep their default values.
         foreach (var (key, value) in fileObject)
         {
-            defaultsObject[key] = value is null ? null : JsonNode.Parse(value.ToJsonString());
+            // DeepClone detaches from fileObject (a node with a parent cannot
+            // be re-parented) and skips the per-value ToJsonString + Parse
+            // round-trip. Explicit nulls still win, as before.
+            defaultsObject[key] = value?.DeepClone();
         }
 
         return defaultsNode.Deserialize(typeInfo);
