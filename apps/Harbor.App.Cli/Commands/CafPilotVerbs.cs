@@ -80,6 +80,12 @@ internal static class CafPilotVerbs
         app.Add("plugin", CafPluginCommands.Plugin);
         app.Add("skill", CafSkillCommands.Skill);
         app.Add("help", CafHelpCommands.Help);
+#if HARBOR_WITH_DSL_DEV
+        // #2432: nested dev verbs. Both registrations and their handlers are
+        // compiled out of the AOT build together with this symbol.
+        app.Add("dsl check", DslDevCommands.Check);
+        app.Add("dsl types", DslDevCommands.Types);
+#endif
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;
     }
