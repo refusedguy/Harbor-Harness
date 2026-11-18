@@ -225,10 +225,8 @@ public sealed class SessionLifecycleService : ISessionLifecycle
                     lines.Add(new ChatLine(role, text));
                 }
             }
-            else
-            {
+            if (messages.IsFailure)
                 SessionLog.ReplayFailed(_logger, session.Id, messages.Error);
-            }
 
             // session.Status travels with the hydration — the core's own answer
             // for this session, not one re-derived from the replayed lines (#687).
