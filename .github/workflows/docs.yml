@@ -70,6 +70,13 @@ on:
       - 'tests/**/*.cs'
       - 'src/**/*.cs'
       - 'apps/**/*.cs'
+      # #2184. The no-NUKE gate scans build/, src/, apps/, tests/, tools/,
+      # samples/ and .github/. A reference to the retired build system can
+      # land in a bootstrap script, a sample or a tool as easily as in a
+      # product source, so those paths must trigger this lane too.
+      - 'build/**'
+      - 'samples/**'
+      - 'tools/**/*.cs'
       # #428. `check-abstractions-contract.py` reads four guarded projects'
       # .csproj files and the .cs they compile. A csproj is how a dependency
       # enters this repository, so a workflow that watched only .cs could not
@@ -665,6 +672,13 @@ jobs:
       # anything would be green without checking anything.
       - name: Self-test-list gate fails on a desynced step list
         run: python3 tools/ci-selftests.py --self-test
+
+      # #2184. The gate that keeps the retired build path out has to be able
+      # to fail: the load-bearing fixture plants Nuke.Common in a project
+      # file and requires exit 1 with a file:line. The other fixtures cover
+      # the entry-point strings and both sides of the exclusion list.
+      - name: No-NUKE gate fails on a planted Nuke.Common reference
+        run: tools/bin/harbor-gates-linux-x64 check-no-nuke --self-test
       # END GENERATED SELFTEST STEPS
   rulesetchecks:
     name: ruleset checks
@@ -676,6 +690,22 @@ jobs:
       - uses: actions/checkout@v7
       - name: Every required status check has a workflow job
         run: tools/bin/harbor-gates-linux-x64 check-ruleset-checks --min-rulesets 2 --min-checks 16
+
+  # #2184. Step 5 of the fallout migration. #2183 removed the NUKE path;
+  # this is the gate that stops it coming back. It reads FILES with the
+  # standard library only, so it runs here, in the lane that stays dotnet-free
+  # and fires on documentation-only pull requests. It does not run in a build
+  # job that a broken build could skip. Blocking by design: no --warn-only.
+  no-nuke:
+    name: no NUKE build system
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: No NUKE reference survives in code, config or workflows
+        run: tools/bin/harbor-gates-linux-x64 check-no-nuke
 
   # The tree gates, in ONE command.
   #

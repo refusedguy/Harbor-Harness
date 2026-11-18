@@ -154,6 +154,7 @@ it. `harbor-gates --list` prints the same table.
 | `check-doc-facts` | a count a document states still equals the count of tracked files |
 | `check-event-topology` | the event-topology document's producer rows name the tree's real PublishAsync call sites |
 | `check-local-merge-loss` | a local squash-merge into dev dropped no content |
+| `check-no-nuke` | no NUKE build-system reference survives in code, config or workflows |
 | `check-no-test-sdk` | no project file declares the VSTest host that stops TUnit's discovery |
 | `check-public-api-resign` | a change to the frozen surface is re-signed in the same commit |
 | `check-reference-trimmer` | does any project in the tree reference a package the compiler never uses |
