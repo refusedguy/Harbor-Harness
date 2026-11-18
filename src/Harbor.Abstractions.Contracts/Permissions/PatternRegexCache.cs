@@ -4,8 +4,8 @@ namespace Harbor.Abstractions.Permissions;
 ///     Compiled-glob cache seam for <see cref="PermissionRule" /> (#195).
 ///     The default <see cref="BoundedPatternRegexCache" /> replaces the former
 ///     unbounded process-wide <c>ConcurrentDictionary</c>: same sharing across
-///     rulesets, but capped with LRU eviction and replaceable in tests via
-///     <see cref="PermissionRule.RegexCacheProvider" />.
+///     rulesets, but capped with LRU eviction and replaceable once at startup, before
+///     first use, via <see cref="PermissionRule.RegexCacheProvider" />.
 /// </summary>
 public interface IPatternRegexCache
 {

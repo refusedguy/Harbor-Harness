@@ -476,15 +476,35 @@ public sealed record PermissionRule(
     ///     the same regex on every <see cref="MatchesPattern" /> call without growing without limit.
     /// </summary>
     /// <remarks>
-    ///     Replaceable (e.g. with a smaller <see cref="BoundedPatternRegexCache" />) for
-    ///     test isolation; restore the previous instance afterwards.
+    ///     Written only during startup via <see cref="RegexCacheProvider" />, then frozen on
+    ///     first use so no running agent can have its matching style swapped underneath it.
+    ///     <c>volatile</c> publishes the fully constructed cache to every reader; the one-time
+    ///     write and the freeze are serialized by <see cref="RegexCacheGate" />.
     /// </remarks>
-    private static IPatternRegexCache _regexCache = new BoundedPatternRegexCache();
+    private static volatile IPatternRegexCache _regexCache = new BoundedPatternRegexCache();
 
+    private static readonly object RegexCacheGate = new();
+    private static volatile bool _regexCacheFrozen;
+
+    // Settable once at startup before the first MatchesPattern call; after that the
+    // cache is frozen and any assignment throws InvalidOperationException (see field doc).
     public static IPatternRegexCache RegexCacheProvider
     {
         get => _regexCache;
-        set => _regexCache = value ?? throw new ArgumentNullException(nameof(value));
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            lock (RegexCacheGate)
+            {
+                if (_regexCacheFrozen)
+                {
+                    throw new InvalidOperationException(
+                        "The glob-regex cache is frozen after first use and cannot be replaced at runtime.");
+                }
+
+                _regexCache = value;
+            }
+        }
     }
 
     /// <summary>
@@ -516,9 +536,33 @@ public sealed record PermissionRule(
 
     private static System.Text.RegularExpressions.Regex GetOrCompileRegex(string pattern)
     {
-        // Delegates to the injectable bounded cache; the closure allocation of
+        // Delegates to the process-wide bounded cache; the closure allocation of
         // the old GetOrAdd factory is gone — compilation lives in the cache.
-        return RegexCacheProvider.GetOrAdd(pattern);
+        return GetRegexCache().GetOrAdd(pattern);
+    }
+
+    /// <summary>
+    ///     Reads the frozen cache without taking a lock on the hot path. The first call
+    ///     freezes the cache under <see cref="RegexCacheGate" /> so a concurrent
+    ///     <see cref="RegexCacheProvider" /> assignment can never win after matching
+    ///     has begun.
+    /// </summary>
+    private static IPatternRegexCache GetRegexCache()
+    {
+        if (_regexCacheFrozen)
+        {
+            return _regexCache;
+        }
+
+        lock (RegexCacheGate)
+        {
+            if (!_regexCacheFrozen)
+            {
+                _regexCacheFrozen = true;
+            }
+
+            return _regexCache;
+        }
     }
 }
 
