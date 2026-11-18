@@ -31,6 +31,10 @@ internal static class SessionsVerb
                 return await RunExportSessionAsync(logger, args.Skip(1).ToArray());
             case "export-zip":
                 return await RunExportZipSessionAsync(logger, args.Skip(1).ToArray());
+            case "export-md":
+                return await RunExportFormattedSessionAsync(logger, args.Skip(1).ToArray(), SessionExportFormat.Markdown);
+            case "export-json":
+                return await RunExportFormattedSessionAsync(logger, args.Skip(1).ToArray(), SessionExportFormat.Json);
             case "import":
                 return await RunImportSessionAsync(logger, args.Skip(1).ToArray());
             case "search":
@@ -49,12 +53,14 @@ internal static class SessionsVerb
                 return await RunForkSessionAsync(logger, args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|export-zip|import|search|revert|checkpoint|checkpoints|rewind|tree|fork]
+                                        Usage: harbor sessions [list|rename|export|export-zip|export-md|export-json|import|search|revert|checkpoint|checkpoints|rewind|tree|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions export-zip <id> [file] export session as ONE zip archive: log + attachments + manifest
                                                                   (default: harbor-session-<id>.zip)
+                                          sessions export-md <id> [file]  export session as a Markdown document (default: harbor-session-<id>.md)
+                                          sessions export-json <id> [file] export session as a JSON document (default: harbor-session-<id>.json)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
                                           sessions revert <id> <message-id>          rewind session to the given message
@@ -188,6 +194,41 @@ internal static class SessionsVerb
         if (code != 0)
         {
             SessionsVerbLog.ExportZipFailed(logger, sessionId);
+        }
+
+        return code;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions export-md|export-json &lt;session-id&gt; [file]</c> —
+    ///     render the session's metadata and current message surface as a single
+    ///     human-readable document. The core lives in
+    ///     <see cref="SessionExportFormattedRunner" /> (read-only, #2675 item 049).
+    /// </summary>
+    internal static async Task<int> RunExportFormattedSessionAsync(
+        ILogger logger,
+        string[] args,
+        SessionExportFormat format)
+    {
+        string verb = format == SessionExportFormat.Markdown ? "export-md" : "export-json";
+        string extension = format == SessionExportFormat.Markdown ? "md" : "json";
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine($"Usage: harbor sessions {verb} <session-id> [file]");
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string path = args.Length > 1 ? args[1] : $"harbor-session-{sessionId}.{extension}";
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        int code = await SessionExportFormattedRunner
+            .RunAsync(Console.Out, Console.Error, store, sessionId, path, format)
+            .ConfigureAwait(false);
+        if (code != 0)
+        {
+            SessionsVerbLog.ExportFailed(logger, $"{verb} for {sessionId}");
         }
 
         return code;
