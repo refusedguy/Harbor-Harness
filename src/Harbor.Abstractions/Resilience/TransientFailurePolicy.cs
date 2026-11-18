@@ -151,9 +151,39 @@ public static class TransientFailurePolicy
     ///     than <see cref="DefaultMaxAttempts" /> gets a long delay rather than a
     ///     wrapped-around short one — <c>1 &lt;&lt; 31</c> is zero in
     ///     <see langword="int" />, which would have turned a deep backoff into an
-    ///     immediate retry.
+    ///     immediate retry. Equivalent to
+    ///     <c>BackoffDelay(failedAttempt, DefaultFirstRetryDelay, null, false)</c>.
     /// </remarks>
     public static TimeSpan BackoffDelay(int failedAttempt)
+        => BackoffDelay(failedAttempt, DefaultFirstRetryDelay, null, jitter: false);
+
+    /// <summary>
+    ///     The one backoff formula every retrying caller uses. Callers that need
+    ///     a different ladder pass different boundaries instead of growing
+    ///     another copy of the formula. That is what moved
+    ///     <c>ReconnectableRpcClient</c> off its private constants (#2600).
+    /// </summary>
+    /// <param name="failedAttempt">The 1-based attempt that just failed.</param>
+    /// <param name="firstRetryDelay">Delay after the first failure; doubles per attempt.</param>
+    /// <param name="maxDelay">
+    ///     Optional cap on the un-jittered delay. The cap is applied BEFORE
+    ///     <paramref name="jitter" />, so a 30 s cap at ±20 % tops out at 36 s.
+    ///     <see langword="null" /> means uncapped.
+    /// </param>
+    /// <param name="jitter">
+    ///     Multiply by a factor in [0.8, 1.2) so clients that failed together do
+    ///     not retry in lockstep.
+    /// </param>
+    /// <remarks>
+    ///     The shift is clamped to 30 and the doubling is computed in
+    ///     <c>double</c> rather than an <see langword="int" /> shift, so a
+    ///     deep attempt cannot wrap around into an immediate retry.
+    /// </remarks>
+    public static TimeSpan BackoffDelay(
+        int failedAttempt,
+        TimeSpan firstRetryDelay,
+        TimeSpan? maxDelay,
+        bool jitter)
     {
         if (failedAttempt < 1)
         {
@@ -164,6 +194,17 @@ public static class TransientFailurePolicy
         }
 
         int shift = Math.Min(failedAttempt - 1, 30);
-        return DefaultFirstRetryDelay * (1 << shift);
+        double delayMs = firstRetryDelay.TotalMilliseconds * Math.Pow(2, shift);
+        if (maxDelay is not null)
+        {
+            delayMs = Math.Min(delayMs, maxDelay.Value.TotalMilliseconds);
+        }
+
+        if (jitter)
+        {
+            delayMs *= 0.8 + 0.4 * Random.Shared.NextDouble();
+        }
+
+        return TimeSpan.FromMilliseconds(delayMs);
     }
 }
