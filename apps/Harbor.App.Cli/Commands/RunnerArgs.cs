@@ -220,9 +220,9 @@ internal static class RunnerArgs
         if (arg.Equals(flag, StringComparison.OrdinalIgnoreCase))
             return new FlagMatch(true, false, string.Empty);
 
-        string prefix = flag + "=";
-        if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return new FlagMatch(true, true, arg[prefix.Length..]);
+        string inlinePrefix = flag + "=";
+        if (arg.StartsWith(inlinePrefix, StringComparison.OrdinalIgnoreCase))
+            return new FlagMatch(true, true, arg[inlinePrefix.Length..]);
 
         return new FlagMatch(false, false, string.Empty);
     }
