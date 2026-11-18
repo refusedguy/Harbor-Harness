@@ -1,0 +1,41 @@
+<Styles xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        HDS Accordion (K25) — look for the rows built by Views/Components/Accordion.
+        hds-accordion-item:      base row, theme-aware surface + heading colour.
+        hds-accordion-bordered:  hairline separator between rows.
+        hds-accordion-disabled:  dimmed and non-interactive row.
+        No literal colours: every brush and token resolves from the HDS
+        dictionaries merged by App.axaml, so a palette swap repaints the rows.
+    -->
+
+    <Style Selector="Expander.hds-accordion-item">
+        <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingSpace2}" />
+        <Setter Property="Margin" Value="{StaticResource MarginSpace2}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="BorderBrush" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Expander.hds-accordion-item:pointerover">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+    </Style>
+
+    <Style Selector="Expander.hds-accordion-bordered">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource BorderWidthHairline}" />
+    </Style>
+
+    <Style Selector="Expander.hds-accordion-disabled">
+        <!-- Interactivity is switched off in code (IsEnabled = false); the
+             style only makes the disabled state visible. -->
+        <Setter Property="Opacity" Value="0.5" />
+    </Style>
+</Styles>

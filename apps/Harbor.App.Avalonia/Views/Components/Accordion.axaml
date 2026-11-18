@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Components.Accordion"
+             AutomationProperties.AutomationId="Accordion">
+
+    <!--
+        HDS Accordion (K25). Expander rows are created in code-behind from the
+        Sections property so the control keeps one authoritative expanded set;
+        the shared look lives in HdsStyles/Accordion.axaml.
+    -->
+    <StackPanel x:Name="ItemsHost" Spacing="{StaticResource Space1}" />
+</UserControl>
