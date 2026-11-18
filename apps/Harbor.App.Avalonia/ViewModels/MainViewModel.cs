@@ -422,6 +422,14 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     [RelayCommand]
     public void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
 
+    // #2682 Z15: the tree's expansion flags live on FileTreeNode, so the
+    // commands are pure mutations of the graph the TreeView already binds to.
+    [RelayCommand]
+    public void ExpandFileTree() => FileTreeExpansion.ExpandAll(FileTree);
+
+    [RelayCommand]
+    public void CollapseFileTree() => FileTreeExpansion.CollapseAll(FileTree);
+
     [RelayCommand]
     public void ToggleTheme() => _themeApplier.Toggle();
 

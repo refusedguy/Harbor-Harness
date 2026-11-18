@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace Harbor.App.Avalonia.Services;
 
@@ -26,7 +27,7 @@ namespace Harbor.App.Avalonia.Services;
 ///     policy (<see cref="Harbor.Abstractions.Filesystem.IFileTreePolicy" />).
 /// </para>
 /// </remarks>
-public class FileTreeNode
+public class FileTreeNode : INotifyPropertyChanged
 {
     /// <summary>Bare display name. For a directory the view appends its own separator.</summary>
     public string Name { get; set; } = string.Empty;
@@ -37,8 +38,26 @@ public class FileTreeNode
     /// <summary>Whether this row is a directory (and therefore expandable).</summary>
     public bool IsDirectory { get; set; }
 
-    /// <summary>Bound two-way to the expander glyph; written by the view, not the scan.</summary>
-    public bool IsExpanded { get; set; }
+    /// <summary>
+    ///     Bound two-way to the expander glyph. Raises <see cref="PropertyChanged" />
+    ///     so an expand/collapse-all command can change the tree from the view-model
+    ///     after the rows have been realized.
+    /// </summary>
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value) return;
+            _isExpanded = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
+        }
+    }
+
+    private bool _isExpanded;
+
+    /// <inheritdoc />
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>Child rows, populated by the scan up to its depth budget.</summary>
     public ObservableCollection<FileTreeNode> Children { get; } = new();

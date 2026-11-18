@@ -18,6 +18,17 @@
         <shell:BoolToWidthConverter x:Key="BoolToWidth" ExpandedWidth="240" CollapsedWidth="56"/>
     </UserControl.Resources>
 
+    <UserControl.Styles>
+        <!--
+            #2682 Z15: the model owns the expansion flag so a view-model command
+            can expand/collapse rows after the containers were realized. The
+            two-way setter also captures a user's manual expander clicks.
+        -->
+        <Style Selector="TreeView#FileTreeView TreeViewItem">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+        </Style>
+    </UserControl.Styles>
+
     <Border Background="{DynamicResource BgRailBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="0,0,1,0"
@@ -55,12 +66,29 @@
                         <TextBlock Grid.Column="0" Text="Explorer"
                                    FontSize="{DynamicResource FontSizeSmall}"
                                    VerticalAlignment="Center"/>
-                        <Button Grid.Column="1" Padding="4" Width="28" Height="28"
-                                Click="Refresh_Click" HorizontalAlignment="Right"
-                                AutomationProperties.Name="Refresh file tree"
-                                ToolTip.Tip="Refresh file tree">
-                            <PathIcon Data="{StaticResource IcRefresh}" Width="14" Height="14"/>
-                        </Button>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2"
+                                    HorizontalAlignment="Right">
+                            <!-- #2682 Z15: expand/collapse the whole tree from the
+                                 header instead of opening every folder by hand. -->
+                            <Button Padding="4" Width="24" Height="24"
+                                    Click="ExpandFileTree_Click"
+                                    AutomationProperties.Name="Expand all folders"
+                                    ToolTip.Tip="Expand all folders">
+                                <PathIcon Data="{StaticResource IcChevronDown}" Width="12" Height="12"/>
+                            </Button>
+                            <Button Padding="4" Width="24" Height="24"
+                                    Click="CollapseFileTree_Click"
+                                    AutomationProperties.Name="Collapse all folders"
+                                    ToolTip.Tip="Collapse all folders">
+                                <PathIcon Data="{StaticResource IcChevronRight}" Width="12" Height="12"/>
+                            </Button>
+                            <Button Padding="4" Width="28" Height="28"
+                                    Click="Refresh_Click"
+                                    AutomationProperties.Name="Refresh file tree"
+                                    ToolTip.Tip="Refresh file tree">
+                                <PathIcon Data="{StaticResource IcRefresh}" Width="14" Height="14"/>
+                            </Button>
+                        </StackPanel>
                     </Grid>
                     <TreeView ItemsSource="{Binding FileTree}" Name="FileTreeView"
                               AutomationProperties.Name="File explorer"
