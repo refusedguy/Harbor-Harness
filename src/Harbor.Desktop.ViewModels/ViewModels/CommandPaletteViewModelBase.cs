@@ -17,6 +17,10 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
     // Case-insensitive by construction: palette queries are lower-cased.
     protected readonly Dictionary<string, string> CommandAliases = new(StringComparer.OrdinalIgnoreCase);
 
+    // #2682 Z01: typed queries, scoped by prefix for Up/Down history walking.
+    private readonly QueryHistory _history = new();
+    private bool _suppressHistoryReset;
+
     [ObservableProperty]
     private string _query = string.Empty;
 
@@ -38,7 +42,40 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
 
     public ObservableCollection<CommandResultViewModel> Results { get; } = new();
 
-    partial void OnQueryChanged(string value) => Refilter(value);
+    /// <summary>#2682 Z01: queries committed this session, oldest first.</summary>
+    public IReadOnlyList<string> RecentQueries => _history.Entries;
+
+    partial void OnQueryChanged(string value)
+    {
+        // Z10: a manual edit invalidates any in-flight history walk. The flag
+        // is set only while Up/Down itself assigns Query, so programmatic
+        // navigation does not reset the prefix it just established.
+        if (!_suppressHistoryReset)
+        {
+            _history.ResetNavigation();
+        }
+        Refilter(value);
+    }
+
+    /// <summary>
+    ///     #2682 Z01: let Up/Down walk prefix-matching query history. Returns
+    ///     true when a history entry was applied to <see cref="Query" />; the
+    ///     caller then leaves the result selection alone. With no matching
+    ///     history the call is a no-op and the caller moves the selection.
+    /// </summary>
+    public bool TryNavigateHistory(bool up)
+    {
+        string? next = up ? _history.MoveBack(Query) : _history.MoveForward(Query);
+        if (next is null)
+        {
+            return false;
+        }
+
+        _suppressHistoryReset = true;
+        Query = next;
+        _suppressHistoryReset = false;
+        return true;
+    }
 
     protected void Refilter(string query)
     {
@@ -106,6 +143,9 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
         try
         {
             cmd.Action.Invoke();
+            // #2682 Z01: a successful invocation commits the typed query to
+            // history. The action's own failure must not pollute history.
+            _history.Add(Query);
             NoteInvocation(cmd);
         }
         catch (Exception ex)
