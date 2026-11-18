@@ -11,17 +11,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CopyModeTests
 {
-    private static ScreenBuffer Buffer(string[] lines)
-    {
-        int cols = lines.Max(l => l.Length);
-        var buffer = TestRender.Buffer(cols, lines.Length);
-        for (int y = 0; y < lines.Length; y++)
-        {
-            buffer.SetText(0, y, lines[y], CellStyle.Plain);
-        }
-
-        return buffer;
-    }
+    private static ScreenBuffer Buffer(string[] lines) => ScreenFixtures.BufferFromLines(lines);
 
     private static KeyEvent Char(char c, KeyModifiers mods = KeyModifiers.None) =>
         KeyEvent.Char(new Rune(c), mods);

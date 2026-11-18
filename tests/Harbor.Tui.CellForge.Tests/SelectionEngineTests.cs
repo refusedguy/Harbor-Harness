@@ -6,17 +6,7 @@ namespace Harbor.Tui.CellForge.Tests;
 
 public class SelectionEngineTests
 {
-    private static ScreenBuffer Buffer(string[] lines)
-    {
-        int cols = lines.Max(l => l.Length);
-        var buffer = TestRender.Buffer(cols, lines.Length);
-        for (int y = 0; y < lines.Length; y++)
-        {
-            buffer.SetText(0, y, lines[y], CellStyle.Plain);
-        }
-
-        return buffer;
-    }
+    private static ScreenBuffer Buffer(string[] lines) => ScreenFixtures.BufferFromLines(lines);
 
     [Test]
     public async Task Press_RightButton_IsNotClaimed()

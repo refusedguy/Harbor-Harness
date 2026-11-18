@@ -83,6 +83,30 @@ internal static class ScreenFixtures
         return buffer;
     }
 
+    /// <summary>A buffer painted from whole rows, sized to the widest line.</summary>
+    internal static ScreenBuffer BufferFromLines(string[] lines)
+    {
+        int cols = lines.Max(l => l.Length);
+        var buffer = TestRender.Buffer(cols, lines.Length);
+        for (int y = 0; y < lines.Length; y++)
+        {
+            buffer.SetText(0, y, lines[y], CellStyle.Plain);
+        }
+
+        return buffer;
+    }
+
     internal static ChatScreen BuildScreen() =>
         ChatScreen.Build(new ComposerController(), new StatusViewModel(), includeSidebar: false);
+
+    /// <summary>A solved screen at the requested size, with the pinned status model.</summary>
+    internal static ChatScreen BuildScreen(int cols, int rows, StatusViewModel? status = null)
+    {
+        var screen = ChatScreen.Build(
+            new ComposerController(),
+            status ?? new StatusViewModel { Model = "m" },
+            includeSidebar: false);
+        screen.Tree.Solve(cols, rows);
+        return screen;
+    }
 }

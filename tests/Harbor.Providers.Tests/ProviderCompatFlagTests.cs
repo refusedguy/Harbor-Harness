@@ -26,14 +26,7 @@ public class ProviderCompatFlagTests
     ///     reflection in <i>product</i> code that must survive trimming.
     /// </summary>
     private static IReadOnlyList<Type> ConcreteFlagTypes() =>
-    [
-        .. typeof(IProviderCompatFlag).Assembly
-            .GetTypes()
-            .Where(t => t is { IsAbstract: false, IsInterface: false, IsClass: true }
-                        && typeof(IProviderCompatFlag).IsAssignableFrom(t)
-                        && t.GetConstructor(Type.EmptyTypes) is not null)
-            .OrderBy(t => t.FullName, StringComparer.Ordinal)
-    ];
+        ProviderTestReflection.ConcreteTypes<IProviderCompatFlag>();
 
     /// <summary>Every flag the registry actually hands out, keyed by provider id.</summary>
     private static IReadOnlyList<IProviderCompatFlag> RegisteredFlags()

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.TestKit;
@@ -434,22 +435,11 @@ public class DynamicModelCatalogTests
     }
 
     /// <summary>
-    ///     Regression: a /models entry without context_length must not be given
-    ///     a fabricated 4096 window. That fake value looked authoritative to
-    ///     TokenTracker, whose guard (window &lt;= reserve) silently disabled
-    ///     compaction for the whole session. The unknown sentinel is 0, which
-    ///     the tracker reports at Warning and refuses to compact.
+    ///     One catalog fetch, with the HTTP stub and the throwaway cache the
+    ///     /models tests all need. Only the wire JSON and the config vary.
     /// </summary>
-    [Test]
-    public async Task GetModelsAsync_MissingContextLength_UsesUnknownWindowSentinel()
+    private static async Task<Result<IReadOnlyList<ModelInfo>>> FetchModels(string json, ProviderConfig config)
     {
-        string json = """
-                      {
-                        "data": [
-                          { "id": "contextless", "name": "Contextless Model" }
-                        ]
-                      }
-                      """;
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
@@ -459,27 +449,47 @@ public class DynamicModelCatalogTests
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
-            var config = new ProviderConfig
-            {
-                Id = "test-provider",
-                DisplayName = "Test",
-                BaseUrl = "https://api.example.com",
-                ModelsUrl = "https://api.example.com/v1/models",
-                ModelsPath = "data"
-            };
-
-            var result = await catalog.GetModelsAsync(config);
-
-            await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value.Count).IsEqualTo(1);
-            await Assert.That(result.Value[0].Id).IsEqualTo("contextless");
-            // 0 = "window not reported", never a fabricated 4096.
-            await Assert.That(result.Value[0].ContextWindow).IsEqualTo(0);
+            return await catalog.GetModelsAsync(config);
         }
         finally
         {
             if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
         }
+    }
+
+    /// <summary>
+    ///     Regression: a /models entry without context_length must not be given
+    ///     a fabricated 4096 window. That fake value looked authoritative to
+    ///     TokenTracker, whose guard (window &lt;= reserve) silently disabled
+    ///     compaction for the whole session. The unknown sentinel is 0, which
+    ///     the tracker reports at Warning and refuses to compact.
+    /// </summary>
+    [Test]
+    public async Task GetModelsAsync_MissingContextLength_UsesUnknownWindowSentinel()
+    {
+        var config = new ProviderConfig
+        {
+            Id = "test-provider",
+            DisplayName = "Test",
+            BaseUrl = "https://api.example.com",
+            ModelsUrl = "https://api.example.com/v1/models",
+            ModelsPath = "data"
+        };
+        var result = await FetchModels(
+            """
+            {
+              "data": [
+                { "id": "contextless", "name": "Contextless Model" }
+              ]
+            }
+            """,
+            config);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Count).IsEqualTo(1);
+        await Assert.That(result.Value[0].Id).IsEqualTo("contextless");
+        // 0 = "window not reported", never a fabricated 4096.
+        await Assert.That(result.Value[0].ContextWindow).IsEqualTo(0);
     }
 
     [Test]
@@ -525,42 +535,27 @@ public class DynamicModelCatalogTests
     public async Task GetModelsAsync_ParsesModelsPath_NestedProperty()
     {
         // ProviderConfig.ModelsPath "data" — like OpenRouter.
-        string json = """
-                      {
-                        "data": [
-                          { "id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "context_length": 200000 }
-                        ]
-                      }
-                      """;
-        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        });
-        var http = new HttpClient(handler);
-        string cacheDir = NewCacheDir();
-        try
-        {
-            var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
-            var config = new ProviderConfig
+        var result = await FetchModels(
+            """
+            {
+              "data": [
+                { "id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "context_length": 200000 }
+              ]
+            }
+            """,
+            new ProviderConfig
             {
                 Id = "openrouter",
                 DisplayName = "OpenRouter",
                 BaseUrl = "https://openrouter.ai/api/v1",
                 ModelsUrl = "https://openrouter.ai/api/v1/models",
                 ModelsPath = "data"
-            };
+            });
 
-            var result = await catalog.GetModelsAsync(config);
-
-            await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value.Count).IsEqualTo(1);
-            await Assert.That(result.Value[0].Id).IsEqualTo("anthropic/claude-3.5-sonnet");
-            await Assert.That(result.Value[0].ContextWindow).IsEqualTo(200_000);
-        }
-        finally
-        {
-            if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
-        }
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Count).IsEqualTo(1);
+        await Assert.That(result.Value[0].Id).IsEqualTo("anthropic/claude-3.5-sonnet");
+        await Assert.That(result.Value[0].ContextWindow).IsEqualTo(200_000);
     }
 
     [Test]

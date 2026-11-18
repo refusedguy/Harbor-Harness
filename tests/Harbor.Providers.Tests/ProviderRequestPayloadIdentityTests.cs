@@ -67,13 +67,7 @@ public sealed class ProviderRequestPayloadIdentityTests
             Tools: []);
     }
 
-    private static OpenAiCompatibleLlmClient CompatibleClient() =>
-        new(
-            new HttpClient(),
-            new ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
-            new TestAuthResolver(),
-            FakeModelCatalog.Instance,
-            NullLogger<OpenAiCompatibleLlmClient>.Instance);
+    private static OpenAiCompatibleLlmClient CompatibleClient() => StubClientFactory.Stub();
 
     private static async Task<byte[]> BodyOfAsync(HttpRequestMessage message) =>
         await message.Content!.ReadAsByteArrayAsync();

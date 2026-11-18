@@ -330,15 +330,7 @@ public sealed class DiffViewerOverlayTests
         await Assert.That(PaintAll(seated)).IsEqualTo(expected);
     }
 
-    private static ChatScreen BuildScreen()
-    {
-        var screen = ChatScreen.Build(
-            new ComposerController(),
-            new StatusViewModel { Model = "m" },
-            includeSidebar: false);
-        screen.Tree.Solve(48, 14);
-        return screen;
-    }
+    private static ChatScreen BuildScreen() => ScreenFixtures.BuildScreen(48, 14);
 
     private static string PaintAll(ChatScreen screen)
     {
