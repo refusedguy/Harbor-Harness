@@ -65,9 +65,6 @@
        the benchmark binds it directly (tests/Harbor.Benchmarks/StreamingCoalescerBenchmark.cs). -->
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
-    <!-- #1100: the ToolDispatcher.ResolveTool allocation gate binds the
-         internal method directly, the way BuildToolResultPreview is measured. -->
-    <InternalsVisibleTo Include="Harbor.Application.Tests"/>
   </ItemGroup>
 
 </Project>
