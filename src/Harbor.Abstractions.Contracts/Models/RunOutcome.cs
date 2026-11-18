@@ -303,64 +303,6 @@ public sealed record RunOutcome(
             verification: verification);
 
     /// <summary>
-    ///     Reconstruct with an explicit acceptance value, leaving the execution
-    ///     and verification axes to the existing mapping. Pure function — no I/O.
-    /// </summary>
-    /// <remarks>
-    ///     Additive overload: the four-argument-through-six-argument forms above
-    ///     are untouched, so callers that predate the acceptance axis still bind
-    ///     to them. <see cref="Acceptance" /> is applied after reconstruction
-    ///     because the store carries no accept/reject fact to derive it from.
-    /// </remarks>
-    /// <param name="runId">The run id minted at run start.</param>
-    /// <param name="sessionId">The owning session id.</param>
-    /// <param name="messages">The run's messages in chronological order.</param>
-    /// <param name="end">The terminal <c>AgentEndEvent</c> of the run.</param>
-    /// <param name="acceptance">The user's decision, supplied by the caller that has it.</param>
-    /// <param name="error">The terminal <c>AgentErrorEvent</c>, when the run errored; otherwise null.</param>
-    /// <param name="verification">The sealed verification evidence for the run; null when the caller has none.</param>
-    /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
-    public static RunOutcome Reconstruct(
-        RunId runId,
-        string sessionId,
-        IReadOnlyList<AgentMessage> messages,
-        AgentEndEvent end,
-        RunAcceptance acceptance,
-        AgentErrorEvent? error = null,
-        RunVerificationRecord? verification = null) =>
-        Reconstruct(runId, sessionId, messages, end, error, verification) with { Acceptance = acceptance };
-
-    /// <summary>
-    ///     Reconstruct from terminal stop signals with an explicit acceptance
-    ///     value. Pure function — no I/O.
-    /// </summary>
-    /// <remarks>
-    ///     Additive overload; the existing signal-based form keeps its
-    ///     signature and its defaults. The acceptance value is an input, never
-    ///     a derivation from the message history.
-    /// </remarks>
-    /// <param name="runId">The run id minted at run start.</param>
-    /// <param name="sessionId">The owning session id.</param>
-    /// <param name="messages">The run's messages in chronological order.</param>
-    /// <param name="cancelled">True when the run ended via cancellation.</param>
-    /// <param name="errorMessage">Error text when the run errored; otherwise null.</param>
-    /// <param name="limit">Which limit ended the run; null when none did.</param>
-    /// <param name="verification">The sealed verification evidence; null when the caller has none.</param>
-    /// <param name="acceptance">The user's decision, supplied by the caller that has it.</param>
-    /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
-    public static RunOutcome Reconstruct(
-        RunId runId,
-        string sessionId,
-        IReadOnlyList<AgentMessage> messages,
-        bool cancelled,
-        string? errorMessage,
-        RunLimitKind? limit,
-        RunVerificationRecord? verification,
-        RunAcceptance acceptance) =>
-        Reconstruct(runId, sessionId, messages, cancelled, errorMessage, limit, verification)
-            with { Acceptance = acceptance };
-
-    /// <summary>
     ///     Reconstruct a finished run's outcome from stored messages and terminal
     ///     stop signals. Pure function — no I/O.
     /// </summary>

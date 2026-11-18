@@ -82,8 +82,7 @@ public class TriStateRunResultTests
 
         RunOutcome outcome = RunOutcome.Reconstruct(
             RunId.New(), SessionId, messages, TestEvents.AgentEnd(messages),
-            acceptance: RunAcceptance.Rejected,
-            verification: noChecks);
+            verification: noChecks) with { Acceptance = RunAcceptance.Rejected };
 
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Succeeded);
         await Assert.That(outcome.Verification!.Verification.Verdict)
@@ -99,8 +98,7 @@ public class TriStateRunResultTests
 
         RunOutcome baseline = RunOutcome.Reconstruct(
             RunId.New(), SessionId, messages, TestEvents.AgentEnd(messages),
-            acceptance: RunAcceptance.Pending,
-            verification: passed);
+            verification: passed) with { Acceptance = RunAcceptance.Pending };
 
         // Acceptance flips alone.
         RunOutcome rejected = baseline with { Acceptance = RunAcceptance.Rejected };
@@ -212,9 +210,7 @@ public class TriStateRunResultTests
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Succeeded);
 
         // An explicit decision is additive, not a rewrite of the old result.
-        RunOutcome decided = RunOutcome.Reconstruct(
-            RunId.New(), SessionId, messages, TestEvents.AgentEnd(messages),
-            acceptance: RunAcceptance.Accepted);
+        RunOutcome decided = Reconstruct(messages) with { Acceptance = RunAcceptance.Accepted };
         await Assert.That(decided.Acceptance).IsEqualTo(RunAcceptance.Accepted);
         await Assert.That(decided.StopReason).IsEqualTo(outcome.StopReason);
     }
