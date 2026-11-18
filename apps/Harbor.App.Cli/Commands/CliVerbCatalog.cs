@@ -30,6 +30,7 @@ internal static class CliVerbCatalog
         "project",
         "handoff",
         "issue",
+        "task",
         "providers",
         "models",
         "sessions",

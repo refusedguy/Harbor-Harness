@@ -10,7 +10,7 @@ namespace Harbor.App.Cli.Commands;
 ///     <c>daemon</c>, <c>status</c>, <c>serve</c>, <c>mcp</c>,
 ///     <c>setup</c>, <c>tui</c>, <c>demo</c>, <c>logs</c>, <c>ask</c>,
 ///     <c>events</c>, <c>headless</c>, <c>ide</c>, <c>plugin</c>, <c>prompt</c>,
-///     <c>skill</c>, <c>doctor</c>, <c>issue</c>, <c>project</c> and <c>help</c>.
+///     <c>skill</c>, <c>doctor</c>, <c>issue</c>, <c>project</c>, <c>task</c> and <c>help</c>.
 ///     The hand-rolled dispatcher is gone:
 ///     <c>Program</c> keeps only the no-args/unknown → interactive fallback;
 ///     Spectre.Console.Cli / System.CommandLine stay forbidden.
@@ -88,6 +88,7 @@ internal static class CafPilotVerbs
         app.Add("project add", CafProjectCommands.Add); // #2674 H12
         app.Add("handoff", CafHandoffCommands.Handoff);
         app.Add("issue", CafIssueCommands.Issue);
+        app.Add("task", CafTaskCommands.TaskVerb); // #2674 G11
         app.Add("pr list", CafPrForgeCommands.List);
         app.Add("pr view", CafPrForgeCommands.View);
         app.Add("pr link", CafPrLinkCommands.Link);
