@@ -1,5 +1,6 @@
 using Harbor.Ui.Framework.State;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Generic;
 
@@ -14,6 +15,8 @@ namespace Harbor.Tui.CellForge.Generic;
 public sealed class GenericTuiRenderer : IDisposable
 {
     private readonly UiStore _store;
+    private readonly EngineCells.PrepaintContext _prepaint = new();
+    private EngineCells.ScreenBuffer? _nodeBuffer;
     private TerminalUiState _ui;
     private bool _disposed;
 
@@ -32,6 +35,23 @@ public sealed class GenericTuiRenderer : IDisposable
 
     /// <summary>Screen this renderer solves plus paints.</summary>
     public GenericScreen Screen { get; set; }
+
+    /// <summary>
+    /// Optional composition root (#2516). When set, <see cref="Render"/> and
+    /// <see cref="Paint"/> run the measure-arrange-prepaint-paint pipeline
+    /// through <see cref="EngineCells.NodeFrame.Render"/> and overlay the cells
+    /// it paints onto the solved screen frame. Null keeps the legacy
+    /// screen-only path unchanged; no existing signature changes.
+    /// </summary>
+    public EngineCells.INode? Root { get; set; }
+
+    /// <summary>
+    /// Prepaint context shared across frames: the record cache, cache-hit
+    /// counters and scene live here, so a second frame with the same root
+    /// replays the recorded range instead of preparing it again. Exposed for
+    /// golden tests and host diagnostics.
+    /// </summary>
+    public EngineCells.PrepaintContext Prepaint => _prepaint;
 
     /// <summary>
     /// Per-screen projectors (epic #1195, issue #1202): focus mirroring runs
@@ -99,6 +119,7 @@ public sealed class GenericTuiRenderer : IDisposable
         Screen.Solve(w, h);
         var buffer = new ScreenBuffer(w, h);
         Screen.PaintAll(buffer);
+        PaintRoot(buffer, w, h);
         SyncFocusFromStore();
         return buffer;
     }
@@ -112,7 +133,53 @@ public sealed class GenericTuiRenderer : IDisposable
         Ensure.NotNull(buffer);
         Screen.Solve(buffer.Cols, buffer.Rows);
         Screen.PaintAll(buffer);
+        PaintRoot(buffer, buffer.Cols, buffer.Rows);
         SyncFocusFromStore();
+    }
+
+    /// <summary>
+    /// Runs the optional node root through the four-phase engine pipeline and
+    /// copies the cells it painted onto the host buffer. The engine owns its
+    /// grid (it is a standalone leaf, #436), so the bridge is member by member
+    /// and only cells the root actually touched are overlaid: untouched cells
+    /// keep the solved screen's content. The engine buffer is reused across
+    /// frames; the prepaint context is the renderer's, so cache hits survive.
+    /// </summary>
+    private void PaintRoot(ScreenBuffer buffer, int cols, int rows)
+    {
+        if (Root is null)
+        {
+            return;
+        }
+
+        _nodeBuffer ??= new EngineCells.ScreenBuffer(cols, rows);
+        if (_nodeBuffer.Cols != cols || _nodeBuffer.Rows != rows)
+        {
+            _nodeBuffer.Resize(cols, rows);
+        }
+
+        _nodeBuffer.BlankAll();
+        EngineCells.NodeFrame.Render(
+            Root,
+            _prepaint,
+            _nodeBuffer,
+            new EngineCells.Constraints(cols, rows),
+            new EngineCells.Rect(0, 0, cols, rows));
+
+        for (int y = 0; y < rows; y++)
+        {
+            for (int x = 0; x < cols; x++)
+            {
+                EngineCells.Cell painted = _nodeBuffer.Get(x, y);
+                if (painted.Rune == ' ' && painted.Fg == 0 && painted.Bg == 0 && painted.Flags == 0)
+                {
+                    continue;
+                }
+
+                buffer.At(x, y) = Cell.FromRaw(
+                    painted.Rune, painted.Fg, painted.Bg, painted.Flags, painted.Width);
+            }
+        }
     }
 
     /// <summary>
