@@ -30,7 +30,7 @@ public class QuestionnaireTests
             .ToArray();
     }
 
-    private static string Bar(int width, int filled) => new('█', filled) + new('░', width - filled);
+    private static string Bar(int width, int filled) => new string('█', filled) + new string('░', width - filled);
 
     [Test]
     public async Task Paint_Golden_FirstStepShowsTitleProgressChoicesInputAndHint()
