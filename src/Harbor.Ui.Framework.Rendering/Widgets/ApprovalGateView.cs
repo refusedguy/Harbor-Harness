@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Abstractions.Extensions;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering;
 
@@ -57,8 +58,12 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
     public ApprovalGateView(string toolName, string detail, string? invocationId = null, int generation = 1)
     {
-        ToolName = string.IsNullOrWhiteSpace(toolName) ? "?" : toolName.Trim();
-        _detailText = (detail ?? string.Empty).Trim();
+        // #2678 item 100: tool name/detail come from the model. Strip ESC and
+        // bidi controls at the boundary so the card can never execute a
+        // sequence or reorder its own prompt text. Clean input is untouched.
+        string safeTool = TerminalTextSanitizer.SanitizeSingleLine(toolName);
+        ToolName = safeTool.Length == 0 ? "?" : safeTool;
+        _detailText = TerminalTextSanitizer.Sanitize(detail).Trim();
         Decision = ApprovalChoice.None;
         InvocationId = invocationId;
         Generation = generation;
