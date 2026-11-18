@@ -33,7 +33,8 @@ public sealed class ProviderRegistry : IProviderRegistry
     // #1108: this is the ONLY model cache. GetAllModelsAsync used to keep a
     // second, TTL-free map (_modelCache) next to it, so the fan-out served
     // forever-stale catalogs while GetModelsCachedAsync re-fetched every
-    // 5 minutes — one dataset, one freshness story now.
+    // 5 minutes. #2571: both readers now go through GetModelsOnce, so one
+    // dataset has one freshness check and one entry write.
     private readonly ConcurrentDictionary<ProviderId, CatalogEntry> _catalogCache = new();
 
     // #1878: the catalogue TTL is read through an injected clock, not through
@@ -120,12 +121,21 @@ public sealed class ProviderRegistry : IProviderRegistry
                 ex => $"Failed to instantiate provider '{providerId}': {ex.Message}")
             .TapError(e => ProviderRegistryLog.InstantiationFailed(_logger, providerId, e));
 
-    /// <inheritdoc />
-    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+    /// <summary>
+    ///     The one read-through of the model catalogue. Both
+    ///     <see cref="GetModelsCachedAsync" /> and the fan-out in
+    ///     <see cref="GetAllModelsAsync" /> check freshness, fetch and stamp the
+    ///     entry here. The caller supplies a single clock read for both the
+    ///     freshness check and the stamp (#2571).
+    /// </summary>
+    private async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsOnce(
+        ProviderId providerId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
-        if (_catalogCache.TryGetValue(providerId, out var cached) && cached.ExpiresAt > _time.GetUtcNow())
+        if (_catalogCache.TryGetValue(providerId, out var cached) && cached.ExpiresAt > now)
         {
-            return Result.Success(cached.Models);
+            return Result.Success<IReadOnlyList<ModelInfo>>(cached.Models);
         }
 
         var client = GetClient(providerId);
@@ -135,7 +145,21 @@ public sealed class ProviderRegistry : IProviderRegistry
         }
 
         var models = await client.Value.GetModelsAsync(cancellationToken).ConfigureAwait(false);
-        return models.Tap(v => _catalogCache[providerId] = new CatalogEntry(v, _time.GetUtcNow().Add(ModelCatalogTtl)));
+        if (models.IsFailure) // §4.6-ok: failures are never cached; the caller folds them.
+        {
+            return models;
+        }
+
+        // Stamped with the caller's clock read, not a second one, so the check
+        // and the write agree on the same instant (#1878).
+        _catalogCache[providerId] = new CatalogEntry(models.Value, now.Add(ModelCatalogTtl));
+        return models;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+    {
+        return await GetModelsOnce(providerId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -173,44 +197,21 @@ public sealed class ProviderRegistry : IProviderRegistry
                 {
                     try
                     {
-                        // #1878: one clock read per fan-out task, used by both
-                        // the freshness check and the entry written below —
-                        // two reads could stamp the same provider with two
-                        // different ExpiresAt values.
+                        // #1878: one clock read per fan-out task, passed to
+                        // GetModelsOnce so its freshness check and the entry it
+                        // writes agree on the same instant (#2571).
                         var now = _time.GetUtcNow();
-
-                        // #1108: the fan-out reads the same TTL catalog cache
-                        // as GetModelsCachedAsync — no second freshness story.
-                        if (_catalogCache.TryGetValue(pid, out var cached)
-                            && cached.ExpiresAt > now)
-                        {
-                            return Result.Success<IReadOnlyList<ModelInfo>>(cached.Models);
-                        }
-
-                        var client = GetClient(pid);
-                        if (client.IsFailure) // §4.6-ok: батч-перечисление — ранний выход в ошибку провайдера.
-                        {
-                            return client.ConvertFailure<IReadOnlyList<ModelInfo>>();
-                        }
 
                         using var perProviderCts = new CancellationTokenSource(PerProviderTimeoutMs);
                         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, perProviderCts.Token);
-                        var models = await client.Value.GetModelsAsync(linkedCts.Token).ConfigureAwait(false);
-                        if (models.IsFailure) // §4.6-ok: батч-перечисление — частичный результат собирается как данные.
-                        {
-                            return models;
-                        }
 
-                        // The provider's own result IS the batch item: one less wrapper,
-                        // and a failure can no longer be spelled with an error that says
-                        // nothing (Result.Failure<T>("") throws instead of being built).
-                        // The cache write stays AFTER the early return rather than inside
-                        // an `if (models.IsSuccess)` block: early-return is the guard shape
-                        // CFE0001 models, and a read inside a branch is what it reports.
-                        // #1108: written to the shared TTL cache, so a later
-                        // GetModelsCachedAsync (or fan-out) reuses it until expiry.
-                        _catalogCache[pid] = new CatalogEntry(models.Value, now.Add(ModelCatalogTtl));
-                        return models;
+                        // The provider's own result IS the batch item: one less
+                        // wrapper, and a failure can no longer be spelled with
+                        // an error that says nothing (Result.Failure<T>("")
+                        // throws instead of being built). GetModelsOnce owns the
+                        // cache check and the write; the fan-out owns only the
+                        // 5 s budget and the partial-result folding below.
+                        return await GetModelsOnce(pid, now, linkedCts.Token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException ex)
                     {
@@ -323,10 +324,35 @@ public sealed class ProviderRegistry : IProviderRegistry
     /// <inheritdoc />
     public void Register(ProviderId providerId, Func<ILlmClient> factory)
     {
+        // #2574: a duplicate id used to be silently overwritten (last writer
+        // wins), so a plugin could replace the client behind an existing user
+        // choice without anyone noticing. Fail fast instead. Callers that can
+        // recover from a conflict use TryRegister, which reports it as a Result.
+        var result = TryRegister(providerId, factory);
+        if (result.IsFailure)
+        {
+            throw new InvalidOperationException(result.Error);
+        }
+    }
+
+    /// <summary>
+    ///     Atomically register a provider, reporting a duplicate id as a
+    ///     failure instead of replacing the existing client (#2574).
+    /// </summary>
+    /// <param name="providerId">The provider id to register.</param>
+    /// <param name="factory">Factory invoked the first time the provider is needed.</param>
+    /// <returns>Success on registration, or a failure naming the duplicate id.</returns>
+    public Result TryRegister(ProviderId providerId, Func<ILlmClient> factory)
+    {
         var lazy = new Lazy<ILlmClient>(() => factory(), LazyThreadSafetyMode.ExecutionAndPublication);
-        _clients[providerId] = lazy;
+        if (!_clients.TryAdd(providerId, lazy))
+        {
+            return Result.Failure($"Provider '{providerId}' is already registered.");
+        }
+
         _catalogCache.TryRemove(providerId, out _);
         InvalidateFrozenSnapshot();
+        return Result.Success();
     }
 
     /// <inheritdoc />

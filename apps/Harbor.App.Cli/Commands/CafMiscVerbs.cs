@@ -6,7 +6,7 @@ namespace Harbor.App.Cli.Commands;
 
 /// <summary>
 ///     CAF-E slice 2 (#1290): <c>ask</c> + <c>events</c> + <c>headless</c> +
-///     <c>ide</c> + <c>plugin</c> + <c>skill</c> + <c>help</c> verbs on
+///     <c>ide</c> + <c>plugin</c> + <c>skill</c> + <c>prompt</c> + <c>help</c> verbs on
 ///     ConsoleAppFramework. Handler methods only — the ONE <c>RunAsync</c>
 ///     call site stays in <see cref="CafPilotVerbs" /> (single RunAsync per
 ///     assembly: the generator keys its emitted file without a per-site
@@ -154,6 +154,32 @@ internal static class CafSkillCommands
         if (force)
             flagTail = [..flagTail, "--force"];
         return await new SkillsCommand(Console.Out, Console.Error).ExecuteAsync([..args, ..flagTail]).ConfigureAwait(false);
+    }
+}
+
+/// <summary>
+///     <c>prompt</c> verb handler (named prompts, issue #2676). Follows the
+///     <see cref="CafSkillCommands" /> shape: typed flags are re-appended to
+///     the positional tail so <see cref="PromptsCommand" /> stays a pure
+///     string-driven command that tests can call directly.
+/// </summary>
+internal static class CafPromptCommands
+{
+    /// <summary>List, show, send, install or uninstall named prompts.</summary>
+    /// <param name="project">Target the project-local scope for install/uninstall.</param>
+    /// <param name="force">Overwrite an existing prompt on install.</param>
+    /// <param name="args">Positional tail (subcommand, name, prompt arguments).</param>
+    public static async Task<int> Prompt(
+        bool project = false,
+        bool force = false,
+        [Argument]params string[] args)
+    {
+        string[] flagTail = [];
+        if (project)
+            flagTail = ["--project"];
+        if (force)
+            flagTail = [..flagTail, "--force"];
+        return await new PromptsCommand(Console.Out, Console.Error).ExecuteAsync([..args, ..flagTail]).ConfigureAwait(false);
     }
 }
 

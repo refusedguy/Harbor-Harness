@@ -142,6 +142,7 @@ Harbor.Abstractions.Providers.IScopedProviderResolver.ScopeFor(Harbor.Abstractio
 const Harbor.Abstractions.Agents.AgentDefinition.DefaultRepeatToolThreshold = 3 -> int
 Harbor.Abstractions.Agents.AgentDefinition.RepeatToolThreshold.get -> int
 Harbor.Abstractions.Agents.AgentDefinition.RepeatToolThreshold.init -> void
+static Harbor.Abstractions.Agents.AgentDefinition.TryCreate(Harbor.Abstractions.Models.Identifiers.AgentName! name, string! displayName, string! description, string! model, string! providerId, Harbor.Abstractions.Permissions.PermissionRuleset! permission, int maxSteps = 50, decimal? temperature = null, Harbor.Abstractions.Models.ReasoningEffort? reasoningEffort = null, string? systemPromptAppend = null, bool isSubAgent = false, bool hidden = false, int? toolTimeoutSeconds = null, Harbor.Abstractions.Models.RunBudgetCaps? budget = null) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.AgentDefinition!>
 Harbor.Abstractions.Sessions.ICompactionEventStore
 Harbor.Abstractions.Sessions.ICompactionEventStore.AppendCompactionEventAsync(string! sessionId, Harbor.Abstractions.Sessions.SessionCompactionEvent! compactionEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
 Harbor.Abstractions.Sessions.ICompactionEventStore.GetCompactionEventsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionCompactionEvent!>!>>!
@@ -398,3 +399,5 @@ Harbor.Abstractions.Sessions.ISessionContext.OperationEvents.get -> Harbor.Abstr
 Harbor.Abstractions.Speech.ISpeechToText
 Harbor.Abstractions.Speech.ISpeechToText.IsAvailable.get -> bool
 Harbor.Abstractions.Speech.ISpeechToText.StartAsync(System.Action<string!>! onPartial, System.Action<string!>! onFinal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+static Harbor.Abstractions.Resilience.TransientFailurePolicy.BackoffDelay(int failedAttempt, System.TimeSpan firstRetryDelay, System.TimeSpan? maxDelay, bool jitter) -> System.TimeSpan
+static Harbor.Abstractions.Resilience.TransientFailurePolicy.IsTransientStatus(System.Net.HttpStatusCode status) -> bool

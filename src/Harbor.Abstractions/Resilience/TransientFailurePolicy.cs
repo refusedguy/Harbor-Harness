@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 
 namespace Harbor.Abstractions.Resilience;
@@ -65,15 +66,16 @@ namespace Harbor.Abstractions.Resilience;
 ///         where the BCL returned that type, which is most of them.
 ///     </para>
 ///     <para>
-///         <b>What is deliberately not here:</b> HTTP status classification
-///         (408 / 429 / 5xx) and <c>Retry-After</c> parsing. Those belong to the
-///         Application-layer policy, which is the only place that sees a
-///         response object rather than a thrown exception. The transports
-///         classify their own status codes inline at the call site and hand only
-///         the exception-shaped failures here. The
-///         <c>StatusCode: null</c> constraint is that boundary stated as a
-///         pattern: a status-*bearing* failure is an answer the server gave, and
-///         retrying one is the Application layer's call — never this set's.
+///         <b>What is deliberately not here:</b> <c>Retry-After</c> parsing and
+///         the LLM path's status policy. <see cref="IsTransientStatus" /> owns
+///         only the small set a remote-MCP transport retries while the response
+///         is still in hand (5xx and 408); 429 is deliberately terminal on that
+///         path while <c>RetryPolicy.HttpClassifier</c> answers "transient" for
+///         it on the LLM path. That split is a decision, not drift. The
+///         <c>StatusCode: null</c> constraint on <see cref="ShouldRetry" /> is
+///         the other half of the boundary: a status-*bearing* thrown failure is
+///         an answer the server gave, so this set does not retry it — a response
+///         object is classified by <see cref="IsTransientStatus" /> instead.
 ///     </para>
 /// </remarks>
 public static class TransientFailurePolicy
@@ -142,6 +144,25 @@ public static class TransientFailurePolicy
     }
 
     /// <summary>
+    ///     Whether a refused HTTP response is a blip the remote-MCP transports
+    ///     should retry: every 5xx and <see cref="HttpStatusCode.RequestTimeout" />
+    ///     (408). Everything else, 429 included, is an answer rather than an
+    ///     outage and costs exactly one attempt (#714).
+    /// </summary>
+    /// <param name="status">The status while the response is still in hand.</param>
+    /// <remarks>
+    ///     This is the status-shaped half of the retry verdict (#2599). The two
+    ///     remote transports used to carry byte-identical private copies and
+    ///     <c>TransportRetryOwnershipRules</c> could only hold the copies to each
+    ///     other. The verdict now has one home here, beside the exception-shaped
+    ///     half in <see cref="ShouldRetry" />; each transport's declared
+    ///     <c>IsTransientStatus</c> is a one-line forwarder the ownership rule can
+    ///     still call to prove the two agree.
+    /// </remarks>
+    public static bool IsTransientStatus(HttpStatusCode status)
+        => (int)status >= 500 || status == HttpStatusCode.RequestTimeout;
+
+    /// <summary>
     ///     Exponential backoff for the retry that follows the failure of attempt
     ///     <paramref name="failedAttempt" />: <c>DefaultFirstRetryDelay ·
     ///     2^(attempt − 1)</c>, so 200 ms, 400 ms, 800 ms.
@@ -151,9 +172,39 @@ public static class TransientFailurePolicy
     ///     than <see cref="DefaultMaxAttempts" /> gets a long delay rather than a
     ///     wrapped-around short one — <c>1 &lt;&lt; 31</c> is zero in
     ///     <see langword="int" />, which would have turned a deep backoff into an
-    ///     immediate retry.
+    ///     immediate retry. Equivalent to
+    ///     <c>BackoffDelay(failedAttempt, DefaultFirstRetryDelay, null, false)</c>.
     /// </remarks>
     public static TimeSpan BackoffDelay(int failedAttempt)
+        => BackoffDelay(failedAttempt, DefaultFirstRetryDelay, null, jitter: false);
+
+    /// <summary>
+    ///     The one backoff formula every retrying caller uses. Callers that need
+    ///     a different ladder pass different boundaries instead of growing
+    ///     another copy of the formula. That is what moved
+    ///     <c>ReconnectableRpcClient</c> off its private constants (#2600).
+    /// </summary>
+    /// <param name="failedAttempt">The 1-based attempt that just failed.</param>
+    /// <param name="firstRetryDelay">Delay after the first failure; doubles per attempt.</param>
+    /// <param name="maxDelay">
+    ///     Optional cap on the un-jittered delay. The cap is applied BEFORE
+    ///     <paramref name="jitter" />, so a 30 s cap at ±20 % tops out at 36 s.
+    ///     <see langword="null" /> means uncapped.
+    /// </param>
+    /// <param name="jitter">
+    ///     Multiply by a factor in [0.8, 1.2) so clients that failed together do
+    ///     not retry in lockstep.
+    /// </param>
+    /// <remarks>
+    ///     The shift is clamped to 30 and the doubling is computed in
+    ///     <c>double</c> rather than an <see langword="int" /> shift, so a
+    ///     deep attempt cannot wrap around into an immediate retry.
+    /// </remarks>
+    public static TimeSpan BackoffDelay(
+        int failedAttempt,
+        TimeSpan firstRetryDelay,
+        TimeSpan? maxDelay,
+        bool jitter)
     {
         if (failedAttempt < 1)
         {
@@ -164,6 +215,17 @@ public static class TransientFailurePolicy
         }
 
         int shift = Math.Min(failedAttempt - 1, 30);
-        return DefaultFirstRetryDelay * (1 << shift);
+        double delayMs = firstRetryDelay.TotalMilliseconds * Math.Pow(2, shift);
+        if (maxDelay is not null)
+        {
+            delayMs = Math.Min(delayMs, maxDelay.Value.TotalMilliseconds);
+        }
+
+        if (jitter)
+        {
+            delayMs *= 0.8 + 0.4 * Random.Shared.NextDouble();
+        }
+
+        return TimeSpan.FromMilliseconds(delayMs);
     }
 }

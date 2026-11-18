@@ -175,7 +175,7 @@ public class McpToolDiscoveryTests
     [Test]
     public async Task Adapter_CrashReturnsFailure_NextCallRespawnsTheProcess()
     {
-        // #2227 / McpRegistry.cs:639-661: the adapter holds the server name, and
+        // #2227 / McpRegistry.cs:605-627: the adapter holds the server name, and
         // GetProcess respawns a dead process on the next invocation. First spawn
         // exits without a response; the second answers normally.
         string counter = Path.GetTempFileName();

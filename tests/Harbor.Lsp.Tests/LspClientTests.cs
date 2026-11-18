@@ -28,6 +28,31 @@ public class LspClientTests
 
     [Test]
     [Timeout(30_000)]
+    public async Task ParamDto_SerializesThroughContext_PreservesWireFormat(CancellationToken cancellationToken)
+    {
+        await using var server = new FakeLspServer();
+        JsonElement? capturedParams = null;
+        server.OnRequest = (_, parameters) =>
+        {
+            capturedParams = parameters;
+            return new Dictionary<string, object?>();
+        };
+        server.Run();
+        server.Client.Start();
+
+        var parameters = new LspWire.PositionParams(
+            new LspWire.TextDocumentIdentifier("file:///tmp/a.ts"),
+            new LspWire.LspPosition(2, 7));
+
+        _ = await server.Client.SendRequestAsync("textDocument/definition", parameters, cancellationToken);
+
+        await Assert.That(capturedParams is not null).IsTrue();
+        await Assert.That(capturedParams!.Value.GetRawText()).IsEqualTo(
+            """{"textDocument":{"uri":"file:///tmp/a.ts"},"position":{"line":2,"character":7}}""");
+    }
+
+    [Test]
+    [Timeout(30_000)]
     public async Task ErrorResponse_ThrowsLspRequestException(CancellationToken cancellationToken)
     {
         await using var server = new FakeLspServer();

@@ -91,8 +91,44 @@ public interface IToolRegistry
 ///     Builder for tool registration (used by plugins).
 /// </summary>
 /// <remarks>
-///     Plugins receive an <see cref="IToolRegistryBuilder" /> during initialization and call one
-///     of the <see cref="AddTool" /> overloads for each tool they wish to contribute.
+///     <para>
+///         Plugins receive an <see cref="IToolRegistryBuilder" /> during initialization and call one
+///         of the <see cref="AddTool" /> overloads for each tool they wish to contribute.
+///     </para>
+///     <para>
+///         <b>The factory overloads construct the tool at registration time (#2578).</b>
+///         This is deliberate and differs from
+///         <see cref="Harbor.Abstractions.Providers.IProviderRegistryBuilder" />, where the plain
+///         factory overload is obsolete and the id-taking overloads keep the client lazy. Three
+///         facts make the same laziness impossible for tools.
+///     </para>
+///     <list type="number">
+///         <item>
+///             The registry is keyed by <see cref="ITool.Name" />. A lazy tool has no name until its
+///             factory runs, so the key cannot be chosen without constructing it. Providers pass the
+///             key as an explicit argument, which is why their factory can stay deferred.
+///         </item>
+///         <item>
+///             <see cref="IToolRegistry.SafetyPolicies" /> are derived from every registered tool's
+///             <see cref="ITool.SafetyProfile" /> when it registers (issue #557). Deferring
+///             construction would either leave a path-taking tool unguarded for the deferral window
+///             or need a second, hand-maintained declaration table, which is the bypass that
+///             derivation removed.
+///         </item>
+///         <item>
+///             The composition root calls <c>Freeze()</c> at startup. Freeze builds a
+///             <see cref="ToolDescriptor" /> for every tool from its instance, so a lazy wrapper
+///             would be forced then even if registration deferred it.
+///         </item>
+///     </list>
+///     <para>
+///         In-tree tool constructors only capture injected dependencies, so the eager form has a
+///         bounded cost. A tool with expensive construction should be built by the caller and handed
+///         to <see cref="AddTool(ITool)" />, which keeps that cost visible at the call site. Do not
+///         mark these overloads obsolete to mirror the provider builder. The provider's laziness
+///         depends on an explicit id and on clients having neither descriptors nor safety
+///         declarations, and neither condition holds for tools.
+///     </para>
 /// </remarks>
 public interface IToolRegistryBuilder
 {

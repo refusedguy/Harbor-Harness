@@ -92,9 +92,15 @@ public sealed class FileToolOutputSpillStore : IToolOutputSpillStore
                 Directory.CreateDirectory(directory);
                 // The cleanup policy rides the creation of a session directory:
                 // the one moment the store knows it is about to add to the area.
-                // A failed sweep is logged by the sweep itself and must not
-                // fail the write — the spill matters more than the housekeeping.
-                _ = Sweep();
+                // Observe the sweep's Result instead of discarding it: a cleanup
+                // failure must not fail the write — the spill matters more than
+                // housekeeping — but it is logged here with the session that
+                // triggered it so it is not silently swallowed.
+                Result<int> sweep = Sweep();
+                if (sweep.IsFailure)
+                {
+                    FileToolOutputSpillStoreLog.SweepFailedOnSpill(_logger, sweep.Error, sessionId);
+                }
             }
 
             File.WriteAllText(path, content, Utf8NoBom);
@@ -194,10 +200,12 @@ public sealed class FileToolOutputSpillStore : IToolOutputSpillStore
 }
 
 /// <summary>
-///     SG1: BCL <c>[LoggerMessage]</c> delegates for the spill store. The
-///     exception is the LAST parameter of each, so the generator renders it
-///     with the message — the templates carry no <c>{Error}</c> placeholder,
-///     because there is no such parameter to fill it with (SYSLIB1014).
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for the spill store. On the
+///     three delegates that take an <see cref="Exception" />, it is the LAST
+///     parameter, so the generator renders it with the message — those
+///     templates carry no <c>{Error}</c> placeholder (SYSLIB1014).
+///     <see cref="SweepFailedOnSpill" /> has no exception: it logs the error
+///     text observed from the sweep's returned <c>Result</c>.
 /// </summary>
 internal static partial class FileToolOutputSpillStoreLog
 {
@@ -209,4 +217,7 @@ internal static partial class FileToolOutputSpillStoreLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Cannot sweep the spill area {Root}")]
     public static partial void SweepFailed(ILogger logger, Exception ex, string root);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Sweep during spill for session {SessionId} did not complete: {Error}")]
+    public static partial void SweepFailedOnSpill(ILogger logger, string sessionId, string error);
 }

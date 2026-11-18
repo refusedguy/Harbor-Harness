@@ -43,6 +43,12 @@ public sealed class RunBudgetTracker
     private long _outputBytes;
     private bool _tripped;
 
+    // Written only under _sync (NoteTripLocked), read lock-free by callers.
+    // volatile gives the read acquire semantics, so a limit-stop report cannot
+    // observe a stale None or the LateUsage -> CancelLag transition out of
+    // order (#2586). The enum's int backing makes each write atomic.
+    private volatile BudgetOvershootReason _overshoot = BudgetOvershootReason.None;
+
     /// <summary>
     ///     Create a ledger enforcing <paramref name="caps" />.
     /// </summary>
@@ -57,7 +63,7 @@ public sealed class RunBudgetTracker
     ///     Why the recorded spend exceeds the cap, when it does.
     ///     <see cref="BudgetOvershootReason.None" /> while within caps.
     /// </summary>
-    public BudgetOvershootReason Overshoot { get; private set; } = BudgetOvershootReason.None;
+    public BudgetOvershootReason Overshoot => _overshoot;
 
     /// <summary>
     ///     Mark one request in flight. Only parallel fan-out calls this; the
@@ -202,16 +208,16 @@ public sealed class RunBudgetTracker
         if (!_tripped)
         {
             _tripped = true;
-            Overshoot = _inFlight > 0
+            _overshoot = _inFlight > 0
                 ? BudgetOvershootReason.InFlightRequests
                 : BudgetOvershootReason.LateUsage;
         }
-        else if (Overshoot == BudgetOvershootReason.LateUsage)
+        else if (_overshoot == BudgetOvershootReason.LateUsage)
         {
             // Spend recorded after the trip: the stop decision lagged behind
             // the meter. First cause is kept for an in-flight trip — a lag
             // on top of in-flight requests adds no new information.
-            Overshoot = BudgetOvershootReason.CancelLag;
+            _overshoot = BudgetOvershootReason.CancelLag;
         }
     }
 }

@@ -52,6 +52,24 @@ public class ToolHelperTests
     }
 
     [Test]
+    public async Task JsonArgs_RequiredWrappers_KeepMessagesAndBlankRule()
+    {
+        // RequireString delegates to JsonArgValidator.RequiredNonEmptyString:
+        // empty fails, whitespace-only still passes, message unchanged.
+        var args = Parse("""{"blank":"   ","n":7}""");
+        await Assert.That(JsonArgs.RequireString(args, "missing").Error)
+            .IsEqualTo("Missing or empty 'missing'.");
+        await Assert.That(JsonArgs.RequireString(args, "blank").IsSuccess).IsTrue();
+        await Assert.That(JsonArgs.RequireString(args, "blank").Value).IsEqualTo("   ");
+
+        // RequireInt delegates to JsonArgValidator.RequiredInt, message unchanged.
+        await Assert.That(JsonArgs.RequireInt(args, "missing").Error)
+            .IsEqualTo("Missing or non-numeric 'missing'.");
+        await Assert.That(JsonArgs.RequireInt(args, "n").Value).IsEqualTo(7);
+        await Assert.That(JsonArgs.RequireInt(Parse("""{"n":"7"}"""), "n").IsFailure).IsTrue();
+    }
+
+    [Test]
     public async Task JsonArgs_GetClampedInt_ClampsAndDefaults()
     {
         var args = Parse("""{"big":50000,"small":0,"neg":-5,"one":7}""");

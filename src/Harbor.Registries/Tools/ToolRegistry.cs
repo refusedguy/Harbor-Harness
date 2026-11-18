@@ -12,32 +12,38 @@ namespace Harbor.Registries.Tools;
 public sealed class ToolRegistry : IToolRegistry
 {
     // Architecture audit v2 §CONCURRENCY-001 (RESOLVED): InvalidateFrozenSnapshot
-    // previously took `lock(_frozenLock)` just to set a single reference field to
-    // null — under write-heavy load (e.g. plugins registering many tools at
-    // startup, or hot-reload of plugin sources) this serialised every Register /
-    // Unregister call and caused a thundering-herd: each InvalidateFrozenSnapshot
-    // wake-up forced every concurrent GetTool/ResolveTools through the slow
-    // ConcurrentDictionary fallback while the lock was held. The fix is a single
-    // Interlocked.Exchange on a volatile field — no lock, no contention, and the
-    // CAS guarantees the next read sees null (volatile-read acquire) so the slow
-    // path is taken at most once per invalidation cycle.
+    // used to take a lock just to publish a null reference. Under write-heavy load
+    // (plugins registering many tools, hot-reload of plugin sources) that
+    // serialised every Register / Unregister call. Publication is lock-free now.
+    //
+    // #2570: the frozen source and the guard set derived from the registered
+    // tools (#557) are one immutable snapshot, published with a single volatile
+    // write. A reader sees either (old source, old guards) or (new source, new
+    // guards), never a registered path-taking tool whose guard is missing. Two
+    // separate volatile writes could be observed torn; one reference swap cannot.
     //
     // #358 (RESOLVED, §OOP-005): reads go through a single IToolSource path.
-    // _frozenSource (when set by Freeze()) is the fast path; otherwise the
-    // shared _concurrentSource reads the live ConcurrentDictionary. A third
+    // Snapshot.FrozenSource (when set by Freeze()) is the fast path; otherwise
+    // the shared _concurrentSource reads the live ConcurrentDictionary. A third
     // source (e.g. lazy-loaded plugin tools) plugs in as another IToolSource
     // (or a composite) without touching GetAllTools / ResolveTools / GetTool.
     private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
     private readonly ConcurrentToolSource _concurrentSource;
-    // #183: single volatile publish-once snapshot (frozen map + cached descriptor
-    // arrays + per-ruleset filtered cache). One reference swap per Freeze(), so
-    // readers never observe a torn view; dropping it drops the filtered cache too.
-    private volatile IToolSource? _frozenSource;
 
-    // #557: the safety policies implied by the registered tools, rebuilt on every
-    // registration change so the traversal guard can never lag behind the registry
-    // (the failure the hand-maintained PathGuardSafetyPolicy.DefaultTools list had).
-    private volatile IReadOnlyList<IArgSafetyPolicy> _safetyPolicies = ToolSafetyPolicies.Build([]);
+    /// <summary>
+    ///     One publication unit: the active source and the safety policies
+    ///     derived from the tool set it was built from (#2570).
+    /// </summary>
+    private sealed record RegistrySnapshot(
+        IToolSource? FrozenSource,
+        IReadOnlyList<IArgSafetyPolicy> SafetyPolicies)
+    {
+        public static RegistrySnapshot Empty { get; } = new(null, ToolSafetyPolicies.Build([]));
+    }
+
+    // #183: publish-once snapshot (frozen map + cached descriptor arrays + per-
+    // ruleset filtered cache). Dropping it drops the filtered cache too.
+    private volatile RegistrySnapshot _snapshot = RegistrySnapshot.Empty;
 
     /// <summary>
     ///     Construct an empty registry reading from the live dictionary until
@@ -51,27 +57,30 @@ public sealed class ToolRegistry : IToolRegistry
     /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
-        // Single path: one volatile read selects the active source; the cached
-        // frozen array is returned as-is (zero alloc) when frozen.
-        IToolSource source = _frozenSource ?? (IToolSource)_concurrentSource;
+        // One volatile read selects source and guards as a pair (#2570); the
+        // cached frozen array is returned as-is (zero alloc) when frozen.
+        RegistrySnapshot snapshot = _snapshot;
+        IToolSource source = snapshot.FrozenSource ?? (IToolSource)_concurrentSource;
         return source.GetAllTools();
     }
 
     /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
     {
-        // Single path: frozen snapshot serves cached/memoized arrays (zero alloc
-        // on repeat calls); unfrozen reads filter the live dictionary. Treat as read-only.
-        IToolSource source = _frozenSource ?? (IToolSource)_concurrentSource;
+        // Frozen snapshot serves cached/memoized arrays (zero alloc on repeat
+        // calls); unfrozen reads filter the live dictionary. Read-only result.
+        RegistrySnapshot snapshot = _snapshot;
+        IToolSource source = snapshot.FrozenSource ?? (IToolSource)_concurrentSource;
         return source.ResolveTools(agentName, sessionPermission);
     }
 
     /// <inheritdoc />
     public Result<ITool> GetTool(ToolName name)
     {
-        // Single path: frozen fast path first, live dictionary fallback inside
-        // the source selection (no duplicated lookup logic here).
-        IToolSource source = _frozenSource ?? (IToolSource)_concurrentSource;
+        // Frozen fast path first, live dictionary fallback inside the source
+        // selection (no duplicated lookup logic here).
+        RegistrySnapshot snapshot = _snapshot;
+        IToolSource source = snapshot.FrozenSource ?? (IToolSource)_concurrentSource;
         return source.GetTool(name);
     }
 
@@ -112,7 +121,7 @@ public sealed class ToolRegistry : IToolRegistry
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _safetyPolicies;
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _snapshot.SafetyPolicies;
 
     /// <summary>
     ///     Assembles the guard set from what is registered right now (#557).
@@ -137,26 +146,22 @@ public sealed class ToolRegistry : IToolRegistry
     public void Freeze()
     {
         // Atomic publish: readers observe either the prior snapshot or the new
-        // one — never a half-built dictionary. The volatile write on
-        // _frozenSource has release semantics so the frozen view is fully
-        // visible before the reference is published.
-        _frozenSource = FrozenToolView.Build(_tools.ToFrozenDictionary(), ToDescriptor);
+        // one, never a half-built dictionary. The volatile write has release
+        // semantics, so the frozen view is fully visible before the reference
+        // goes live. Guards are carried forward from the last registration
+        // change, which rebuilds them from the live tool set (#557).
+        _snapshot = new RegistrySnapshot(
+            FrozenToolView.Build(_tools.ToFrozenDictionary(), ToDescriptor),
+            _snapshot.SafetyPolicies);
     }
 
     private void InvalidateFrozenSnapshot()
     {
-        // Lock-free invalidation: a single CAS-write publishes null. Concurrent
-        // GetTool/ResolveTools readers may observe either the prior snapshot
-        // (still valid — they just continue using the stale-but-consistent
-        // frozen view until the next Freeze()) or null (and fall through to
-        // the ConcurrentDictionary slow path). Both outcomes are safe. Dropping
-        // the snapshot also drops its memoized per-ruleset arrays.
-        Interlocked.Exchange(ref _frozenSource, (IToolSource?)null);
-        // #557: the guard set follows the registry in lockstep. A window exists
-        // between the interlocked null above and this assignment, so a concurrent
-        // reader can observe the old snapshot with the old policies or the new one
-        // with the new ones — never a registered tool whose guard is missing.
-        _safetyPolicies = BuildSafetyPolicies();
+        // One volatile write publishes the invalidated source and the freshly
+        // derived guards together (#2570). A reader sees the previous pair or
+        // this one, so it cannot pair a newly registered tool with an older
+        // guard set. Dropping the source drops its memoized per-ruleset arrays.
+        _snapshot = new RegistrySnapshot(null, BuildSafetyPolicies());
     }
 
     /// <summary>
@@ -270,6 +275,10 @@ public sealed class ToolRegistryBuilder : IToolRegistryBuilder
         }
     }
 
+    // #2578: these factory overloads invoke the factory at registration time on purpose.
+    // The registry needs the tool instance for its key, its safety declaration (#557) and
+    // the descriptor snapshot built by Freeze(). See the IToolRegistryBuilder remarks for
+    // the full rationale and why the provider builder's obsolete overload has no twin here.
     /// <inheritdoc />
     public void AddTool<T>() where T : ITool, new() => AddTool(new T());
 

@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Env;
 using Harbor.Tools.Mcp;
 
@@ -118,7 +119,13 @@ public static class McpLoginRunner
             return 2;
         }
 
-        new McpOAuthTokenCache().Clear(name);
+        Result cleared = new McpOAuthTokenCache().Clear(name);
+        if (cleared.IsFailure)
+        {
+            error.WriteLine(cleared.Error);
+            return 1;
+        }
+
         output.WriteLine($"Logged out of MCP server '{name}' (cached tokens cleared).");
         return 0;
     }

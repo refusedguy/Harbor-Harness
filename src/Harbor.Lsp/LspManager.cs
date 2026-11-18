@@ -77,7 +77,7 @@ public sealed class LspManager : ILspService
             // The session bounds its own wait (LspServerSession.DefaultRequestTimeout):
             // a server that stopped answering fails the open instead of parking
             // the caller on a write that never completes.
-            Result opened = await session.OpenAsync(fullPath, text, LanguageIdFor(session.Definition), ct).ConfigureAwait(false);
+            Result opened = await session.OpenAsync(fullPath, text, session.Definition.LanguageId, ct).ConfigureAwait(false);
             if (opened.IsFailure)
             {
                 LspManagerLog.OpenDegraded(_logger, fullPath, opened.Error);
@@ -380,16 +380,6 @@ public sealed class LspManager : ILspService
 
         return Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? "/";
     }
-
-    private static string LanguageIdFor(LspServerDefinition definition) => definition.Id switch
-    {
-        "typescript" => "typescript",
-        "python" => "python",
-        "go" => "go",
-        "rust" => "rust",
-        "csharp" => "csharp",
-        _ => definition.Language.ToLowerInvariant(),
-    };
 
     // ── Dispose ────────────────────────────────────────────────────────────
 

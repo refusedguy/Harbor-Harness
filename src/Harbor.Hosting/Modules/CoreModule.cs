@@ -53,6 +53,8 @@ internal static class CoreModule
         // the same shared Instance, so both consumers read one cache.
         // #2230: give that one instance the bootstrap logger so context-budget
         // truncation warnings reach the log; identity stays the singleton.
+        // #2591: this is a composition-time-only attachment (SetLogger publishes
+        // via Volatile.Write); callers must not swap it on a live instance.
         // ctx.LoggerFactory is always present (AddHarborConfiguration creates it),
         // unlike ILogger<T> from DI, which bare ServiceCollections need not have.
         WorkspaceContextSource.Instance.SetLogger(

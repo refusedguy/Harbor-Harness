@@ -1,4 +1,5 @@
 #nullable enable
+static Harbor.Abstractions.Extensions.StringTruncation.Clip(string! text, int max) -> string!
 Harbor.Abstractions.Models.TranscriptIntegrity
 Harbor.Abstractions.Models.TranscriptIntegrity.<Clone>$() -> Harbor.Abstractions.Models.TranscriptIntegrity!
 Harbor.Abstractions.Models.TranscriptIntegrity.Deconstruct(out int UnreadableRecordCount, out bool IsTailTruncated, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallPart!>! UnclosedToolCalls) -> void

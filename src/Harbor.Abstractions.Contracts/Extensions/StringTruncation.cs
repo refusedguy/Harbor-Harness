@@ -84,6 +84,32 @@ public static class StringTruncation
     }
 
     /// <summary>
+    ///     Trim a stderr/diagnostic string and clip it to a bounded head with a
+    ///     trailing ellipsis (#2583). Single owner of the four per-assembly
+    ///     <c>Clip</c> copies that used to live in ChangeApplier,
+    ///     WorkspaceMaterializer, HookRunner and WorkspaceInspector. Blank input
+    ///     becomes a fixed placeholder so a failing command with no stderr still
+    ///     renders a reason instead of an empty string.
+    /// </summary>
+    /// <remarks>
+    ///     Unlike <see cref="Truncate(string?,int)" />, the ellipsis sits beyond
+    ///     <paramref name="max"/>: a cut result is <c>max + 1</c> chars. That is
+    ///     the legacy byte-for-byte output; do not fold it into the within-budget
+    ///     <see cref="Truncate(string?,int)" /> policy without updating every
+    ///     error string that pins this shape.
+    /// </remarks>
+    /// <param name="text">Diagnostic text, trimmed before measuring.</param>
+    /// <param name="max">Head length kept before the ellipsis (caller-owned cap).</param>
+    /// <returns>The trimmed text, <c>"(no stderr)"</c> when blank, or head + ellipsis.</returns>
+    public static string Clip(string text, int max)
+    {
+        string t = text.Trim();
+        if (t.Length == 0)
+            return "(no stderr)";
+        return t.Length <= max ? t : t[..max] + Ellipsis;
+    }
+
+    /// <summary>
     ///     Bound a dump to a full <paramref name="max" />-char head plus a
     ///     <c>…[truncated N chars]</c> marker appended beyond it.
     /// </summary>

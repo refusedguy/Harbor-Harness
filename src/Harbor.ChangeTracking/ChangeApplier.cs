@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.ChangeTracking;
 
@@ -203,7 +204,7 @@ public static class ChangeApplier
         GitOutput checkOut = check.Value;
         if (checkOut.ExitCode != 0)
             return Fail($"Run '{manifest.RunId}': git apply --check failed: " +
-                $"{Clip(checkOut.Stderr)} Nothing written, tree unchanged.");
+                $"{StringTruncation.Clip(checkOut.Stderr, MaxStderrInError)} Nothing written, tree unchanged.");
 
         Result<string> recheck = await RevParseHeadAsync(manifest.RepoRoot, ct).ConfigureAwait(false);
         if (recheck.IsFailure)
@@ -263,7 +264,7 @@ public static class ChangeApplier
         {
             GitOutput checkOut = check.Value;
             if (checkOut.ExitCode != 0)
-                sb.Append($" Pre-check FAILS: {Clip(checkOut.Stderr)}");
+                sb.Append($" Pre-check FAILS: {StringTruncation.Clip(checkOut.Stderr, MaxStderrInError)}");
             else
                 sb.Append(" Pre-check passes.");
         }
@@ -306,11 +307,11 @@ public static class ChangeApplier
         if (clean)
             return new AcceptResult(
                 AcceptOutcome.Refused, 4,
-                $"Run '{manifest.RunId}': git apply failed ({Clip(applyStderr)}); " +
+                $"Run '{manifest.RunId}': git apply failed ({StringTruncation.Clip(applyStderr, MaxStderrInError)}); " +
                 "rollback (apply --reverse) restored a clean tree. Nothing applied.");
 
         var sb = new StringBuilder();
-        sb.Append($"Run '{manifest.RunId}': git apply failed ({Clip(applyStderr)}); ");
+        sb.Append($"Run '{manifest.RunId}': git apply failed ({StringTruncation.Clip(applyStderr, MaxStderrInError)}); ");
         sb.Append("rollback did NOT restore a clean tree — manual repair required. Recovery: ");
         sb.Append($"git -C \"{manifest.RepoRoot}\" status --porcelain; ");
         sb.Append($"git -C \"{manifest.RepoRoot}\" apply --reverse --index \"{patchPath}\"; ");
@@ -325,7 +326,7 @@ public static class ChangeApplier
             repoRoot, ["rev-parse", "HEAD"], ProbeTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<string>(
-                    $"git rev-parse HEAD failed in '{repoRoot}': {Clip(o.Stderr)}")
+                    $"git rev-parse HEAD failed in '{repoRoot}': {StringTruncation.Clip(o.Stderr, MaxStderrInError)}")
                 : Result.Success(o.Stdout.Trim()))
             .Ensure(static sha => sha.Length > 0, $"git rev-parse HEAD returned empty output in '{repoRoot}'.");
     }
@@ -339,7 +340,7 @@ public static class ChangeApplier
         GitOutput statusOut = status.Value;
         if (statusOut.ExitCode != 0)
             return Result.Failure<IReadOnlyList<string>>(
-                $"git status failed in '{repoRoot}': {Clip(statusOut.Stderr)}");
+                $"git status failed in '{repoRoot}': {StringTruncation.Clip(statusOut.Stderr, MaxStderrInError)}");
         var tracked = new List<string>();
         ReadOnlySpan<char> rest = statusOut.Stdout.AsSpan();
         while (true)
@@ -472,14 +473,6 @@ public static class ChangeApplier
         string stdout = await stdoutTask.ConfigureAwait(false);
         string stderr = await stderrTask.ConfigureAwait(false);
         return Result.Success(new GitOutput(proc.ExitCode, stdout, stderr));
-    }
-
-    private static string Clip(string text)
-    {
-        string t = text.Trim();
-        if (t.Length == 0)
-            return "(no stderr)";
-        return t.Length <= MaxStderrInError ? t : t[..MaxStderrInError] + "…";
     }
 
     private static string OneLine(string text, int max)

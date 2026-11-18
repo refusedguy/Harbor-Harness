@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
 
@@ -38,11 +39,18 @@ internal sealed partial class McpOAuthJsonContext : JsonSerializerContext
 public sealed class McpOAuthTokenCache
 {
     private readonly string _directory;
+    private readonly ILogger? _logger;
 
-    /// <summary>Construct over an explicit directory (tests) or the harbor home.</summary>
-    public McpOAuthTokenCache(string? directory = null)
+    /// <summary>
+    ///     Construct over an explicit directory (tests) or the harbor home.
+    ///     The optional logger receives a warning with the exception whenever a
+    ///     write or delete fails — the caller gets the same failure as a
+    ///     <see cref="Result" />, so the error is never silently dropped.
+    /// </summary>
+    public McpOAuthTokenCache(string? directory = null, ILogger? logger = null)
     {
         _directory = directory ?? DefaultDirectory();
+        _logger = logger;
     }
 
     /// <summary>
@@ -114,8 +122,13 @@ public sealed class McpOAuthTokenCache
         }
     }
 
-    /// <summary>Persist tokens (best-effort; failures are swallowed — callers fall back to login).</summary>
-    public void Save(string server, McpOAuthTokens tokens)
+    /// <summary>
+    ///     Persist tokens. A failed write is a <see cref="Result" /> failure, not
+    ///     a swallowed exception: the caller must not report "token cached" when
+    ///     nothing reached disk. The failure is also logged with the exception
+    ///     when a logger was supplied.
+    /// </summary>
+    public Result Save(string server, McpOAuthTokens tokens)
     {
         try
         {
@@ -124,33 +137,57 @@ public sealed class McpOAuthTokenCache
                 new McpPersistedTokens(tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc),
                 McpOAuthJsonContext.Default.McpPersistedTokens);
             File.WriteAllText(PathFor(server), payload);
+            return Result.Success();
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            // Best-effort cache — save failures fall back to interactive login.
+            if (_logger is not null) McpOAuthTokenCacheLog.SaveFailed(_logger, ex, server);
+            return Result.Failure($"Cannot save cached OAuth tokens for MCP server '{server}': {ex.Message}");
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
-            // Best-effort cache — save failures fall back to interactive login.
+            if (_logger is not null) McpOAuthTokenCacheLog.SaveFailed(_logger, ex, server);
+            return Result.Failure($"Cannot save cached OAuth tokens for MCP server '{server}': {ex.Message}");
         }
     }
 
-    /// <summary>Drop cached tokens (logout).</summary>
-    public void Clear(string server)
+    /// <summary>
+    ///     Drop cached tokens (logout). A failed delete is a
+    ///     <see cref="Result" /> failure so the caller cannot claim the cache was
+    ///     cleared when it was not; the exception is logged when available.
+    /// </summary>
+    public Result Clear(string server)
     {
         try
         {
             string path = PathFor(server);
             if (File.Exists(path))
                 File.Delete(path);
+            return Result.Success();
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            // Best-effort cache — clear failures are harmless.
+            if (_logger is not null) McpOAuthTokenCacheLog.ClearFailed(_logger, ex, server);
+            return Result.Failure($"Cannot clear cached OAuth tokens for MCP server '{server}': {ex.Message}");
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
-            // Best-effort cache — clear failures are harmless.
+            if (_logger is not null) McpOAuthTokenCacheLog.ClearFailed(_logger, ex, server);
+            return Result.Failure($"Cannot clear cached OAuth tokens for MCP server '{server}': {ex.Message}");
         }
     }
+}
+
+/// <summary>
+///     BCL <c>[LoggerMessage]</c> delegates for <see cref="McpOAuthTokenCache" />.
+///     Each delegate carries the exception so the write/delete failure is not
+///     reduced to a bare message when it reaches the log.
+/// </summary>
+internal static partial class McpOAuthTokenCacheLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Could not save cached OAuth tokens for MCP server '{Server}'")]
+    public static partial void SaveFailed(ILogger logger, Exception ex, string server);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Could not clear cached OAuth tokens for MCP server '{Server}'")]
+    public static partial void ClearFailed(ILogger logger, Exception ex, string server);
 }

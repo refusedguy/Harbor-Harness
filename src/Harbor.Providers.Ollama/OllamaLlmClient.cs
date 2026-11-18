@@ -269,7 +269,7 @@ public sealed class OllamaLlmClient : ILlmClient
                     break;
 
                 case LlmAssistantMessage assistant:
-                    WriteAssistant(writer, assistant);
+                    WriteAssistant(writer, assistant, logger);
                     break;
 
                 case LlmToolResultMessage result:
@@ -290,11 +290,11 @@ public sealed class OllamaLlmClient : ILlmClient
     ///     <c>""</c> rather than omitting <c>content</c> when the turn carries no
     ///     text: Ollama's template expects the key to be present.
     /// </summary>
-    private static void WriteAssistant(Utf8JsonWriter writer, LlmAssistantMessage assistant)
+    private static void WriteAssistant(Utf8JsonWriter writer, LlmAssistantMessage assistant, ILogger logger)
     {
         writer.WriteStartObject();
         writer.WriteString("role", "assistant");
-        writer.WriteString("content", FirstTextOrEmpty(assistant.Content));
+        writer.WriteString("content", ProviderPayload.FirstTextOrEmpty(assistant.Content, logger, "ollama"));
 
         writer.WriteStartArray("tool_calls");
         for (int i = 0; i < assistant.Content.Count; i++)
@@ -324,20 +324,6 @@ public sealed class OllamaLlmClient : ILlmClient
         writer.WriteString("role", role);
         writer.WriteString("content", content);
         writer.WriteEndObject();
-    }
-
-    /// <summary>The first text block's text, or an empty string when there is none.</summary>
-    private static string FirstTextOrEmpty(IReadOnlyList<LlmContentBlock> content)
-    {
-        for (int i = 0; i < content.Count; i++)
-        {
-            if (content[i] is LlmTextBlock text)
-            {
-                return text.Text;
-            }
-        }
-
-        return "";
     }
 
     /// <summary>

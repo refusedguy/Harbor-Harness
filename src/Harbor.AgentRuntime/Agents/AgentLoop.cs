@@ -606,7 +606,9 @@ public sealed class AgentLoop : IAgentLoop
             string failure = string.Format(CultureInfo.InvariantCulture, CoreResources.GetError("AgentFailed"), ex.Message);
             AgentLoopLog.RunFailed(_logger, ex, session.Session.Id, failure);
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
-            return Result.Failure(ex.Message);
+            // #2592: return the same enriched text that went to the correlated log
+            // record; the bare ex.Message loses the format tag the log carries.
+            return Result.Failure(failure);
         }
         finally
         {

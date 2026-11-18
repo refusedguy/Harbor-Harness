@@ -68,7 +68,15 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         long Version);
 
     private readonly ConcurrentDictionary<string, CachedSnapshot> _cache = new(StringComparer.Ordinal);
+
+    // Published once at composition time by SetLogger (or supplied by the
+    // constructor). Post-construction writes go through Volatile.Write and every
+    // read goes through Volatile.Read via Logger, so a load racing with a late
+    // attachment sees either the old or the new logger, never a torn value
+    // (#2591).
     private ILogger<WorkspaceContextService>? _logger;
+
+    private ILogger<WorkspaceContextService>? Logger => Volatile.Read(ref _logger);
 
     /// <summary>
     ///     Create a workspace source. The logger is optional: the static migration
@@ -83,7 +91,19 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     ///     pre-DI callers share a cache; attaching here keeps that identity while
     ///     letting budget warnings reach the log (#2230).
     /// </summary>
-    public void SetLogger(ILogger<WorkspaceContextService> logger) => _logger = logger;
+    /// <remarks>
+    ///     Composition-time only: call once, before the first workspace load.
+    ///     The field is written through <see cref="Volatile.Write{T}(ref T, T)" />
+    ///     and read through <see cref="Volatile.Read{T}(ref T)" />, so a load that
+    ///     races with a late attachment observes either the old logger or the new
+    ///     one, never a torn value; callers must not use this to swap a logger on
+    ///     a live instance (#2591).
+    /// </remarks>
+    public void SetLogger(ILogger<WorkspaceContextService> logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        Volatile.Write(ref _logger, logger);
+    }
 
     /// <summary>
     ///     Cached variant of the two per-turn loads. The version is a SHA-256
@@ -153,8 +173,8 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
             // Best-effort version: a partial fingerprint can match a stale
             // snapshot and serve an outdated prompt. Log the cause instead of
             // failing silently.
-            if (_logger is not null)
-                WorkspaceContextServiceLog.VersionFingerprintFailed(_logger, ex);
+            if (Logger is { } logger)
+                WorkspaceContextServiceLog.VersionFingerprintFailed(logger, ex);
         }
 
         return BitConverter.ToInt64(hash.GetHashAndReset(), 0);
@@ -202,7 +222,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
 
             if (remaining <= 0)
             {
-                _logger?.LogWarning(
+                Logger?.LogWarning(
                     "Project context budget: skipped '{File}' because the combined {Budget}-byte budget is already exhausted. Trim AGENTS.md/CLAUDE.md or move content into a skill.",
                     name, MaxContextBytes);
                 continue;
@@ -219,7 +239,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
                 byte[] bytes = File.ReadAllBytes(path);
                 if (bytes.Length > remaining)
                 {
-                    _logger?.LogWarning(
+                    Logger?.LogWarning(
                         "Project context budget: truncated '{File}' to {Kept} of {Total} bytes under the combined {Budget}-byte budget. Trim AGENTS.md/CLAUDE.md or move content into a skill.",
                         name, remaining, bytes.Length, MaxContextBytes);
                     bytes = bytes[..remaining];
@@ -235,8 +255,8 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
             catch (IOException ex)
             {
                 // Unreadable context file — skip it; the prompt builds without it.
-                if (_logger is not null)
-                    WorkspaceContextServiceLog.ContextFileSkipped(_logger, ex, name);
+                if (Logger is { } logger)
+                    WorkspaceContextServiceLog.ContextFileSkipped(logger, ex, name);
             }
         }
 
@@ -341,14 +361,14 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         }
         catch (IOException ex)
         {
-            if (_logger is not null)
-                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
+            if (Logger is { } logger)
+                WorkspaceContextServiceLog.SkillRootUnreadable(logger, ex, directory);
             return;
         }
         catch (UnauthorizedAccessException ex)
         {
-            if (_logger is not null)
-                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
+            if (Logger is { } logger)
+                WorkspaceContextServiceLog.SkillRootUnreadable(logger, ex, directory);
             return;
         }
 
@@ -389,14 +409,14 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         }
         catch (IOException ex)
         {
-            if (_logger is not null)
-                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
+            if (Logger is { } logger)
+                WorkspaceContextServiceLog.SkillRootUnreadable(logger, ex, directory);
             return;
         }
         catch (UnauthorizedAccessException ex)
         {
-            if (_logger is not null)
-                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
+            if (Logger is { } logger)
+                WorkspaceContextServiceLog.SkillRootUnreadable(logger, ex, directory);
             return;
         }
 
@@ -457,8 +477,8 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         catch (IOException ex)
         {
             // Fall through to null below (no front-matter name).
-            if (_logger is not null)
-                WorkspaceContextServiceLog.SkillFrontMatterUnreadable(_logger, ex, filePath);
+            if (Logger is { } logger)
+                WorkspaceContextServiceLog.SkillFrontMatterUnreadable(logger, ex, filePath);
         }
 
         return null;
@@ -518,8 +538,8 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         catch (IOException ex)
         {
             // Fall through to the generic descriptor below.
-            if (_logger is not null)
-                WorkspaceContextServiceLog.SkillFrontMatterUnreadable(_logger, ex, filePath);
+            if (Logger is { } logger)
+                WorkspaceContextServiceLog.SkillFrontMatterUnreadable(logger, ex, filePath);
         }
 
         return "No description provided.";

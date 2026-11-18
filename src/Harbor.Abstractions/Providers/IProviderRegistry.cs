@@ -73,9 +73,22 @@ public interface IProviderRegistry
 ///     Builder for provider registration (used by plugins).
 /// </summary>
 /// <remarks>
-///     Plugins receive an <see cref="IProviderRegistryBuilder" /> during initialization and call
-///     one of the <see cref="AddProvider" /> overloads for each provider they wish to contribute.
-///     Registration failures surface as <see cref="InvalidOperationException" />.
+///     <para>
+///         Plugins receive an <see cref="IProviderRegistryBuilder" /> during initialization and call
+///         one of the <see cref="AddProvider" /> overloads for each provider they wish to contribute.
+///         Registration failures surface as <see cref="InvalidOperationException" />.
+///     </para>
+///     <para>
+///         The id-taking overloads are lazy: the registry wraps the factory in a
+///         <c>Lazy&lt;ILlmClient&gt;</c> and does not invoke it until a client is requested.
+///         <see cref="AddProvider(Func{ILlmClient})" /> cannot be lazy because it reads the client's
+///         own id to choose the key, so it invokes the factory once at registration and is marked
+///         obsolete on the concrete builder. Tool builders follow the opposite policy and construct
+///         at registration on purpose; see
+///         <see cref="Harbor.Abstractions.Tools.IToolRegistryBuilder" />. The difference is that a
+///         client needs no descriptor and no safety declaration, while a tool supplies both from
+///         its instance.
+///     </para>
 /// </remarks>
 public interface IProviderRegistryBuilder
 {

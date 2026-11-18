@@ -58,6 +58,9 @@ public sealed class HookConfig
     private bool _loaded;
     private DateTime _writeStamp = DateTime.MinValue;
     private IReadOnlyDictionary<string, IReadOnlyList<HookEntry>> _table = EmptyTable;
+    // Written under _lock by the reload. Volatile publishes that write to the
+    // public LoadError readers that live outside the lock.
+    private volatile string? _loadError;
 
     /// <summary>Construct a hook config bound to <paramref name="path" />.</summary>
     /// <param name="path">Config path override; defaults to <see cref="GetDefaultPath" />.</param>
@@ -70,7 +73,12 @@ public sealed class HookConfig
     ///     The last load failure, if the file exists but could not be parsed.
     ///     Null when the file is absent (no hooks — not an error) or healthy.
     /// </summary>
-    public string? LoadError { get; private set; }
+    /// <remarks>
+    ///     Volatile-backed for safe publication from the reload thread. A caller
+    ///     that needs the error to match a particular set of hooks must use
+    ///     <see cref="GetHooksWithError" />, which reads both under one lock.
+    /// </remarks>
+    public string? LoadError => _loadError;
 
     /// <summary>Returns the default config file path (<c>~/.harbor/hooks.json</c>).</summary>
     public static string GetDefaultPath()
@@ -84,31 +92,46 @@ public sealed class HookConfig
     ///     <paramref name="toolName" />. A null <paramref name="toolName" />
     ///     (e.g. <c>SessionEnd</c>, which has no tool) returns every entry.
     /// </summary>
-    public IReadOnlyList<HookEntry> GetHooks(string eventName, string? toolName)
+    public IReadOnlyList<HookEntry> GetHooks(string eventName, string? toolName) =>
+        GetHooksWithError(eventName, toolName).Entries;
+
+    /// <summary>
+    ///     Hooks and the load error from the SAME reload, read under one lock.
+    ///     The runner uses this so a concurrent reload cannot swap the error
+    ///     between the hook lookup and the error read (the old pair of calls
+    ///     released <c>_lock</c> in between and could log a stale warning).
+    /// </summary>
+    internal HookLookup GetHooksWithError(string eventName, string? toolName)
     {
-        var table = GetTable();
-        if (!table.TryGetValue(eventName, out var entries))
+        lock (_lock)
         {
-            return [];
-        }
-
-        if (toolName is null)
-        {
-            return entries;
-        }
-
-        List<HookEntry>? matched = null;
-        for (int i = 0; i < entries.Count; i++)
-        {
-            if (Matches(entries[i].Matcher, toolName))
+            IReadOnlyDictionary<string, IReadOnlyList<HookEntry>> table = GetTableCore();
+            if (!table.TryGetValue(eventName, out var entries))
             {
-                matched ??= new List<HookEntry>();
-                matched.Add(entries[i]);
+                return new HookLookup([], _loadError);
             }
-        }
 
-        return matched ?? (IReadOnlyList<HookEntry>)[];
+            if (toolName is null)
+            {
+                return new HookLookup(entries, _loadError);
+            }
+
+            List<HookEntry>? matched = null;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (Matches(entries[i].Matcher, toolName))
+                {
+                    matched ??= new List<HookEntry>();
+                    matched.Add(entries[i]);
+                }
+            }
+
+            return new HookLookup(matched ?? (IReadOnlyList<HookEntry>)[], _loadError);
+        }
     }
+
+    /// <summary>Hooks and the load error observed by one locked reload.</summary>
+    internal readonly record struct HookLookup(IReadOnlyList<HookEntry> Entries, string? LoadError);
 
     /// <summary>
     ///     Matcher predicate, factored out so tests can pin it without a file.
@@ -145,26 +168,25 @@ public sealed class HookConfig
         return false;
     }
 
-    private IReadOnlyDictionary<string, IReadOnlyList<HookEntry>> GetTable()
+    // Called only while _lock is held (from GetHooksWithError). Returns the
+    // current table, reloading from disk when the file's stamp has moved.
+    private IReadOnlyDictionary<string, IReadOnlyList<HookEntry>> GetTableCore()
     {
-        lock (_lock)
+        DateTime stamp = File.Exists(_path) ? File.GetLastWriteTimeUtc(_path) : DateTime.MinValue;
+        if (_loaded && stamp == _writeStamp)
         {
-            DateTime stamp = File.Exists(_path) ? File.GetLastWriteTimeUtc(_path) : DateTime.MinValue;
-            if (_loaded && stamp == _writeStamp)
-            {
-                return _table;
-            }
-
-            _table = LoadCore();
-            _writeStamp = stamp;
-            _loaded = true;
             return _table;
         }
+
+        _table = LoadCore();
+        _writeStamp = stamp;
+        _loaded = true;
+        return _table;
     }
 
     private IReadOnlyDictionary<string, IReadOnlyList<HookEntry>> LoadCore()
     {
-        LoadError = null;
+        _loadError = null;
         if (!File.Exists(_path))
         {
             return EmptyTable;
@@ -178,7 +200,7 @@ public sealed class HookConfig
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is JsonException)
         {
-            LoadError = $"Cannot parse '{_path}': {ex.Message}";
+            _loadError = $"Cannot parse '{_path}': {ex.Message}";
             return EmptyTable;
         }
 

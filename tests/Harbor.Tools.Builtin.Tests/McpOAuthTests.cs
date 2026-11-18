@@ -70,25 +70,30 @@ public class McpOAuthTests : IDisposable
         new(new StubHttpMessageHandler(respond));
 
     [Test]
-    public async Task OAuthConfig_Parse_ReadsAuthBlock()
+    public async Task OAuthConfig_ParseResult_ReadsAuthBlock()
     {
         using var doc = JsonDocument.Parse("""
             {"url": "https://mcp.example.com/mcp", "transport": "sse",
              "auth": {"clientId": "cid", "scopes": ["a", "b"], "tokenEndpoint": "https://x/token"}}
             """);
-        var cfg = McpOAuthConfig.Parse(doc.RootElement);
+        var result = McpOAuthConfig.ParseResult(doc.RootElement);
 
-        await Assert.That(cfg).IsNotNull();
-        await Assert.That(cfg!.ClientId).IsEqualTo("cid");
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.HasValue).IsTrue();
+        var cfg = result.Value.Value;
+        await Assert.That(cfg.ClientId).IsEqualTo("cid");
         await Assert.That(cfg.Scopes).IsEquivalentTo(["a", "b"]);
         await Assert.That(cfg.TokenEndpoint).IsEqualTo("https://x/token");
     }
 
     [Test]
-    public async Task OAuthConfig_Parse_MissingAuth_ReturnsNull()
+    public async Task OAuthConfig_ParseResult_MalformedAuth_ReturnsFailure()
     {
-        using var doc = JsonDocument.Parse("""{"url": "https://mcp.example.com/mcp"}""");
-        await Assert.That(McpOAuthConfig.Parse(doc.RootElement)).IsNull();
+        using var doc = JsonDocument.Parse("""{"url": "https://mcp.example.com/mcp", "auth": "not-an-object"}""");
+        var result = McpOAuthConfig.ParseResult(doc.RootElement);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("InvalidAuthBlock");
     }
 
     [Test]
@@ -191,6 +196,21 @@ public class McpOAuthTests : IDisposable
         await Assert.That(loaded).IsNotNull();
         await Assert.That(loaded!.AccessToken).IsEqualTo("at");
         await Assert.That(loaded.IsExpired(DateTimeOffset.UtcNow)).IsFalse();
+    }
+
+    [Test]
+    public async Task TokenCache_Save_FailureIsObserved()
+    {
+        // A file where the cache directory should be makes CreateDirectory
+        // throw. The old void Save swallowed it; the caller must now see it.
+        string blocked = Path.Combine(_root, "blocked-dir");
+        await File.WriteAllTextAsync(blocked, "not a directory");
+        var cache = new McpOAuthTokenCache(blocked);
+
+        Result saved = cache.Save("srv", new McpOAuthTokens("at", null, DateTimeOffset.UtcNow.AddHours(1)));
+
+        await Assert.That(saved.IsFailure).IsTrue();
+        await Assert.That(saved.Error).Contains("Cannot save cached OAuth tokens");
     }
 
     [Test]
@@ -356,6 +376,36 @@ public class McpOAuthTests : IDisposable
         await Assert.That(cache.Load("srv")!.AccessToken).IsEqualTo("fresh");
     }
 
+    [Test]
+    public async Task Handler_Refresh_SaveFailure_IsPropagated()
+    {
+        var cache = new McpOAuthTokenCache(_root);
+        cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
+
+        // The Load above succeeded; break the cache between Load and Save so
+        // the write fails. The handler must report that instead of handing out
+        // a token that will vanish on the next start.
+        using var http = StubClient(_ =>
+        {
+            Directory.Delete(_root, recursive: true);
+            File.WriteAllText(_root, "blocked");
+            return Json(new McpOAuthTokenResponse("fresh", 3600));
+        });
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig
+            {
+                ClientId = "cid",
+                AuthorizationEndpoint = "https://x/authorize",
+                TokenEndpoint = "https://x/token",
+            },
+            cache, () => http);
+
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("could not be cached");
+    }
+
     /// <summary>
     ///     The other half of the boundary #566 draws: a token DID exist and the
     ///     authorization server rejected the refresh grant. That is an error, it
@@ -513,14 +563,18 @@ public class McpOAuthTests : IDisposable
     }
 
     [Test]
-    public async Task Loopback_ParseQuery_ValidatesState()
+    public async Task Loopback_ParseQueryResult_ValidatesState()
     {
-        await Assert.That(
-            McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=s1 HTTP/1.1", "code", "s1"))
-            .IsEqualTo("abc");
-        await Assert.That(
-            McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=evil HTTP/1.1", "code", "s1"))
-            .IsNull();
+        var matched = McpLoopbackListener.ParseQueryResult(
+            "GET /callback?code=abc&state=s1 HTTP/1.1", "code", "s1");
+        await Assert.That(matched.IsSuccess).IsTrue();
+        await Assert.That(matched.Value.HasValue).IsTrue();
+        await Assert.That(matched.Value.Value).IsEqualTo("abc");
+
+        var mismatched = McpLoopbackListener.ParseQueryResult(
+            "GET /callback?code=abc&state=evil HTTP/1.1", "code", "s1");
+        await Assert.That(mismatched.IsSuccess).IsTrue();
+        await Assert.That(mismatched.Value.HasNoValue).IsTrue();
     }
 
     [Test]

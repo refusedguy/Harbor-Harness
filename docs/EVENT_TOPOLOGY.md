@@ -35,7 +35,7 @@ snapshot of subscribers in the publisher's own call stack**.
 producers (await PublishAsync directly)
   AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:331,489,542,567,582,597,608
   ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,915,1035
-  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:245,281,574
+  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:275,311,604
   SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:214
   TurnRunner .................... src/Harbor.AgentRuntime/Agents/TurnRunner.cs:256,284,318,329,343,481,801,922,979,1015,1265,1413
   ToolRetryPolicy ............... src/Harbor.AgentRuntime/Agents/ToolRetryPolicy.cs:131,215,262,287,307,329
@@ -48,10 +48,10 @@ InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.
      (zero subscribers + no mandatory sink + ring unarmed ⇒ returns before
       touching a collection; falls through to the slow path otherwise)
   1. middleware pipeline (registration order; drop/throw ⇒ event dies here)
-     ............................ src/Harbor.Registries/Events/InMemoryEventBus.cs:489 (+816-847)
-  2. scrollback ring append ...... src/Harbor.Registries/Events/InMemoryEventBus.cs:498 (+src/Harbor.Registries/Events/EventBusScrollbackStore.cs:179-201)
-  3. lock-free snapshot .......... src/Harbor.Registries/Events/InMemoryEventBus.cs:504
-  4. sequential awaited fan-out .. src/Harbor.Registries/Events/InMemoryEventBus.cs:533 (+862-956)
+     ............................ src/Harbor.Registries/Events/InMemoryEventBus.cs:545 (+873-879)
+  2. scrollback ring append ...... src/Harbor.Registries/Events/InMemoryEventBus.cs:554 (+src/Harbor.Registries/Events/EventBusScrollbackStore.cs:179-201)
+  3. lock-free snapshot .......... src/Harbor.Registries/Events/InMemoryEventBus.cs:560
+  4. sequential awaited fan-out .. src/Harbor.Registries/Events/InMemoryEventBus.cs:589 (+892-986)
         │ same event reference to every subscriber in the snapshot, in subscription order
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
@@ -64,7 +64,7 @@ subscribers (all in-process, each owns its IDisposable — see §6)
   CellForge bridges (one owned handle) ...... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:26
   Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
   DemoCellForgeScreen (demo scene) .......... apps/Harbor.App.Cli/Demo/DemoCellForgeScreen.cs:278
-  TurnChangeOracle (turn summary) ........... src/Harbor.Application/Observability/TurnChangeOracle.cs:133,134,135,136
+  TurnChangeOracle (turn summary) ........... src/Harbor.Application/Observability/TurnChangeOracle.cs:137,138,139,140
 ```
 
 ### 1.1 The rows' criterion
@@ -191,11 +191,11 @@ is the subscriber's business, and the live branches are:
 - **G1 — per-producer sequential order.** A single producer that `await`s each
   `PublishAsync` before the next publish is observed in publish order by every
   subscriber that stays attached: the fan-out loop awaits handlers in snapshot
-  order per event (`InMemoryEventBus.cs:533,862-956`), and sequential awaits
+  order per event (`InMemoryEventBus.cs:589,892-986`), and sequential awaits
   serialize publishes. Tested: `EventTopologySemanticsTests.SingleProducer_OrderPreserved`.
 - **G2 — single observed sequence per publish.** All subscribers in one
   publish's snapshot receive the **same event reference in the same position**
-  of their stream (snapshot taken once at `InMemoryEventBus.cs:504`). Tested:
+  of their stream (snapshot taken once at `InMemoryEventBus.cs:560`). Tested:
   `EventTopologySemanticsTests.SingleObservedSequence_AllSubscribersSeeSameOrder`.
 - **G3 — NO wall-clock / cross-producer total order.** Concurrent publishers
   interleave arbitrarily; "channel-acceptance order" is just whichever
@@ -218,7 +218,7 @@ is the subscriber's business, and the live branches are:
   (This is stronger than "accepted ≠ processed": for the common case they
   coincide; they diverge only for over-budget slow subscribers, whose orphaned
   task stays observed via a fault-logging continuation,
-  `InMemoryEventBus.cs:914`.)
+  `InMemoryEventBus.cs:944`.)
 - **No durability in the bus.** Crash loses everything not yet in
   `ISessionStore`: the scrollback ring is memory-only, and there is no
   graceful-shutdown drain API — `IEventBus` declares no `Dispose`/`Complete`
@@ -230,7 +230,7 @@ is the subscriber's business, and the live branches are:
   `PublishAsync` calls honour the caller's `CancellationToken` — cancellation
   abandons the remaining fan-out (tail loss by design).
 - **Late subscribers get future events only.** `Subscribe` never replays
-  (`InMemoryEventBus.cs:542-551`); history is available only as an explicit
+  (`InMemoryEventBus.cs:598-607`); history is available only as an explicit
   pull via `GetScrollback` (repeatable point-in-time copy,
   `src/Harbor.Registries/Events/EventBusScrollbackStore.cs:127-171`). Tested:
   `EventTopologySemanticsTests.LateSubscriber_SeesFutureOnly_ScrollbackIsSnapshot`.
@@ -271,7 +271,7 @@ is the subscriber's business, and the live branches are:
 
 - **Throwing subscriber is evicted, others continue** — an exception in one
   handler marks it dead and removes it after the publish
-  (`InMemoryEventBus.cs:927-939`), never halting the renderer or other
+  (`InMemoryEventBus.cs:957-969`), never halting the renderer or other
   subscribers. Pre-existing test: `EventBusTests.FailingSubscriber_DoesNotBlockOthers`.
 - **An agent listener that throws is logged and KEPT** — `IAgent.Subscribe` wraps
   the caller's callback so the exception never reaches the bus
@@ -281,13 +281,13 @@ is the subscriber's business, and the live branches are:
   Tested: `AgentListenerFanOutTests.ThrowingListener_IsLoggedAndSkipped_AndStaysSubscribed`.
 - **Middleware failure drops the event for everyone** — a `false` return or a
   throw anywhere in the pipeline returns before scrollback and fan-out
-  (`InMemoryEventBus.cs:483-489,807-840`). Middleware is therefore a mandatory
+  (`InMemoryEventBus.cs:539-545,863-879`). Middleware is therefore a mandatory
   filter, not an optional listener.
 - **Slow-subscriber budget (A4):** each handler gets `DefaultHandlerBudget`
   (250 ms, `InMemoryEventBus.cs:118`); an over-budget handler is left behind
   (orphaned but observed), accrues a strike, and is evicted after
   `MaxSlowStrikes` (3, `InMemoryEventBus.cs:134`) consecutive strikes
-  (`InMemoryEventBus.cs:895-908,911-932`). `TimeSpan.Zero` disables the budget
+  (`InMemoryEventBus.cs:925-938,941-962`). `TimeSpan.Zero` disables the budget
   (legacy blocking semantics). Pre-existing tests:
   `EventBusBackpressureTests` (all three cases).
 - **Scrollback eviction (drop-oldest):** at capacity the oldest slot is
@@ -297,9 +297,9 @@ is the subscriber's business, and the live branches are:
 ## 6. Subscription lifecycle
 
 - Every `Subscribe` returns an `IDisposable`; disposal CAS-removes that exact
-  `Subscription` record (`InMemoryEventBus.cs:542-551,568-583`). Disposal is
+  `Subscription` record (`InMemoryEventBus.cs:598-607,624-639`). Disposal is
   idempotent (`_action = null` after first invoke,
-  `InMemoryEventBus.cs:1164-1178`).
+  `InMemoryEventBus.cs:1194-1208`).
 - Holders responsible for disposal: `EventBroadcaster.DisposeAsync`,
   `InProcessHarborClient`, the CellForge REPL pump (`using var busPump`,
   `ReplLifecycle.cs:176-182`), CellForge bridges
@@ -346,7 +346,7 @@ is the subscriber's business, and the live branches are:
    - **Nothing on the synchronous path suspends.** A subscriber that returns an
      already-completed `ValueTask` — the common case, and the one
      `PublishAsync_1Sub` measures — takes `DispatchToOneAsync`'s
-     `IsCompletedSuccessfully` branch (`InMemoryEventBus.cs:1024`) and returns
+     `IsCompletedSuccessfully` branch (`InMemoryEventBus.cs:1054`) and returns
      without a real suspension, so the `async Task` helpers beneath it stay
      structs on the stack and hand back the builder's cached completed task.
    - **The bytes that remain are not the interface's.** 200 B/publish on the

@@ -18,16 +18,26 @@ namespace Harbor.Ui.Framework.Commands;
 ///     running a handler. <c>/exit</c> and <c>/quit</c> are handled by the REPL runner
 ///     before any handler lookup, so they carry no execute delegate.
 /// </param>
+/// <param name="Source">
+///     Where the command comes from (#2686 Q06). Builtins leave the default; a
+///     provider- or skill-contributed command declares its own origin here so help
+///     and palettes can show it. Trailing optional parameter so no existing caller
+///     has to change.
+/// </param>
 public sealed record SlashCommandDefinition(
     string Name,
     string Description,
     IReadOnlyList<string> Aliases,
     IReadOnlyList<string>? ArgSuggestions = null,
     string Group = SlashCommandCatalog.GroupOther,
-    bool QuitsLoop = false)
+    bool QuitsLoop = false,
+    CommandSource Source = CommandSource.Builtin)
 {
     /// <summary>The command as the user types it, including the leading <c>/</c>.</summary>
     public string Invocation => "/" + Name;
+
+    /// <summary>The lowercase provenance label shown in help output.</summary>
+    public string SourceLabel => Source.Label();
 }
 
 /// <summary>
