@@ -39,6 +39,16 @@
   </ItemGroup>
 
   <!--
+    #2439: the mutation-batch IR is internal to the product; only the
+    CellForge test project drives the applier directly. The rest of the tree
+    reaches it through the codegen generator, which emits calls against the
+    internal factory methods in the same compilation.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
+  </ItemGroup>
+
+  <!--
     #1845: the public-API freeze of #428 moves from a 607-line python text
     scan (tools/check-public-api.py, deleted by that issue) to the COMPILER's
     symbol table. Microsoft.CodeAnalysis.PublicApiAnalyzers reads the public
