@@ -152,10 +152,8 @@ public static class AppReducer
         AppMsg.SetPanelDirectory pd => ReduceResult.NoOp(SetPanelDirectory(state, pd.Id, pd.Directory)),
         AppMsg.SetPrComments pc => ReduceResult.NoOp(state with
         {
-            Ui = state.Ui with
-            {
-                PrComments = state.Ui.PrComments.SetItem(pc.Id, pc.Cards)
-            }
+            Ui = state.Ui.UpdatePanelField(
+                u => u.PrComments, (u, map) => u with { PrComments = map }, pc.Id, pc.Cards)
         }),
         AppMsg.SetFileTreePending ft => ReduceResult.NoOp(SetFileTree(state, ft.Id, FileTreeSnapshot.Pending(ft.Directory))),
         AppMsg.SetFileTreeLoaded fl => ReduceResult.NoOp(SetFileTree(state, fl.Id, FileTreeSnapshot.Completed(
@@ -244,7 +242,11 @@ public static class AppReducer
             return state;
         int current = ui.PanelSizes.TryGetValue(id, out int s) ? s : 0;
         int next = Math.Clamp(current + delta, PanelRegistry.MinSize, PanelRegistry.MaxSize);
-        return state with { Ui = ui with { PanelSizes = ui.PanelSizes.SetItem(id, next) } };
+        return state with
+        {
+            Ui = ui.UpdatePanelField(
+                u => u.PanelSizes, (u, map) => u with { PanelSizes = map }, id, next)
+        };
     }
 
     /// <summary>
@@ -261,7 +263,11 @@ public static class AppReducer
         var ui = state.Ui;
         if (ui.PanelCursors.TryGetValue(id, out int current) && current == next)
             return state;
-        return state with { Ui = ui with { PanelCursors = ui.PanelCursors.SetItem(id, next) } };
+        return state with
+        {
+            Ui = ui.UpdatePanelField(
+                u => u.PanelCursors, (u, map) => u with { PanelCursors = map }, id, next)
+        };
     }
 
     /// <summary>
@@ -286,13 +292,12 @@ public static class AppReducer
         bool cursorZero = !ui.PanelCursors.TryGetValue(id, out int cur) || cur == 0;
         if (sameDir && cursorZero)
             return state;
+        var dirs = ui.UpdatePanelField(
+            u => u.PanelDirs, (u, map) => u with { PanelDirs = map }, id, dir);
         return state with
         {
-            Ui = ui with
-            {
-                PanelDirs = ui.PanelDirs.SetItem(id, dir),
-                PanelCursors = ui.PanelCursors.SetItem(id, 0)
-            }
+            Ui = dirs.UpdatePanelField(
+                u => u.PanelCursors, (u, map) => u with { PanelCursors = map }, id, 0)
         };
     }
 
@@ -337,7 +342,11 @@ public static class AppReducer
         if (ui.FileTrees.TryGetValue(id, out FileTreeSnapshot? current) && current == snapshot)
             return state;
 
-        return state with { Ui = ui with { FileTrees = ui.FileTrees.SetItem(id, snapshot) } };
+        return state with
+        {
+            Ui = ui.UpdatePanelField(
+                u => u.FileTrees, (u, map) => u with { FileTrees = map }, id, snapshot)
+        };
     }
 
     /// <summary>
@@ -361,7 +370,8 @@ public static class AppReducer
         // (a revision bump, a repaint) instead of a no-op the store would drop.
         return state with
         {
-            Ui = ui with { FileTrees = ui.FileTrees.SetItem(id, FileTreeSnapshot.None) }
+            Ui = ui.UpdatePanelField(
+                u => u.FileTrees, (u, map) => u with { FileTrees = map }, id, FileTreeSnapshot.None)
         };
     }
 
@@ -388,7 +398,11 @@ public static class AppReducer
         if (next.SetEquals(current))
             return state;
 
-        return state with { Ui = ui with { PanelExpandedDirs = ui.PanelExpandedDirs.SetItem(id, next) } };
+        return state with
+        {
+            Ui = ui.UpdatePanelField(
+                u => u.PanelExpandedDirs, (u, map) => u with { PanelExpandedDirs = map }, id, next)
+        };
     }
 
     // ── key input (generic actions only; chat actions are the extension's) ──
@@ -402,112 +416,14 @@ public static class AppReducer
     /// </summary>
     private static ReduceResult UpdateKey(UiState state, AppMsg.KeyInput k, bool busy)
     {
-        if (busy && k.Action is not (ChatAction.ScrollUpLine or ChatAction.ScrollDownLine
-            or ChatAction.ScrollUpPage or ChatAction.ScrollDownPage
-            or ChatAction.ScrollTop or ChatAction.ScrollBottom
-            or ChatAction.ToggleFocus))
+        // One table for both passes (#2622). Chat-owned actions were already
+        // claimed in phase 1, so they are no-ops here; unknown actions fall
+        // through to the same no-op the old default arm produced.
+        KeyActionRegistry.Entry? entry = KeyActionRegistry.Find(k.Action);
+        if (entry is null || entry.Owner != KeyActionRegistry.Domain.Generic)
             return ReduceResult.NoOp(state);
-
-        return UpdateKeyGeneric(state, k);
+        if (busy && !entry.AllowedWhileBusy)
+            return ReduceResult.NoOp(state);
+        return entry.Fold(state, k, busy) ?? ReduceResult.NoOp(state);
     }
-
-    private static ReduceResult UpdateKeyGeneric(UiState state, AppMsg.KeyInput k)
-    {
-        var ui = state.Ui;
-        switch (k.Action)
-        {
-            case ChatAction.ToggleFocus:
-                return ReduceResult.NoOp(state.SetFocus(ui.Focus == FocusMode.Input ? FocusMode.Chat : FocusMode.Input));
-
-            // Scrolling works in both focus modes; the wheel arrives as PageUp/PageDown.
-            case ChatAction.ScrollUpLine:
-                return ReduceResult.NoOp(state.SetScroll(ui.ScrollOffset + 1));
-            case ChatAction.ScrollDownLine:
-                return ReduceResult.NoOp(state.SetScroll(ui.ScrollOffset - 1));
-            case ChatAction.ScrollUpPage:
-                return ReduceResult.NoOp(state.SetScroll(ui.ScrollOffset + Math.Max(1, ui.ViewportLines - 2)));
-            case ChatAction.ScrollDownPage:
-                return ReduceResult.NoOp(state.SetScroll(ui.ScrollOffset - Math.Max(1, ui.ViewportLines - 2)));
-            case ChatAction.ScrollTop:
-                return ReduceResult.NoOp(state.SetScroll(int.MaxValue));
-            case ChatAction.ScrollBottom:
-                return ReduceResult.NoOp(state.SetScroll(0));
-
-            // Input editing only when the input box owns focus.
-            case ChatAction.Backspace:
-                return Edit(state, ui, new InputMsg.Backspace());
-            case ChatAction.InputHistoryPrev:
-                return Edit(state, ui, new InputMsg.HistoryUp());
-            case ChatAction.InputHistoryNext:
-                return Edit(state, ui, new InputMsg.HistoryDown());
-            case ChatAction.Autocomplete:
-                return ui.Focus == FocusMode.Input && ui.Input.Text.StartsWith('/')
-                    ? Edit(state, ui, new InputMsg.Autocomplete(TuiEffectHost.KnownSlashCommands))
-                    : ReduceResult.NoOp(state);
-            case ChatAction.Char:
-                return ui.Focus == FocusMode.Input && k.Pressed.Character is { } c
-                    ? Edit(state, ui, new InputMsg.Char(c))
-                    : ReduceResult.NoOp(state);
-            case ChatAction.InsertNewline:
-                // Enter-family decision lives here (#359): Shift/Alt+Enter
-                // appends '\n' (same as typing it). Ctrl combos resolve here
-                // only via subset matching — the composer ignores Ctrl+Enter,
-                // so the store drops it too instead of inserting a newline.
-                return ui.Focus == FocusMode.Input && !k.Pressed.Has(KeyModifierSet.Ctrl)
-                    ? Edit(state, ui, new InputMsg.Char('\n'))
-                    : ReduceResult.NoOp(state);
-
-            // Panel actions (epic C step 2): resolved actions land on the
-            // existing panel transitions — previously fell into default noop.
-            case ChatAction.TogglePanelSlot:
-                return ReduceResult.NoOp(TogglePanelSlot(state, k));
-            case ChatAction.CyclePanelFocus:
-                return ReduceResult.NoOp(CycleFocus(state));
-            case ChatAction.ClosePanel:
-                return ReduceResult.NoOp(FocusPanel(state, null));
-            case ChatAction.ResizePanelGrow:
-                return ReduceResult.NoOp(ResizeFocusedPanel(state, +1));
-            case ChatAction.ResizePanelShrink:
-                return ReduceResult.NoOp(ResizeFocusedPanel(state, -1));
-            case ChatAction.HelpPanel:
-                return ReduceResult.NoOp(TogglePanel(state, "help"));
-            case ChatAction.WhichKey:
-                // Hosts register a "whichkey" panel rendering the leader +
-                // which-key bindings; noop until one exists (TogglePanel
-                // ignores unknown ids) so the key is safe on every renderer.
-                return ReduceResult.NoOp(TogglePanel(state, "whichkey"));
-            case ChatAction.ToggleLogsPanel:
-                return ReduceResult.NoOp(TogglePanel(state, "logs"));
-            case ChatAction.JumpPalette:
-                // Hosts register a "jump" panel (or overlay) rendering the
-                // worktree jump palette; noop until one exists (TogglePanel
-                // ignores unknown ids) so the key is safe on every renderer.
-                return ReduceResult.NoOp(TogglePanel(state, "jump"));
-
-            case ChatAction.None:
-            default:
-                return ReduceResult.NoOp(state);
-        }
-    }
-
-    /// <summary>Apply an input-model command, but only while the input box owns focus.</summary>
-    private static ReduceResult Edit(UiState state, TerminalUiState ui, InputMsg command) =>
-        ui.Focus == FocusMode.Input
-            ? ReduceResult.NoOp(state.SetInput(InputMsg.Update(ui.Input, command)))
-            : ReduceResult.NoOp(state);
-
-    /// <summary>Alt+1..9: slot index from the pressed character.</summary>
-    private static UiState TogglePanelSlot(UiState state, AppMsg.KeyInput k)
-    {
-        if (k.Pressed.Character is not { } c || c is < '1' or > '9')
-            return state;
-        int idx = c - '1';
-        if (idx < 0 || idx >= state.Ui.RegisteredPanelIds.Length)
-            return state;
-        return TogglePanel(state, state.Ui.RegisteredPanelIds[idx]);
-    }
-
-    /// <summary>Grow/shrink the focused panel; noop when chat owns focus.</summary>
-    private static UiState ResizeFocusedPanel(UiState state, int delta) =>
-        state.Ui.FocusedPanelId is { } id ? ResizePanel(state, id, delta) : state;
 }

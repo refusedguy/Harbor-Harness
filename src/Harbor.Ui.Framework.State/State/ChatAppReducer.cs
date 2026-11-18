@@ -268,61 +268,12 @@ public static class ChatAppReducer
     /// </summary>
     private static ReduceResult? OnKeyInput(UiState state, AppMsg.KeyInput k)
     {
-        bool busy = IsBusy(state);
-        switch (k.Action)
-        {
-            // Escape during a run is an abort (not a quit) — see keymap note below.
-            case ChatAction.Quit when busy:
-            case ChatAction.Abort:
-                return TransitionAbort(state);
-
-            case ChatAction.Quit:
-                return new ReduceResult(state, new TuiEffect.QuitApp());
-
-            case ChatAction.Submit:
-            {
-                if (busy)
-                    return null;
-                (var nextInput, string? submitted) = state.Ui.Input.Consume();
-                var next = state.SetInput(nextInput);
-                if (submitted is null)
-                    return ReduceResult.NoOp(next);
-
-                return ClassifySubmit(next, submitted);
-            }
-
-            case ChatAction.Clear:
-                return busy ? null : ReduceResult.NoOp(state.ClearTranscript());
-
-            // Tab-strip actions (#389). The tab model is chat-owned, so these are
-            // claimed here and deliberately NOT gated on `busy`: switching or
-            // closing a tab is chrome, not transcript work, and must stay
-            // available while an agent runs — the effect is what the host
-            // honours or refuses.
-            case ChatAction.NextTab:
-                return NextTabFromKey(state);
-            case ChatAction.PreviousTab:
-                return PreviousTabFromKey(state);
-            case ChatAction.CloseTab:
-                return CloseFocusedTab(state);
-            case ChatAction.OpenTab:
-                return RequestOpenTab(state);
-            case ChatAction.ReopenTab:
-                return ReopenTab(state);
-            case ChatAction.NextUnreadTab:
-                return CycleUnreadTab(state, forward: true);
-            case ChatAction.PreviousUnreadTab:
-                return CycleUnreadTab(state, forward: false);
-            case ChatAction.ActivateTabSlot:
-                return ActivateSlotFromKey(state, k.Pressed);
-            case ChatAction.MoveTabLeft:
-                return MoveFocusedTab(state, -1);
-            case ChatAction.MoveTabRight:
-                return MoveFocusedTab(state, +1);
-
-            default:
-                return null;
-        }
+        // Both passes consult the same table (#2622). Generic-owned and
+        // unmapped actions return null so AppReducer's phase 2 can fold them.
+        KeyActionRegistry.Entry? entry = KeyActionRegistry.Find(k.Action);
+        return entry is { Owner: KeyActionRegistry.Domain.Chat } chat
+            ? chat.Fold(state, k, IsBusy(state))
+            : null;
     }
 
     /// <summary>
@@ -331,7 +282,7 @@ public static class ChatAppReducer
     ///     host so exit words, slash commands, and prompts behave identically wherever
     ///     a line is submitted.
     /// </summary>
-    private static ReduceResult ClassifySubmit(UiState state, string submitted)
+    internal static ReduceResult ClassifySubmit(UiState state, string submitted)
     {
         string trimmed = submitted.Trim();
         if (ChatCommands.ExitWords.Contains(trimmed))
@@ -353,7 +304,7 @@ public static class ChatAppReducer
     ///     the renderer's responsibility (driven by <see cref="ChatRole" />), so the
     ///     text here is markup-free.
     /// </summary>
-    private static ReduceResult TransitionAbort(UiState state)
+    internal static ReduceResult TransitionAbort(UiState state)
     {
         var next = FlushPending(state);
         if (!string.IsNullOrEmpty(next.Chat.Active.ThinkBuffer))
