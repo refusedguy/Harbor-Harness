@@ -93,11 +93,11 @@ The interpreter lives in this build-time tooling assembly, not in the runtime. T
 
 ## Dev log channel (#2437)
 
-`DevReload.DevLogChannel` is the diagnostic channel for the markup dev tools. A producer writes one short record (UTC time, source, message) to a bounded in-memory tail and to an append-only JSONL file. Neither the channel nor its producers touch `IEventBus`, an `ILogger` provider or a renderer, so a watcher or interpreter write cannot mark a frame dirty or paint into the CellForge cell grid.
+`DevReload.DevLogChannel` is the diagnostic channel for the markup dev tools. A producer writes one short record (UTC time, source, message) to a bounded in-memory tail and to an append callback. The dev CLI supplies that callback and appends JSONL to a file under `~/.harbor/dev`. Neither the channel nor its producers touch `IEventBus`, an `ILogger` provider or a renderer, so a watcher or interpreter write cannot mark a frame dirty or paint into the CellForge cell grid.
 
-`DslDevFileWatcher` polls a `.harbor-ui` file at 250 ms with a 200 ms debounce and calls the shared interpreter. Both the watcher and `DevReloadInterpreter.Reload` write to the channel; a rejected edit leaves the live tree, and therefore the screen's last valid frame, untouched. A file write failure is contained and the in-memory tail keeps the record.
+`DslDevFileWatcher` polls a `.harbor-ui` file at 250 ms with a 200 ms debounce and calls the shared interpreter. The host supplies file access through `DevMarkupFileSource` because this assembly is a Roslyn component. Both the watcher and `DevReloadInterpreter.Reload` write to the channel; a rejected edit leaves the live tree, and therefore the screen's last valid frame, untouched.
 
-`harbor dsl watch <file> [--devlog <path>]` starts the producer and writes nothing to the console. `harbor dsl devlog [--devlog <path>] [--count <N>]` is the separate reader and prints the tail to stdout. Both commands are behind `HARBOR_WITH_DSL_DEV`, and the channel, watcher and interpreter all live in this tooling assembly, which the CLI references only when `HarborWithDslDev=true`. An AOT publish switches the flag off, so the channel is not in the AOT binary.
+`harbor dsl watch <file> [--devlog <path>]` starts the producer and writes nothing to the console. `harbor dsl devlog [--devlog <path>] [--count <N>]` is the separate reader and prints the tail to stdout. Both commands are behind `HARBOR_WITH_DSL_DEV`, and the channel, watcher and interpreter all live in this tooling assembly, which the CLI references only when `HarborWithDslDev=true`. The file IO stays in the dev CLI. An AOT publish switches the flag off, so the channel is not in the AOT binary.
 
 ## Dependencies
 

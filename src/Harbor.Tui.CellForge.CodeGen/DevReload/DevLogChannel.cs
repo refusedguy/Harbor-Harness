@@ -1,8 +1,8 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 
 namespace Harbor.Tui.CellForge.CodeGen.DevReload;
@@ -15,18 +15,17 @@ public sealed record DevLogEntry(DateTimeOffset At, string Source, string Messag
 
 /// <summary>
 ///     DEV-ONLY diagnostic channel for the markup reload tools (issue #2437).
-///     Records go to a bounded in-memory tail and, when a path is supplied, to
-///     a JSONL file. Nothing here touches <c>IEventBus</c>, an <c>ILogger</c>
-///     provider or a renderer, so a watcher or interpreter write cannot reach
-///     the CellForge cell grid or mark a frame dirty.
+///     Records go to a bounded in-memory tail and to an append callback the
+///     dev CLI host supplies. Nothing here touches <c>IEventBus</c>, an
+///     <c>ILogger</c> provider or a renderer, so a watcher or interpreter
+///     write cannot reach the CellForge cell grid or mark a frame dirty.
 /// </summary>
 /// <remarks>
-///     The assembly that owns this type is referenced by the CLI only with
-///     <c>HarborWithDslDev=true</c>. Both AOT recipes switch that flag and the
-///     <c>HARBOR_WITH_DSL_DEV</c> symbol off, so the channel is absent from the
-///     AOT binary together with the dev interpreter. A file write failure is
-///     contained: the in-memory tail keeps the record and the caller never
-///     sees an exception from logging.
+///     This assembly is a Roslyn component, so it owns no file or environment
+///     access. The dev CLI supplies the append callback and reads the file for
+///     its reader command. That split keeps analyzer rules intact and keeps
+///     the channel, watcher and interpreter out of AOT builds: the CLI
+///     references this assembly only when <c>HarborWithDslDev=true</c>.
 /// </remarks>
 public sealed class DevLogChannel
 {
@@ -34,30 +33,22 @@ public sealed class DevLogChannel
 
     private readonly object _gate = new();
     private readonly Queue<DevLogEntry> _recent = new();
-    private readonly string? _filePath;
+    private readonly Action<string>? _append;
     private readonly int _capacity;
 
-    /// <summary>The default file, under the user's Harbor directory.</summary>
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".harbor", "dev", "dsl-devlog.jsonl");
-
-    /// <summary>Creates a channel. A null path keeps records in memory only.</summary>
-    /// <param name="filePath">Optional JSONL sink, append-only.</param>
+    /// <summary>Creates a channel. A null callback keeps records in memory only.</summary>
+    /// <param name="append">Receives one UTF-8 JSON record per write.</param>
     /// <param name="capacity">Size of the in-memory tail.</param>
-    public DevLogChannel(string? filePath = null, int capacity = DefaultCapacity)
+    public DevLogChannel(Action<string>? append = null, int capacity = DefaultCapacity)
     {
         if (capacity <= 0)
             throw new ArgumentOutOfRangeException(nameof(capacity));
 
-        _filePath = string.IsNullOrWhiteSpace(filePath) ? null : filePath;
+        _append = append;
         _capacity = capacity;
     }
 
-    /// <summary>The append-only file, or null for a memory-only channel.</summary>
-    public string? FilePath => _filePath;
-
-    /// <summary>Appends one record to the tail and to the optional file.</summary>
+    /// <summary>Appends one record to the tail and to the optional sink.</summary>
     /// <param name="source">Short producer name.</param>
     /// <param name="message">Short decision or failure.</param>
     public void Write(string source, string message)
@@ -74,38 +65,7 @@ public sealed class DevLogChannel
             while (_recent.Count > _capacity)
                 _recent.Dequeue();
 
-            if (_filePath is null)
-                return;
-
-            try
-            {
-                var buffer = new ArrayBufferWriter<byte>();
-                using (var writer = new Utf8JsonWriter(buffer))
-                {
-                    writer.WriteStartObject();
-                    writer.WriteNumber("ms", entry.At.ToUnixTimeMilliseconds());
-                    writer.WriteString("source", entry.Source);
-                    writer.WriteString("message", entry.Message);
-                    writer.WriteEndObject();
-                }
-
-                string? directory = Path.GetDirectoryName(_filePath);
-                if (!string.IsNullOrEmpty(directory))
-                    Directory.CreateDirectory(directory);
-
-                using var stream = new FileStream(
-                    _filePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-                stream.Write(buffer.WrittenSpan);
-                stream.WriteByte((byte)'\n');
-            }
-            catch (IOException)
-            {
-                // A full disk or a locked file must not break a dev reload.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // The in-memory tail above still carries the record.
-            }
+            _append?.Invoke(Encode(entry));
         }
     }
 
@@ -124,20 +84,19 @@ public sealed class DevLogChannel
     }
 
     /// <summary>
-    ///     Reads the tail of a channel file. This is the reader half used by a
-    ///     separate command; it never needs the producer's in-memory state.
+    ///     Parses the tail of a channel file for the separate reader command.
     ///     Truncated or malformed lines are skipped, so a live file can be
     ///     tailed while it is being written.
     /// </summary>
-    /// <param name="filePath">Path written by <see cref="Write"/>.</param>
+    /// <param name="lines">Lines read by the host from the channel file.</param>
     /// <param name="count">Maximum number of records to return.</param>
-    public static IReadOnlyList<DevLogEntry> ReadFile(string? filePath, int count = 50)
+    public static IReadOnlyList<DevLogEntry> ParseLines(IEnumerable<string> lines, int count = 50)
     {
-        if (count <= 0 || string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        if (count <= 0)
             return [];
 
         var entries = new List<DevLogEntry>();
-        foreach (var line in File.ReadLines(filePath))
+        foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line))
                 continue;
@@ -164,5 +123,20 @@ public sealed class DevLogChannel
 
         int take = Math.Min(count, entries.Count);
         return take == 0 ? [] : entries.GetRange(entries.Count - take, take);
+    }
+
+    private static string Encode(DevLogEntry entry)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("ms", entry.At.ToUnixTimeMilliseconds());
+            writer.WriteString("source", entry.Source);
+            writer.WriteString("message", entry.Message);
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }

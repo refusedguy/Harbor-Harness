@@ -237,38 +237,29 @@ public class DevReloadInterpreterTests
     // ── 5. Dev log channel: diagnostics never go through the renderer ────
 
     [Test]
-    public async Task Reload_WritesOneDecisionToTheDevLogChannelAndItsFile()
+    public async Task Reload_WritesOneDecisionToTheDevLogChannelAndItsSink()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "harbor-devlog-" + Guid.NewGuid().ToString("N"));
-        string path = Path.Combine(directory, "dsl.jsonl");
-        try
-        {
-            var channel = new DevLogChannel(path);
-            var interpreter = Interpreter();
-            interpreter.AttachLog(channel);
+        var lines = new List<string>();
+        var channel = new DevLogChannel(lines.Add);
+        var interpreter = Interpreter();
+        interpreter.AttachLog(channel);
 
-            var result = interpreter.Reload("""
-                panel "main":
-                    .text "hello world"
-                    .height 10
-                    text "done"
-                """);
+        var result = interpreter.Reload("""
+            panel "main":
+                .text "hello world"
+                .height 10
+                text "done"
+            """);
 
-            var records = channel.Read();
-            await Assert.That(records.Count).IsEqualTo(1);
-            await Assert.That(records[0].Source).IsEqualTo("interpreter");
-            await Assert.That(records[0].Message).Contains(result.Outcome.ToString());
+        var records = channel.Read();
+        await Assert.That(records.Count).IsEqualTo(1);
+        await Assert.That(records[0].Source).IsEqualTo("interpreter");
+        await Assert.That(records[0].Message).Contains(result.Outcome.ToString());
 
-            var fromFile = DevLogChannel.ReadFile(path);
-            await Assert.That(fromFile.Count).IsEqualTo(1);
-            await Assert.That(fromFile[0].Message).IsEqualTo(records[0].Message);
-            await Assert.That(fromFile[0].At).IsEqualTo(records[0].At);
-        }
-        finally
-        {
-            if (Directory.Exists(directory))
-                Directory.Delete(directory, recursive: true);
-        }
+        var parsed = DevLogChannel.ParseLines(lines, 10);
+        await Assert.That(parsed.Count).IsEqualTo(1);
+        await Assert.That(parsed[0].Message).IsEqualTo(records[0].Message);
+        await Assert.That(parsed[0].At).IsEqualTo(records[0].At);
     }
 
     [Test]
@@ -284,7 +275,7 @@ public class DevReloadInterpreterTests
         await Assert.That(records.Count).IsEqualTo(2);
         await Assert.That(records[0].Message).IsEqualTo("second");
         await Assert.That(records[1].Message).IsEqualTo("third");
-        await Assert.That(DevLogChannel.ReadFile(null).Count).IsEqualTo(0);
+        await Assert.That(DevLogChannel.ParseLines(Array.Empty<string>(), 5).Count).IsEqualTo(0);
     }
 
     [Test]
@@ -296,18 +287,20 @@ public class DevReloadInterpreterTests
         {
             Directory.CreateDirectory(directory);
             File.WriteAllText(path, BaseMarkup);
+            DateTime stamp = File.GetLastWriteTimeUtc(path);
 
             var channel = new DevLogChannel();
             var interpreter = Interpreter();
             interpreter.AttachLog(channel);
+            var source = new DevMarkupFileSource(() => stamp, () => File.ReadAllText(path));
             using var watcher = new DslDevFileWatcher(
-                path, interpreter, channel, pollInterval: TimeSpan.Zero, debounce: TimeSpan.Zero);
+                source, interpreter, channel, pollInterval: TimeSpan.Zero, debounce: TimeSpan.Zero);
 
             watcher.Poll();
             await Assert.That(channel.Read().Count).IsEqualTo(0);
 
             File.WriteAllText(path, BaseMarkup.Replace("hello", "changed", StringComparison.Ordinal));
-            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(2));
+            stamp = stamp.AddSeconds(2);
             watcher.Poll(); // detects the edit, starts the debounce window
             watcher.Poll(); // applies one reload
 

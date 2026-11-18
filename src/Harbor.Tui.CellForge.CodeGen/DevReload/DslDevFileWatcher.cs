@@ -1,9 +1,13 @@
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Harbor.Tui.CellForge.CodeGen.DevReload;
+
+/// <summary>File access the dev watcher needs, supplied by the dev CLI host.</summary>
+/// <param name="StampUtc">Last write time of the markup file, in UTC.</param>
+/// <param name="ReadText">Current text of the markup file.</param>
+public sealed record DevMarkupFileSource(Func<DateTime> StampUtc, Func<string> ReadText);
 
 /// <summary>
 ///     DEV-ONLY file watcher for <c>.harbor-ui</c> markup (issue #2437). It
@@ -16,9 +20,11 @@ namespace Harbor.Tui.CellForge.CodeGen.DevReload;
 /// <remarks>
 ///     This is the logging-slice watcher: it owns no host state and performs no
 ///     template diff of its own. The poll interval and debounce match the
-///     #2434 pipeline (250 ms polling, 200 ms debounce). Passing
-///     <see cref="TimeSpan.Zero"/> as the poll interval disables the timer so
-///     a test can drive <see cref="Poll"/> deterministically.
+///     #2434 pipeline (250 ms polling, 200 ms debounce). The host supplies file
+///     access through <see cref="DevMarkupFileSource"/> because this assembly
+///     is a Roslyn component. Passing <see cref="TimeSpan.Zero"/> as the poll
+///     interval disables the timer so a test can drive <see cref="Poll"/>
+///     deterministically.
 /// </remarks>
 public sealed class DslDevFileWatcher : IDisposable
 {
@@ -28,7 +34,7 @@ public sealed class DslDevFileWatcher : IDisposable
     /// <summary>Debounce window, from the #2434 pipeline.</summary>
     public static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(200);
 
-    private readonly string _path;
+    private readonly DevMarkupFileSource _file;
     private readonly DevReloadInterpreter _interpreter;
     private readonly DevLogChannel _log;
     private readonly TimeSpan _debounce;
@@ -40,23 +46,23 @@ public sealed class DslDevFileWatcher : IDisposable
     private DateTime _pendingSince;
 
     /// <summary>Creates a watcher and starts its poll timer.</summary>
-    /// <param name="path">The .harbor-ui file to poll.</param>
+    /// <param name="file">Stamp and read access to the markup file.</param>
     /// <param name="interpreter">The dev interpreter owning the live tree.</param>
     /// <param name="log">The channel that receives every observation.</param>
     /// <param name="pollInterval">Timer period; zero disables the timer.</param>
     /// <param name="debounce">How long a change must stay stable before reload.</param>
     public DslDevFileWatcher(
-        string path,
+        DevMarkupFileSource file,
         DevReloadInterpreter interpreter,
         DevLogChannel log,
         TimeSpan? pollInterval = null,
         TimeSpan? debounce = null)
     {
-        _path = path ?? throw new ArgumentNullException(nameof(path));
+        _file = file ?? throw new ArgumentNullException(nameof(file));
         _interpreter = interpreter ?? throw new ArgumentNullException(nameof(interpreter));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _debounce = debounce ?? Debounce;
-        _lastStamp = Stamp();
+        _lastStamp = file.StampUtc();
 
         var interval = pollInterval ?? PollInterval;
         _timer = interval > TimeSpan.Zero
@@ -70,12 +76,10 @@ public sealed class DslDevFileWatcher : IDisposable
         get { lock (_gate) return _lastStamp; }
     }
 
-    private DateTime Stamp() => File.Exists(_path) ? File.GetLastWriteTimeUtc(_path) : DateTime.MinValue;
-
     /// <summary>One poll cycle. Public so tests need no wall-clock timer.</summary>
     public void Poll()
     {
-        DateTime stamp = Stamp();
+        DateTime stamp = _file.StampUtc();
         lock (_gate)
         {
             if (_pendingStamp is { } pending)
@@ -111,7 +115,7 @@ public sealed class DslDevFileWatcher : IDisposable
         // was, so the screen keeps its last valid frame.
         try
         {
-            var result = _interpreter.Reload(File.ReadAllText(_path));
+            var result = _interpreter.Reload(_file.ReadText());
             _log.Write("watcher", $"applied {result.Outcome} rev={result.Revision}: {result.Reason}");
         }
         catch (Exception ex)

@@ -24,6 +24,26 @@ namespace Harbor.App.Cli.Commands;
 /// </remarks>
 internal static class DslDevCommands
 {
+    private static string DefaultDevLogPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".harbor", "dev", "dsl-devlog.jsonl");
+
+    /// <summary>
+    ///     The analyzer assembly owns the channel logic but no file IO. The
+    ///     dev CLI supplies the append callback and the reader reads the same
+    ///     JSONL file in its own process.
+    /// </summary>
+    private static DevLogChannel CreateDevLog(string? devlog, out string path)
+    {
+        string resolved = string.IsNullOrWhiteSpace(devlog) ? DefaultDevLogPath : devlog!;
+        path = resolved;
+        string? directory = Path.GetDirectoryName(resolved);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        return new DevLogChannel(line => File.AppendAllText(resolved, line + "\n"));
+    }
+
     /// <summary>Parses one markup file and reports its syntax diagnostics.</summary>
     /// <param name="file">Path to a .harbor-ui file.</param>
     /// <param name="printIr">Print the parsed IR as a debug tree.</param>
@@ -80,7 +100,7 @@ internal static class DslDevCommands
         // #2437: the reload decision also goes to the dev-only channel, which
         // no renderer subscribes to. The console lines below belong to this
         // standalone command; the channel is the input for `dsl devlog`.
-        var channel = new DevLogChannel(DevLogChannel.DefaultPath);
+        var channel = CreateDevLog(null, out _);
         if (!DevReloadInterpreter.TryCreate(File.ReadAllText(files[0]), out var interpreter, out var error))
         {
             channel.Write("interpreter", "initial parse rejected: " + error);
@@ -111,8 +131,9 @@ internal static class DslDevCommands
     /// <param name="count">How many recent records to print.</param>
     public static int Devlog(string? devlog = null, int count = 50)
     {
-        string path = string.IsNullOrWhiteSpace(devlog) ? DevLogChannel.DefaultPath : devlog!;
-        var entries = DevLogChannel.ReadFile(path, count);
+        string path = string.IsNullOrWhiteSpace(devlog) ? DefaultDevLogPath : devlog!;
+        var lines = File.Exists(path) ? File.ReadLines(path) : Array.Empty<string>();
+        var entries = DevLogChannel.ParseLines(lines, count);
         if (entries.Count == 0)
         {
             Console.Out.WriteLine($"devlog: no records in {path}");
@@ -139,8 +160,7 @@ internal static class DslDevCommands
             return 1;
         }
 
-        string path = string.IsNullOrWhiteSpace(devlog) ? DevLogChannel.DefaultPath : devlog!;
-        var channel = new DevLogChannel(path);
+        var channel = CreateDevLog(devlog, out _);
         if (!DevReloadInterpreter.TryCreate(File.ReadAllText(file), out var interpreter, out var error))
         {
             channel.Write("watcher", "initial parse rejected: " + error);
@@ -151,7 +171,10 @@ internal static class DslDevCommands
         interpreter!.AttachLog(channel);
         channel.Write("watcher", $"watching {file}");
 
-        using var watcher = new DslDevFileWatcher(file, interpreter, channel);
+        var source = new DevMarkupFileSource(
+            () => File.Exists(file) ? File.GetLastWriteTimeUtc(file) : DateTime.MinValue,
+            () => File.ReadAllText(file));
+        using var watcher = new DslDevFileWatcher(source, interpreter, channel);
         using var cts = new CancellationTokenSource();
         ConsoleCancelEventHandler onCancel = (_, args) =>
         {
