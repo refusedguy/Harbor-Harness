@@ -345,6 +345,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
 
         var task = Task.Run(async () =>
         {
+            bool abandoned = false;
             try
             {
                 Task<JsonElement?> handlerTask = _handler(method, parameters, requestCts.Token);
@@ -357,11 +358,13 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
                     Task.Delay(_options.RequestTimeout, CancellationToken.None)).ConfigureAwait(false);
                 if (completed != handlerTask)
                 {
-                    // The abandoned handler keeps running under requestCts; observe
-                    // it so a late fault is logged, not lost (§FP-003). Its CTS is
-                    // intentionally not disposed on this path — the handler's token
-                    // must stay cancelable; the CancelAfter timer already fired.
-                    _ = ObserveAbandonedAsync(handlerTask);
+                    // The abandoned handler keeps running under requestCts, so its
+                    // token must stay usable until that handler ends. Transfer CTS
+                    // ownership to the observer (which disposes after awaiting the
+                    // handler) and skip disposal below. The observer also logs a
+                    // late fault instead of losing it (§FP-003).
+                    abandoned = true;
+                    _ = ObserveAbandonedAsync(handlerTask, requestCts);
                     await WriteErrorAsync(
                         id, -32002, $"Request '{method}' timed out after {_options.RequestTimeout.TotalSeconds:F0}s.")
                         .ConfigureAwait(false);
@@ -384,8 +387,13 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
                 IdeJsonRpcServerLog.HandlerFailed(_logger, ex, method);
                 await WriteErrorAsync(id, IdeRpcException.HandlerError, ex.Message).ConfigureAwait(false);
             }
-
-            requestCts.Dispose();
+            finally
+            {
+                // Dispose on every path this task owns the CTS (including a
+                // fault thrown by a catch block). On the timeout path ownership
+                // moved to ObserveAbandonedAsync, which waits for the handler.
+                if (!abandoned) requestCts.Dispose();
+            }
         });
 
         lock (_inFlightLock)
@@ -395,7 +403,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         }
     }
 
-    private async Task ObserveAbandonedAsync(Task<JsonElement?> handler)
+    private async Task ObserveAbandonedAsync(Task<JsonElement?> handler, CancellationTokenSource requestCts)
     {
         try
         {
@@ -408,6 +416,12 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         catch (Exception ex)
         {
             IdeJsonRpcServerLog.AbandonedHandlerFaulted(_logger, ex);
+        }
+        finally
+        {
+            // The handler's token had to stay valid while it ran; release the
+            // CTS and its CancelAfter registration once it is done.
+            requestCts.Dispose();
         }
     }
 
