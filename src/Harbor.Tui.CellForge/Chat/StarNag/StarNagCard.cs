@@ -13,6 +13,7 @@
 using Harbor.Abstractions.Env;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Services;
+using Harbor.Ui.Framework.Strings;
 
 namespace Harbor.Tui.CellForge.StarNag;
 
@@ -71,29 +72,48 @@ public sealed class StarNagCard
     public const int DefaultInterval = 5;
 
     /// <summary>
-    ///     The toast text. The trailing keys stand for the two actions the card
-    ///     offers: <c>s</c> = star later (postpone one interval),
-    ///     <c>n</c> = never (dismiss permanently via <see cref="Dismiss"/>).
+    ///     Catalogue key for the toast text (issue #434, one-component extraction
+    ///     slice). The trailing keys stand for the two actions the card offers:
+    ///     <c>s</c> = star later (postpone one interval), <c>n</c> = never
+    ///     (dismiss permanently via <see cref="Dismiss"/>). They are keyboard
+    ///     hints, so they stay literal in every locale.
     /// </summary>
-    public const string Message = "Star Harbor on GitHub? s/n";
+    public const string MessageKey = "StarNag_Message";
 
     private readonly int _interval;
     private readonly Action<StarNagState> _save;
+    private readonly IUiStrings _strings;
     private StarNagState _state;
 
     /// <summary>Creates a card with the given cadence, state and persistence callback.</summary>
     /// <param name="interval">Minimum launches between two shows. Values below 1 fall back to <see cref="DefaultInterval"/>.</param>
     /// <param name="state">Starting state. Null starts from <see cref="StarNagState.Empty"/>.</param>
     /// <param name="save">Persistence callback. Null makes the card in-memory only (tests).</param>
+    /// <param name="strings">
+    ///     UI string catalogue supplying <see cref="Message"/>. Null uses the
+    ///     shared default instance (current locale); pass a
+    ///     <see cref="UiStringsCatalog"/> with a pinned locale in tests
+    ///     (#1573 substitution seam).
+    /// </param>
     public StarNagCard(
         int interval = DefaultInterval,
         StarNagState? state = null,
-        Action<StarNagState>? save = null)
+        Action<StarNagState>? save = null,
+        IUiStrings? strings = null)
     {
         _interval = interval < 1 ? DefaultInterval : interval;
         _state = state ?? StarNagState.Empty;
         _save = save ?? (_ => { });
+        _strings = strings ?? new UiStringsCatalog();
     }
+
+    /// <summary>
+    ///     The localized toast text, resolved from the shared catalogue
+    ///     (issue #434). Kept as a lookup rather than a literal so <c>en</c> and
+    ///     <c>ru</c> share one source of truth; <see cref="TryShow"/> reads it
+    ///     at show time.
+    /// </summary>
+    public string Message => _strings.Get(MessageKey);
 
     /// <summary>Current counter snapshot (test seam).</summary>
     public StarNagState State => _state;
