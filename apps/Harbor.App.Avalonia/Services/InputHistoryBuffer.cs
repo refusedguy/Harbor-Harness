@@ -1,4 +1,4 @@
-// InputHistoryBuffer.cs — issue #2681, item G02.
+// InputHistoryBuffer.cs. Issue #2681, item G02.
 //
 // WHAT THIS CLOSES
 // ----------------

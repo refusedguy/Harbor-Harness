@@ -1,4 +1,4 @@
-// InputHistoryTests.cs — issue #2681, item G02.
+// InputHistoryTests.cs. Issue #2681, item G02.
 //
 // The Avalonia composer used to forget every prompt the moment it was sent.
 // These tests pin the two halves of the fix: the pure buffer's navigation
