@@ -422,29 +422,16 @@ public static class WorkspaceMaterializer
         }
         catch (IOException ex)
         {
-            DeleteQuiet(tmp);
+            QuietFileDelete.Delete(tmp);
             return Result.Failure<string>(
                 $"Run '{manifest.RunId}' AlreadyExists: manifest at '{manifestPath}' — refusing to overwrite. ({ex.Message})");
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
         {
-            DeleteQuiet(tmp);
+            QuietFileDelete.Delete(tmp);
             return Result.Failure<string>($"Cannot write manifest for run '{manifest.RunId}': {ex.Message}");
         }
         return Result.Success(manifestPath);
-    }
-
-    private static void DeleteQuiet(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-        {
-            _ = ex;
-        }
     }
 
     private static Result<RunManifest> ReadManifest(string runId, JsonElement root)

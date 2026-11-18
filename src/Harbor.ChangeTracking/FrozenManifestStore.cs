@@ -67,7 +67,7 @@ internal static class FrozenManifestStore
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
         {
-            DeleteQuiet(tmp);
+            QuietFileDelete.Delete(tmp);
             return Result.Failure<string>($"Cannot write frozen patch for run '{runId}': {ex.Message}");
         }
         return Result.Success(path);
@@ -218,18 +218,5 @@ internal static class FrozenManifestStore
         if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int n) && n >= 0)
             return n;
         return null;
-    }
-
-    private static void DeleteQuiet(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-        {
-            _ = ex;
-        }
     }
 }
