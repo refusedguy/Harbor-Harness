@@ -141,7 +141,7 @@ on:
         type: string
         default: "500"
       record_baseline:
-        description: "Rewrite assets/demo/baseline.json from this run's GIFs (report-only; the manifest is committed back by the auto-commit step on push runs)."
+        description: "Rewrite assets/demo/baseline.json from this run's GIFs (report-only). This dispatch commits the rewritten manifest and GIFs back to the branch."
         type: boolean
         default: false
       reproducibility:
@@ -561,7 +561,7 @@ jobs:
           if RECORD:
               summary += [
                   "**Baseline re-recorded** from this run's output — `assets/demo/baseline.json` "
-                  "was rewritten and is committed back by the auto-commit step (push runs only).",
+                  "was rewritten and is committed back by the auto-commit step on this run.",
                   "",
               ]
           if errors:
@@ -661,8 +661,13 @@ jobs:
       # So: commit, then rebase onto the current remote and push, with retries.
       # A race resolves. A genuine problem — an unresolvable conflict, a
       # rejected permission — still fails, which is correct.
-      - name: Commit regenerated GIFs (push to dev/master only)
-        if: github.event_name == 'push'
+      # A record_baseline dispatch rewrites the manifest, but the next push
+      # cannot commit it: that push re-records against the OLD manifest, so the
+      # drift gate fails before this step ever runs (issue #2507). The manifest
+      # CI just generated must be committed by the run that generated it, or it
+      # dies in an artifact and the loop never closes.
+      - name: Commit regenerated GIFs (push, or a re-record dispatch)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.record_baseline)
         env:
           DEMO_BRANCH: ${{ github.ref_name }}
         run: |
