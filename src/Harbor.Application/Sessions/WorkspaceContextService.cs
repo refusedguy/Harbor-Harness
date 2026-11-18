@@ -40,6 +40,14 @@ namespace Harbor.Application.Sessions;
 ///         expensive prompt assembly itself stays behind
 ///         <c>CachingSystemPromptBuilder</c>'s content hash.
 ///     </para>
+///     <para>
+///         #2675 item 071: <c>HARBOR_IGNORE_GUIDANCE_FILES</c> (or its Amp alias
+///         <c>AMP_IGNORE_GUIDANCE_FILES</c>) is a colon-separated glob list of
+///         context file names to keep out of the prompt. Excluded files are
+///         still readable by the tools on request; only prompt injection is
+///         suppressed. The value participates in the snapshot version so a
+///         change takes effect without a process restart.
+///     </para>
 /// </remarks>
 public sealed class WorkspaceContextService : IWorkspaceContextSource
 {
@@ -49,6 +57,8 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     private const string ProjectSkillsDir = ".harbor/skills";
     private const string SkillFileName = "SKILL.md";
     private const int MaxDescriptionLength = 160;
+    private const string IgnoreGuidanceFilesVariable = "HARBOR_IGNORE_GUIDANCE_FILES";
+    private const string AmpIgnoreGuidanceFilesVariable = "AMP_IGNORE_GUIDANCE_FILES";
 
     /// <summary>
     ///     Total byte budget shared by <em>all</em> project context files (#2230).
@@ -141,8 +151,15 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         Span<byte> scratch = stackalloc byte[sizeof(long)];
         try
         {
+            string ignored = IgnoreGuidanceFilesValue;
+            AppendChars(hash, ignored);
+            hash.AppendData(Separator); // exclusion policy participates in the cache key
+
             foreach (string name in ContextFileNames)
             {
+                if (IsIgnored(name, ignored))
+                    continue;
+
                 AppendChars(hash, name);
                 hash.AppendData(Separator); // field separator
                 string path = Path.Combine(workingDirectory, name);
@@ -180,6 +197,37 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         return BitConverter.ToInt64(hash.GetHashAndReset(), 0);
     }
 
+    /// <summary>
+    ///     Colon-separated glob list of guidance files to keep out of the prompt.
+    ///     The Harbor-native variable wins; the Amp spelling is accepted as an
+    ///     alias. An empty value means no exclusions.
+    /// </summary>
+    private static string IgnoreGuidanceFilesValue =>
+        Environment.GetEnvironmentVariable(IgnoreGuidanceFilesVariable)
+        ?? Environment.GetEnvironmentVariable(AmpIgnoreGuidanceFilesVariable)
+        ?? string.Empty;
+
+    /// <summary>Match a context file name against the exclusion list (#2675 item 071).</summary>
+    private static bool IsIgnored(string fileName, string patterns)
+    {
+        if (patterns.Length == 0)
+            return false;
+
+        foreach (string pattern in patterns.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (pattern.Length == 0)
+                continue;
+            if (pattern == "*")
+                return true;
+            if (pattern[^1] == '*' && fileName.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (string.Equals(pattern, fileName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
     private static void AppendLong(IncrementalHash hash, long value, Span<byte> scratch)
     {
         System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(scratch, value);
@@ -212,8 +260,12 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     {
         var files = new List<ContextFile>(ContextFileNames.Length);
         int remaining = MaxContextBytes;
+        string ignored = IgnoreGuidanceFilesValue;
         foreach (string name in ContextFileNames)
         {
+            if (IsIgnored(name, ignored))
+                continue;
+
             string path = Path.Combine(workingDirectory, name);
             if (!File.Exists(path))
             {
