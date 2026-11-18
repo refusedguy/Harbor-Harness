@@ -269,6 +269,48 @@ public class ToolRegistrySnapshotTests
     }
 
     /// <summary>
+    ///     #2572: a name declared by two sources resolves to exactly one tool on
+    ///     every read path. The first source that resolves the name wins, so the
+    ///     live dispatcher and the frozen snapshot agree — before the fix the
+    ///     frozen path picked the opposite tool and the live descriptor list
+    ///     carried the name twice.
+    /// </summary>
+    [Test]
+    public async Task CompositeToolRegistry_DuplicateName_ResolvesConsistentlyAcrossPaths()
+    {
+        var first = new StubSource("shared_tool", "only_first");
+        var second = new StubSource("shared_tool", "only_second");
+
+        var live = new CompositeToolRegistry();
+        live.AddSource(first);
+        live.AddSource(second);
+
+        var frozen = new CompositeToolRegistry();
+        frozen.AddSource(first);
+        frozen.AddSource(second);
+        frozen.Freeze();
+
+        var shared = ToolName.Create("shared_tool");
+        var liveTool = live.GetTool(shared);
+        var frozenTool = frozen.GetTool(shared);
+
+        await Assert.That(liveTool.IsSuccess).IsTrue();
+        await Assert.That(frozenTool.IsSuccess).IsTrue();
+        await Assert.That(ReferenceEquals(liveTool.Value, frozenTool.Value)).IsTrue();
+        await Assert.That(ReferenceEquals(liveTool.Value, first.GetTool(shared).Value)).IsTrue();
+
+        await AssertSameNames(live.GetAllTools(), "shared_tool", "only_first", "only_second");
+        await AssertSameNames(frozen.GetAllTools(), "shared_tool", "only_first", "only_second");
+
+        var permission = new PermissionRuleset(new[]
+        {
+            new PermissionRule("*", "*", PermissionAction.Allow)
+        });
+        await AssertSameNames(live.ResolveTools("code", permission), "shared_tool", "only_first", "only_second");
+        await AssertSameNames(frozen.ResolveTools("code", permission), "shared_tool", "only_first", "only_second");
+    }
+
+    /// <summary>
     ///     #1240: frozen arrays are pre-sorted by name (ordinal) — the per-turn
     ///     consumer iterates them as-is instead of paying an OrderBy per turn.
     ///     Registration order must not leak into the snapshot order.
