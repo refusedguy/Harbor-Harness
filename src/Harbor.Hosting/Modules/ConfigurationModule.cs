@@ -66,7 +66,18 @@ internal static class ConfigurationModule
 
         string? envModel = HarborEnv.Get(HarborEnv.Model);
         if (!string.IsNullOrEmpty(envModel))
-            ctx.Harbor.Model = envModel;
+        {
+            // #2568: the property setter discarded TrySetModel's parse reason,
+            // so a bad HARBOR_MODEL silently fell back to the loaded model. The
+            // fallback stays the same; the refusal is now reported.
+            var overrideResult = ctx.Harbor.TrySetModel(envModel);
+            if (overrideResult.IsFailure)
+            {
+                loggerFactory.CreateLogger("Harbor.Hosting.ConfigurationModule").LogWarning(
+                    "HARBOR_MODEL '{Model}' was rejected: {Reason}. Using the configured model instead.",
+                    envModel, overrideResult.Error);
+            }
+        }
 
         // App hook (desktop overrides ctx.Common with its async-loaded instance).
         options.AfterConfiguration?.Invoke(ctx);
