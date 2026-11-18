@@ -74,6 +74,16 @@ public sealed class ComponentGoldenFramesTests : GoldenTestBase
     [Test]
     [Category("E2E")]
     [Category("Golden")]
+    public async Task Frames_StatusBadge_Running()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+        var snapshot = CaptureFrame(() => StatusBadgeView("running"), 240, 80);
+        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/statusbadge/running.golden.txt", snapshot, "running");
+    }
+
+    [Test]
+    [Category("E2E")]
+    [Category("Golden")]
     public async Task Frames_Toast_Single()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
