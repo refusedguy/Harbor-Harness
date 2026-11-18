@@ -1,3 +1,5 @@
+namespace Harbor.TestKit.Tests;
+
 /// <summary>
 ///     The seed contract a fuzz failure is replayed from. These cases assert
 ///     what a caller can observe: which seeds a run gets when the environment
