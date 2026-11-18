@@ -145,18 +145,7 @@ public sealed partial record AssistantMessage(
     /// <param name="text">The text to append.</param>
     /// <returns>A new <see cref="AssistantMessage" /> with the appended part.</returns>
     public AssistantMessage AppendText(string text)
-    {
-        // Manual array copy avoids the LINQ `Append(...).ToArray()` pipeline, which
-        // allocates a struct iterator + final array. We allocate exactly one array
-        // (the new Parts) and copy the existing items by index.
-        var newArray = new ContentPart[Parts.Count + 1];
-        for (int i = 0; i < Parts.Count; i++)
-        {
-            newArray[i] = Parts[i];
-        }
-        newArray[Parts.Count] = new TextPart(text);
-        return this with { Parts = newArray };
-    }
+        => Append(new TextPart(text));
 
     /// <summary>
     ///     Returns a copy of this message with an additional <see cref="ThinkingPart" /> appended.
@@ -164,15 +153,7 @@ public sealed partial record AssistantMessage(
     /// <param name="text">The thinking text to append.</param>
     /// <returns>A new <see cref="AssistantMessage" /> with the appended part.</returns>
     public AssistantMessage AppendThinking(string text)
-    {
-        var newArray = new ContentPart[Parts.Count + 1];
-        for (int i = 0; i < Parts.Count; i++)
-        {
-            newArray[i] = Parts[i];
-        }
-        newArray[Parts.Count] = new ThinkingPart(text);
-        return this with { Parts = newArray };
-    }
+        => Append(new ThinkingPart(text));
 
     /// <summary>
     ///     Returns a copy of this message with an additional <see cref="ToolCallPart" /> appended.
@@ -180,13 +161,30 @@ public sealed partial record AssistantMessage(
     /// <param name="toolCall">The tool call part to append.</param>
     /// <returns>A new <see cref="AssistantMessage" /> with the appended part.</returns>
     public AssistantMessage AppendToolCall(ToolCallPart toolCall)
+        => Append(toolCall);
+
+    /// <summary>
+    ///     The one append implementation: copies <see cref="Parts" /> into a new
+    ///     array with <paramref name="part" /> at the end and returns a copy of
+    ///     this message carrying it.
+    /// </summary>
+    /// <remarks>
+    ///     Manual array copy avoids the LINQ <c>Append(...).ToArray()</c> pipeline,
+    ///     which allocates a struct iterator + final array. We allocate exactly
+    ///     one array (the new <see cref="Parts" />) and copy the existing items
+    ///     by index. A change to the copy strategy (e.g. <c>ImmutableArray</c> or
+    ///     spare capacity) lands here once, not in each <c>Append*</c> wrapper.
+    /// </remarks>
+    /// <param name="part">The content part to append.</param>
+    /// <returns>A new <see cref="AssistantMessage" /> with the appended part.</returns>
+    private AssistantMessage Append(ContentPart part)
     {
         var newArray = new ContentPart[Parts.Count + 1];
         for (int i = 0; i < Parts.Count; i++)
         {
             newArray[i] = Parts[i];
         }
-        newArray[Parts.Count] = toolCall;
+        newArray[Parts.Count] = part;
         return this with { Parts = newArray };
     }
 
