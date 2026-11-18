@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Tui.CellForge.Rendering;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -299,36 +300,6 @@ public sealed class ColumnsBlock : IChatBlock
         return text + new string(' ', pad);
     }
 
-    private static string Truncate(string text, int width)
-    {
-        if (width <= 1)
-        {
-            return width <= 0 ? string.Empty : "…";
-        }
-
-        var sb = new StringBuilder();
-        int w = 0;
-        var span = text.AsSpan();
-        while (!span.IsEmpty)
-        {
-            System.Text.Rune.DecodeFromUtf16(span, out var rune, out int consumed);
-            if (consumed <= 0)
-            {
-                break;
-            }
-
-            int cw = Math.Max(1, UnicodeWidth.Width(rune));
-            if (w + cw > width - 1)
-            {
-                break;
-            }
-
-            sb.Append(span[..consumed]);
-            w += cw;
-            span = span[consumed..];
-        }
-
-        sb.Append('…');
-        return sb.ToString();
-    }
+    private static string Truncate(string text, int width) =>
+        UnicodeTruncation.Truncate(text, width, UnicodeTruncation.Ellipsis);
 }

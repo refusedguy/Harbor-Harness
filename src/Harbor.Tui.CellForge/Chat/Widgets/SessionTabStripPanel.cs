@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
@@ -878,27 +877,6 @@ public sealed class SessionTabStripPanel : Panel
     ///     a wide glyph and never returning more cells than asked for — the
     ///     invariant that keeps the strip from painting over its neighbour.
     /// </summary>
-    internal static string Truncate(string text, int cells)
-    {
-        if (cells <= 0)
-            return string.Empty;
-        if (UnicodeWidth.Width(text.AsSpan()) <= cells)
-            return text;
-
-        int width = 0;
-        var sb = new StringBuilder(cells);
-        var rest = text.AsSpan();
-        while (!rest.IsEmpty
-               && Rune.DecodeFromUtf16(rest, out Rune rune, out int consumed) == OperationStatus.Done)
-        {
-            int w = UnicodeWidth.Width(rune);
-            if (width + w > cells)
-                break;
-            sb.Append(rune.ToString());
-            width += w;
-            rest = rest[consumed..];
-        }
-
-        return sb.ToString();
-    }
+    internal static string Truncate(string text, int cells) =>
+        UnicodeTruncation.Truncate(text, cells, string.Empty);
 }

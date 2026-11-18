@@ -105,7 +105,7 @@ public sealed class CellForgeDiffPreviewPanel : CellForgePanelBase
                     break;
                 }
 
-                rows.Add("  " + PanelText.Truncate(hunk.Header.TrimEnd('\r'), bodyBudget));
+                rows.Add("  " + UnicodeTruncation.Truncate(hunk.Header.TrimEnd('\r'), bodyBudget, UnicodeTruncation.Ellipsis));
                 shown++;
             }
 
@@ -135,7 +135,7 @@ public sealed class CellForgeDiffPreviewPanel : CellForgePanelBase
                 }
 
                 string line = gutterText + " " + raw.TrimEnd('\r');
-                rows.Add("  " + PanelText.Truncate(line, bodyBudget));
+                rows.Add("  " + UnicodeTruncation.Truncate(line, bodyBudget, UnicodeTruncation.Ellipsis));
                 shown++;
             }
         }
@@ -147,7 +147,7 @@ public sealed class CellForgeDiffPreviewPanel : CellForgePanelBase
             string marker = virtualized
                 ? $"⋯ virtualized: {patch.TotalLines} lines, showing {shown} ({(patch.WasChunked ? "chunked" : "head window")})"
                 : $"⋯ {remaining} more line(s)";
-            rows.Add("  " + PanelText.Truncate(marker, bodyBudget));
+            rows.Add("  " + UnicodeTruncation.Truncate(marker, bodyBudget, UnicodeTruncation.Ellipsis));
         }
     }
 
