@@ -89,7 +89,8 @@ public class LspFrameTransportTests
         var fromServer = new MemPipeStream();
         await using var transport = new LspFrameTransport(fromServer, new MemPipeStream());
         byte[] body = Encoding.UTF8.GetBytes("not-json");
-        await fromServer.WriteAsync([.. Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n"), .. body], CancellationToken.None);
+        byte[] frame = [.. Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n"), .. body];
+        await fromServer.WriteAsync(frame, CancellationToken.None);
 
         await Assert.ThrowsAsync<JsonException>(async () =>
             await transport.ReadFrameAsync(CancellationToken.None));
