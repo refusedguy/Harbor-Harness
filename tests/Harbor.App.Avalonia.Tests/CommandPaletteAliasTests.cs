@@ -35,15 +35,17 @@ public class CommandPaletteAliasTests
     [Test]
     public async Task AliasedQuery_FindsTheCanonicalRow()
     {
-        var vm = new TestPalette();
-        vm.Add("/exit", "Exit Harbor");
-        vm.Add("/new", "Start a new session");
-        vm.Alias("quit", "/exit");
+        var palette = new TestPalette();
+        palette.Add("/exit", "Exit Harbor");
+        palette.Add("/new", "Start a new session");
+        palette.Add("/model", "Switch the active LLM model");
+        palette.Alias("quit", "/exit");
 
-        vm.Filter("quit");
+        palette.Filter("quit");
 
-        await Assert.That(vm.Results.Count).IsEqualTo(1);
-        await Assert.That(vm.Results[0].Label).IsEqualTo("/exit");
+        await Assert.That(palette.Results.Count).IsEqualTo(1);
+        await Assert.That(palette.Results[0].Label).IsEqualTo("/exit");
+        await Assert.That(palette.Results[0].Hint).IsEqualTo("Exit Harbor");
     }
 
     [Test]
@@ -53,19 +55,17 @@ public class CommandPaletteAliasTests
         vm.Add("/exit", "Exit Harbor");
         vm.Alias("quit", "/exit");
 
-        vm.Filter("QUIT");
+        vm.Filter("QuIt");
 
-        await Assert.That(vm.Results.Count).IsEqualTo(1);
-        await Assert.That(vm.Results[0].Label).IsEqualTo("/exit");
+        await Assert.That(vm.Results.Single().Label).IsEqualTo("/exit");
     }
 
     [Test]
     public async Task Alias_RewritesToASubstringQuery_NotOnlyAnExactLabel()
     {
-        // The canonical value is an ordinary query. It need not equal a
-        // label verbatim; the regular Contains filter runs after the rewrite.
         var vm = new TestPalette();
         vm.Add("Stop agent", "AgentStop");
+        vm.Add("Refresh session list", "SessionRefresh");
         vm.Alias("halt", "agent");
 
         vm.Filter("halt");
@@ -83,9 +83,10 @@ public class CommandPaletteAliasTests
         vm.Alias("quit", "/exit");
 
         vm.Filter("new");
+        await Assert.That(vm.Results.Single().Label).IsEqualTo("/new");
 
-        await Assert.That(vm.Results.Count).IsEqualTo(1);
-        await Assert.That(vm.Results[0].Label).IsEqualTo("/new");
+        vm.Filter("exit");
+        await Assert.That(vm.Results.Single().Label).IsEqualTo("/exit");
     }
 
     [Test]
@@ -97,7 +98,7 @@ public class CommandPaletteAliasTests
 
         vm.Filter("ghost");
 
-        await Assert.That(vm.Results.Count).IsEqualTo(0);
+        await Assert.That(vm.Results).IsEmpty();
     }
 
     [Test]
@@ -105,11 +106,11 @@ public class CommandPaletteAliasTests
     {
         var vm = new TestPalette();
         vm.Add("/exit", "Exit Harbor");
+        vm.Add("/new", "Start a new session");
         vm.Alias(string.Empty, "/nothing");
 
         vm.Filter(string.Empty);
 
-        await Assert.That(vm.Results.Count).IsEqualTo(1);
-        await Assert.That(vm.Results[0].Label).IsEqualTo("/exit");
+        await Assert.That(vm.Results.Count).IsEqualTo(2);
     }
 }
