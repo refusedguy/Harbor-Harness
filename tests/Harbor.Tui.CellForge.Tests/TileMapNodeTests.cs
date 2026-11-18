@@ -120,16 +120,18 @@ public sealed class TileMapNodeTests
     }
 
     [Test]
-    public async Task Node_EmptyMapSlot_PaintsNothing()
+    public async Task Node_EmptyOrUnknownMapSlot_PaintsNothing()
     {
         var atlas = Atlas(1, 1);
-        var node = new EngineCells.TileMapNode(atlas, 1, 1);
-        node.Arrange(new EngineCells.Rect(0, 0, 1, 1));
+        var node = new EngineCells.TileMapNode(atlas, 1, 2);
+        node.SetTile(0, 0, "not-defined");
+        node.Arrange(new EngineCells.Rect(0, 0, 2, 1));
 
-        var buffer = MarkedBuffer(1, 1);
-        node.Paint(buffer, new EngineCells.Rect(0, 0, 1, 1));
+        var buffer = MarkedBuffer(2, 1);
+        node.Paint(buffer, new EngineCells.Rect(0, 0, 2, 1));
 
         await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'z');
+        await Assert.That(buffer.Get(1, 0).Rune).IsEqualTo((int)'z');
     }
 
     [Test]

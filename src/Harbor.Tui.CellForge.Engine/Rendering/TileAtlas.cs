@@ -107,6 +107,16 @@ public sealed class TileAtlas
     }
 
     /// <summary>Looks up a tile's cells. The returned memory is owned by the atlas.</summary>
-    public ReadOnlyMemory<Cell>? Get(string id) =>
-        _tiles.TryGetValue(id, out Cell[]? cells) ? cells : null;
+    public ReadOnlyMemory<Cell>? Get(string id)
+    {
+        if (_tiles.TryGetValue(id, out Cell[]? cells))
+        {
+            return cells;
+        }
+
+        // A conditional `? cells : null` would infer Cell[]? and wrap a null
+        // array into a non-null ReadOnlyMemory — an unknown id must be a true
+        // nullable miss so callers can skip it.
+        return null;
+    }
 }
