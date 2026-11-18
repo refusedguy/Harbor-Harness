@@ -2,13 +2,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
              xmlns:avaloniaEdit="https://github.com/avaloniaui/avaloniaedit"
              x:Class="Harbor.App.Avalonia.Views.CodeEditorView">
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- K24: clickable path breadcrumb for the active file -->
+        <DockPanel Grid.Row="0" Margin="8,4,8,0"
+                   IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectNotNullConverter.Instance}}">
+            <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
+                       FontSize="10" Foreground="{DynamicResource TextTertiaryBrush}"
+                       IsVisible="{Binding SelectedCrumbPath, Converter={x:Static views:ObjectNotNullConverter.Instance}}"
+                       Text="{Binding SelectedCrumbPath, StringFormat='Selected: {0}'}"/>
+            <ctrl:BreadcrumbBar Crumbs="{Binding ActivePathCrumbs}"
+                                CrumbClickCommand="{Binding SelectCrumbCommand}"/>
+        </DockPanel>
 
         <!-- Tab strip + toolbar -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Background="{DynamicResource BgRailBrush}">
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Background="{DynamicResource BgRailBrush}">
             <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                 <ItemsControl ItemsSource="{Binding Tabs}">
                     <ItemsControl.ItemsPanel>
@@ -41,7 +53,7 @@
         </Grid>
 
         <!-- Active editor with floating inline edit overlay -->
-        <Border Grid.Row="1" Classes="CodeEditorHost" Margin="0">
+        <Border Grid.Row="2" Classes="CodeEditorHost" Margin="0">
             <Canvas>
                 <TextBlock Text="No file open — press Ctrl+O to open a file."
                            Canvas.Left="0" Canvas.Top="0"

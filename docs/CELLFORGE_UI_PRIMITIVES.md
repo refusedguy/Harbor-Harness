@@ -45,13 +45,13 @@ at commit `b1239b7b`, not a claim about future work.
 | P10 | Log view with follow, filter and wrap | widget shipped |
 | P11 | Breadcrumbs with back and forward | engine widget shipped |
 | P12 | Collapsible tree with aggregated hidden nodes | widget shipped |
-| P13 | Faceted history with session resume | open |
+| P13 | Faceted history with session resume | state primitive shipped |
 | P14 | Document renderer with pager keys and wrap | view shipped |
 | P15 | Inline image with capability negotiation | engine support shipped |
 
 Three items were open when this catalog was written: P02, P05 and P13. P02 was
-implemented in #2884 as `TwoPaneState`; P05 is implemented here as
-`NavigableChangeBlocks`; P13 covers faceted history.
+implemented in #2884 as `TwoPaneState`, P13 as `FacetedHistoryState`, and P05
+as `NavigableChangeBlocks` in this slice.
 
 ## The primitive
 
@@ -201,6 +201,19 @@ caller gets either the single cursor line or an anchored range. `Rows()` is a
 pure projection for a clip and `Paint()` writes both sides to a
 `ScreenBuffer`; a transfer is reported as a `BlockTransfer` value, so no git or
 application type enters the primitive's public surface.
+
+## P13: faceted history (shipped)
+
+P13 is implemented as [`FacetedHistory.cs`](../src/Harbor.Tui.CellForge.Engine/Rendering/FacetedHistory.cs).
+It keeps the primitive domain-free: a caller supplies prepared
+`HistoryEntry` records (identity, search text, detail and named facets), and the
+state owns only the query, the facet selections and the cursor. `Visible()` is a
+pure filter, `FacetValues(key)` counts a key's values against the *other*
+constraints so drill-down stays useful, and `Selected` reports the entry back
+to the caller. Facet constraints combine with AND across keys and OR within a
+key; free text is case-insensitive over the search text and detail. No exit
+code, cwd, host or duration type appears on the primitive's public surface, so
+session resume stays an application concern.
 
 ## Related documents
 

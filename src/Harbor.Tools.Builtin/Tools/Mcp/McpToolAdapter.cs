@@ -30,26 +30,20 @@ public sealed partial class McpToolAdapter : ITool
     public ToolName Name => BuildName(_server, _toolName);
 
     /// <summary>
-    ///     Build the stable tool name for one server/tool pair. Discovery and the
-    ///     adapter call this same helper, so the permission rule granted at
-    ///     registration names exactly the tool the dispatcher resolves.
+    ///     Build the stable, provider-safe tool name for one server/tool pair.
+    ///     Discovery and the adapter call this same helper, so the permission rule
+    ///     granted at registration names exactly the tool the dispatcher resolves.
+    ///     <para>
+    ///         Names that already satisfy <see cref="ToolName" /> and the provider's
+    ///         64-character cap keep the legacy <c>mcp_server_tool</c> shape. Names that
+    ///         need sanitizing get a digest of the original pair so two different tools
+    ///         can never collapse into one model-facing name (#2677 item 2). The original
+    ///         remote name is still stored in <c>_toolName</c> and is what <c>tools/call</c>
+    ///         sends to the server.
+    ///     </para>
     /// </summary>
     internal static ToolName BuildName(string server, string remoteName)
-        => ToolName.Create($"mcp_{Sanitize(server)}_{Sanitize(remoteName)}");
-
-    private static string Sanitize(string value)
-    {
-        // ToolName accepts ^[a-z][a-z0-9_]*$. Server names and MCP tool names are
-        // free-form, so an unknown character becomes '_' rather than throwing at
-        // discovery time. The "mcp_" prefix keeps the first character a letter.
-        char[] chars = new char[value.Length];
-        for (int i = 0; i < value.Length; i++)
-        {
-            char c = char.ToLowerInvariant(value[i]);
-            chars[i] = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' ? c : '_';
-        }
-        return new string(chars);
-    }
+        => ToolNameSanitizer.Sanitize(server, remoteName);
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;

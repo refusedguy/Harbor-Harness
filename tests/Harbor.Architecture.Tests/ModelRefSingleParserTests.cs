@@ -169,6 +169,11 @@ public sealed class ModelRefSingleParserTests
             + "matcher's spelling ('StartsWith' on a variable named 'prefix') is the same shape "
             + "as the provider/ prefix strip this rule is about. Listed because the matcher is "
             + "textual, not semantic.",
+        ["apps/Harbor.App.Avalonia/ViewModels/BreadcrumbBuilder.cs"] =
+            "NOT A REFERENCE. K24's breadcrumb splitter reads a FILESYSTEM path, which is "
+            + "slash-separated by definition. It splits on '/' to produce crumbs and appends "
+            + "'/' to a Windows drive root; neither operation parses a 'provider/model' "
+            + "reference. Listed because the matcher is textual, not semantic.",
     };
 
     /// <summary>

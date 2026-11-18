@@ -150,9 +150,17 @@ public sealed class CellForgePilot : IAsyncDisposable
         await WaitForIdleAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>Drain parked projections until the pump is idle (textual <c>wait_for_idle</c>).</summary>
-    public async Task<bool> WaitForIdleAsync(CancellationToken ct = default) =>
-        await Renderer.WaitForIdleAsync(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+    /// <summary>
+    ///     Drain the event bus and the parked projections until both are idle
+    ///     (textual <c>wait_for_idle</c>). The bus comes first: a subscriber
+    ///     still running can dispatch store work after a projection drained,
+    ///     so renderer idle alone was not the whole idle fact.
+    /// </summary>
+    public async Task<bool> WaitForIdleAsync(CancellationToken ct = default)
+    {
+        await Bus.WaitForDrainAsync(ct: ct).ConfigureAwait(false);
+        return await Renderer.WaitForIdleAsync(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+    }
 
     // -- message_hook asserts --
 

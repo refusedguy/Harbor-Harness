@@ -60,6 +60,14 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     [ObservableProperty]
     private EditorTabViewModel? _activeTab;
 
+    /// <summary>K24: clickable path crumbs for the active tab's file.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<BreadcrumbCrumb> _activePathCrumbs = [];
+
+    /// <summary>K24: path of the crumb the user last clicked.</summary>
+    [ObservableProperty]
+    private string? _selectedCrumbPath;
+
     [ObservableProperty]
     private IReadOnlyList<LspDiagnostic> _activeDiagnostics = [];
 
@@ -115,12 +123,20 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             newValue.PropertyChanged += OnTabPropertyChanged;
         }
 
+        // K24: the path crumbs follow the active tab. A tab re-pointed at a
+        // different file (Save As) refreshes them through OnTabPropertyChanged.
+        ActivePathCrumbs = BreadcrumbBuilder.Build(newValue?.FilePath);
+        SelectedCrumbPath = null;
         RefreshDiagnostics(newValue);
         if (newValue is not null && _lsp is not null && !_lspOpened.Contains(newValue.FilePath))
         {
             OpenWithLsp(newValue.FilePath, newValue.Content);
         }
     }
+
+    /// <summary>K24: a crumb click records the path it addresses.</summary>
+    [RelayCommand]
+    private void SelectCrumb(string? path) => SelectedCrumbPath = path;
 
     [RelayCommand]
     private async Task OpenFileAsync()
@@ -260,6 +276,11 @@ public sealed partial class CodeEditorViewModel : ObservableObject
 
     private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(EditorTabViewModel.FilePath))
+        {
+            ActivePathCrumbs = BreadcrumbBuilder.Build(ActiveTab?.FilePath);
+        }
+
         if (e.PropertyName == nameof(EditorTabViewModel.Content)
             && sender is EditorTabViewModel { } tab
             && ActiveTab == tab

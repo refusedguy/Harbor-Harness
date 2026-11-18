@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Hosting;
 using Harbor.Storage.Jsonl;
@@ -7,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     <c>harbor sessions</c> family: list (default), rename, export, export-zip, import,
+///     <c>harbor sessions</c> family: list (default), rename, retitle, export, export-zip, import,
 ///     search, usage, revert, checkpoint, checkpoints, rewind, tree, fork. Extracted from <c>Program</c> (#176);
 ///     rename persists a new title via ISessionStore.UpdateAsync,
 ///     export/import round-trip one session through the portable line payload
@@ -27,6 +28,8 @@ internal static class SessionsVerb
                 return await RunListSessionsAsync(logger);
             case "rename":
                 return await RunRenameSessionAsync(logger, args.Skip(1).ToArray());
+            case "retitle":
+                return await RunRetitleSessionAsync(args.Skip(1).ToArray());
             case "export":
                 return await RunExportSessionAsync(logger, args.Skip(1).ToArray());
             case "export-zip":
@@ -55,9 +58,10 @@ internal static class SessionsVerb
                 return await RunForkSessionAsync(logger, args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|export-zip|export-md|export-json|import|search|usage|revert|checkpoint|checkpoints|rewind|tree|fork]
+                                        Usage: harbor sessions [list|rename|retitle|export|export-zip|export-md|export-json|import|search|usage|revert|checkpoint|checkpoints|rewind|tree|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
+                                          sessions retitle <id>           regenerate a title from the first user message
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions export-zip <id> [file] export session as ONE zip archive: log + attachments + manifest
                                                                   (default: harbor-session-<id>.zip)
@@ -140,6 +144,25 @@ internal static class SessionsVerb
 
         Console.WriteLine($"Renamed {sessionId} → \"{title}\"");
         return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions retitle &lt;session-id&gt;</c> (issue #2684 S06):
+    ///     one auxiliary naming request, no agent loop, title-only update.
+    /// </summary>
+    internal static async Task<int> RunRetitleSessionAsync(string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions retitle <session-id>");
+            return 2;
+        }
+
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        var providers = host.Services.GetRequiredService<IProviderRegistry>();
+        return await SessionRetitleRunner.RunAsync(Console.Out, Console.Error, store, providers, args[0])
+            .ConfigureAwait(false);
     }
 
     internal static async Task<int> RunExportSessionAsync(ILogger logger, string[] args)

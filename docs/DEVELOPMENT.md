@@ -77,6 +77,14 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 (pinned in `Direct
 - **Pre-existing Avalonia 12 headless failures** (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — "Stack empty" in `SetInheritanceParent`), plus an occasional flaky pair `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered`. Not Harbor bugs — see ROADMAP backlog.
 - **IPC named-pipe event-stream tests on Linux** (`Harbor.Ipc.Tests`) self-skip unless `HARBOR_IPC_EVENTSTREAM=1` is set; some timing flakes remain.
 
+### Deterministic event drain
+
+`FakeEventBus.WaitForDrainAsync` replaces a fixed sleep after `PublishAsync`: it
+returns when every published event, including events a subscriber published in
+turn, has reached all subscribers. `CellForgePilot.WaitForIdleAsync` awaits it
+before draining the renderer. A subscriber that awaits the drain from inside
+`PublishAsync` deadlocks; the timeout names the pending event types.
+
 ### Golden baselines — one contract
 
 A golden is a committed snapshot of what a piece of code renders. Since

@@ -54,6 +54,9 @@ public sealed class MockLlmServer : IAsyncDisposable
     // SetChunkDelay so N concurrent streams still interleave on the wire while
     // wall-clock time stays compressed. Zero disables the delay entirely.
     private TimeSpan _chunkDelay = TimeSpan.FromMilliseconds(50);
+    // Wire-level fault injected into subsequent streamed completions. Volatile
+    // so a test may switch it while the listener loop serves other requests.
+    private volatile MockLlmFault _fault;
     // Recording: every served completion is appended to this JSONL file so a
     // later run can replay the exact sequence without re-scripting.
     private string? _recordingPath;
@@ -232,6 +235,12 @@ public sealed class MockLlmServer : IAsyncDisposable
     {
         _chunkDelay = delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
     }
+
+    /// <summary>
+    ///     Inject a wire-level fault into subsequent streamed completions.
+    ///     <see cref="MockLlmFault.None" /> restores the healthy SSE path.
+    /// </summary>
+    public void SetFault(MockLlmFault fault) => _fault = fault;
 
     /// <summary>
     ///     Put <paramref name="model" /> into echo mode: every request is
@@ -538,10 +547,12 @@ public sealed class MockLlmServer : IAsyncDisposable
         resp.ContentType = "text/event-stream";
         resp.ContentEncoding = Encoding.UTF8;
         var outStream = resp.OutputStream;
+        // Snapshot once per request: a test may re-arm the fault between calls.
+        MockLlmFault fault = _fault;
 
         if (canned.IsToolCall)
         {
-            // Single tool-call chunk + finish.
+            // Single tool-call chunk + finish. Faults target text streams only.
             string toolCallChunk = BuildToolCallChunk(model ?? "mock", canned.ToolName!, canned.ToolArgs!);
             await WriteSseAsync(outStream, toolCallChunk, ct).ConfigureAwait(false);
             string finishChunk = BuildFinishChunk(model ?? "mock", "tool_calls");
@@ -560,13 +571,44 @@ public sealed class MockLlmServer : IAsyncDisposable
                 string slice = text.Substring(i, len);
                 string chunk = BuildTextDeltaChunk(model ?? "mock", slice);
                 await WriteSseAsync(outStream, chunk, ct).ConfigureAwait(false);
+
+                // Land the fault right after the first delta. The client has
+                // then seen real content, so an assertion can tell "the stream
+                // survived" apart from "nothing was ever delivered".
+                if (i == 0 && fault is MockLlmFault.BadJson)
+                {
+                    await WriteSseAsync(outStream, "{NOT VALID JSON", ct).ConfigureAwait(false);
+                }
+                if (i == 0 && fault is MockLlmFault.DisconnectAfterChunk)
+                {
+                    // Return closes the response cleanly: the client sees EOF
+                    // mid-stream, not an HTTP-level error.
+                    return;
+                }
+
                 if (_chunkDelay > TimeSpan.Zero)
                 {
                     await Task.Delay(_chunkDelay, ct).ConfigureAwait(false);
                 }
             }
+
+            if (fault is MockLlmFault.TruncatedSse)
+            {
+                // Half-written data line with no terminator. The pump's EOF
+                // path hands it to the chunk parser, which skips it.
+                byte[] partial = Encoding.UTF8.GetBytes("data: {\"choices\":[{\"delta\":{\"content\":\"cut");
+                await outStream.WriteAsync(partial, ct).ConfigureAwait(false);
+                await outStream.FlushAsync(ct).ConfigureAwait(false);
+                return; // no finish frame and no sentinel
+            }
+
             string finishChunk = BuildFinishChunk(model ?? "mock", "stop");
             await WriteSseAsync(outStream, finishChunk, ct).ConfigureAwait(false);
+        }
+
+        if (fault is MockLlmFault.NoDone)
+        {
+            return; // EOF without the sentinel: the pump emits one FinishEvent
         }
 
         await WriteSseDoneAsync(outStream, ct).ConfigureAwait(false);
@@ -726,6 +768,30 @@ public sealed class MockLlmServer : IAsyncDisposable
         string? ToolArgs,
         bool IsError,
         string? ErrorMessage);
+}
+
+/// <summary>
+///     Wire-level failures <see cref="MockLlmServer" /> can inject into a
+///     streamed text completion. They exercise the client's parser at the
+///     HTTP/SSE boundary without a live provider key. Tool-call completions
+///     are unaffected.
+/// </summary>
+public enum MockLlmFault
+{
+    /// <summary>Healthy stream: text deltas, a finish frame, then <c>[DONE]</c>.</summary>
+    None,
+
+    /// <summary>A final <c>data:</c> line cut mid-JSON with no terminator.</summary>
+    TruncatedSse,
+
+    /// <summary>A complete malformed JSON line after the first text delta.</summary>
+    BadJson,
+
+    /// <summary>Stream ends after the finish frame but without <c>[DONE]</c>.</summary>
+    NoDone,
+
+    /// <summary>Response closes cleanly right after the first text delta.</summary>
+    DisconnectAfterChunk,
 }
 
 /// <summary>
