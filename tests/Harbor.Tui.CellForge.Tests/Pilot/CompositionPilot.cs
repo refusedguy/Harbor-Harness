@@ -6,14 +6,15 @@
 // that does NOT own a chat runtime: it renders an INode tree straight into a
 // ScreenBuffer via NodeFrame.Render and reads back the visible output.
 //
-// This is deliberately NOT ElementId (#2361/#2436) and NOT the in-flight
-// WidgetIdRegistry product type (#2498, not on dev at the time of writing):
+// Stable id lookup is backed by the product WidgetIdRegistry (#2498) as its
+// single source of truth. The pilot used to carry a private ordinal id -> INode
+// map that duplicated the registry byte for byte (same comparer, same duplicate
+// throws); #2524 only avoided the registry because #2498 was still in flight.
+// ElementId (#2361/#2436) is a different concept and stays separate:
 //   * ElementId is a per-frame identity PATH used by prepaint to reuse records.
-//   * the product registry maps a stable name to an INode for production hosts.
-//   * this pilot keeps a tiny test-local ordinal id -> INode map, only so a
-//     test can say "give me the visible output of the widget named 'center'".
-// Keeping the map here (internal, test assembly) avoids duplicating either
-// product type and adds no public API surface.
+//   * WidgetIdRegistry maps a stable name to one INode and answers QueryOne.
+// The per-frame IdTrace below records ElementId paths; it never mixes with the
+// registry's stable ids. All new surface is internal, no public API is added.
 
 using System.Text;
 
@@ -26,10 +27,14 @@ namespace Harbor.Tui.CellForge.Tests.Pilot;
 /// </summary>
 internal sealed class CompositionPilot
 {
-    private readonly Dictionary<string, EngineCells.INode> _byId = new(StringComparer.Ordinal);
+    private readonly EngineCells.WidgetIdRegistry _byId;
     private readonly List<string> _idTrace = [];
 
-    public CompositionPilot(Func<EngineCells.INode> root, int cols, int rows)
+    public CompositionPilot(
+        Func<EngineCells.INode> root,
+        int cols,
+        int rows,
+        EngineCells.WidgetIdRegistry? registry = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(cols);
@@ -39,6 +44,7 @@ internal sealed class CompositionPilot
         Rows = rows;
         Root = root();
         Buffer = new EngineCells.ScreenBuffer(cols, rows);
+        _byId = registry ?? new EngineCells.WidgetIdRegistry();
     }
 
     public int Cols { get; }
@@ -59,22 +65,24 @@ internal sealed class CompositionPilot
     /// </summary>
     public IReadOnlyList<string> IdTrace => _idTrace;
 
-    /// <summary>Register a widget under a stable, ordinal id for lookup.</summary>
+    /// <summary>
+    /// Register a widget under a stable, ordinal id for lookup. Delegates to the
+    /// backing <see cref="EngineCells.WidgetIdRegistry"/>, including its
+    /// duplicate-id throw and its argument guards.
+    /// </summary>
     public CompositionPilot Register(string id, EngineCells.INode node)
     {
-        ArgumentException.ThrowIfNullOrEmpty(id);
-        ArgumentNullException.ThrowIfNull(node);
-        if (!_byId.TryAdd(id, node))
-        {
-            throw new InvalidOperationException($"A widget with id '{id}' is already registered.");
-        }
-
+        _byId.Register(id, node);
         return this;
     }
 
-    /// <summary>Find a registered widget by its exact id (no selectors).</summary>
+    /// <summary>
+    /// Find a registered widget by its exact id (no selectors). Reads the
+    /// backing <see cref="EngineCells.WidgetIdRegistry"/>; null or empty ids
+    /// are treated as unknown, matching the old private-map behaviour.
+    /// </summary>
     public EngineCells.INode? FindById(string id) =>
-        id is not null && _byId.TryGetValue(id, out var node) ? node : null;
+        !string.IsNullOrEmpty(id) ? _byId.QueryOne(id) : null;
 
     /// <summary>Record an ElementId path seen by a widget this frame.</summary>
     internal void Trace(EngineCells.ElementId id) => _idTrace.Add(id.ToString());
