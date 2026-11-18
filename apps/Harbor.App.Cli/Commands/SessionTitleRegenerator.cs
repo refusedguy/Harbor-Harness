@@ -27,7 +27,8 @@ namespace Harbor.App.Cli.Commands;
 ///         Only the title changes. Messages, provider, model and metadata are
 ///         copied through unchanged, which is why this writes
 ///         <c>session with { Title = ... }</c> instead of reconstructing a
-///         session from scratch.
+///         session from scratch. The four fallible reads and writes travel on
+///         one Result rail rather than a ladder of guards (docs/ROP-API-INVENTORY.md §3.1).
 ///     </para>
 /// </remarks>
 public static class SessionTitleRegenerator
@@ -65,35 +66,55 @@ public static class SessionTitleRegenerator
             return Result.Failure<string>("A session id is required.");
         }
 
-        var loaded = await store.GetAsync(sessionId).ConfigureAwait(false);
-        if (loaded.IsFailure)
-        {
-            return Result.Failure<string>($"Cannot read session {sessionId}: {loaded.Error}");
-        }
+        return await Result.Success(sessionId)
+            .Bind(async id => await (await store.GetAsync(id).ConfigureAwait(false))
+                .MapError(e => $"Cannot read session {id}: {e}"))
+            .Bind(async session => await (await LoadFirstPromptAsync(store, session, ct).ConfigureAwait(false))
+                .Bind(prompt => NameAndSaveAsync(providerRegistry, store, session, prompt, ct)))
+            .ConfigureAwait(false);
+    }
 
-        Session session = loaded.Value;
-        var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-        if (messages.IsFailure)
-        {
-            return Result.Failure<string>($"Cannot read messages for session {sessionId}: {messages.Error}");
-        }
+    /// <summary>Read the first non-blank user message, or fail with a clear reason.</summary>
+    private static async Task<Result<string>> LoadFirstPromptAsync(
+        ISessionStore store,
+        Session session,
+        CancellationToken ct)
+    {
+        return await (await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false))
+            .MapError(e => $"Cannot read messages for session {session.Id}: {e}")
+            .Bind(messages => messages
+                .TryFirst(m => m is UserMessage u && !string.IsNullOrWhiteSpace(u.Content))
+                .Map(m => ((UserMessage)m).Content)
+                .ToResult("The session has no user message to name."))
+            .ConfigureAwait(false);
+    }
 
-        Maybe<string> first = messages.Value
-            .TryFirst(m => m is UserMessage u && !string.IsNullOrWhiteSpace(u.Content))
-            .Map(m => ((UserMessage)m).Content);
+    /// <summary>Resolve the provider, ask for a title, then persist it.</summary>
+    private static async Task<Result<string>> NameAndSaveAsync(
+        IProviderRegistry providerRegistry,
+        ISessionStore store,
+        Session session,
+        string firstPrompt,
+        CancellationToken ct)
+    {
+        return await providerRegistry.GetClient(ProviderId.Create(session.ProviderId))
+            .MapError(e => $"Cannot resolve provider {session.ProviderId}: {e}")
+            .Bind(client => AskAsync(client, session, firstPrompt, ct))
+            .Bind(async title => await (await store.UpdateAsync(session with { Title = title }, ct)
+                    .ConfigureAwait(false))
+                .MapError(e => $"Cannot persist the new title: {e}")
+                .Map(_ => title))
+            .ConfigureAwait(false);
+    }
 
-        if (first.HasNoValue)
-        {
-            return Result.Failure<string>("The session has no user message to name.");
-        }
-
-        var clientResult = providerRegistry.GetClient(ProviderId.Create(session.ProviderId));
-        if (clientResult.IsFailure)
-        {
-            return Result.Failure<string>($"Cannot resolve provider {session.ProviderId}: {clientResult.Error}");
-        }
-
-        string excerpt = first.Value.Length > MaxPromptChars ? first.Value[..MaxPromptChars] : first.Value;
+    /// <summary>One bounded naming request. No tools, no agent loop.</summary>
+    private static async Task<Result<string>> AskAsync(
+        ILlmClient client,
+        Session session,
+        string firstPrompt,
+        CancellationToken ct)
+    {
+        string excerpt = firstPrompt.Length > MaxPromptChars ? firstPrompt[..MaxPromptChars] : firstPrompt;
         var request = new LlmRequest(
             Model: session.Model,
             Messages: [LlmUserMessage.Text(
@@ -108,7 +129,7 @@ public static class SessionTitleRegenerator
         timeout.CancelAfter(RequestTimeout);
 
         var sb = new StringBuilder();
-        await foreach (var evt in clientResult.Value.StreamAsync(request, timeout.Token).ConfigureAwait(false))
+        await foreach (var evt in client.StreamAsync(request, timeout.Token).ConfigureAwait(false))
         {
             if (evt is TextDeltaEvent delta)
             {
@@ -117,18 +138,9 @@ public static class SessionTitleRegenerator
         }
 
         string? title = Sanitize(sb.ToString());
-        if (title is null)
-        {
-            return Result.Failure<string>("The model did not return a usable title.");
-        }
-
-        var saved = await store.UpdateAsync(session with { Title = title }, ct).ConfigureAwait(false);
-        if (saved.IsFailure)
-        {
-            return Result.Failure<string>($"Cannot persist the new title: {saved.Error}");
-        }
-
-        return Result.Success(title);
+        return title is null
+            ? Result.Failure<string>("The model did not return a usable title.")
+            : Result.Success(title);
     }
 
     /// <summary>

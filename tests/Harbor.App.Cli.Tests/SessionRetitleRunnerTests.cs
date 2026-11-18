@@ -60,7 +60,7 @@ public class SessionRetitleRunnerTests
     public async Task Empty_Model_Answer_Keeps_The_Old_Title()
     {
         string id = await SeedAsync("keep me");
-        var llm = new ScriptedLlmClient(new LlmEvent[0]);
+        var llm = new ScriptedLlmClient(Array.Empty<LlmEvent>());
 
         int exit = await RunAsync(id, llm);
 
@@ -72,7 +72,7 @@ public class SessionRetitleRunnerTests
     [Test]
     public async Task Missing_Session_Is_Store_Failure()
     {
-        var llm = new ScriptedLlmClient(new LlmEvent[0]);
+        var llm = new ScriptedLlmClient(Array.Empty<LlmEvent>());
 
         int exit = await RunAsync("no-such-session", llm);
 
@@ -83,7 +83,7 @@ public class SessionRetitleRunnerTests
     [Test]
     public async Task Empty_Id_Is_Argument_Error()
     {
-        var llm = new ScriptedLlmClient(new LlmEvent[0]);
+        var llm = new ScriptedLlmClient(Array.Empty<LlmEvent>());
 
         int exit = await RunAsync("   ", llm);
 
