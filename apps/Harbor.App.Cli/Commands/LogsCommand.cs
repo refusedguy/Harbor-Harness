@@ -259,28 +259,30 @@ public sealed class LogsCommand : ICommand
         int top = 10;
         for (int i = 1; i < args.Length; i++)
         {
-            switch (args[i])
+            string option = args[i];
+            if (string.Equals(option, "--slow", StringComparison.Ordinal))
             {
-                case "--slow":
-                    if (i + 1 >= args.Length || !TryParseMilliseconds(args[++i], out slowMs))
-                    {
-                        _error.WriteLine("--slow needs a non-negative millisecond value (for example: --slow 100).");
-                        return Task.FromResult(1);
-                    }
-                    break;
-                case "--top":
-                    if (i + 1 >= args.Length
-                        || !int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out top)
-                        || top <= 0)
-                    {
-                        _error.WriteLine("--top needs a positive integer (for example: --top 10).");
-                        return Task.FromResult(1);
-                    }
-                    break;
-                default:
-                    _error.WriteLine($"Unknown option for --spans: {args[i]}");
-                    PrintUsage();
+                if (i + 1 >= args.Length || !TryParseMilliseconds(args[++i], out slowMs))
+                {
+                    _error.WriteLine("--slow needs a non-negative millisecond value (for example: --slow 100).");
                     return Task.FromResult(1);
+                }
+            }
+            else if (string.Equals(option, "--top", StringComparison.Ordinal))
+            {
+                if (i + 1 >= args.Length
+                    || !int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out top)
+                    || top <= 0)
+                {
+                    _error.WriteLine("--top needs a positive integer (for example: --top 10).");
+                    return Task.FromResult(1);
+                }
+            }
+            else
+            {
+                _error.WriteLine($"Unknown option for --spans: {option}");
+                PrintUsage();
+                return Task.FromResult(1);
             }
         }
 
