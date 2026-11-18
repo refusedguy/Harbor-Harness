@@ -19,8 +19,8 @@ namespace Harbor.Abstractions.Sessions;
 ///         The session store is the durable backing store for conversations. It owns session
 ///         metadata (CRUD via <see cref="CreateAsync" />, <see cref="GetAsync" />, <see cref="ListAsync" />,
 ///         <see cref="DeleteAsync" />), message history (<see cref="AppendMessageAsync" />,
-///         <see cref="UpdateMessageAsync" />, <see cref="GetMessagesAsync" />), and aggregated stats
-///         (<see cref="GetStatsAsync" />, <see cref="UpdateStatsAsync" />).
+///         <see cref="UpdateMessageAsync" />, <see cref="GetMessagesAsync" />), and, through the
+///         <see cref="ISessionStatsStore" /> capability, aggregated stats.
 ///     </para>
 ///     <para>
 ///         Implementations MUST be thread-safe and MUST persist data across process restarts
@@ -71,7 +71,7 @@ namespace Harbor.Abstractions.Sessions;
 ///         <see cref="DeleteMessagesAfterAsync" />.
 ///     </para>
 /// </remarks>
-public interface ISessionStore
+public interface ISessionStore : ISessionStatsStore
 {
     /// <summary>
     ///     Create a new session.
@@ -281,36 +281,6 @@ public interface ISessionStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Success, or failure if the session does not exist.</returns>
     public Task<Result> UpdateAsync(Session session, CancellationToken ct = default);
-
-    /// <summary>
-    ///     Get aggregated stats for a session.
-    /// </summary>
-    /// <remarks>
-    ///     Stats semantics diverge by implementation: <c>JsonlSessionStore</c>
-    ///     derives stats from the message history on every call (writes via
-    ///     <see cref="UpdateStatsAsync" /> are accepted but ignored), while
-    ///     <c>SqliteSessionStore</c> and <c>MemorySessionStore</c> return the
-    ///     last stored metadata record.
-    /// </remarks>
-    /// <param name="sessionId">The session id.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The current stats, or failure if the session does not exist.</returns>
-    public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default);
-
-    /// <summary>
-    ///     Update aggregated stats for a session.
-    /// </summary>
-    /// <remarks>
-    ///     <c>JsonlSessionStore</c> derives stats from messages (see
-    ///     <see cref="GetStatsAsync" />), so this is a no-op success there;
-    ///     the other stores persist the record and fail when the session does
-    ///     not exist.
-    /// </remarks>
-    /// <param name="sessionId">The session id.</param>
-    /// <param name="metadata">The new stats to persist.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Success, or failure if the session does not exist.</returns>
-    public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default);
 
     /// <summary>
     ///     Rewind the session to <paramref name="messageId" />: every message

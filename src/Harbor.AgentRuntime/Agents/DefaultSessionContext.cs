@@ -17,7 +17,7 @@ namespace Harbor.Application.Agents;
 ///     </para>
 ///     <para>
 ///         <b>Why the total is seeded once, here, instead of re-read per turn.</b>
-///         <see cref="ISessionStore.GetStatsAsync" /> diverges by implementation
+///         <see cref="ISessionStatsStore.GetStatsAsync" /> diverges by implementation
 ///         and <c>JsonlSessionStore</c> derives its fold from the message
 ///         history — which already contains the assistant message this turn just
 ///         appended. Re-reading per turn and adding the delta on top counts that

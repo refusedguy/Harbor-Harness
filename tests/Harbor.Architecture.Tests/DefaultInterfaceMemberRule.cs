@@ -508,6 +508,22 @@ public sealed class DefaultInterfaceMemberRule
             + "exists to remove.",
             ""),
         new(
+            "Harbor.Abstractions.Sessions.ISessionStatsStore",
+            "GetStatsAsync",
+            DimDirection.Conservative,
+            "Fails loudly (#2569): a store that does not expose stats must not answer with a "
+            + "zeroed record that reads as real usage. The omission is visible to the caller, "
+            + "which is the direction #579's convention requires.",
+            ""),
+        new(
+            "Harbor.Abstractions.Sessions.ISessionStatsStore",
+            "UpdateStatsAsync",
+            DimDirection.Conservative,
+            "Fails loudly (#2569): a store that does not persist stats must not report success "
+            + "for a write it never made. The omission is visible to the caller, which is the "
+            + "direction #579's convention requires.",
+            ""),
+        new(
             "Harbor.Abstractions.Sessions.ISessionContext",
             "CheckpointAsync",
             DimDirection.Conservative,
