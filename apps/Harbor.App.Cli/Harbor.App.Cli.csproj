@@ -208,6 +208,23 @@
     <DefineConstants Condition="'$(HarborWithAot)' == 'true'">$(DefineConstants);HARBOR_WITH_AOT</DefineConstants>
   </PropertyGroup>
 
+  <!--
+    #2432: IR-inspection verbs (dsl check with the print-IR flag, dsl types)
+    are a developer tool. They bind the markup parser, which lives in the
+    Roslyn generator project, so they are compiled only when the build is not
+    AOT. The flag is false for both AOT recipes: the HarborWithAot property
+    and the HARBOR_MINIMAL shorthand (which turns HarborWithAot on as well).
+    The ProjectReference and the `#if HARBOR_WITH_DSL_DEV` registration sites
+    share this flag, so the AOT binary carries neither the commands nor the
+    generator assembly.
+  -->
+  <PropertyGroup>
+    <HarborWithDslDev Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithDslDev>
+    <HarborWithDslDev Condition="'$(HarborWithAot)' == 'true'">false</HarborWithDslDev>
+    <HarborWithDslDev Condition="'$(HarborWithDslDev)' == ''">true</HarborWithDslDev>
+    <DefineConstants Condition="'$(HarborWithDslDev)' == 'true'">$(DefineConstants);HARBOR_WITH_DSL_DEV</DefineConstants>
+  </PropertyGroup>
+
   <!-- NativeAOT: strip, optimize for speed. StripSymbols/TrimmerRemoveSymbols
        (drop debug symbols) and TrimMode=full (aggressive) are the size story.
 
@@ -338,6 +355,20 @@
     <!-- #1617: explicit over transitive — ReplLifecycle/CellForgeReplRunner arm
          a Harbor.Tui.CellForge.Widgets.ThemeFileWatcher directly. -->
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Syntax\Harbor.Tui.CellForge.Syntax.csproj"/>
+  </ItemGroup>
+
+  <!--
+    #2432: the dev-only `dsl` verbs call the shared markup parser, which
+    lives in the Roslyn generator assembly. Conditional on the same flag as
+    the `#if` around their registration, so an AOT publish never sees this
+    edge. The parser itself depends only on the BCL and Contracts; no Roslyn
+    type crosses into the CLI's public surface.
+  -->
+  <ItemGroup Condition="'$(HarborWithDslDev)' == 'true'">
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.CodeGen\Harbor.Tui.CellForge.CodeGen.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
 
