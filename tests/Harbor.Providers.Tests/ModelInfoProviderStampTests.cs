@@ -115,7 +115,7 @@ public sealed class ModelInfoProviderStampTests
 
         Result<IReadOnlyList<ModelInfo>> result = await catalog.GetModelsAsync(config);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Count).IsEqualTo(1)
             .Because("a hardcoded catalog is returned whole; this is not a filtering path");
 
@@ -158,7 +158,7 @@ public sealed class ModelInfoProviderStampTests
 
         Result<IReadOnlyList<ModelInfo>> result = await catalog.GetModelsAsync(config);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Count).IsEqualTo(3);
 
         for (int i = 0; i < result.Value.Count; i++)
@@ -194,7 +194,7 @@ public sealed class ModelInfoProviderStampTests
         ModelInfo before = config.Models![0];
         Result<IReadOnlyList<ModelInfo>> result = await catalog.GetModelsAsync(config);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value[0].ProviderId).IsEqualTo("gateway");
         await Assert.That(result.Value[0].Id).IsEqualTo(before.Id)
             .Because("an already-correct catalog is returned as-is");
@@ -236,7 +236,7 @@ public sealed class ModelInfoProviderStampTests
 
             Result<IReadOnlyList<ModelInfo>> result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Count).IsEqualTo(1);
             await Assert.That(result.Value[0].ProviderId).IsEqualTo("gateway")
                 .Because(
@@ -285,7 +285,7 @@ public sealed class ModelInfoProviderStampTests
 
         Result<IReadOnlyList<ModelInfo>> result = await catalog.GetModelsAsync(config);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         // Count and ORDER, not just membership: truncation shows up as a short
         // list, and a re-ordering would show up here too.
