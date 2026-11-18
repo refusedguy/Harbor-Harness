@@ -92,20 +92,17 @@ public class ProviderOptionPreflightTests
     [Test]
     public async Task ParseOptions_ReadsProviderModelAndAssignments()
     {
-        Result<IReadOnlyList<OptionAssignment>> parsed = ProviderOptionPreflight.ParseOptions(
-            ["kilocode", "tencent/hy3:free", "--option", "toolUse=true", "--option", "temperature=0.4"],
-            out string? providerId,
-            out string? modelId);
+        Result<PreflightRequest> parsed = ProviderOptionPreflight.ParseOptions(
+            ["kilocode", "tencent/hy3:free", "--option", "toolUse=true", "--option", "temperature=0.4"]);
 
-        Result<IReadOnlyList<OptionAssignment>> missing = ProviderOptionPreflight.ParseOptions(
-            [], out _, out _);
+        Result<PreflightRequest> missing = ProviderOptionPreflight.ParseOptions([]);
 
         await Assert.That(parsed.IsSuccess).IsTrue();
-        await Assert.That(providerId).IsEqualTo("kilocode");
-        await Assert.That(modelId).IsEqualTo("tencent/hy3:free");
-        await Assert.That(parsed.Value.Count).IsEqualTo(2);
-        await Assert.That(parsed.Value[1].Name).IsEqualTo("temperature");
-        await Assert.That(parsed.Value[1].Value).IsEqualTo("0.4");
+        await Assert.That(parsed.Value.ProviderId).IsEqualTo("kilocode");
+        await Assert.That(parsed.Value.ModelId).IsEqualTo("tencent/hy3:free");
+        await Assert.That(parsed.Value.Options.Count).IsEqualTo(2);
+        await Assert.That(parsed.Value.Options[1].Name).IsEqualTo("temperature");
+        await Assert.That(parsed.Value.Options[1].Value).IsEqualTo("0.4");
         await Assert.That(missing.IsFailure).IsTrue();
     }
 

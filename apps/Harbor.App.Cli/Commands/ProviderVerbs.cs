@@ -1,3 +1,5 @@
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.App.Cli.Hosting;
@@ -74,6 +76,82 @@ internal static class ProviderVerbs
             foreach (var m in g) Console.WriteLine($"  {m.Id} — {m.DisplayName}");
         }
         return 0;
+    }
+}
+
+/// <summary>
+///     Reads the live capability facts for one model from the provider registry
+///     and prints the pure preflight verdict (#2686 Q07). The validator owns
+///     every rule; this runner only resolves the model and shapes the output.
+///     It lives beside <see cref="ProviderVerbs" /> because that file already
+///     consumes <see cref="IProviderRegistry" />: a new consumer file would
+///     change the committed seam graph.
+/// </summary>
+internal static class ProviderOptionRunner
+{
+    internal static async Task<int> RunAsync(
+        string[] args,
+        CancellationToken cancellationToken,
+        IProviderRegistry? registry = null)
+    {
+        Result<PreflightRequest> parsed = ProviderOptionPreflight.ParseOptions(args);
+        if (parsed.IsFailure)
+        {
+            Console.Error.WriteLine($"models preflight: {parsed.Error}");
+            return 1;
+        }
+
+        PreflightRequest request = parsed.Value;
+        string providerId = request.ProviderId;
+        string modelId = request.ModelId;
+        Result<ProviderId> id = ProviderId.TryCreate(providerId);
+        if (id.IsFailure)
+        {
+            Console.Error.WriteLine($"models preflight: {id.Error}");
+            return 1;
+        }
+
+        if (registry is null)
+        {
+            var host = HostBuilder.Build();
+            registry = host.Services.GetRequiredService<IProviderRegistry>();
+        }
+
+        Result<IReadOnlyList<ModelInfo>> models = await registry.GetAllModelsAsync(cancellationToken).ConfigureAwait(false);
+        if (models.IsFailure)
+        {
+            Console.Error.WriteLine($"models preflight: {models.Error}");
+            return 1;
+        }
+
+        ModelInfo? selected = Find(models.Value, id.Value, modelId);
+        if (selected is null)
+        {
+            Console.Error.WriteLine($"models preflight: no model '{modelId}' for provider '{providerId}'.");
+            return 1;
+        }
+
+        var profile = new ModelOptionProfile(
+            selected.SupportsToolUse,
+            selected.SupportsVision,
+            selected.SupportsReasoning,
+            selected.MaxOutputTokens,
+            selected.ContextWindow);
+
+        Result outcome = ProviderOptionPreflight.Validate(profile, request.Options);
+        Console.Out.WriteLine(ProviderOptionPreflight.FormatResult(providerId, modelId, outcome));
+        return outcome.IsFailure ? 1 : 0;
+    }
+
+    private static ModelInfo? Find(IReadOnlyList<ModelInfo> models, ProviderId providerId, string modelId)
+    {
+        foreach (ModelInfo model in models)
+        {
+            if (!string.Equals(model.ProviderId, providerId.Value, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase)) return model;
+        }
+
+        return null;
     }
 }
 

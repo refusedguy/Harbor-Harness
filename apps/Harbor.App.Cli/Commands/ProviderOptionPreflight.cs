@@ -6,6 +6,12 @@ namespace Harbor.App.Cli.Commands;
 /// <summary>One requested model option, as <c>--option name=value</c>.</summary>
 internal sealed record OptionAssignment(string Name, string Value);
 
+/// <summary>The parsed preflight request: which model, and which options to check.</summary>
+internal sealed record PreflightRequest(
+    string ProviderId,
+    string ModelId,
+    IReadOnlyList<OptionAssignment> Options);
+
 /// <summary>The capability facts a provider reports for one model.</summary>
 internal sealed record ModelOptionProfile(
     bool SupportsToolUse,
@@ -117,10 +123,10 @@ internal static class ProviderOptionPreflight
     }
 
     /// <summary>Parse the verb's <c>--option name=value</c> tail.</summary>
-    internal static Result<IReadOnlyList<OptionAssignment>> ParseOptions(string[] args, out string? providerId, out string? modelId)
+    internal static Result<PreflightRequest> ParseOptions(string[] args)
     {
-        providerId = null;
-        modelId = null;
+        string? providerId = null;
+        string? modelId = null;
         var options = new List<OptionAssignment>();
 
         for (int i = 0; i < args.Length; i++)
@@ -129,12 +135,12 @@ internal static class ProviderOptionPreflight
             if (token == "--option")
             {
                 if (i + 1 >= args.Length)
-                    return Result.Failure<IReadOnlyList<OptionAssignment>>("--option needs a name=value value.");
+                    return Result.Failure<PreflightRequest>("--option needs a name=value value.");
 
                 string assignment = args[++i];
                 int equals = assignment.IndexOf('=', StringComparison.Ordinal);
                 if (equals <= 0 || equals == assignment.Length - 1)
-                    return Result.Failure<IReadOnlyList<OptionAssignment>>($"--option '{assignment}' must be name=value.");
+                    return Result.Failure<PreflightRequest>($"--option '{assignment}' must be name=value.");
 
                 options.Add(new OptionAssignment(
                     assignment[..equals].Trim(),
@@ -143,7 +149,7 @@ internal static class ProviderOptionPreflight
             }
 
             if (token.StartsWith("--", StringComparison.Ordinal))
-                return Result.Failure<IReadOnlyList<OptionAssignment>>($"unexpected argument '{token}'.");
+                return Result.Failure<PreflightRequest>($"unexpected argument '{token}'.");
 
             if (providerId is null)
             {
@@ -157,13 +163,13 @@ internal static class ProviderOptionPreflight
                 continue;
             }
 
-            return Result.Failure<IReadOnlyList<OptionAssignment>>($"unexpected argument '{token}'.");
+            return Result.Failure<PreflightRequest>($"unexpected argument '{token}'.");
         }
 
         if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId))
-            return Result.Failure<IReadOnlyList<OptionAssignment>>("expected <provider> <model>.");
+            return Result.Failure<PreflightRequest>("expected <provider> <model>.");
 
-        return Result.Success<IReadOnlyList<OptionAssignment>>(options);
+        return Result.Success(new PreflightRequest(providerId, modelId, options));
     }
 
     /// <summary>Human-readable JSON-safe summary of what was checked.</summary>
