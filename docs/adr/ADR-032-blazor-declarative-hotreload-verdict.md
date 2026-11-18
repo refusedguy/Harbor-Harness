@@ -41,8 +41,8 @@ Harbor (issues
 `BuildRootEmitter.cs`, `BuildRootOverrideCoordinator.cs` и `MarkupChecksum.cs`
 лежат те же правила, которые отчёт вывел из `RenderTreeDiffBuilder.cs`,
 `HotReloadManager.cs` и `ChecksumUtilities.cs`. Это не совпадение и не вторая
-реализация: DSL-платформа влила их раньше отдельными slices по issue из цепочки
-#2424-#2441.
+реализация: DSL-платформа влила их раньше отдельными slices по issue-цепочке
+`2424-2441`.
 
 ## §3. Что неприменимо и почему
 
