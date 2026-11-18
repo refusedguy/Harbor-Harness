@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
@@ -28,7 +30,7 @@ internal sealed class PanelIndex
             : throw new KeyNotFoundException($"panel '{id}' not found");
 
     /// <summary>Tries named lookup without throwing.</summary>
-    public bool TryGet(string id, out Panel? panel) => _byId.TryGetValue(id, out panel);
+    public bool TryGet(string id, [NotNullWhen(true)] out Panel? panel) => _byId.TryGetValue(id, out panel);
 
     /// <summary>True when <paramref name="id"/> is registered.</summary>
     public bool Contains(string id) => _byId.ContainsKey(id);
