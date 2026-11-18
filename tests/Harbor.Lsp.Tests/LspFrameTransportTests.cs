@@ -119,7 +119,7 @@ public class LspClientTransportTests
             await Assert.That(envelope.RootElement.GetProperty("jsonrpc").GetString()).IsEqualTo("2.0");
             await Assert.That(envelope.RootElement.GetProperty("method").GetString()).IsEqualTo("textDocument/definition");
             int id = envelope.RootElement.GetProperty("id").GetInt32();
-            transport.Feed($$"""{"jsonrpc":"2.0","id":{{id}},"result":{"ok":true}}""");
+            transport.Feed("{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"ok\":true}}");
         }
 
         JsonElement? result = await request.WaitAsync(TimeSpan.FromSeconds(5));
