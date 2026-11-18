@@ -891,8 +891,8 @@ Decided: код не писать. Отчёт остаётся открытым 
 Issue #2692 — self-contained отчёт `demo-gifs-docs-decision` с вопросом, нужен
 ли отдельный файл состояний demo GIF, и четырьмя минимальными slice. Проверка
 `gh pr list --search 2692`, `gh pr list --search 2691` и `origin/dev`
-(`f26ceb7e`): P1 влит PR #2511 (таблица покрытия в `DEMO_GIFS.md`), P2 влит PR
-#2514 (`GIF_MIN_SCREENS_*` и `check-demo-screens.py` с self-test), P0 требует
+(`f26ceb7e`): P1 влит PR #2511 (таблица покрытия в `DEMO_GIFS.md`), P2 влит
+PR #2514 (`GIF_MIN_SCREENS_*` и `check-demo-screens.py` с self-test), P0 требует
 owner-dispatch с пушем бинарников, а P3 описан неверно: `screen-*.png` живут во
 временном каталоге, который `demo-repro normalize` удаляет. Смежные по #2691
 PR #2787 и #2879 уже в дереве.
