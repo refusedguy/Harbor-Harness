@@ -76,7 +76,7 @@ public class GenericRootReplayGoldenTests
 
         const string golden =
             "                \n" +
-            " REPLAY-OK     \n" +
+            " REPLAY-OK      \n" +
             "                \n";
         await Assert.That(TestRender.Art(first)).IsEqualTo(golden);
         await Assert.That(TestRender.Art(second)).IsEqualTo(golden);
