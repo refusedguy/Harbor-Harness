@@ -6,8 +6,8 @@
 // returns a new state, so the host owns undo/render/serialization. BCL-only and
 // AOT-safe like the other cell widgets; no extension axis (#555).
 
+using System.Globalization;
 using System.Text;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
@@ -303,40 +303,59 @@ public static class SequenceNav
             return;
         }
 
-        var markup = new StringBuilder();
-        markup.Append(HasPrevious(state)
-            ? PreviousGlyph.ToString()
-            : "[dim]" + PreviousGlyph + "[/]");
+        // Every glyph in the control is one cell wide, so a running column
+        // is enough to place each run without a markup parse or a width pass.
+        int column = rect.X;
+        int right = rect.X + rect.Width;
+        CellStyle bold = new(style.Fg, style.Bg, style.Attrs | StyleAttr.Bold);
+        CellStyle dim = new(style.Fg, style.Bg, style.Attrs | StyleAttr.Dim);
+
+        void Put(string text, CellStyle runStyle)
+        {
+            int room = right - column;
+            if (room <= 0)
+            {
+                return;
+            }
+
+            if (text.Length > room)
+            {
+                text = text[..room];
+            }
+
+            buffer.SetText(column, rect.Y, text, runStyle);
+            column += text.Length;
+        }
+
+        bool hasPrevious = HasPrevious(state);
+        Put(PreviousGlyph.ToString(), hasPrevious ? style : dim);
 
         int current = Number(state);
         var slots = Slots(state);
         foreach (var slot in slots)
         {
-            markup.Append(' ');
+            Put(" ", style);
             if (slot.IsGap)
             {
-                markup.Append("[dim]").Append(GapGlyph).Append("[/]");
+                Put(GapGlyph, dim);
             }
             else if (slot.Number == current)
             {
-                markup.Append("[bold][[").Append(slot.Number).Append("]][/]");
+                Put("[" + slot.Number.ToString(CultureInfo.InvariantCulture) + "]", bold);
             }
             else
             {
-                markup.Append(slot.Number);
+                Put(slot.Number.ToString(CultureInfo.InvariantCulture), style);
             }
         }
 
         if (slots.Count > 0)
         {
-            markup.Append(' ');
+            Put(" ", style);
         }
 
-        markup.Append(HasNext(state)
-            ? NextGlyph.ToString()
-            : "[dim]" + NextGlyph + "[/]");
-
-        MarkupCells.Paint(buffer, rect.X, rect.Y, markup.ToString(), style);
+        bool hasNext = HasNext(state);
+        Put(NextGlyph.ToString(), hasNext ? style : dim);
     }
 
     /// <summary>
