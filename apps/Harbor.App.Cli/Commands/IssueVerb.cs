@@ -65,35 +65,33 @@ internal static class IssueVerb
             return 1;
         }
 
-        switch (request.Action)
+        if (request.Action == "list")
         {
-            case "list":
+            Result<IReadOnlyList<IssueSummary>> issues = IssueProjection.ParseList(json.Value);
+            if (issues.IsFailure)
             {
-                Result<IReadOnlyList<IssueSummary>> issues = IssueProjection.ParseList(json.Value);
-                if (issues.IsFailure)
-                {
-                    Console.Error.WriteLine(issues.Error);
-                    return 1;
-                }
-                Console.Out.Write(IssueProjection.FormatList(issues.Value));
-                return 0;
+                Console.Error.WriteLine(issues.Error);
+                return 1;
             }
-            case "read":
-            {
-                Result<IssueDetail> issue = IssueProjection.ParseDetail(json.Value);
-                if (issue.IsFailure)
-                {
-                    Console.Error.WriteLine(issue.Error);
-                    return 1;
-                }
-                Console.Out.Write(IssueProjection.FormatDetail(issue.Value));
-                return 0;
-            }
-            default:
-                IssueVerbLog.Commented(logger, request.Number);
-                Console.Out.WriteLine($"Commented on #{request.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
-                return 0;
+            Console.Out.Write(IssueProjection.FormatList(issues.Value));
+            return 0;
         }
+
+        if (request.Action == "read")
+        {
+            Result<IssueDetail> issue = IssueProjection.ParseDetail(json.Value);
+            if (issue.IsFailure)
+            {
+                Console.Error.WriteLine(issue.Error);
+                return 1;
+            }
+            Console.Out.Write(IssueProjection.FormatDetail(issue.Value));
+            return 0;
+        }
+
+        IssueVerbLog.Commented(logger, request.Number);
+        Console.Out.WriteLine($"Commented on #{request.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
+        return 0;
     }
 }
 

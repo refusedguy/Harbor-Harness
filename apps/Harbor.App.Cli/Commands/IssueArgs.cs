@@ -58,55 +58,53 @@ internal static class IssueArgs
         for (int i = 1; i < args.Length; i++)
         {
             string token = args[i];
-            switch (token)
+            if (token == "--limit")
             {
-                case "--limit":
-                    if (action != "list")
-                        return Result.Failure<IssueRequest>("issue: --limit is only valid for 'list'.");
-                    if (++i >= args.Length
-                        || !int.TryParse(args[i], NumberStyles.None, CultureInfo.InvariantCulture, out limit)
-                        || limit < 1 || limit > MaxLimit)
-                        return Result.Failure<IssueRequest>($"issue: --limit must be 1..{MaxLimit}.");
-                    break;
-
-                case "--state":
-                    if (action != "list")
-                        return Result.Failure<IssueRequest>("issue: --state is only valid for 'list'.");
-                    if (++i >= args.Length || args[i] is not ("open" or "closed" or "all"))
-                        return Result.Failure<IssueRequest>("issue: --state must be open, closed or all.");
-                    state = args[i];
-                    break;
-
-                case "--repo":
-                    if (++i >= args.Length || !IsValidRepo(args[i]))
-                        return Result.Failure<IssueRequest>("issue: --repo must be owner/repo.");
-                    repo = args[i];
-                    break;
-
-                case "--body":
-                    if (action != "comment")
-                        return Result.Failure<IssueRequest>("issue: --body is only valid for 'comment'.");
-                    if (++i >= args.Length || string.IsNullOrWhiteSpace(args[i]))
-                        return Result.Failure<IssueRequest>("issue: --body needs a non-empty value.");
-                    body = args[i];
-                    break;
-
-                case "--body-file":
-                    if (action != "comment")
-                        return Result.Failure<IssueRequest>("issue: --body-file is only valid for 'comment'.");
-                    if (++i >= args.Length || string.IsNullOrWhiteSpace(args[i]))
-                        return Result.Failure<IssueRequest>("issue: --body-file needs a non-empty path.");
-                    bodyFile = args[i];
-                    break;
-
-                default:
-                    if (token.StartsWith('-'))
-                        return Result.Failure<IssueRequest>($"issue: unknown option '{token}'.");
-                    if (number != 0)
-                        return Result.Failure<IssueRequest>($"issue: unexpected argument '{token}'.");
-                    if (!int.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out number) || number <= 0)
-                        return Result.Failure<IssueRequest>($"issue: expected a positive issue number, got '{token}'.");
-                    break;
+                if (action != "list")
+                    return Result.Failure<IssueRequest>("issue: --limit is only valid for 'list'.");
+                if (++i >= args.Length
+                    || !int.TryParse(args[i], NumberStyles.None, CultureInfo.InvariantCulture, out limit)
+                    || limit < 1 || limit > MaxLimit)
+                    return Result.Failure<IssueRequest>($"issue: --limit must be 1..{MaxLimit}.");
+            }
+            else if (token == "--state")
+            {
+                if (action != "list")
+                    return Result.Failure<IssueRequest>("issue: --state is only valid for 'list'.");
+                if (++i >= args.Length || args[i] is not ("open" or "closed" or "all"))
+                    return Result.Failure<IssueRequest>("issue: --state must be open, closed or all.");
+                state = args[i];
+            }
+            else if (token == "--repo")
+            {
+                if (++i >= args.Length || !IsValidRepo(args[i]))
+                    return Result.Failure<IssueRequest>("issue: --repo must be owner/repo.");
+                repo = args[i];
+            }
+            else if (token == "--body")
+            {
+                if (action != "comment")
+                    return Result.Failure<IssueRequest>("issue: --body is only valid for 'comment'.");
+                if (++i >= args.Length || string.IsNullOrWhiteSpace(args[i]))
+                    return Result.Failure<IssueRequest>("issue: --body needs a non-empty value.");
+                body = args[i];
+            }
+            else if (token == "--body-file")
+            {
+                if (action != "comment")
+                    return Result.Failure<IssueRequest>("issue: --body-file is only valid for 'comment'.");
+                if (++i >= args.Length || string.IsNullOrWhiteSpace(args[i]))
+                    return Result.Failure<IssueRequest>("issue: --body-file needs a non-empty path.");
+                bodyFile = args[i];
+            }
+            else
+            {
+                if (token.StartsWith('-'))
+                    return Result.Failure<IssueRequest>($"issue: unknown option '{token}'.");
+                if (number != 0)
+                    return Result.Failure<IssueRequest>($"issue: unexpected argument '{token}'.");
+                if (!int.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out number) || number <= 0)
+                    return Result.Failure<IssueRequest>($"issue: expected a positive issue number, got '{token}'.");
             }
         }
 
@@ -127,19 +125,19 @@ internal static class IssueArgs
         if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        int slash = value.IndexOf('/');
-        if (slash <= 0 || slash == value.Length - 1 || value.IndexOf('/', slash + 1) >= 0)
-            return false;
-        if (value.StartsWith('-') || value.Contains("..", StringComparison.Ordinal))
-            return false;
-
+        int slashes = 0;
         foreach (char c in value)
         {
+            if (c == '/')
+                slashes++;
             if (char.IsWhiteSpace(c) || char.IsControl(c) || c is '\\' or ':' or '@')
                 return false;
         }
 
-        return true;
+        return slashes == 1
+            && value[0] is not ('/' or '-')
+            && value[^1] != '/'
+            && !value.Contains("..", StringComparison.Ordinal);
     }
 }
 
@@ -149,13 +147,16 @@ internal static class IssueArgs
 /// </summary>
 internal static class IssueGhCommand
 {
-    internal static IReadOnlyList<string> Build(IssueRequest request) => request.Action switch
+    internal static IReadOnlyList<string> Build(IssueRequest request)
     {
-        "list" => BuildList(request),
-        "read" => BuildRead(request),
-        "comment" => BuildComment(request),
-        _ => throw new InvalidOperationException($"Unknown issue action '{request.Action}'."),
-    };
+        if (request.Action == "list")
+            return BuildList(request);
+        if (request.Action == "read")
+            return BuildRead(request);
+        if (request.Action == "comment")
+            return BuildComment(request);
+        throw new InvalidOperationException($"Unknown issue action '{request.Action}'.");
+    }
 
     private static IReadOnlyList<string> BuildList(IssueRequest request)
     {
