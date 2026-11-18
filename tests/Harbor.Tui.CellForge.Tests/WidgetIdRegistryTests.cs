@@ -79,7 +79,7 @@ public sealed class WidgetIdRegistryTests
         registry.Register("present", new FixedNode());
 
         await Assert.That(registry.QueryOne("absent")).IsNull();
-        await Assert.That(registry.QueryOne("")).Throws<ArgumentException>();
+        Assert.Throws<ArgumentException>(() => { _ = registry.QueryOne(""); });
     }
 
     [Test]
