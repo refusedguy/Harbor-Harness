@@ -17,6 +17,13 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
     // Case-insensitive by construction: palette queries are lower-cased.
     protected readonly Dictionary<string, string> CommandAliases = new(StringComparer.OrdinalIgnoreCase);
 
+    // #2681 G85: the filter matches several fields, so ranking has to weigh
+    // them instead of scoring the label alone. Label is the primary match,
+    // Hint the secondary one (shortcut / identifier), Kind the category.
+    private const double LabelWeight = 1.0;
+    private const double HintWeight = 0.5;
+    private const double KindWeight = 0.3;
+
     // #2682 Z01: typed queries, scoped by prefix for Up/Down history walking.
     private readonly QueryHistory _history = new();
     private bool _suppressHistoryReset;
@@ -96,11 +103,11 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
                     .Where(c => c.Label.ToLowerInvariant().Contains(q) || c.Hint.ToLowerInvariant().Contains(q))
                     .ToList();
             // #2682 Z02: commands the user has already run lead their match
-            // group; the fuzzy score breaks ties. OrderByDescending is stable,
-            // so never-invoked commands keep their registration order.
+            // group; the weighted fuzzy score breaks ties. OrderByDescending is
+            // stable, so never-invoked commands keep their registration order.
             var ranked = matches
                 .OrderByDescending(c => InvocationCount(c))
-                .ThenByDescending(c => string.IsNullOrEmpty(q) ? 0 : FuzzyScore(c.Label.ToLowerInvariant(), q))
+                .ThenByDescending(c => string.IsNullOrEmpty(q) ? 0d : WeightedScore(c, q))
                 .ToList();
             foreach (var m in ranked)
             {
@@ -131,6 +138,23 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
             ti++;
         }
         return qi == query.Length ? score - (text.Length - query.Length) : -1;
+    }
+
+    /// <summary>
+    ///     #2681 G85: best weighted score across the fields a palette row
+    ///     exposes. A field that does not match stays at -1 so a weak hint
+    ///     cannot outrank a non-matching label; every field that does match
+    ///     keeps its own weight instead of collapsing into one label score.
+    /// </summary>
+    private static double WeightedScore(CommandResultViewModel command, string query) =>
+        Math.Max(
+            FieldScore(command.Label, query, LabelWeight),
+            Math.Max(FieldScore(command.Hint, query, HintWeight), FieldScore(command.Kind, query, KindWeight)));
+
+    private static double FieldScore(string text, string query, double weight)
+    {
+        int score = FuzzyScore(text.ToLowerInvariant(), query);
+        return score < 0 ? -1d : score * weight;
     }
 
     public void InvokeSelected()
