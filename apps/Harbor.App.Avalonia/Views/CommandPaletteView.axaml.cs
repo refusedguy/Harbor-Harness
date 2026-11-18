@@ -32,12 +32,21 @@ public partial class CommandPaletteView : UserControl
 
         switch (e.Key)
         {
+            // #2682 Z01: with a typed query, Up/Down first walk matching query
+            // history; only when there is no history to walk do they move the
+            // result selection (the behaviour exercised by component tests).
             case Key.Down:
-                vm.MoveDown();
+                if (!vm.TryNavigateHistory(up: false))
+                {
+                    vm.MoveDown();
+                }
                 e.Handled = true;
                 break;
             case Key.Up:
-                vm.MoveUp();
+                if (!vm.TryNavigateHistory(up: true))
+                {
+                    vm.MoveUp();
+                }
                 e.Handled = true;
                 break;
             case Key.Enter:
