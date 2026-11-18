@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Ui.Framework.Rendering.Widgets;
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -209,7 +210,10 @@ public sealed record UiState
                 Diagnostics = chat.Diagnostics,
                 // The open tabs are workspace chrome, not transcript: a
                 // clear-screen must not close them (#388).
-                TabStrip = chat.TabStrip
+                TabStrip = chat.TabStrip,
+                // The question form is transcript state: clear-screen drops it
+                // with the lines (#2627).
+                QuestionForm = QuestionFormState.Empty
             },
             Ui = Ui with
             {

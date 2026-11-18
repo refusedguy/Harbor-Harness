@@ -61,7 +61,7 @@ check-test-packages	tools/bin/harbor-gates-linux-x64 check-test-packages --min-p
 check-test-projects	tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
 check-tool-schema-pin	tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --min-tools 25
 check-workflows	tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
-check-xml-doc-coverage	tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --min-members 493 --min-documented 478 --min-coverage 0.96
+check-xml-doc-coverage	tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --min-members 1344 --min-documented 1324 --min-coverage 0.98
 ci-selftests.py	python3 tools/ci-selftests.py --min-steps 48
 ci-shard-slices.py	python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37
 coverage-report	tools/bin/harbor-gates-linux-x64 coverage-report --coverage-dir Coverage --source-root . --registry tools/coverage-registry.txt --summary Coverage/summary.md --out Coverage/coverage-per-file.md --uncovered-out Coverage/coverage-uncovered-locations.txt --min-files 1200

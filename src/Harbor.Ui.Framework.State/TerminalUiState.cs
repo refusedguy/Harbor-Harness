@@ -197,6 +197,20 @@ public sealed record TerminalUiState
     /// <summary>Return a snapshot with the keyboard focus replaced.</summary>
     public TerminalUiState SetFocus(FocusMode focus) => this with { Focus = focus };
 
+    /// <summary>
+    ///     Replace one entry of a panel-keyed immutable map. This is the single
+    ///     generic form of the <c>Ui with { Field = Field.SetItem(id, value) }</c>
+    ///     pattern used by the panel arms in <see cref="AppReducer"/>;
+    ///     <paramref name="replace"/> writes the updated map back because C#
+    ///     has no generic <c>with</c> expression.
+    /// </summary>
+    internal TerminalUiState UpdatePanelField<T>(
+        Func<TerminalUiState, ImmutableDictionary<string, T>> field,
+        Func<TerminalUiState, ImmutableDictionary<string, T>, TerminalUiState> replace,
+        string id,
+        T value)
+        => replace(this, field(this).SetItem(id, value));
+
     /// <summary>Resolve a viewport name; null/empty addresses the default viewport.</summary>
     private static string ViewportKey(string? viewportName)
         => string.IsNullOrEmpty(viewportName) ? DefaultViewport : viewportName;

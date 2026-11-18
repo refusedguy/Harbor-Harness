@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Ui.Framework.Rendering.Widgets;
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -302,4 +303,21 @@ public abstract record ChatAppMsg : AppMsg
 
     /// <summary>Record a bake/save failure as inline display text (never an exception).</summary>
     public sealed record MarkupFailed(string Error) : ChatAppMsg;
+
+    // ── inline question form (#2627 — answer state lives in UiState) ───────
+
+    /// <summary>
+    ///     Replace the active question-form snapshot. The widget publishes this
+    ///     on every answer transition; the reducer is the only writer of
+    ///     <c>Chat.QuestionForm</c>. Carrying the whole immutable snapshot makes
+    ///     replay/time-travel reproduce the exact card.
+    /// </summary>
+    public sealed record QuestionFormChanged(QuestionFormState State) : ChatAppMsg;
+
+    /// <summary>
+    ///     Record the submitted answers of the question form once (audit stamp).
+    ///     A submit <see cref="QuestionFormChanged" /> may arrive alongside it;
+    ///     this arm is the explicit host-facing "answers are final" transition.
+    /// </summary>
+    public sealed record QuestionSubmit(ImmutableArray<QuestionAnswer> Answers) : ChatAppMsg;
 }

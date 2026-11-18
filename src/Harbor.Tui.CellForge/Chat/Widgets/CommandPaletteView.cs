@@ -291,7 +291,10 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 
     private void Refilter()
     {
-        _results = FuzzyMatcher.Filter(_query, _commands, static c => c.Title + " " + c.Detail);
+        // Filter returns a thread-local reusable buffer; copy it before the
+        // group/title sort below so _commands (the frame's source) is never
+        // reordered and this palette's results survive another palette's pass.
+        _results = new List<CommandItem>(FuzzyMatcher.Filter(_query, _commands, static c => c.Title + " " + c.Detail));
 
         if (_query.Length == 0 && !(_frames.TryPeek(out var top) && top.PreserveOrder))
         {

@@ -10,7 +10,7 @@ namespace Harbor.App.Cli.Commands;
 ///     <c>daemon</c>, <c>status</c>, <c>serve</c>, <c>mcp</c>,
 ///     <c>setup</c>, <c>tui</c>, <c>demo</c>, <c>logs</c>, <c>ask</c>,
 ///     <c>events</c>, <c>headless</c>, <c>ide</c>, <c>plugin</c>,
-///     <c>skill</c> and <c>help</c>. The hand-rolled dispatcher is gone:
+///     <c>skill</c>, <c>doctor</c> and <c>help</c>. The hand-rolled dispatcher is gone:
 ///     <c>Program</c> keeps only the no-args/unknown → interactive fallback;
 ///     Spectre.Console.Cli / System.CommandLine stay forbidden.
 /// </summary>
@@ -79,7 +79,9 @@ internal static class CafPilotVerbs
 #endif
         app.Add("plugin", CafPluginCommands.Plugin);
         app.Add("skill", CafSkillCommands.Skill);
+        app.Add("doctor", CafDoctorCommands.Doctor);
         app.Add("help", CafHelpCommands.Help);
+        app.Add("completions", CafCompletionCommands.Completions);
 #if HARBOR_WITH_DSL_DEV
         // #2432: nested dev verbs. Both registrations and their handlers are
         // compiled out of the AOT build together with this symbol.

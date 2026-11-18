@@ -26,7 +26,7 @@ The CLI is the canonical Harbor app. The sibling desktop app (`apps/Harbor.App.A
 
 - [ ] Streaming of tool output inside interactive renderers (progressive tool-result rendering)
 - [ ] Config file hot reload (watch `~/.harbor/config.json`)
-- [ ] Shell completion (bash/zsh/powershell via `dotnet-suggest`)
+- [x] Shell completion (`harbor completions <bash|zsh|fish|powershell>`)
 - [ ] `/diff` command to view file changes from last tool call
 - [ ] `/undo` for reversible tool calls (read-only safe)
 - [ ] MCP **server** mode (MCP *client* tools already work — see `Harbor.Tools.Builtin` mcp trio)
@@ -36,14 +36,14 @@ The CLI is the canonical Harbor app. The sibling desktop app (`apps/Harbor.App.A
 ## Known issues
 
 - Scripting moved out of the main build — `--script` reports unsupported and points at `contrib/scripting` (`Program.cs:362-376`).
-- Shell completion not yet wired (`dotnet-suggest` integration planned).
+- Shell completion is wired: `harbor completions <bash|zsh|fish|powershell>` prints a script generated from the same verb catalog as `harbor help`.
 - Long sessions in `HARBOR_TUI=ansi` can flicker on Windows Terminal with `tmux`.
 - Plugin compile errors not surfaced with file:line (planned P0).
 
 ## Next priorities
 
 1. **P0**: Surface plugin compile errors with `path:line:col` diagnostics
-2. **P1**: Shell completion (`dotnet-suggest`)
+2. **P1 (done, #2669)**: Shell completion via `harbor completions <bash|zsh|fish|powershell>`
 3. **P1**: `/diff` command
 4. **P2**: MCP server mode
 5. **P2**: Auto-update

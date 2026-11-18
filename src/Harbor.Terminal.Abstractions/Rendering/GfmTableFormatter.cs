@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using Harbor.Abstractions.Extensions;
 
@@ -166,52 +167,46 @@ public static class GfmTableFormatter
     }
 
     /// <summary>
-    ///     Display width aware of East-Asian wide/fullwidth chars (e.g. Cyrillic
-    ///     and CJK render wider than ASCII in terminals). A rough half-width
-    ///     approximation: anything in the wide ranges counts as 2 columns.
+    ///     Display width from the canonical per-rune table (issue #2646):
+    ///     combining marks count 0 and astral runes count 2, so grid geometry
+    ///     agrees with <c>TableMeasurer</c> and the renderer's <c>UnicodeWidth</c>.
     /// </summary>
-    private static int DispWidth(string text)
-    {
-        int w = 0;
-        foreach (char ch in text)
-            w += IsWide(ch) ? 2 : 1;
-        return w;
-    }
-
-    private static bool IsWide(char c)
-    {
-        // Covers common wide ranges (CJK, Hangul, fullwidth forms). Cyrillic is
-        // NOT wide in terminals; this stays conservative to avoid under-sizing.
-        return c >= 0x1100 && c <= 0x115F || // Hangul Jamo
-               c >= 0x2E80 && c <= 0x303E ||
-               c >= 0x3041 && c <= 0x33FF ||
-               c >= 0x3400 && c <= 0x4DBF ||
-               c >= 0x4E00 && c <= 0x9FFF ||
-               c >= 0xA000 && c <= 0xA4CF ||
-               c >= 0xAC00 && c <= 0xD7A3 ||
-               c >= 0xF900 && c <= 0xFAFF ||
-               c >= 0xFE30 && c <= 0xFE4F ||
-               c >= 0xFF00 && c <= 0xFF60 ||
-               c >= 0xFFE0 && c <= 0xFFE6;
-    }
+    private static int DispWidth(string text) => UnicodeDisplayWidth.Width(text.AsSpan());
 
     /// <summary>
     ///     Length of the prefix that fits in <paramref name="width" /> minus the
     ///     ellipsis. <paramref name="resultWidth" /> is the final display width
     ///     including the ellipsis, so the caller can pad without a string alloc.
+    ///     Advances by whole runes so a surrogate pair is never split mid-cell.
     /// </summary>
     private static int TruncatedPrefixLength(string text, int width, out int resultWidth)
     {
         int w = 0;
         int len = 0;
-        foreach (char ch in text)
+        ReadOnlySpan<char> slice = text.AsSpan();
+        while (!slice.IsEmpty)
         {
-            int cw = IsWide(ch) ? 2 : 1;
+            int cw;
+            int consumed;
+            if (Rune.DecodeFromUtf16(slice, out var rune, out consumed) == OperationStatus.Done)
+            {
+                cw = UnicodeDisplayWidth.Width(rune);
+            }
+            else
+            {
+                // Lone surrogate: keep the one-column-per-code-unit fallback
+                // instead of dropping the char or splitting a valid pair.
+                cw = 1;
+                consumed = 1;
+            }
+
             if (w + cw > width - 1) // leave room for the ellipsis
                 break;
             w += cw;
-            len++;
+            len += consumed;
+            slice = slice[consumed..];
         }
+
         resultWidth = w + 1;
         return len;
     }

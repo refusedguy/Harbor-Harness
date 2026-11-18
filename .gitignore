@@ -95,7 +95,9 @@ appsettings.Local.json
 config.local.json
 
 ## Harbor runtime
-.harbor/
+# In-repo agent skills are source, not runtime state (#2670).
+.harbor/*
+!.harbor/skills/
 ~/.harbor/
 *.session.jsonl
 *.harbor-cache

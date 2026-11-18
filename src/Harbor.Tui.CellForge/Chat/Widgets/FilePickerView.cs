@@ -320,7 +320,9 @@ public sealed class FilePickerView : IStatefulGenericWidget<GenericNavState>
 
     private void Refilter()
     {
-        _results = FuzzyMatcher.Filter(_query, _files, static f => f.Path + " " + f.Detail);
+        // Filter's result is a thread-local buffer reused by the next filter;
+        // keep a stable copy for this picker's selection and preview state.
+        _results = new List<FilePickerItem>(FuzzyMatcher.Filter(_query, _files, static f => f.Path + " " + f.Detail));
         _selected = 0;
         _offset = 0;
         _navState.SetContent(_results.Count);

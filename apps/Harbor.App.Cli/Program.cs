@@ -154,8 +154,10 @@ public static class Program
             "skill" => await CafPilotVerbs.RunAsync("skill", tail),
             "auth" => await CafPilotVerbs.RunAsync("auth", tail),
             "config" => await CafPilotVerbs.RunAsync("config", tail),
+            "doctor" => await CafPilotVerbs.RunAsync("doctor", tail),
             "help" or "--help" or "-h" => await CafPilotVerbs.RunAsync("help", tail),
             "version" or "--version" or "-v" => await CafPilotVerbs.RunAsync("version", tail),
+            "completions" => await CafPilotVerbs.RunAsync("completions", tail),
 #if HARBOR_WITH_DSL_DEV
             // #2432: IR-inspection verbs are dev-only; the AOT build compiles
             // neither this dispatch arm nor the command class.

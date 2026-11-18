@@ -1429,13 +1429,14 @@ jobs:
       - name: The pinned tool schemas agree with the declarations
         run: tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --min-tools 25
 
-  # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
+  # #431 (slice D3, scope widened in D6). XML-doc coverage gate for the frozen
+  # contract assemblies, Harbor.Abstractions.Contracts and Harbor.Abstractions.
   #
   # `Directory.Build.props` keeps CS1591 in NoWarn, so the compiler never asks
-  # whether a public member of Harbor.Abstractions.Contracts carries an XML
-  # doc — and the D2 metadata lane turns those docs into the published API
-  # reference, so a silent gap ships silently. This job asks the question
-  # instead, with stdlib python only (no SDK, this workflow stays dotnet-free).
+  # whether a public member of either assembly carries an XML doc — and the D2
+  # metadata lane turns those docs into the published API reference, so a
+  # silent gap ships silently. This job asks the question instead, with stdlib
+  # python only (no SDK, this workflow stays dotnet-free).
   #
   # The gate is zero-tolerance on top of an explicit suppression list, not a
   # bare percentage: every public/protected declaration, enum value, and
@@ -1445,18 +1446,25 @@ jobs:
   # exactly one currently-undocumented member, so documenting one means
   # dropping its entry in the same diff, where a reviewer can see it.
   #
+  # D6 added Harbor.Abstractions to the scope (#431 criterion 5 says "frozen
+  # contract assemblies" in the plural; the DocFX lane publishes both). Its
+  # undocumented members were documented rather than suppressed. Five lines
+  # inside multi-line default method bodies of ISessionStore are suppressed
+  # with a reason: the line matcher has no body awareness and reads those
+  # statements as implicit interface members.
+  #
   # The floors are a ratchet, like the ones above. Measured on this tree:
-  # 493 members, 478 documented (97.0%, floor 0.96), 15 suppressed (−8
-  # GetEqualityComponents <inheritdoc/> rows via #1559 records). The count
-  # floors are set AT those values, not below: a floor with slack cannot tell
-  # "the surface got smaller" from "the matcher stopped matching". The
-  # non-vacuity proof is the gate's own --self-test (one undocumented member
-  # fails, naming it), run in the `selftest` job above.
+  # 1344 members, 1324 documented (98.5%, floor 0.98), 20 suppressed (15 in
+  # Contracts plus the 5 matcher artifacts above). The count floors are set AT
+  # those values, not below: a floor with slack cannot tell "the surface got
+  # smaller" from "the matcher stopped matching". The non-vacuity proof is the
+  # gate's own --self-test (one undocumented member fails, naming it), run in
+  # the `selftest` job above.
   #
   # The JOB is gone: the gate is compiled into the binary, it is in the list
   # of the tree runner (tools/gates/all/gates.go), and the `tree` job above
-  # runs it with the same floors: `--min-members 493 --min-documented 478
-  # --min-coverage 0.96`.
+  # runs it with the same floors: `--min-members 1344 --min-documented 1324
+  # --min-coverage 0.98`.
 
   # #1731. Twelfth question, and the only one that asks whether a GENERATED
   # document still matches the tree it was generated from.

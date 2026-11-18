@@ -81,15 +81,17 @@ public sealed class AutocompleteDestructiveGate
 /// Mode-aware ranking over <see cref="FuzzyMatcher" />: rows outside the
 /// active trigger mode never reach the scorer, so a <c>/</c> query cannot
 /// surface <c>@</c> references and vice versa. Ties keep catalog order
-/// (<see cref="FuzzyMatcher.Filter{T}" /> is stable).
+/// (the fuzzy ranking is stable).
 /// </summary>
 public static class AutocompleteFilter
 {
     /// <summary>
     /// Rows of <paramref name="mode" /> matching <paramref name="query" />,
-    /// best score first (all rows when the query is empty).
+    /// best score first (all rows in input order when the query is empty).
+    /// The result is a thread-local view over <see cref="FuzzyMatcher" />'s
+    /// reusable buffer: valid until the next filter on this thread.
     /// </summary>
-    public static List<AutocompleteItem> Filter(
+    public static IReadOnlyList<AutocompleteItem> Filter(
         string query,
         IReadOnlyList<AutocompleteItem> candidates,
         AutocompleteMode mode)
@@ -97,16 +99,15 @@ public static class AutocompleteFilter
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(candidates);
 
-        var scoped = new List<AutocompleteItem>(candidates.Count);
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            if (candidates[i].Mode == mode)
-            {
-                scoped.Add(candidates[i]);
-            }
-        }
-
-        return FuzzyMatcher.Filter(query, scoped, static item => item.Title);
+        // The mode check rides along in FuzzyMatcher's scoring pass, so the
+        // old mode-scoped List allocation is gone. An empty query keeps input
+        // order; a non-empty one is ranked by Score as before.
+        return FuzzyMatcher.Filter(
+            query,
+            candidates,
+            static item => item.Title,
+            mode,
+            static (item, wanted) => item.Mode == wanted);
     }
 
     /// <summary>

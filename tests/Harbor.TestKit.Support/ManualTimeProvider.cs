@@ -125,6 +125,52 @@ public sealed class ManualTimeProvider : TimeProvider
     public void AdvanceMs(long milliseconds) =>
         Move(TimeSpan.FromMilliseconds(milliseconds), milliseconds);
 
+    /// <summary>
+    ///     Moves the clock to the earliest armed timer's deadline and fires
+    ///     every timer due at or before that instant. The caller does not name
+    ///     a delay: the timer owns its deadline, so a test that waits for a
+    ///     30-second grace period cannot guess the 30 seconds wrong.
+    /// </summary>
+    /// <returns>
+    ///     <see langword="true" /> when an armed timer existed, so the clock
+    ///     moved to its deadline and due callbacks ran; <see langword="false" />
+    ///     when no timer was armed, in which case the clock did not move.
+    /// </returns>
+    /// <remarks>
+    ///     Only clocks built with <c>fireTimerOnAdvance: true</c> own armed
+    ///     timers; the recording dials hand out a no-op handle and therefore
+    ///     have nothing to jump to.
+    /// </remarks>
+    public bool AdvanceToNextTimer()
+    {
+        DateTimeOffset nextDue;
+        lock (_gate)
+        {
+            nextDue = DateTimeOffset.MaxValue;
+            foreach (ManualTimer timer in _timers)
+            {
+                if (timer.DueAt < nextDue)
+                {
+                    nextDue = timer.DueAt;
+                }
+            }
+        }
+
+        if (nextDue == DateTimeOffset.MaxValue)
+        {
+            return false;
+        }
+
+        TimeSpan delta = nextDue - _now;
+        if (delta < TimeSpan.Zero)
+        {
+            delta = TimeSpan.Zero;
+        }
+
+        Move(delta, (long)delta.TotalMilliseconds);
+        return true;
+    }
+
     private void Move(TimeSpan delta, long milliseconds)
     {
         lock (_gate)

@@ -275,4 +275,51 @@ public sealed class ChatViewTests : ComponentTestBase
             chat.IsAgentRunning = false;
         });
     }
+
+    /// <summary>
+    ///     G08: the docked chat input keeps the Stop button available for the
+    ///     whole agent run. A streaming reply (IsStreaming=true, IsThinking=false)
+    ///     used to hide Stop because the button bound to IsThinking only, so
+    ///     the user could not abort generation from the chat input.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    [Category("Component")]
+    public async Task ChatView_Streaming_ShowsStopButton()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        UI(() =>
+        {
+            var chat = Vm.Chat;
+            chat.IsAgentRunning = true;
+            chat.IsStreaming = true;
+            chat.IsThinking = false;
+        });
+
+        var stopVisible = await Driver.WaitForConditionAsync(
+            () => UI(() =>
+            {
+                var stop = Driver.FindButtonByText("Stop ■");
+                return stop is not null && stop.IsVisible;
+            }),
+            TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+        await Assert.That(stopVisible).IsTrue().Because(Driver.LastWaitDiagnostic);
+
+        var sendHidden = await Driver.WaitForConditionAsync(
+            () => UI(() =>
+            {
+                var send = Driver.FindButtonByText("Send ▶");
+                return send is not null && !send.IsVisible;
+            }),
+            TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+        await Assert.That(sendHidden).IsTrue().Because(Driver.LastWaitDiagnostic);
+
+        UI(() =>
+        {
+            var chat = Vm.Chat;
+            chat.IsAgentRunning = false;
+            chat.IsStreaming = false;
+        });
+    }
 }

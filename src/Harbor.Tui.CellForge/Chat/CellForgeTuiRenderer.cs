@@ -119,8 +119,33 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     /// </summary>
     public CellForgePanelRegistry Panels { get; }
 
+    /// <summary>
+    ///     Host-facing constructor. Delegates to the backend overload so the
+    ///     store / panel / mediator / projector wiring lives in one place.
+    ///     Null is passed as a literal, not as an optional parameter of this
+    ///     signature: Harbor.Hosting calls this overload, and an Engine type
+    ///     in its signature would bind a new AssemblyRef from the
+    ///     CompositionRoot to Harbor.Tui.CellForge.Engine (#2657).
+    /// </summary>
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
+        StatusBarViewModel? statusVm = null,
+        ChatHistoryViewModel? chatVm = null,
+        InputViewModel? inputVm = null,
+        UiStore? store = null,
+        ISessionManager? sessions = null,
+        PanelServices? panelServices = null)
+        : this(logger, null!, statusVm, chatVm, inputVm, store, sessions, panelServices)
+    {
+    }
+
+    /// <summary>Golden-frame test seam. The backend must be an
+    /// <see cref="ISyncTerminalBackend"/> — the context flushes synchronously
+    /// (issue #468). A null backend selects the stdout default. This overload
+    /// owns the single initialization block.</summary>
+    public CellForgeTuiRenderer(
+        ILogger<CellForgeTuiRenderer> logger,
+        ISyncTerminalBackend backend,
         StatusBarViewModel? statusVm = null,
         ChatHistoryViewModel? chatVm = null,
         InputViewModel? inputVm = null,
@@ -150,39 +175,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
-        Context = new CellForgeRenderContext(Logger);
-    }
-
-    /// <summary>Golden-frame test seam. The backend must be an
-    /// <see cref="ISyncTerminalBackend"/> — the context flushes synchronously
-    /// (issue #468).</summary>
-    public CellForgeTuiRenderer(
-        ILogger<CellForgeTuiRenderer> logger,
-        ISyncTerminalBackend backend,
-        StatusBarViewModel? statusVm = null,
-        ChatHistoryViewModel? chatVm = null,
-        InputViewModel? inputVm = null,
-        UiStore? store = null,
-        ISessionManager? sessions = null,
-        PanelServices? panelServices = null)
-        : base(logger)
-    {
-        // Issue #77: see the primary ctor — injected shared store or a
-        // private one when null.
-        _store = store ?? new UiStore();
-        _sessions = sessions;
-        // #470: see the primary ctor.
-        PanelDeps = panelServices
-            ?? new PanelServices { Store = _store, Sessions = sessions };
-        Panels = new CellForgePanelRegistry();
-        RegisterBuiltinPanels(Panels);
-        _mediator = new ChatViewModelMediator(
-            ViewModels, () => Screen, IdlePlaceholder, BusyPlaceholder,
-            statusVm, chatVm, inputVm);
-        _chatProjector = _mediator.ChatProjector;
-        Projectors = new ScreenProjectorRegistry();
-        Projectors.Register(_chatProjector);
-        Context = new CellForgeRenderContext(backend, Logger);
+        // The host path passes a null backend and keeps the stdout default;
+        // golden-frame tests pass their own backend (#468).
+        Context = backend is null
+            ? new CellForgeRenderContext(Logger)
+            : new CellForgeRenderContext(backend, Logger);
     }
 
     /// <summary>

@@ -26,6 +26,13 @@ public partial class SessionCardViewModel : ObservableObject
     private readonly IToastService _toasts;
     private readonly ILogger<SessionCardViewModel> _logger;
 
+    /// <summary>
+    ///     Reference instant captured when the card is projected. Passing it
+    ///     explicitly to <see cref="StatusMappers.TimeAgo" /> keeps that helper
+    ///     pure and ties the label to the state transition (#2633).
+    /// </summary>
+    private readonly DateTime _nowUtc = DateTime.UtcNow;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
     [NotifyPropertyChangedFor(nameof(StatusBrushKey))]
@@ -64,7 +71,7 @@ public partial class SessionCardViewModel : ObservableObject
         _logger = logger;
     }
 
-    public string RelativeTime => StatusMappers.TimeAgo(UpdatedAt.UtcDateTime);
+    public string RelativeTime => StatusMappers.TimeAgo(UpdatedAt.UtcDateTime, _nowUtc);
 
     public string StatusText => StatusMappers.SessionStatusToText(Status);
     public string StatusBrushKey => StatusMappers.SessionStatusToBrushKey(Status);

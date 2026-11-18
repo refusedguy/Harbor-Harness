@@ -10,6 +10,14 @@ namespace Harbor.Ui.Framework.ViewModels;
 /// </summary>
 public sealed partial class SessionItemViewModel : ObservableObject
 {
+    /// <summary>
+    ///     Reference instant captured when this row is projected. Keeping the
+    ///     clock read here instead of inside <see cref="RelativeTime" /> makes
+    ///     the label a function of state: the same projected row renders the
+    ///     same text until the projector runs again (#2633).
+    /// </summary>
+    private readonly DateTimeOffset _nowUtc = DateTimeOffset.UtcNow;
+
     [ObservableProperty] private string? _gitBranch;
     [ObservableProperty] private bool _gitIsDirty;
     [ObservableProperty] private int _gitDirtyCount;
@@ -52,10 +60,10 @@ public sealed partial class SessionItemViewModel : ObservableObject
     /// <summary>Relative time: "now", "5m", "3h", "2d", "07/18".</summary>
     public string RelativeTime => UpdatedAt switch
     {
-        var t when (DateTimeOffset.UtcNow - t).TotalMinutes < 1 => "now",
-        var t when (DateTimeOffset.UtcNow - t).TotalHours < 1 => $"{(int)(DateTimeOffset.UtcNow - t).TotalMinutes}m",
-        var t when (DateTimeOffset.UtcNow - t).TotalDays < 1 => $"{(int)(DateTimeOffset.UtcNow - t).TotalHours}h",
-        var t when (DateTimeOffset.UtcNow - t).TotalDays < 7 => $"{(int)(DateTimeOffset.UtcNow - t).TotalDays}d",
+        var t when (_nowUtc - t).TotalMinutes < 1 => "now",
+        var t when (_nowUtc - t).TotalHours < 1 => $"{(int)(_nowUtc - t).TotalMinutes}m",
+        var t when (_nowUtc - t).TotalDays < 1 => $"{(int)(_nowUtc - t).TotalHours}h",
+        var t when (_nowUtc - t).TotalDays < 7 => $"{(int)(_nowUtc - t).TotalDays}d",
         _ => UpdatedAt.ToString("MM/dd")
     };
 

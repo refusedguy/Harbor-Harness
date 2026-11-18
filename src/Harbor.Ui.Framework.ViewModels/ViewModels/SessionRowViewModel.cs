@@ -22,6 +22,12 @@ namespace Harbor.Ui.Framework.ViewModels;
 /// </remarks>
 public sealed partial class SessionRowViewModel : ObservableObject
 {
+    /// <summary>
+    ///     Reference instant captured when this row is projected. The
+    ///     relative label is computed from it instead of reading the clock on
+    ///     every render, so an unchanged state keeps an unchanged label (#2633).
+    /// </summary>
+    private readonly DateTimeOffset _nowUtc = DateTimeOffset.UtcNow;
 
     /// <summary>True when this row is the currently selected session.</summary>
     [ObservableProperty]
@@ -108,7 +114,7 @@ public sealed partial class SessionRowViewModel : ObservableObject
     {
         get
         {
-            var delta = DateTimeOffset.UtcNow - UpdatedAt;
+            var delta = _nowUtc - UpdatedAt;
             if (delta.TotalMinutes < 1) return "now";
             if (delta.TotalHours < 1) return ((int)delta.TotalMinutes).ToString(CultureInfo.InvariantCulture) + "m";
             if (delta.TotalDays < 1) return ((int)delta.TotalHours).ToString(CultureInfo.InvariantCulture) + "h";

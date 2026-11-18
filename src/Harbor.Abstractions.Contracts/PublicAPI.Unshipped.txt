@@ -244,6 +244,10 @@ Harbor.Abstractions.Models.RunAcceptance.Rejected = 2 -> Harbor.Abstractions.Mod
 Harbor.Abstractions.Models.RunAcceptance.NotOffered = 3 -> Harbor.Abstractions.Models.RunAcceptance
 Harbor.Abstractions.Models.RunOutcome.Acceptance.get -> Harbor.Abstractions.Models.RunAcceptance
 Harbor.Abstractions.Models.RunOutcome.Acceptance.init -> void
+Harbor.Abstractions.Dsl.IPanelDescriptor
+Harbor.Abstractions.Dsl.IPanelDescriptor.Build(object! state) -> object?
+Harbor.Abstractions.Dsl.IPanelDescriptor.Match(object! state) -> bool
+Harbor.Abstractions.Dsl.IPanelDescriptor.StateType.get -> System.Type!
 Harbor.Abstractions.Dsl.SpecArena
 Harbor.Abstractions.Dsl.SpecArena.AddRoot(Harbor.Abstractions.Dsl.SpecNode! node) -> void
 Harbor.Abstractions.Dsl.SpecArena.CreateNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine) -> Harbor.Abstractions.Dsl.SpecNode!
@@ -330,3 +334,11 @@ Harbor.Abstractions.Dsl.SpecValueKind.String = 0 -> Harbor.Abstractions.Dsl.Spec
 Harbor.Abstractions.Dsl.SpecValueKind.Number = 1 -> Harbor.Abstractions.Dsl.SpecValueKind
 Harbor.Abstractions.Dsl.SpecValueKind.Boolean = 2 -> Harbor.Abstractions.Dsl.SpecValueKind
 Harbor.Abstractions.Dsl.SpecValueKind.Identifier = 3 -> Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Extensions.UnicodeDisplayWidth
+static Harbor.Abstractions.Extensions.UnicodeDisplayWidth.Width(System.ReadOnlySpan<char> text) -> int
+static Harbor.Abstractions.Extensions.UnicodeDisplayWidth.Width(System.Text.Rune r) -> int
+const Harbor.Abstractions.Events.AgentEvent.CurrentSchemaVersion = 1 -> int
+Harbor.Abstractions.Events.AgentEvent.SchemaVersion.get -> int
+Harbor.Abstractions.Events.AgentEvent.SchemaVersion.init -> void
+Harbor.Abstractions.Events.AgentEvent.IsJournaled.get -> bool
+Harbor.Abstractions.Events.AgentEvent.IsJournaled.init -> void

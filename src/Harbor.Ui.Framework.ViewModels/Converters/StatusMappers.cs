@@ -139,10 +139,17 @@ public static class StatusMappers
     ///     Returns <see cref="string.Empty" /> if <paramref name="utc" />
     ///     is null or <see cref="DateTime.MinValue" />.
     /// </summary>
-    public static string TimeAgo(DateTime? utc)
+    /// <param name="utc">UTC instant to describe.</param>
+    /// <param name="now">
+    ///     Reference instant supplied by the caller. The mapper reads no clock:
+    ///     the same two arguments always yield the same label, so a fixed UI
+    ///     state cannot render differently on a later frame. The projector (or
+    ///     the framework adapter at the UI boundary) owns the clock and decides
+    ///     when to refresh the label (#2633).
+    /// </param>
+    public static string TimeAgo(DateTime? utc, DateTime now)
     {
         if (utc is null || utc == DateTime.MinValue) return string.Empty;
-        var now = DateTime.UtcNow;
         var delta = now - utc.Value;
         if (delta.TotalSeconds < 60) return "just now";
         if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m ago";

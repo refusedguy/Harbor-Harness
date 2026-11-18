@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering;
@@ -24,7 +25,8 @@ public sealed class QuestionOption
 /// One question of a <see cref="QuestionFormView" /> batch form: a title (the
 /// tab), a prompt, and an enumerated option set plus an optional free-text
 /// custom answer (the kilocode QuestionDock / crush batch-form pattern).
-/// Immutable config — all interactive state lives in the form.
+/// Immutable config. Interactive answers live in an immutable
+/// <see cref="QuestionFormState" /> snapshot (#2627), not in the widget.
 /// </summary>
 public sealed class QuestionItem
 {
@@ -59,7 +61,7 @@ public sealed class QuestionItem
 }
 
 /// <summary>Submitted answers of one <see cref="QuestionItem" /> (host consumption + audit).</summary>
-public sealed record QuestionAnswer(int QuestionIndex, string[] SelectedLabels, string CustomAnswer);
+public sealed record QuestionAnswer(int QuestionIndex, ImmutableArray<string> SelectedLabels, string CustomAnswer);
 
 /// <summary>
 /// Inline question form in the chat timeline ([PRIM13], issue #309): a batch
@@ -70,8 +72,14 @@ public sealed record QuestionAnswer(int QuestionIndex, string[] SelectedLabels, 
 /// never jumps on submit; switching tabs legitimately re-measures).
 /// Blocks stay paint-only in this renderer, so answers are collected by the
 /// host frame loop calling <see cref="HandleKey" /> first while the form is
-/// focused. Implements <see cref="IFocusTarget" /> so the host
-/// <c>FocusRouter</c> can traverse it via Tab.
+/// focused. Every answer transition lands in a <see cref="QuestionFormState" />
+/// snapshot: a host passes get/set delegates backed by
+/// <c>UiState.Chat.QuestionForm</c> and dispatches
+/// <c>ChatAppMsg.QuestionFormChanged</c>, so one state always paints the same
+/// card and replay/time-travel work (#2627). Without delegates the form keeps
+/// a private snapshot so standalone callers and goldens behave identically.
+/// Implements <see cref="IFocusTarget" /> so the host <c>FocusRouter</c> can
+/// traverse it via Tab.
 /// Scope: new widget only — no approval wiring, no diff viewer, no status.
 /// </summary>
 public sealed class QuestionFormView : IChatBlock, IFocusTarget
@@ -84,10 +92,10 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     private readonly long _id = Interlocked.Increment(ref _nextId);
 
     private readonly List<QuestionItem> _questions;
-    private readonly List<QuestionState> _states;
+    private readonly Func<QuestionFormState> _getState;
+    private readonly Action<QuestionFormState> _setState;
     private int _selectedQuestion;
     private bool _focused;
-    private bool _submitted;
 
     private List<string> _wrappedPrompt = [];
     private int _wrappedFor = -1;
@@ -105,13 +113,49 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     /// </summary>
     internal Rect? LastPaintRect { get; private set; }
 
+    /// <summary>
+    ///     Standalone form: owns a private immutable snapshot. Use the overload
+    ///     with state delegates when a store owns the answers.
+    /// </summary>
     public QuestionFormView(IReadOnlyList<QuestionItem>? questions)
+        : this(questions, null, null)
+    {
+    }
+
+    /// <summary>
+    ///     Store-backed form. <paramref name="getState" /> reads the current
+    ///     answer snapshot; <paramref name="setState" /> publishes each transition.
+    ///     Hosts fold the published snapshot into their store (TEA), so the
+    ///     widget holds no mutable answer state of its own.
+    /// </summary>
+    public QuestionFormView(
+        IReadOnlyList<QuestionItem>? questions,
+        Func<QuestionFormState>? getState,
+        Action<QuestionFormState>? setState)
     {
         _questions = questions is null ? [] : [.. questions];
-        _states = new List<QuestionState>(_questions.Count);
-        for (int i = 0; i < _questions.Count; i++)
+        if (getState is null)
         {
-            _states.Add(new QuestionState());
+            var local = QuestionFormState.Create(_questions.Count);
+            _getState = () => local;
+            _setState = next => local = next;
+        }
+        else
+        {
+            _getState = getState;
+            _setState = setState ?? (_ => { });
+        }
+    }
+
+    /// <summary>Current immutable answer snapshot (single source for paint + input).</summary>
+    public QuestionFormState State => _getState();
+
+    /// <summary>Apply a pure transition, publishing the new snapshot to the host.</summary>
+    private void SetState(QuestionFormState next)
+    {
+        if (!ReferenceEquals(next, State))
+        {
+            _setState(next);
         }
     }
 
@@ -133,7 +177,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
                     bytes += q.Options[j].Label.Length * 2;
                 }
 
-                bytes += _states[i].Custom.Length * 2;
+                bytes += State.Questions[i].Custom.Length * 2;
             }
 
             return bytes;
@@ -150,50 +194,40 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     public int SelectedQuestion => _questions.Count == 0 ? 0 : Math.Clamp(_selectedQuestion, 0, _questions.Count - 1);
 
     /// <summary>True after <see cref="TrySubmit" /> — answers are frozen.</summary>
-    public bool IsSubmitted => _submitted;
+    public bool IsSubmitted => State.IsSubmitted;
 
-    public bool IsPending => !_submitted;
+    public bool IsPending => !State.IsSubmitted;
 
     /// <summary>Raised exactly once, on the render/input thread that submitted, when answers are recorded.</summary>
     public event EventHandler? Submitted;
 
     /// <summary>Cursor row of question <paramref name="questionIndex" /> (option rows, then the custom row).</summary>
-    public int CursorAt(int questionIndex) => _states[CheckedIndex(questionIndex)].Cursor;
+    public int CursorAt(int questionIndex) => State.Questions[CheckedIndex(questionIndex)].Cursor;
 
     /// <summary>Selected option indices of question <paramref name="questionIndex" /> (ascending).</summary>
     public IReadOnlyList<int> SelectedOptions(int questionIndex)
     {
-        var state = _states[CheckedIndex(questionIndex)];
-        var sorted = new List<int>(state.Selected);
+        var selected = State.Questions[CheckedIndex(questionIndex)].Selected;
+        var sorted = new List<int>(selected.Length);
+        for (int i = 0; i < selected.Length; i++)
+        {
+            sorted.Add(selected[i]);
+        }
+
         sorted.Sort();
         return sorted;
     }
 
     /// <summary>Free-text custom answer of question <paramref name="questionIndex" />.</summary>
-    public string CustomAnswer(int questionIndex) => _states[CheckedIndex(questionIndex)].Custom.ToString();
+    public string CustomAnswer(int questionIndex) => State.Questions[CheckedIndex(questionIndex)].Custom;
 
     /// <summary>Snapshot of all answers (selected labels + custom text per question).</summary>
-    public IReadOnlyList<QuestionAnswer> GetAnswers()
-    {
-        var answers = new List<QuestionAnswer>(_questions.Count);
-        for (int i = 0; i < _questions.Count; i++)
-        {
-            var labels = new List<string>();
-            foreach (int idx in SelectedOptions(i))
-            {
-                labels.Add(_questions[i].Options[idx].Label);
-            }
-
-            answers.Add(new QuestionAnswer(i, [.. labels], _states[i].Custom.ToString()));
-        }
-
-        return answers;
-    }
+    public IReadOnlyList<QuestionAnswer> GetAnswers() => State.ToAnswers(_questions);
 
     /// <summary>Selects a tab (clamped). Returns true when the selection changed.</summary>
     public bool SelectQuestion(int index)
     {
-        if (_questions.Count == 0 || _submitted)
+        if (_questions.Count == 0 || State.IsSubmitted)
         {
             return false;
         }
@@ -210,37 +244,29 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
 
     /// <summary>Selects the next tab (wraps). Returns true when the selection changed.</summary>
     public bool NextQuestion() =>
-        _questions.Count > 1 && !_submitted && SelectQuestion(_selectedQuestion + 1 >= _questions.Count ? 0 : _selectedQuestion + 1);
+        _questions.Count > 1 && !State.IsSubmitted && SelectQuestion(_selectedQuestion + 1 >= _questions.Count ? 0 : _selectedQuestion + 1);
 
     /// <summary>Selects the previous tab (wraps). Returns true when the selection changed.</summary>
     public bool PrevQuestion() =>
-        _questions.Count > 1 && !_submitted && SelectQuestion(_selectedQuestion - 1 < 0 ? _questions.Count - 1 : _selectedQuestion - 1);
+        _questions.Count > 1 && !State.IsSubmitted && SelectQuestion(_selectedQuestion - 1 < 0 ? _questions.Count - 1 : _selectedQuestion - 1);
 
     /// <summary>Moves the option cursor of the active question by a signed delta (clamped).</summary>
     public bool MoveCursor(int delta)
     {
-        if (_questions.Count == 0 || _submitted || delta == 0)
+        if (_questions.Count == 0 || State.IsSubmitted || delta == 0)
         {
             return false;
         }
 
         int q = SelectedQuestion;
-        int rows = RowCount(q);
-        if (rows == 0)
+        if (RowCount(q) == 0)
         {
             return false;
         }
 
-        var state = _states[q];
-        int next = Math.Clamp(state.Cursor, 0, rows - 1) + delta;
-        next = Math.Clamp(next, 0, rows - 1);
-        if (next == state.Cursor)
-        {
-            return false;
-        }
-
-        state.Cursor = next;
-        return true;
+        int cursorBefore = State.Questions[q].Cursor;
+        SetState(State.MoveCursor(q, delta, _questions[q]));
+        return State.Questions[q].Cursor != cursorBefore;
     }
 
     /// <summary>
@@ -250,45 +276,27 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     /// </summary>
     public bool ToggleAtCursor()
     {
-        if (_questions.Count == 0 || _submitted)
+        if (_questions.Count == 0 || State.IsSubmitted)
         {
             return false;
         }
 
         int q = SelectedQuestion;
         var item = _questions[q];
-        var state = _states[q];
-        int cursor = Math.Clamp(state.Cursor, 0, Math.Max(0, RowCount(q) - 1));
+        int cursor = Math.Clamp(State.Questions[q].Cursor, 0, Math.Max(0, RowCount(q) - 1));
         if (cursor >= item.Options.Count)
         {
             return false; // custom row — no toggle semantic
         }
 
-        if (item.MultiSelect)
-        {
-            if (!state.Selected.Add(cursor))
-            {
-                _ = state.Selected.Remove(cursor);
-            }
-
-            return true;
-        }
-
-        if (state.Selected.Count == 1 && state.Selected.Contains(cursor))
-        {
-            state.Selected.Clear();
-            return true;
-        }
-
-        state.Selected.Clear();
-        _ = state.Selected.Add(cursor);
+        SetState(State.ToggleAtCursor(q, item));
         return true;
     }
 
     /// <summary>Replaces the custom answer of question <paramref name="questionIndex" /> (prefill path).</summary>
     public bool SetCustomAnswer(int questionIndex, string? text)
     {
-        if (_submitted)
+        if (State.IsSubmitted)
         {
             return false;
         }
@@ -299,13 +307,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             return false;
         }
 
-        var sb = _states[q].Custom;
-        sb.Clear();
-        if (!string.IsNullOrEmpty(text))
-        {
-            _ = sb.Append(text);
-        }
-
+        SetState(State.SetCustom(q, text));
         return true;
     }
 
@@ -315,12 +317,12 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     /// </summary>
     public bool TrySubmit()
     {
-        if (_submitted || _questions.Count == 0)
+        if (State.IsSubmitted || _questions.Count == 0)
         {
             return false;
         }
 
-        _submitted = true;
+        SetState(State.Submit(State.ToAnswers(_questions)));
         Submitted?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -376,13 +378,13 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
 
         int q = SelectedQuestion;
         var item = _questions[q];
-        var state = _states[q];
+        var state = State.Questions[q];
         int width = ctx.Rect.Width;
         int total = TotalRows(width);
         int skip = Math.Min(ctx.SkipRows, total);
         int rows = Math.Min(ctx.Rect.Height, total - skip);
 
-        var headerStyle = _submitted
+        var headerStyle = State.IsSubmitted
             ? ChatPalette.Dim
             : new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var promptStyle = new CellStyle(ChatPalette.Text);
@@ -391,7 +393,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
         var checkedStyle = ChatPalette.ToolOk;
         var hintStyle = ChatPalette.Dim;
 
-        string focusRail = _focused && !_submitted ? "▸" : string.Empty;
+        string focusRail = _focused && !State.IsSubmitted ? "▸" : string.Empty;
         var body = new List<Row>(TotalRows(width));
         body.Add(new Row(focusRail + HeaderLabel + $" · {q + 1}/{_questions.Count} · {item.Title}", headerStyle));
         if (StripRows() == 1)
@@ -411,7 +413,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             var opt = item.Options[i];
             string text = opt.Description is null ? opt.Label : $"{opt.Label} — {opt.Description}";
             body.Add(new Row(
-                $"{(i == cursor ? "▸" : " ")} {(state.Selected.Contains(i) ? "[x]" : "[ ]")} {text}",
+                $"{(i == cursor ? "▸" : " ")} {(state.Selected.IndexOf(i) >= 0 ? "[x]" : "[ ]")} {text}",
                 i == cursor ? cursorStyle : optionStyle,
                 OptionIndex: i));
         }
@@ -419,13 +421,13 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
         if (item.AllowCustom)
         {
             bool customCursor = cursor >= item.Options.Count;
-            string caret = _submitted ? string.Empty : "▌";
+            string caret = State.IsSubmitted ? string.Empty : "▌";
             body.Add(new Row(
                 $"{(customCursor ? "▸" : " ")} ✎ custom: {state.Custom}{caret}",
                 customCursor ? cursorStyle : optionStyle));
         }
 
-        body.Add(_submitted
+        body.Add(State.IsSubmitted
             ? new Row("✓ submitted", ChatPalette.ToolOk)
             : new Row(HintLine, hintStyle));
 
@@ -437,7 +439,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             {
                 PaintStrip(buffer, ctx.Rect.X, y, width);
             }
-            else if (row.OptionIndex >= 0 && row.OptionIndex == cursor && !_submitted)
+            else if (row.OptionIndex >= 0 && row.OptionIndex == cursor && !State.IsSubmitted)
             {
                 // Cursor row: accent marker, checkbox tone keeps its audit color.
                 PaintOptionRow(buffer, ctx.Rect.X, y, width, row, cursorStyle, checkedStyle);
@@ -468,19 +470,19 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
                 sb.Append("  ").AppendLine(item.Prompt);
             }
 
-            var state = _states[i];
+            var state = State.Questions[i];
             for (int j = 0; j < item.Options.Count; j++)
             {
-                _ = sb.Append("  ").Append(state.Selected.Contains(j) ? "[x] " : "[ ] ").AppendLine(item.Options[j].Label);
+                _ = sb.Append("  ").Append(state.Selected.IndexOf(j) >= 0 ? "[x] " : "[ ] ").AppendLine(item.Options[j].Label);
             }
 
             if (item.AllowCustom)
             {
-                _ = sb.Append("  custom: ").AppendLine(state.Custom.ToString());
+                _ = sb.Append("  custom: ").AppendLine(state.Custom);
             }
         }
 
-        _ = sb.Append(_submitted ? "submitted" : HintLine);
+        _ = sb.Append(State.IsSubmitted ? "submitted" : HintLine);
         return sb.ToString();
     }
 
@@ -498,7 +500,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     /// </summary>
     public bool HandleKey(in KeyEvent key)
     {
-        if (_submitted || _questions.Count == 0
+        if (State.IsSubmitted || _questions.Count == 0
             || (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat))
         {
             return false;
@@ -635,7 +637,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             return false;
         }
 
-        return _states[q].Cursor >= item.Options.Count;
+        return State.Questions[q].Cursor >= item.Options.Count;
     }
 
     private bool AppendCustom(string text)
@@ -651,7 +653,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             return false;
         }
 
-        _ = _states[q].Custom.Append(text);
+        SetState(State.AppendCustom(q, text));
         return true;
     }
 
@@ -662,15 +664,14 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             return false;
         }
 
-        var sb = _states[SelectedQuestion].Custom;
-        if (sb.Length == 0)
+        int q = SelectedQuestion;
+        if (State.Questions[q].Custom.Length == 0)
         {
             return false;
         }
 
-        // Rune-aware delete: a trailing low surrogate takes its high half along.
-        int take = sb.Length >= 2 && char.IsLowSurrogate(sb[^1]) && char.IsHighSurrogate(sb[^2]) ? 2 : 1;
-        _ = sb.Remove(sb.Length - take, take);
+        // Rune-aware delete is owned by the pure state transition (#2627).
+        SetState(State.BackspaceCustom(q));
         return true;
     }
 
@@ -798,13 +799,6 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
         {
             buffer.SetText(x + box, y, text.AsSpan(box, boxLen), checkedStyle);
         }
-    }
-
-    private sealed class QuestionState
-    {
-        public int Cursor;
-        public readonly HashSet<int> Selected = [];
-        public readonly System.Text.StringBuilder Custom = new();
     }
 
     private readonly record struct Row(string Text, CellStyle Style, bool Pad = false, bool IsStrip = false, int OptionIndex = -1);

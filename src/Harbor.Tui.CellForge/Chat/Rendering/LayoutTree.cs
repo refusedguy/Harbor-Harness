@@ -278,7 +278,10 @@ public sealed class LayoutTree
     /// <summary>Maximum cached (layout, area) results (ENG3 #274).</summary>
     public const int MaxCachedLayouts = 500;
 
-    private readonly Dictionary<string, Panel> _panels = [];
+    // Named-panel identity (lookup, registration, removal) lives in PanelIndex;
+    // this class owns geometry and tree shape. The public members below keep
+    // their signatures and delegate here, so the tree is a thin facade over it.
+    private readonly PanelIndex _panels = new();
     private readonly Dictionary<string, SpringFx> _ratioSprings = [];
     private readonly Dictionary<string, SpringFx> _minWidthSprings = [];
     private SplitNode? _root;
@@ -296,7 +299,7 @@ public sealed class LayoutTree
     /// <summary>Currently cached (layout, area) results.</summary>
     public int CacheCount => _layoutCache.Count;
 
-    public IReadOnlyCollection<Panel> Panels => _panels.Values;
+    public IReadOnlyCollection<Panel> Panels => _panels.Panels;
 
     /// <summary>
     /// Z-ordered overlay plane painted after the panels (PRIM2a, btea Compositor
@@ -338,13 +341,10 @@ public sealed class LayoutTree
     /// Spectre <c>GetLayout(name)</c> analogue (SC2 #1210). See <see cref="this[string]"/>.
     /// </summary>
     /// <exception cref="KeyNotFoundException"><paramref name="id"/> is unknown.</exception>
-    public Panel GetPanel(string id) =>
-        _panels.TryGetValue(id, out var panel)
-            ? panel
-            : throw new KeyNotFoundException($"panel '{id}' not found");
+    public Panel GetPanel(string id) => _panels.Get(id);
 
     /// <summary>Tries named access without throwing (SC2 #1210).</summary>
-    public bool TryGetPanel(string id, out Panel? panel) => _panels.TryGetValue(id, out panel);
+    public bool TryGetPanel(string id, out Panel? panel) => _panels.TryGet(id, out panel);
 
     /// <summary>
     /// Spectre <c>Layout.Update(renderable)</c> analogue (SC2 #1210): swaps the
@@ -370,7 +370,7 @@ public sealed class LayoutTree
         replacement.Rect = old.Rect;
         replacement.Focused = old.Focused;
         node.Leaf = replacement;
-        _panels[panelId] = replacement;
+        _panels.Replace(panelId, replacement);
         _capsVer++;
     }
 
@@ -535,7 +535,7 @@ public sealed class LayoutTree
         foreach (var p in panels)
         {
             Ensure.NotNull(p);
-            if (p.Id == panelId || _panels.ContainsKey(p.Id))
+            if (p.Id == panelId || _panels.Contains(p.Id))
                 throw new ArgumentException($"panel '{p.Id}' is already in the tree.", nameof(panels));
         }
 
@@ -638,14 +638,14 @@ public sealed class LayoutTree
     public void AnimateMinWidth(string panelId, int target)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(target);
-        if (!_panels.ContainsKey(panelId))
+        if (!_panels.Contains(panelId))
         {
             throw new KeyNotFoundException($"panel '{panelId}' not found");
         }
 
         if (!_minWidthSprings.TryGetValue(panelId, out var spring))
         {
-            spring = new SpringFx(_panels[panelId].Min.Width);
+            spring = new SpringFx(_panels.Get(panelId).Min.Width);
             _minWidthSprings[panelId] = spring;
         }
 
@@ -807,7 +807,7 @@ public sealed class LayoutTree
             _orderedBuffer[i].Rect = _solvedOrder[i];
         }
 
-        if (_focusedId is not null && _panels.TryGetValue(_focusedId, out var focused))
+        if (_focusedId is not null && _panels.TryGet(_focusedId, out var focused))
         {
             focused.Focused = true;
         }
@@ -1220,5 +1220,5 @@ public sealed class LayoutTree
         }
     }
 
-    private void Register(Panel panel) => _panels[panel.Id] = panel;
+    private void Register(Panel panel) => _panels.Register(panel);
 }

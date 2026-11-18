@@ -286,7 +286,7 @@ var registry = []registered{
 	},
 	{
 		name:    "check-xml-doc-coverage",
-		summary: "every public member of the frozen contract assembly carries an XML doc",
+		summary: "every public member of the frozen contract assemblies carries an XML doc",
 		run:     checkxmldoccoverage.Run,
 	},
 	{

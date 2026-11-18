@@ -18,6 +18,11 @@ namespace Harbor.App.Avalonia.Tests;
 /// </remarks>
 public class ChatLineVmTests
 {
+    // Fixed reference instant: TimestampText is now a pure (utc, now) label,
+    // so the test supplies both halves of the pair instead of relying on the
+    // wall clock at getter time (#2633).
+    private static readonly DateTime TimestampNow = new(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
     // ── RoleBrushKey ───────────────────────────────────────────────
 
     // #1770: the role→brush copies differed only in the role, the sample text
@@ -74,7 +79,8 @@ public class ChatLineVmTests
     {
         var vm = new ChatLineVm(ChatRole.User, "hi")
         {
-            TimestampUtc = DateTime.UtcNow.AddSeconds(5)
+            NowUtc = TimestampNow,
+            TimestampUtc = TimestampNow.AddSeconds(5)
         };
         await Assert.That(vm.TimestampText).IsEqualTo("just now");
     }
@@ -84,7 +90,8 @@ public class ChatLineVmTests
     {
         var vm = new ChatLineVm(ChatRole.User, "hi")
         {
-            TimestampUtc = DateTime.UtcNow.AddMinutes(-5)
+            NowUtc = TimestampNow,
+            TimestampUtc = TimestampNow.AddMinutes(-5)
         };
         await Assert.That(vm.TimestampText).IsEqualTo("5m ago");
     }
