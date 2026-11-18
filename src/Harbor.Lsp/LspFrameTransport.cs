@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Text;
+using System.Text;
 using System.Text.Json;
 
 namespace Harbor.Lsp;
