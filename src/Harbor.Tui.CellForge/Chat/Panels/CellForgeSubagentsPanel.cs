@@ -27,6 +27,9 @@ namespace Harbor.Tui.CellForge.Panels;
 ///         are throttled to one store listing per 1.5s). A live
 ///         <see cref="IPanelSessionGateway" /> overrides the stored status with its
 ///         real-time status text when the sub-session was opened in this app run.
+///         Built rows are cached by (revision, active session, width) so neither
+///         a repaint nor a cursor key rebuilds them; a new listing or a moved
+///         revision drops the cache.
 ///         Both collaborators are optional and an absent one degrades the panel
 ///         instead of throwing (#470 — the old <c>ctx.Services</c> service locator
 ///         was never populated on the CellForge path).
@@ -52,8 +55,12 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     /// <summary>Minimum interval between revision-triggered store re-listings.</summary>
     internal const long RefreshThrottleMs = 1500;
 
+    private readonly record struct RowsCacheKey(long Revision, string? ActiveSessionId, int Width);
+
     private readonly object _gate = new();
     private List<Session> _snapshot = new();
+    private List<SubagentRow>? _rowsCache;
+    private RowsCacheKey _rowsCacheKey;
     private bool _loaded;
     private long _lastRevision = -1;
     private long _lastRefreshTicks;
@@ -159,7 +166,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
             case UiKeyCode.Down:
                 lock (_gate)
                 {
-                    _cursor = Math.Min(Math.Max(0, ListRowsCountLocked(ctx)), _cursor + 1);
+                    _cursor = Math.Min(Math.Max(0, RowsCountLocked - 1), _cursor + 1);
                 }
 
                 return true;
@@ -188,16 +195,37 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
 
     private List<SubagentRow> ListRows(PanelContext ctx)
     {
-        var store = ctx.Deps.SessionStore;
-        List<Session> snapshot;
         lock (_gate)
         {
-            ObserveRevisionLocked(ctx, store);
-            snapshot = new List<Session>(_snapshot);
+            ObserveRevisionLocked(ctx, ctx.Deps.SessionStore);
+            return CachedRowsLocked(ctx);
+        }
+    }
+
+    /// <summary>
+    ///     Rows for the current key, built at most once per revision/active
+    ///     session/width. Call only under <c>_gate</c>; a cached list is never
+    ///     mutated after construction, so <see cref="Build" /> can read it
+    ///     outside the lock.
+    /// </summary>
+    private List<SubagentRow> CachedRowsLocked(PanelContext ctx)
+    {
+        var key = new RowsCacheKey(
+            ctx.State.Revision, ctx.State.Chat.ActiveSessionId?.Value, ctx.Width);
+        if (_rowsCache is null || _rowsCacheKey != key)
+        {
+            _rowsCache = BuildRowsLocked(ctx);
+            _rowsCacheKey = key;
         }
 
+        return _rowsCache;
+    }
+
+    /// <summary>Build rows straight from the owned snapshot. Call only under <c>_gate</c>.</summary>
+    private List<SubagentRow> BuildRowsLocked(PanelContext ctx)
+    {
         var rows = new List<SubagentRow>(SubagentsModel.BuildRows(
-            snapshot, ctx.State.Chat.ActiveSessionId?.Value, DateTimeOffset.UtcNow));
+            _snapshot, ctx.State.Chat.ActiveSessionId?.Value, DateTimeOffset.UtcNow));
 
         // Live override: a session opened in this app run reports its
         // real-time status instead of the last persisted one.
@@ -215,12 +243,8 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
         return rows;
     }
 
-    private int ListRowsCountLocked(PanelContext ctx)
-    {
-        // Row count without manager enrichment (cursor clamping only).
-        var snapshot = new List<Session>(_snapshot);
-        return SubagentsModel.BuildRows(snapshot, ctx.State.Chat.ActiveSessionId?.Value, DateTimeOffset.UtcNow).Count - 1;
-    }
+    /// <summary>Cached row count for cursor clamping. Call only under <c>_gate</c>.</summary>
+    private int RowsCountLocked => _rowsCache?.Count ?? 0;
 
     /// <summary>Note a new store revision and kick a refresh when due. Call only under <c>_gate</c>.</summary>
     private void ObserveRevisionLocked(PanelContext ctx, ISessionStore? store)
@@ -228,6 +252,8 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
         long revision = ctx.State.Revision;
         bool moved = revision != _lastRevision;
         _lastRevision = revision;
+        if (moved)
+            _rowsCache = null;
         if (store is null)
         {
             if (!_loaded)
@@ -283,6 +309,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
         }
 
         _snapshot = new List<Session>(result.Value);
+        _rowsCache = null;
         _loaded = true;
         _loadError = null;
     }
@@ -290,8 +317,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     /// <summary>Enter transcript mode for the cursor row. Call only under <c>_gate</c> (list mode).</summary>
     private void EnterTranscriptLocked(PanelContext ctx)
     {
-        var snapshot = new List<Session>(_snapshot);
-        var rows = SubagentsModel.BuildRows(snapshot, ctx.State.Chat.ActiveSessionId?.Value, DateTimeOffset.UtcNow);
+        var rows = CachedRowsLocked(ctx);
         if (_cursor < 0 || _cursor >= rows.Count)
             return;
         var row = rows[_cursor];
