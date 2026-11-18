@@ -872,3 +872,17 @@ Decided: product-код не меняется, новый slice не откры�
 per-frame reuse уже дают prepaint/ElementId и `TimelineLayoutCache`.
 
 - Полный текст: [ADR-030](ADR-030-gpui-report-patterns-already-landed.md).
+## ADR-031: отчёт steal-list 2026-11 (#2690) — нового slice нет
+
+Issue #2690 — self-contained отчёт `steal-list-2026-11` с восемью идеями.
+Проверка `gh pr list --search 2690` и `origin/dev` (`2392420b`): идеи 1-5 влиты
+PR #2492-#2496 (follow-up #2539 и #2546), идея 6 — PR #2870; идея 7 зафиксирована
+[ADR-024](ADR-024-grapheme-cluster-16-byte-cell.md) как side-table с отложенной
+реализацией; идея 8 — широкий refactor трёх сборок и требует owner-решения.
+
+Decided: код не писать. Отчёт остаётся открытым источником сравнения, гейты и
+пороги не меняются. Пересмотр — по новому факту: снятие defer с ADR-024 или
+выбор владельцем границ единого аниматора.
+
+- Полный текст, таблица по восьми идеям и условия пересмотра:
+  [ADR-031](ADR-031-steal-list-2026-11-no-new-slice.md).
