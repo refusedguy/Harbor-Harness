@@ -1,7 +1,7 @@
 # ratchet for tools/check-accessible-names.py: one row per nameless interactive control the tree already carries. Rows may only shrink.
 apps/Harbor.App.Avalonia/Views/ChatView.axaml:41:ListBox
 apps/Harbor.App.Avalonia/Views/Chrome/TitleBarView.axaml:12:Button
-apps/Harbor.App.Avalonia/Views/CodeEditorView.axaml:78:TextBox
+apps/Harbor.App.Avalonia/Views/CodeEditorView.axaml:90:TextBox
 apps/Harbor.App.Avalonia/Views/Components/EmptyState.axaml:56:Button
 apps/Harbor.App.Avalonia/Views/Components/SegmentedControl.axaml:14:ListBox
 apps/Harbor.App.Avalonia/Views/Dev/ComponentGalleryView.axaml:41:TextBox
