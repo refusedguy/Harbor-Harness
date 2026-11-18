@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
+using Microsoft.Extensions.Logging;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
@@ -245,6 +246,45 @@ public class RetryLlmClientDecoratorTests
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value).IsSameReferenceAs(modelList);
+    }
+
+    /// <summary>
+    ///     E02: a transient preflight retry is not silent. The source-generated
+    ///     warning must reach the logging composition root with the failing
+    ///     attempt number, in both the formatted message and the structured
+    ///     field, so a test can pin "attempt 1" without scraping prose.
+    /// </summary>
+    [Test]
+    public async Task TransientPreflight_Retry_WritesWarningWithAttemptNumber()
+    {
+        var logs = new RecordingLoggerProvider();
+        ILogger<RetryLlmClientDecorator> logger = logs.CreateLogger<RetryLlmClientDecorator>();
+        var inner = new ScriptedLlmClient(
+            ThenThrow(null, new HttpRequestException("no such host", null)),
+            Events(TestEvents.LlmFinish()));
+        var decorator = new RetryLlmClientDecorator(
+            inner,
+            new RetryPolicy(),
+            logger,
+            new RetryOptions(3, TimeSpan.FromMilliseconds(1), false));
+
+        var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));
+
+        await Assert.That(error).IsNull();
+        await Assert.That(events.Count).IsEqualTo(1);
+        await Assert.That(events[0]).IsTypeOf<FinishEvent>();
+        await Assert.That(inner.Calls).IsEqualTo(2).Because("one failed preflight + one successful one");
+
+        List<RecordedLogEntry> warnings = logs
+            .EntriesFor(typeof(RetryLlmClientDecorator).FullName!)
+            .Where(e => e.Level == LogLevel.Warning)
+            .ToList();
+        await Assert.That(warnings.Count).IsEqualTo(1)
+            .Because("each transient retry writes exactly one warning under the decorator's category");
+        await Assert.That(warnings[0].Message).Contains("attempt 1")
+            .Because("the retry callback passes the 1-based attempt number to the source-generated log method");
+        await Assert.That(LogCapture.FieldOf(warnings[0].State, "Attempt")).IsEqualTo("1")
+            .Because("the structured field is what lets a test pin the attempt without depending on message wording");
     }
 
     // ── fixtures ──
