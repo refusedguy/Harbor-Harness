@@ -169,9 +169,10 @@ public static class PermissionMiniLine
     }
 
     /// <summary>
-    /// Same conservative wide ranges as the terminal table renderer
-    /// (<c>GfmTableFormatter.IsWide</c>): CJK/Hangul/fullwidth are 2 cells,
-    /// Cyrillic stays 1. Astral runes (emoji) are 2 cells.
+    /// Conservative CJK/Hangul/fullwidth ranges: CJK/Hangul/fullwidth are 2
+    /// cells, Cyrillic stays 1, astral runes are 2. The canonical per-rune
+    /// table now lives in <c>Harbor.Abstractions.Extensions.UnicodeDisplayWidth</c>;
+    /// this local subset stays pinned for the permission line.
     /// </summary>
     private static bool IsWide(Rune rune)
     {

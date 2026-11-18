@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Extensions;
+
 namespace Harbor.Terminal.Abstractions.Rendering;
 
 /// <summary>
@@ -327,27 +329,7 @@ public static class TableMeasurer
         return false;
     }
 
-    private static int WidthOf(string text)
-    {
-        int w = 0;
-        for (int i = 0; i < text.Length; i++)
-        {
-            w += IsWide(text[i]) ? 2 : 1;
-        }
-
-        return w;
-    }
-
-    private static bool IsWide(char c) =>
-        c is >= '\u1100' and <= '\u115F' or // Hangul Jamo
-            >= '\u2E80' and <= '\u303E' or
-            >= '\u3041' and <= '\u33FF' or
-            >= '\u3400' and <= '\u4DBF' or
-            >= '\u4E00' and <= '\u9FFF' or
-            >= '\uA000' and <= '\uA4CF' or
-            >= '\uAC00' and <= '\uD7A3' or
-            >= '\uF900' and <= '\uFAFF' or
-            >= '\uFE30' and <= '\uFE4F' or
-            >= '\uFF00' and <= '\uFF60' or
-            >= '\uFFE0' and <= '\uFFE6';
+    // One canonical width table for both the string-grid formatter and the
+    // cell-native TableBlock path (issue #2646): no local CJK approximation.
+    private static int WidthOf(string text) => UnicodeDisplayWidth.Width(text.AsSpan());
 }
