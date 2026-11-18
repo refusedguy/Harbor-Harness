@@ -119,6 +119,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     /// </summary>
     public CellForgePanelRegistry Panels { get; }
 
+    /// <summary>
+    ///     Host-facing constructor. Delegates to the backend overload so the
+    ///     store / panel / mediator / projector wiring lives in one place.
+    ///     The backend is created here, inside this assembly, rather than as
+    ///     an optional parameter: Harbor.Hosting calls this overload, and an
+    ///     Engine type in its signature would bind a new AssemblyRef from the
+    ///     CompositionRoot to Harbor.Tui.CellForge.Engine (#2657).
+    /// </summary>
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
         StatusBarViewModel? statusVm = null,
@@ -126,8 +134,23 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         InputViewModel? inputVm = null,
         UiStore? store = null,
         ISessionManager? sessions = null,
-        PanelServices? panelServices = null,
-        ISyncTerminalBackend? backend = null)
+        PanelServices? panelServices = null)
+        : this(logger, new StdoutBackend(), statusVm, chatVm, inputVm, store, sessions, panelServices)
+    {
+    }
+
+    /// <summary>Golden-frame test seam. The backend must be an
+    /// <see cref="ISyncTerminalBackend"/> — the context flushes synchronously
+    /// (issue #468). This overload owns the single initialization block.</summary>
+    public CellForgeTuiRenderer(
+        ILogger<CellForgeTuiRenderer> logger,
+        ISyncTerminalBackend backend,
+        StatusBarViewModel? statusVm = null,
+        ChatHistoryViewModel? chatVm = null,
+        InputViewModel? inputVm = null,
+        UiStore? store = null,
+        ISessionManager? sessions = null,
+        PanelServices? panelServices = null)
         : base(logger)
     {
         // Issue #77: the DI-shared store is injected by the composition root
@@ -151,29 +174,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
-        // Only the golden-frame test seam passes a backend; without one the
-        // context keeps its stdout default. Both paths log through the
-        // renderer's logger (#2457).
-        Context = backend is null
-            ? new CellForgeRenderContext(Logger)
-            : new CellForgeRenderContext(backend, Logger);
-    }
-
-    /// <summary>Golden-frame test seam. The backend must be an
-    /// <see cref="ISyncTerminalBackend"/> — the context flushes synchronously
-    /// (issue #468). Delegates to the primary constructor so panel, mediator
-    /// and projector wiring lives in one place.</summary>
-    public CellForgeTuiRenderer(
-        ILogger<CellForgeTuiRenderer> logger,
-        ISyncTerminalBackend backend,
-        StatusBarViewModel? statusVm = null,
-        ChatHistoryViewModel? chatVm = null,
-        InputViewModel? inputVm = null,
-        UiStore? store = null,
-        ISessionManager? sessions = null,
-        PanelServices? panelServices = null)
-        : this(logger, statusVm, chatVm, inputVm, store, sessions, panelServices, backend)
-    {
+        Context = new CellForgeRenderContext(backend, Logger);
     }
 
     /// <summary>
