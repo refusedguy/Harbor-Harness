@@ -432,13 +432,31 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
 
         string fg = Strategy.Foreground(foreground);
         string bg = background.HasValue ? Strategy.Background(background.Value) : string.Empty;
-        _writer.Write($"{fg}{bg}{text}{Strategy.Reset}");
+        // RenderDelta calls this once per TextDeltaEvent. Writing the pieces
+        // separately avoids a text-sized interpolated string per delta; the
+        // emitted bytes are byte-for-byte the same.
+        _writer.Write(fg);
+        _writer.Write(bg);
+        _writer.Write(text);
+        _writer.Write(Strategy.Reset);
     }
 
     public void WriteStyled(string text, TuiStyle style)
     {
         string codes = Strategy.Style(style);
-        _writer.Write(codes.Length == 0 ? text : $"\x1b[{codes}m{text}{Strategy.Reset}");
+        if (codes.Length == 0)
+        {
+            _writer.Write(text);
+            return;
+        }
+
+        // Same hot path as above: ESC[ + codes + 'm', the text and the reset
+        // go out as separate writes, with no interpolation over the delta.
+        _writer.Write("\x1b[");
+        _writer.Write(codes);
+        _writer.Write('m');
+        _writer.Write(text);
+        _writer.Write(Strategy.Reset);
     }
 
     public void SetCursorPosition(int row, int col) => _writer.Write(Strategy.CursorPosition(row, col));
