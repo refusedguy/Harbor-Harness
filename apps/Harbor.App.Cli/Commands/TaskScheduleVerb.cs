@@ -258,40 +258,38 @@ internal sealed class CronExpression
                 }
             }
 
-            int start;
-            int end;
-            int dash = body.IndexOf('-');
-            if (body == "*")
+            Result<(int Start, int End)> range = ParseRange(body, min, max, fieldName);
+            Result applied = range.Bind(r =>
             {
-                start = min;
-                end = max;
-            }
-            else if (dash >= 0)
-            {
-                Result<int> a = ParseValue(body[..dash], fieldName);
-                Result<int> b = ParseValue(body[(dash + 1)..], fieldName);
-                if (a.IsFailure) return Result.Failure(a.Error);
-                if (b.IsFailure) return Result.Failure(b.Error);
-                start = a.Value;
-                end = b.Value;
-            }
-            else
-            {
-                Result<int> v = ParseValue(body, fieldName);
-                if (v.IsFailure) return Result.Failure(v.Error);
-                start = end = v.Value;
-            }
+                if (r.Start < min || r.End > max || r.Start > r.End)
+                    return Result.Failure($"cron {fieldName}: value outside {min}..{max}.");
 
-            if (start < min || end > max || start > end)
-                return Result.Failure($"cron {fieldName}: value outside {min}..{max}.");
-
-            for (int value = start; value <= end; value += step)
-            {
-                int normalized = normalizeSeven && value == 7 ? 0 : value;
-                target[normalized - min] = true;
-            }
+                for (int value = r.Start; value <= r.End; value += step)
+                {
+                    int normalized = normalizeSeven && value == 7 ? 0 : value;
+                    target[normalized - min] = true;
+                }
+                return Result.Success();
+            });
+            if (applied.IsFailure)
+                return Result.Failure(applied.Error);
         }
         return Result.Success();
+    }
+
+    private static Result<(int Start, int End)> ParseRange(string body, int min, int max, string fieldName)
+    {
+        if (body == "*")
+            return Result.Success((Start: min, End: max));
+
+        int dash = body.IndexOf('-');
+        if (dash >= 0)
+        {
+            Result<int> a = ParseValue(body[..dash], fieldName);
+            Result<int> b = ParseValue(body[(dash + 1)..], fieldName);
+            return a.Bind(start => b.Map(end => (Start: start, End: end)));
+        }
+        return ParseValue(body, fieldName).Map(v => (Start: v, End: v));
     }
 
     private static Result<int> ParseValue(string text, string fieldName) =>
