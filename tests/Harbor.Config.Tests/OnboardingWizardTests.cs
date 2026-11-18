@@ -17,7 +17,7 @@ namespace Harbor.Config.Tests;
 ///     <c>ANTHROPIC_API_KEY</c>, in the same assembly as
 ///     <c>AuthStoreTests</c>, which writes the same variables and reaches
 ///     <c>AuthStore.ListApiKeysAsync</c>. That method enumerates the entire process
-///     environment (AuthStore.cs:140, re-anchored after the #1625 extraction to
+///     environment (AuthStore.cs:167, re-anchored after the #1625 extraction to
 ///     Harbor.PolicyConfig), so the set of providers this wizard sees is
 ///     a function of timing. Every one of these writes is a null-out of a real
 ///     provider key, which is why the collision is a flake rather than a wrong
@@ -42,7 +42,7 @@ public class OnboardingWizardTests
     ///     </para>
     ///     <para>
     ///         That is not a test-only name. <c>AuthStore.FromConventionalEnv</c>
-    ///         (<c>AuthStore.cs:65-74</c>, re-anchored after the #1625 extraction
+    ///         (<c>AuthStore.cs:72-81</c>, re-anchored after the #1625 extraction
     ///         to Harbor.PolicyConfig) derives <c>&lt;PROVIDER&gt;_API_KEY</c> from
     ///         the provider id and reads the process environment for it, and the wizard
     ///         reaches it through <c>_authStore.GetApiKeyAsync</c>

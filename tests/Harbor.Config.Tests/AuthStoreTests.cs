@@ -9,7 +9,7 @@ namespace Harbor.Config.Tests;
 ///     #823: every write here is process-wide state that
 ///     <see cref="AuthStore" /> reads back, and two of them are read by something
 ///     wider than this class — <c>ListApiKeysAsync</c> enumerates the ENTIRE
-///     process environment (AuthStore.cs:140, re-anchored after the #1625
+///     process environment (AuthStore.cs:167, re-anchored after the #1625
 ///     extraction to Harbor.PolicyConfig) and synthesises a provider entry for
 ///     every <c>*_API_KEY</c> it finds. <c>OnboardingWizardTests</c> is in this
 ///     same assembly, writes 32 of the same variables, and is not in #823's list of
@@ -249,7 +249,7 @@ public class AuthStoreTests
         (var auth, _, string path) = CreateAuthStore();
         string envName = "ENVLISTPROVIDER_API_KEY";
         // #847: this is the one that mattered most — ListApiKeysAsync enumerates the
-        // ENTIRE process environment (AuthStore.cs:140, re-anchored after the
+        // ENTIRE process environment (AuthStore.cs:167, re-anchored after the
         // #1625 extraction to Harbor.PolicyConfig), so a key destroyed here is
         // gone from a set this very class reads back.
         string? previousEnv = Environment.GetEnvironmentVariable(envName);
