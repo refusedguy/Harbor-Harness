@@ -100,9 +100,13 @@ public static class CellForgePanelAdapter
     {
         if (widget is not null)
         {
-            foreach (var decoder in _decoders)
+            // #2648: _decoders is an interface-typed volatile field. Read it once
+            // and index it, so the per-frame path neither boxes an enumerator nor
+            // sees the field change between Count and the last access.
+            var decoders = _decoders;
+            for (int i = 0; i < decoders.Count; i++)
             {
-                if (decoder.TryDecode(widget, ctx, out var rows) && rows is not null)
+                if (decoders[i].TryDecode(widget, ctx, out var rows) && rows is not null)
                 {
                     return rows;
                 }
@@ -114,11 +118,89 @@ public static class CellForgePanelAdapter
             null => Array.Empty<string>(),
             string s => SplitLines(s),
             IReadOnlyList<string> rows => rows,
-            IEnumerable<string> lines => lines.Select(l => l ?? string.Empty).ToArray(),
+            IEnumerable<string> lines => MaterializeLines(lines),
             _ => SplitLines(widget.ToString() ?? string.Empty),
         };
     }
 
-    private static IReadOnlyList<string> SplitLines(string text) =>
-        text.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
+    /// <summary>
+    ///     #2648: <c>string.Split</c> allocates a separator array, a result
+    ///     array and one substring per line on every frame. Walk the span with
+    ///     <c>IndexOf</c>, count first, then fill an exact-sized array.
+    ///     <c>\r\n</c> stays one separator (it was first in the old separator
+    ///     list) and empty entries, including a trailing one, are kept exactly
+    ///     as <c>StringSplitOptions.None</c> kept them.
+    /// </summary>
+    private static IReadOnlyList<string> SplitLines(string text)
+    {
+        ReadOnlySpan<char> span = text.AsSpan();
+
+        int count = 1; // Splitting "" yields one empty entry.
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (span[i] == '\r')
+            {
+                if (i + 1 < span.Length && span[i + 1] == '\n')
+                {
+                    i++;
+                }
+                count++;
+            }
+            else if (span[i] == '\n')
+            {
+                count++;
+            }
+        }
+
+        var rows = new string[count];
+        int next = 0;
+        while (true)
+        {
+            int cr = span.IndexOf('\r');
+            int lf = span.IndexOf('\n');
+            int at = cr < 0 ? lf : lf < 0 ? cr : Math.Min(cr, lf);
+            if (at < 0)
+            {
+                rows[next] = span.ToString();
+                break;
+            }
+
+            bool carriageReturn = span[at] == '\r';
+            rows[next++] = span[..at].ToString();
+            span = span[(at + 1)..];
+            if (carriageReturn && !span.IsEmpty && span[0] == '\n')
+            {
+                span = span[1..];
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    ///     #2648: <c>Select(...).ToArray()</c> allocates a delegate, an iterator
+    ///     and a growing buffer on every frame. A source that knows its size
+    ///     copies straight into an exact array; the only remaining work is the
+    ///     null-to-empty coalescing the old Select performed.
+    /// </summary>
+    private static IReadOnlyList<string> MaterializeLines(IEnumerable<string> lines)
+    {
+        if (lines is ICollection<string> sized)
+        {
+            var rows = new string[sized.Count];
+            sized.CopyTo(rows, 0);
+            for (int i = 0; i < rows.Length; i++)
+            {
+                rows[i] ??= string.Empty;
+            }
+            return rows;
+        }
+
+        var list = new List<string>();
+        foreach (string line in lines)
+        {
+            list.Add(line ?? string.Empty);
+        }
+        return list;
+    }
 }
