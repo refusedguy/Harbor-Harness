@@ -2,3 +2,5 @@
 # There is no parser yet (#2426); the text only has to reach the pipeline.
 panel "sample":
     text "Hello from the CellForge markup sample"
+    .bind "ctrl+k" "sample.next" "Next panel"
+    .bind "ctrl+p" "sample.prev" "Previous panel"

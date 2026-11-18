@@ -35,6 +35,11 @@ namespace Harbor.Tui.CellForge.CodeGen;
 ///         half for a document with diagnostics, and carries a source checksum
 ///         and positional comments in the generated code.
 ///     </para>
+///     <para>
+///         Issue #2688 adds a fourth output: declarative <c>.bind</c>
+///         operations become <c>Binding</c> data, emitted only when the
+///         consumer references the CellForge input contracts.
+///     </para>
 /// </remarks>
 [Generator]
 public sealed class MarkupGenerator : IIncrementalGenerator
@@ -148,6 +153,28 @@ public sealed class MarkupGenerator : IIncrementalGenerator
             {
                 spc.AddSource(
                     output.Identifier + ".Bindings.g.cs",
+                    SourceText.From(output.Source, Encoding.UTF8));
+            }
+        });
+
+        // #2688. Key bindings are data, not C# code-behind. The emitter checks
+        // the compilation for the runtime type, so this phase adds a source
+        // only where the consumer can actually bind it.
+        var keyBindings = declarations
+            .Combine(context.CompilationProvider)
+            .Select(static (pair, _) => KeyBindingsEmitter.Emit(
+                pair.Right,
+                pair.Left.TargetPath,
+                pair.Left.Identifier,
+                MarkupParser.Parse(pair.Left.Text)))
+            .WithTrackingName("MarkupGenerator.KeyBindings");
+
+        context.RegisterSourceOutput(keyBindings, static (spc, output) =>
+        {
+            if (output.Source.Length != 0)
+            {
+                spc.AddSource(
+                    output.Identifier + ".KeyBindings.g.cs",
                     SourceText.From(output.Source, Encoding.UTF8));
             }
         });
