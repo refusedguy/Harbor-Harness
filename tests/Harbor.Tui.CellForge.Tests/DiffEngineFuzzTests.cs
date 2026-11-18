@@ -39,7 +39,11 @@ public class DiffEngineFuzzTests
     [Test]
     public async Task Fuzz_AfterEveryFlush_FrontEqualsNext()
     {
-        foreach (int seed in new[] { 11, 23, 47 })
+        // #2705 T03: one seed source for every stochastic test. The defaults
+        // keep the historical three-seed run; HARBOR_TEST_SEED narrows to one
+        // reproducible seed and HARBOR_TEST_ITERATIONS widens the walk. RunFuzz
+        // prints the seed in its failure message, so a red CI run is replayable.
+        foreach (int seed in TestSeeds.Values(11, 23, 47))
         {
             await RunFuzz(seed);
         }
