@@ -31,6 +31,7 @@ namespace Harbor.TestKit;
 public sealed class ManualTimeProvider : TimeProvider
 {
     private readonly List<TimeSpan> _delays = [];
+    private readonly List<ManualTimer> _timers = [];
     private readonly Lock _gate = new();
 
     private DateTimeOffset _now;
@@ -47,10 +48,22 @@ public sealed class ManualTimeProvider : TimeProvider
     ///     that a retry policy observing a <c>Task.Delay</c> would see an
     ///     already-elapsed delay.
     /// </param>
-    public ManualTimeProvider(DateTimeOffset? start = null, bool fireTimerOnCreate = false)
+    /// <param name="fireTimerOnAdvance">
+    ///     Whether <see cref="Advance" /> fires timers whose deadline the move
+    ///     reached. Off by default, which keeps the recording-clock behaviour.
+    ///     Turn it on for a deadline carried by
+    ///     <c>CancellationTokenSource(TimeSpan, TimeProvider)</c>: advancing the
+    ///     clock then cancels the token deterministically, with no wall-clock
+    ///     sleep and no tolerance to tune.
+    /// </param>
+    public ManualTimeProvider(
+        DateTimeOffset? start = null,
+        bool fireTimerOnCreate = false,
+        bool fireTimerOnAdvance = false)
     {
         _now = start ?? DateTimeOffset.UnixEpoch;
         FireTimerOnCreate = fireTimerOnCreate;
+        FireTimerOnAdvance = fireTimerOnAdvance;
     }
 
     /// <summary>
@@ -58,6 +71,26 @@ public sealed class ManualTimeProvider : TimeProvider
     ///     its callback immediately.
     /// </summary>
     public bool FireTimerOnCreate { get; }
+
+    /// <summary>
+    ///     Whether <see cref="Advance" /> fires timers that the move made due.
+    /// </summary>
+    public bool FireTimerOnAdvance { get; }
+
+    /// <summary>
+    ///     Timers still armed on this clock. A caller that owns a deadline can
+    ///     assert this is zero after its run to prove the timer was released.
+    /// </summary>
+    public int ActiveTimerCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _timers.Count;
+            }
+        }
+    }
 
     /// <summary>
     ///     The delays this clock was asked for, in the order they were asked.
@@ -83,20 +116,65 @@ public sealed class ManualTimeProvider : TimeProvider
     ///     Moves the clock forward.
     /// </summary>
     /// <param name="delta">How far to move it.</param>
-    public void Advance(TimeSpan delta)
-    {
-        _now += delta;
-        ElapsedMilliseconds += (long)delta.TotalMilliseconds;
-    }
+    public void Advance(TimeSpan delta) => Move(delta, (long)delta.TotalMilliseconds);
 
     /// <summary>
     ///     Moves the clock forward by whole milliseconds.
     /// </summary>
     /// <param name="milliseconds">How far to move it.</param>
-    public void AdvanceMs(long milliseconds)
+    public void AdvanceMs(long milliseconds) =>
+        Move(TimeSpan.FromMilliseconds(milliseconds), milliseconds);
+
+    private void Move(TimeSpan delta, long milliseconds)
     {
-        ElapsedMilliseconds += milliseconds;
-        _now += TimeSpan.FromMilliseconds(milliseconds);
+        List<ManualTimer>? due = null;
+        lock (_gate)
+        {
+            _now += delta;
+            ElapsedMilliseconds += milliseconds;
+
+            if (!FireTimerOnAdvance)
+            {
+                return;
+            }
+
+            due = [];
+            for (int i = _timers.Count - 1; i >= 0; i--)
+            {
+                ManualTimer timer = _timers[i];
+                if (!timer.IsDue(_now))
+                {
+                    continue;
+                }
+
+                due.Add(timer);
+                if (timer.Period == Timeout.InfiniteTimeSpan || timer.Period <= TimeSpan.Zero)
+                {
+                    timer.Deadline = null;
+                    _timers.RemoveAt(i);
+                }
+                else
+                {
+                    DateTimeOffset next = timer.Deadline!.Value + timer.Period;
+                    while (next <= _now)
+                    {
+                        next += timer.Period;
+                    }
+
+                    timer.Deadline = next;
+                }
+            }
+        }
+
+        // Fire outside the lock: a CTS callback can dispose its own timer,
+        // and that disposal takes the same lock.
+        if (due is not null)
+        {
+            foreach (ManualTimer timer in due)
+            {
+                timer.Fire();
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -115,9 +193,15 @@ public sealed class ManualTimeProvider : TimeProvider
         TimeSpan dueTime,
         TimeSpan period)
     {
+        ManualTimer? armed = null;
         lock (_gate)
         {
             _delays.Add(dueTime);
+            if (FireTimerOnAdvance && !FireTimerOnCreate)
+            {
+                armed = new ManualTimer(this, callback, state, dueTime, period);
+                _timers.Add(armed);
+            }
         }
 
         if (FireTimerOnCreate)
@@ -125,12 +209,12 @@ public sealed class ManualTimeProvider : TimeProvider
             callback(state);
         }
 
-        return NoopTimer.Instance;
+        return armed ?? NoopTimer.Instance;
     }
 
     /// <summary>
-    ///     The timer every copy of this fake returned: a handle that changes
-    ///     nothing and disposes quietly.
+    ///     The timer the recording dials return: a handle that changes nothing
+    ///     and disposes quietly.
     /// </summary>
     private sealed class NoopTimer : ITimer
     {
@@ -143,5 +227,68 @@ public sealed class ManualTimeProvider : TimeProvider
         }
 
         public ValueTask DisposeAsync() => default;
+    }
+
+    /// <summary>
+    ///     A one-shot or periodic timer whose deadline lives on the virtual
+    ///     clock, used only when <see cref="FireTimerOnAdvance" /> is set.
+    /// </summary>
+    private sealed class ManualTimer(
+        ManualTimeProvider owner,
+        TimerCallback callback,
+        object? state,
+        TimeSpan dueTime,
+        TimeSpan period) : ITimer
+    {
+        private bool _disposed;
+
+        /// <summary>When the timer fires, or null when it is disarmed.</summary>
+        public DateTimeOffset? Deadline { get; set; } =
+            dueTime == Timeout.InfiniteTimeSpan ? null : owner._now + dueTime;
+
+        /// <summary>The repeat interval, or an infinite/one-shot value.</summary>
+        public TimeSpan Period { get; private set; } = period;
+
+        /// <summary>Whether the virtual clock has reached the deadline.</summary>
+        public bool IsDue(DateTimeOffset now) => Deadline is { } deadline && now >= deadline;
+
+        /// <summary>Run the callback unless the timer was disposed.</summary>
+        public void Fire()
+        {
+            if (!_disposed)
+            {
+                callback(state);
+            }
+        }
+
+        /// <inheritdoc />
+        public bool Change(TimeSpan newDueTime, TimeSpan newPeriod)
+        {
+            if (_disposed)
+            {
+                return false;
+            }
+
+            Period = newPeriod;
+            Deadline = newDueTime == Timeout.InfiniteTimeSpan ? null : owner._now + newDueTime;
+            return true;
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            _disposed = true;
+            lock (owner._gate)
+            {
+                owner._timers.Remove(this);
+            }
+        }
+
+        /// <inheritdoc />
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return default;
+        }
     }
 }

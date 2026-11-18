@@ -69,8 +69,11 @@ public sealed class AgentLoop : IAgentLoop
     private readonly IMcpRegistry? _mcpRegistry;
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
-    // #1024: wall-clock budget enforcement reads these — an elapsed check at
-    // the turn boundary, deliberately NOT a CancelAfter on the run token.
+    // #1024/#403: wall-clock budget enforcement reads these. The deadline is
+    // armed on the INJECTED clock and linked with the user token, so it can
+    // interrupt an in-flight turn; the terminal event still distinguishes a
+    // deadline from a user stop. A naive CancelAfter on the caller's token is
+    // deliberately avoided — that would report a ceiling as a pressed stop.
     private readonly TimeProvider _clock;
     private readonly TimeSpan? _runTimeout;
     private readonly UserHookGates _hookGates;
@@ -122,12 +125,13 @@ public sealed class AgentLoop : IAgentLoop
         // order. The product half of that claim is gated:
         // tests/Harbor.Hosting.Tests/PipelineBehaviorCompositionTests.cs.
         IEnumerable<IPipelineBehavior>? pipelineBehaviors = null,
-        // #1024: wall-clock budget + clock. Both optional so every
+        // #1024/#403: wall-clock budget + clock. Both optional so every
         // direct-construction caller (tests, benchmarks, load harnesses) keeps
         // compiling unchanged and keeps the legacy unbounded behaviour.
-        // Null budget (default) preserves it. A set budget is enforced by an
-        // elapsed check at the turn boundary — NOT by CancelAfter on the run
-        // token, which would read as a user cancel.
+        // Null budget (default) preserves it. A set budget arms a deadline on
+        // this clock, linked with the caller's token: an in-flight turn is
+        // interrupted through the token, and the terminal event stamps a
+        // RunLimitKind.Timeout instead of a user cancel.
         TimeProvider? timeProvider = null,
         TimeSpan? runTimeout = null,
         // PX4: user hooks (slice 1: Pre/PostToolUse + SessionEnd; slice 2:
@@ -276,6 +280,16 @@ public sealed class AgentLoop : IAgentLoop
     ///         the opposite direction, so the reason is carried on the event and this
     ///         <see cref="Result" /> keeps meaning "the loop did not die".
     ///     </para>
+    ///     <para>
+    ///         #403 (mid-stream): when a wall-clock budget is configured, the
+    ///         run carries a token linked to a deadline on the injected
+    ///         <see cref="TimeProvider" />. Work inside a turn observes that
+    ///         token, so a long stream or tool is interrupted instead of being
+    ///         left to finish past the budget. The cancellation is classified
+    ///         at the terminal event: a deadline yields
+    ///         <see cref="RunLimitKind.Timeout" /> with <c>Cancelled == false</c>,
+    ///         while a user stop keeps <c>Cancelled == true</c> and no limit.
+    ///     </para>
     /// </returns>
     public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
     {
@@ -296,6 +310,10 @@ public sealed class AgentLoop : IAgentLoop
         using var activity = HarborTelemetry.Source.StartActivity("Agent.Run");
         activity?.SetTag(GenAiTags.AgentName, agent.Name.Value);
         activity?.SetTag(GenAiTags.RequestModel, agent.Model);
+        // #403 (mid-stream): declared outside the try so the cancellation
+        // filters below can read it, and disposed in the finally so every exit
+        // (success, limit, user cancel, provider error) releases the timer.
+        CancellationTokenSource? timeoutCts = null;
         try
         {
             // Resolve the model once up front so the context window can be carried
@@ -349,6 +367,20 @@ public sealed class AgentLoop : IAgentLoop
             // #1024: the wall-clock stamp. Read once per run so the elapsed
             // check below is a comparison, not a second clock to skew.
             DateTimeOffset startedAt = _clock.GetUtcNow();
+            // #403 (mid-stream): arm the deadline on the SAME injected clock
+            // the stamp came from, then link it with the caller's token. Work
+            // inside a turn sees the linked token, so a long stream or tool is
+            // interrupted when the budget elapses. The linked source never
+            // replaces `ct` in the loop's own cancel checks: the caller's token
+            // stays the only thing that means "the user stopped this".
+            if (_runTimeout is { } wallBudget)
+            {
+                timeoutCts = new CancellationTokenSource(wallBudget, _clock);
+            }
+            using CancellationTokenSource? runCts = timeoutCts is null
+                ? null
+                : CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+            CancellationToken runCt = runCts?.Token ?? ct;
             // #404: the run's budget ledger. Null when the agent sets no
             // caps — the loop then pays one null-branch per turn (no table,
             // no lookup), which is the zero-added-cost claim for uncapped
@@ -375,13 +407,13 @@ public sealed class AgentLoop : IAgentLoop
                 : null;
             while (!ct.IsCancellationRequested)
             {
-                // #1024: boundary enforcement for the wall-clock budget. This
-                // MUST stay a read of the clock, never a CancelAfter on `ct`:
-                // firing the run token would route the run into the cancel
-                // branch below and report a user-set ceiling as a user-pressed
-                // stop. An in-flight turn is never interrupted — it completes,
-                // and the run ends before the next one starts (#997 leaves
-                // in-flight calls alone the same way).
+                // #1024/#403: between-turn backstop for the wall-clock budget.
+                // The linked deadline above interrupts an in-flight turn; this
+                // read of the clock catches the case where no turn was in
+                // flight when the budget elapsed. It stays a comparison, never
+                // a CancelAfter on `ct`: firing the caller's token would route
+                // the run into the cancel branch and report a ceiling the user
+                // set as a stop the user pressed.
                 if (_runTimeout is { } budget && _clock.GetUtcNow() - startedAt >= budget)
                 {
                     AgentLoopLog.WallClockBudgetHit(_logger, budget, session.Session.Id, agent.Name.Value);
@@ -421,7 +453,7 @@ public sealed class AgentLoop : IAgentLoop
                 try
                 {
                     step = await _turnRunner.RunTurnAsync(
-                        session, agent, client, model, turn, truncationFallback, ct, runBudget, repeatGuard, loopGuard).ConfigureAwait(false);
+                        session, agent, client, model, turn, truncationFallback, runCt, runBudget, repeatGuard, loopGuard).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -473,7 +505,7 @@ public sealed class AgentLoop : IAgentLoop
                     if (step.Quiescent)
                     {
                         GoalRoundDriver.RoundOutcome outcome = await _goalDriver
-                            .TryReserveRoundAsync(session, agent, ct).ConfigureAwait(false);
+                            .TryReserveRoundAsync(session, agent, runCt).ConfigureAwait(false);
                         if (outcome == GoalRoundDriver.RoundOutcome.Scheduled)
                         {
                             // Another round: the loop keeps going, and the
@@ -514,6 +546,17 @@ public sealed class AgentLoop : IAgentLoop
                 return Result.Failure("Agent run was cancelled.");
             }
 
+            // #403 (mid-stream): a deadline that fired while a turn wound down
+            // gracefully still ends the run as a limit. TurnRunner converts a
+            // cancellation during streaming into a quiet Aborted outcome, so
+            // without this guard such a run could publish a clean terminal
+            // event and hide that the clock had run out.
+            if (limit is null && timeoutCts?.IsCancellationRequested == true)
+            {
+                AgentLoopLog.WallClockBudgetHit(_logger, _runTimeout ?? TimeSpan.Zero, session.Session.Id, agent.Name.Value);
+                limit = RunLimitKind.Timeout;
+            }
+
             AgentLoopLog.LoopCompleted(_logger, session.Session.Id, agent.Name.Value);
             // #403: `Limit` rides the terminal event so every reader gets the
             // reason, not only `RunOutcome`. Renderers read this event and NOT
@@ -541,6 +584,21 @@ public sealed class AgentLoop : IAgentLoop
             await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
             return Result.Failure("Agent run was cancelled.");
         }
+        catch (OperationCanceledException) when (timeoutCts?.IsCancellationRequested == true)
+        {
+            // #403 (mid-stream): the deadline, not the user, cancelled the
+            // token. Close the run on the same terminal shape as the boundary
+            // check: a limit on the event, no Cancelled flag, no error event,
+            // and Success so a caller such as SubAgentRunner does not read a
+            // ceiling the user configured as a malfunction. The user-cancel
+            // filter above runs first, so a stop that wins the race stays a
+            // user stop and is never re-labeled as a limit.
+            AgentLoopLog.WallClockBudgetHit(_logger, _runTimeout ?? TimeSpan.Zero, session.Session.Id, agent.Name.Value);
+            await _eventBus.PublishAsync(
+                new AgentEndEvent(SnapshotMessages(session.Messages), Limit: RunLimitKind.Timeout), CancellationToken.None).ConfigureAwait(false);
+            await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
+            return Result.Success();
+        }
         catch (Exception ex)
         {
             activity?.AddException(ex);
@@ -549,6 +607,14 @@ public sealed class AgentLoop : IAgentLoop
             AgentLoopLog.RunFailed(_logger, ex, session.Session.Id, failure);
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
+        }
+        finally
+        {
+            // #403 (mid-stream): the deadline timer holds a callback into this
+            // CTS. Disposing it on every exit keeps a finished run from holding
+            // a live timer on the injected clock. The linked source is a using
+            // local inside the try and is released on the same exits.
+            timeoutCts?.Dispose();
         }
     }
 
