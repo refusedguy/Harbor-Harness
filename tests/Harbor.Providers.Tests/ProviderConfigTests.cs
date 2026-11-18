@@ -42,7 +42,7 @@ public class ProviderConfigTests
         {
             var result = ProviderConfig.LoadFromFile(path);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Id).IsEqualTo("openrouter");
             await Assert.That(result.Value.DisplayName).IsEqualTo("OpenRouter");
             await Assert.That(result.Value.BaseUrl).IsEqualTo("https://openrouter.ai/api/v1");
@@ -73,7 +73,7 @@ public class ProviderConfigTests
         try
         {
             var result = ProviderConfig.LoadFromFile(path);
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Id).IsEqualTo("deepseek");
         }
         finally
@@ -90,7 +90,7 @@ public class ProviderConfigTests
         {
             var result = ProviderConfig.LoadFromFile(path);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("Failed to load provider config");
         }
         finally
@@ -113,7 +113,7 @@ public class ProviderConfigTests
         {
             var result = ProviderConfig.LoadFromFile(path);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("missing 'id'");
         }
         finally
@@ -136,7 +136,7 @@ public class ProviderConfigTests
         {
             var result = ProviderConfig.LoadFromFile(path);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("missing 'baseUrl'");
         }
         finally
@@ -151,7 +151,7 @@ public class ProviderConfigTests
         string path = Path.Combine(Path.GetTempPath(), $"harbor-nonexistent-{Guid.NewGuid():N}.json");
         var result = ProviderConfig.LoadFromFile(path);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -214,7 +214,7 @@ public class EnvVarAuthResolverTests
 
         var result = await resolver.ResolveApiKeyAsync("anthropic");
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value).IsEqualTo("override-key-123");
     }
 
@@ -231,7 +231,7 @@ public class EnvVarAuthResolverTests
             var resolver = new EnvVarAuthResolver();
             var result = await resolver.ResolveApiKeyAsync("testprovider");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value).IsEqualTo("env-key-456");
         }
         finally
@@ -254,7 +254,7 @@ public class EnvVarAuthResolverTests
             var resolver = new EnvVarAuthResolver();
             var result = await resolver.ResolveApiKeyAsync("kilo-code");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value).IsEqualTo("kilo-key");
         }
         finally
@@ -278,7 +278,7 @@ public class EnvVarAuthResolverTests
 
             var result = await resolver.ResolveApiKeyAsync("missingprovider");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("MISSINGPROVIDER_API_KEY");
         }
         finally
@@ -300,7 +300,7 @@ public class EnvVarAuthResolverTests
             var resolver = new EnvVarAuthResolver();
             var result = await resolver.ResolveApiKeyAsync("emptyprovider");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -314,7 +314,7 @@ public class EnvVarAuthResolverTests
         var resolver = new EnvVarAuthResolver();
         var result = await resolver.ResolveApiKeyAsync("neuro-flash");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("NEURO_FLASH_API_KEY");
     }
 }
@@ -351,7 +351,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Count).IsEqualTo(2);
             await Assert.That(result.Value[0].Id).IsEqualTo("m1");
             await Assert.That(result.Value[1].Id).IsEqualTo("m2");
@@ -381,7 +381,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("no modelsUrl");
         }
         finally
@@ -421,7 +421,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Count).IsEqualTo(2);
             await Assert.That(result.Value[0].Id).IsEqualTo("gpt-4o");
             await Assert.That(result.Value[0].DisplayName).IsEqualTo("GPT-4o");
@@ -485,7 +485,7 @@ public class DynamicModelCatalogTests
             """,
             config);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Count).IsEqualTo(1);
         await Assert.That(result.Value[0].Id).IsEqualTo("contextless");
         // 0 = "window not reported", never a fabricated 4096.
@@ -521,7 +521,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Count).IsEqualTo(1);
             await Assert.That(result.Value[0].Id).IsEqualTo("llama3.2");
         }
@@ -552,7 +552,7 @@ public class DynamicModelCatalogTests
                 ModelsPath = "data"
             });
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Count).IsEqualTo(1);
         await Assert.That(result.Value[0].Id).IsEqualTo("anthropic/claude-3.5-sonnet");
         await Assert.That(result.Value[0].ContextWindow).IsEqualTo(200_000);
@@ -597,7 +597,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Count).IsEqualTo(1);
             await Assert.That(result.Value[0].Id).IsEqualTo("llama3.2:latest");
             await Assert.That(result.Value[0].ContextWindow).IsEqualTo(4096);
@@ -630,7 +630,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -662,7 +662,7 @@ public class DynamicModelCatalogTests
             };
 
             var first = await catalog.GetModelsAsync(config);
-            await Assert.That(first.IsSuccess).IsTrue();
+            await Assert.That(first).IsSuccessful();
 
             string cacheFile = Path.Combine(cacheDir, "cachedprov.json");
             await Assert.That(File.Exists(cacheFile)).IsTrue();
@@ -703,7 +703,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Count).IsEqualTo(1);
             await Assert.That(result.Value[0].Id).IsEqualTo("good-model");
         }
@@ -745,7 +745,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("all 2 model entries were skipped");
             await Assert.That(result.Error).Contains("no 'id'");
             await Assert.That(result.Error).Contains("[0]");
@@ -787,7 +787,7 @@ public class DynamicModelCatalogTests
 
             var result = await catalog.GetModelsAsync(config);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Count).IsEqualTo(2);
             await Assert.That(result.Value[0].Id).IsEqualTo("first");
             await Assert.That(result.Value[1].Id).IsEqualTo("second");

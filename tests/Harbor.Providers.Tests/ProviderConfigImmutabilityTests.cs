@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
+using Harbor.TestKit;
 namespace Harbor.Providers.Tests;
 /// <summary>
 ///     #195 (immutability batch): ProviderConfig is immutable after load —
@@ -15,7 +16,7 @@ public class ProviderConfigImmutabilityTests
     {
         var result = ProviderConfig.Create("", "https://api.example.com");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("missing 'id'");
     }
 
@@ -24,7 +25,7 @@ public class ProviderConfigImmutabilityTests
     {
         var result = ProviderConfig.Create("test", "");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("missing 'baseUrl'");
     }
 
@@ -39,7 +40,7 @@ public class ProviderConfigImmutabilityTests
 
         var result = ProviderConfig.Create("p", "https://api.example.com", models: models, headers: headers);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         models.Add(new("m2", "p", "M2", 4096, 1024, false, false, true, Pricing.Unknown, "openai"));
         headers["X-B"] = "2";
         await Assert.That(result.Value.Models!.Count).IsEqualTo(1);
@@ -60,7 +61,7 @@ public class ProviderConfigImmutabilityTests
 
         var result = ProviderConfig.LoadFromJson(json);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Headers!["X-Title"]).IsEqualTo("Harbor");
         await Assert.That(result.Value.Capabilities!["streaming"]).IsEqualTo("true");
     }
