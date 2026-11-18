@@ -330,3 +330,8 @@ Harbor.Abstractions.Dsl.SpecValueKind.String = 0 -> Harbor.Abstractions.Dsl.Spec
 Harbor.Abstractions.Dsl.SpecValueKind.Number = 1 -> Harbor.Abstractions.Dsl.SpecValueKind
 Harbor.Abstractions.Dsl.SpecValueKind.Boolean = 2 -> Harbor.Abstractions.Dsl.SpecValueKind
 Harbor.Abstractions.Dsl.SpecValueKind.Identifier = 3 -> Harbor.Abstractions.Dsl.SpecValueKind
+Harbor.Abstractions.Dsl.RootBuilderOverride
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Clear() -> void
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Current.get -> System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>?
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Current.set -> void
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Install(System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>? builder) -> System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>?
