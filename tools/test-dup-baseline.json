@@ -15,19 +15,19 @@
     "test_methods": 7092
   },
   "metrics": {
-    "groups": 182,
+    "groups": 181,
     "intra_file_groups": 103,
-    "cross_file_groups": 79,
+    "cross_file_groups": 78,
     "exact_groups": 97,
-    "duplicate_lines": 2656,
-    "group_lines": 4613,
+    "duplicate_lines": 2648,
+    "group_lines": 4597,
     "shape_coincidences": 0,
     "files": 1092,
     "lines": 218771,
     "methods": 11107,
     "test_methods": 7092
   },
-  "blocking_duplicate_lines": 2381,
+  "blocking_duplicate_lines": 2373,
   "groups": {
     "00c25fe277a33905527cc4696dd798419f502485": {
       "members": [
@@ -295,18 +295,6 @@
       "files": 3,
       "exact": 3,
       "shape": "a6c62225923f618f3293a028aa242afcfc7a9bea"
-    },
-    "136e393d8ff76a1145da28e90b03ec43a442407b": {
-      "members": [
-        "tests/Harbor.Abstractions.Tests/RunVerificationRecordTests.cs::Contract#0",
-        "tests/Harbor.Abstractions.Tests/TriStateRunResultTests.cs::Contract#0",
-        "tests/Harbor.Storage.Tests/RunOutcomeTests.cs::VerificationContract#0"
-      ],
-      "count": 3,
-      "lines": 8,
-      "files": 3,
-      "exact": 0,
-      "shape": "57bd1a3f0d69971f5274c494ba69663128e62287"
     },
     "137a65525989a04fd6b2306e4df8813f4902568d": {
       "members": [
