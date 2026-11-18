@@ -25,6 +25,7 @@ internal static class CliVerbCatalog
         "setup",
         "auth",
         "config",
+        "doctor",
         "providers",
         "models",
         "sessions",
