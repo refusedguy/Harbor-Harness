@@ -6,7 +6,8 @@
 //
 // It is NOT the command palette primitive (#2321): no fuzzy search, no alias
 // table and no input history live here. A palette is a modal query over a
-// command catalog; an anchored overlay is a rectangle next to a cell.
+// command catalog; an anchored overlay is a rectangle next to a cell, and the
+// host owns what paints inside it.
 
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
