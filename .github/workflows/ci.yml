@@ -195,6 +195,17 @@ jobs:
           filters: |
             dotnet:
               - 'src/**'
+              # #2540 — sample SOURCES are compiled here too: the six
+              # samples/plugins projects are rows of Harbor.slnx, and the
+              # one sample outside it is built by an explicit step in the
+              # `build` job below. Without this line a PR that only edits a
+              # sample .cs sets dotnet=false, skips `build`, and the claim
+              # "CI compiles the sample change" is false — exactly the
+              # #2502 case that removed a reference from FileTree and was
+              # never compiled on that run. This row ADDS a trigger; it
+              # removes none of the filters below (the `packages` gate
+              # still fires on samples/**/*.csproj).
+              - 'samples/**'
               - 'tests/**'
               - 'apps/**'
               - 'contrib/**'
@@ -1457,6 +1468,20 @@ jobs:
         run: |
           date +%s > "$RUNNER_TEMP/harbor-compile-start"
           bash build/build.sh Compile --configuration Release
+
+      # #2540 — the sample project that is NOT a row of Harbor.slnx.
+      #
+      # `samples/plugins/*` are compiled by the Fallout compile above, so
+      # the `samples/**` row of the dotnet filter is enough for them.
+      # Harbor.Samples.DesignSystemConsumer is different: it lives in
+      # Harbor.Samples.slnx, which also lists the contrib apps that need
+      # workloads this job does not have, so the solution-wide compile does
+      # not reach it. Build it by name instead, with its own restore (the
+      # `test/sample package set` job restores it but is a different job and
+      # never compiles it). Without this step, an edit to that sample's
+      # Program.cs would trigger the build job and still compile nothing.
+      - name: Compile the sample project outside Harbor.slnx (#2540)
+        run: dotnet build samples/designsystem-consumer/Harbor.Samples.DesignSystemConsumer.csproj -c Release
 
       # ── DIAGNOSTIC (issue #2107): how many projects did the compile rebuild? ──
       #
