@@ -103,10 +103,9 @@ public class ChunkPropertyNameParityTests
     [Test]
     public async Task OpenAiWire_ToolCallIndex_StillReachesThePositionalId()
     {
+        string wire = """{"choices":[{"delta":{"tool_calls":[{"index":4,"function":{"name":"ls","arguments":"{}"}}]}}]}""";
         var map = new Dictionary<int, string>();
-        _ = CompatOpenAiWire.ParseChatChunk(
-            Utf8("""{"choices":[{"delta":{"tool_calls":[{"index":4,"function":{"name":"ls","arguments":"{}"}}]}}]}"""),
-            map);
+        _ = CompatOpenAiWire.ParseChatChunk(Utf8(wire), map);
 
         await Assert.That(map.ContainsKey(4)).IsTrue();
         await Assert.That(map[4]).IsEqualTo("tc4");

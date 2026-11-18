@@ -75,13 +75,7 @@ public class OpenAiCompatibleRequestBuildScalingTests
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{"path":"a.txt"}""");
 
-    private static OpenAiCompatibleLlmClient CreateClient() =>
-        new(
-            new HttpClient(),
-            new ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
-            new TestAuthResolver(),
-            FakeModelCatalog.Instance,
-            NullLogger<OpenAiCompatibleLlmClient>.Instance);
+    private static OpenAiCompatibleLlmClient CreateClient() => StubClientFactory.Stub();
 
     private static LlmRequest AssistantRequest(int toolCalls) =>
         new(

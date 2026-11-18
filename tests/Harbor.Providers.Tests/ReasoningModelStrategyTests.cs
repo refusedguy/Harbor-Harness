@@ -16,14 +16,7 @@ public class ReasoningModelStrategyTests
 {
     /// <summary>Every concrete IReasoningModelStrategy in the OpenAI provider assembly.</summary>
     private static IReadOnlyList<Type> ConcreteStrategyTypes() =>
-    [
-        .. typeof(IReasoningModelStrategy).Assembly
-            .GetTypes()
-            .Where(t => t is { IsAbstract: false, IsInterface: false, IsClass: true }
-                        && typeof(IReasoningModelStrategy).IsAssignableFrom(t)
-                        && t.GetConstructor(Type.EmptyTypes) is not null)
-            .OrderBy(t => t.FullName, StringComparer.Ordinal)
-    ];
+        ProviderTestReflection.ConcreteTypes<IReasoningModelStrategy>();
 
     [Test]
     public async Task EveryConcreteReasoningStrategy_IsRegistered()

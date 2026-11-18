@@ -123,17 +123,18 @@ public sealed class StreamingFlushAllocGates
     [Timeout(300_000)]
     public async Task Flush_CostPerDelta_StaysWithinBudget()
     {
+        var options = new PerfGateOptions
+        {
+            Label = "streaming-flush-cost",
+            MaxBytesPerUnit = MaxBytesPerFlush,
+            MaxProbeUnitsPerUnit = MaxProbeUnitsPerFlush,
+            RequirePositiveBytes = true,
+            MinMeasurableLegMs = MinLegMs,
+        };
         PerfGateResult result = await PerfGate.MeasureAsync(
             work: (Func<int, PerfGateLeg>)DriveFlushCost,
             units: FlushesPerWindow,
-            options: new PerfGateOptions
-            {
-                Label = "streaming-flush-cost",
-                MaxBytesPerUnit = MaxBytesPerFlush,
-                MaxProbeUnitsPerUnit = MaxProbeUnitsPerFlush,
-                RequirePositiveBytes = true,
-                MinMeasurableLegMs = MinLegMs,
-            });
+            options: options);
 
         await result.AssertWithinBudgetsAsync("streaming flush of a 4 KiB prefix plus one delta");
     }

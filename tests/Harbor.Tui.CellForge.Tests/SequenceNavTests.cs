@@ -223,8 +223,8 @@ public class SequenceNavGoldenTests
     [Test]
     public async Task Carousel_Text_ShowsContiguousAdjacentItems()
     {
-        await Assert.That(SequenceNav.Text(SequenceNav.Carousel(3, 7)))
-            .IsEqualTo("< 2 3 [4] 5 6 >");
+        string first = SequenceNav.Text(SequenceNav.Carousel(3, 7));
+        await Assert.That(first).IsEqualTo("< 2 3 [4] 5 6 >");
         await Assert.That(SequenceNav.Text(SequenceNav.Carousel(0, 7)))
             .IsEqualTo("< [1] 2 3 4 5 >");
         await Assert.That(SequenceNav.Text(SequenceNav.Carousel(6, 7)))

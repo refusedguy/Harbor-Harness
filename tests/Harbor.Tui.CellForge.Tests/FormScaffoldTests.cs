@@ -14,16 +14,9 @@ public class FormScaffoldTests
     private const int Width = 32;
     private const int InnerWidth = 30;
 
-    private static string[] Lines(FormScaffold form, int width = Width)
-    {
-        int height = form.DesiredHeight;
-        var buffer = TestRender.Buffer(width, height);
-        form.Paint(buffer, new Rect(0, 0, width, height));
-        return TestRender.Art(buffer).Split('\n')
-            .Select(line => line.TrimEnd())
-            .Take(height)
-            .ToArray();
-    }
+    private static string[] Lines(FormScaffold form, int width = Width) =>
+        ScreenFixtures.PaintedLines(form.DesiredHeight, width,
+            buffer => form.Paint(buffer, new Rect(0, 0, width, form.DesiredHeight)));
 
     private static string Row(string inner) => "│" + inner.PadRight(InnerWidth) + "│";
 

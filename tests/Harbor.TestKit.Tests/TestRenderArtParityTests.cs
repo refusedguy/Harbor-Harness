@@ -30,7 +30,6 @@
 // The grid is prepared OUTSIDE the measured window in both cases: what the
 // figure measures is the DUMP.
 
-using System.Text;
 using Harbor.TestKit;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
@@ -130,9 +129,10 @@ public class TestRenderArtParityTests
     /// <returns>The art.</returns>
     private static string LegacyArt(ScreenBuffer buffer)
     {
-        var sb = new StringBuilder();
+        var rows = new List<string>(buffer.Rows);
         for (int y = 0; y < buffer.Rows; y++)
         {
+            var cells = new List<string>(buffer.Cols);
             for (int x = 0; x < buffer.Cols; x++)
             {
                 var cell = buffer.Get(x, y);
@@ -141,13 +141,13 @@ public class TestRenderArtParityTests
                     continue;
                 }
 
-                sb.Append(LegacyArtChar(cell.Rune));
+                cells.Add(LegacyArtChar(cell.Rune));
             }
 
-            sb.Append('\n');
+            rows.Add(string.Concat(cells) + '\n');
         }
 
-        return sb.ToString();
+        return string.Concat(rows);
     }
 
     /// <summary>
@@ -175,7 +175,6 @@ public class TestRenderArtParityTests
             body();
         }
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        return allocated / Iterations;
+        return (GC.GetAllocatedBytesForCurrentThread() - before) / Iterations;
     }
 }

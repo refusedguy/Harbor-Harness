@@ -185,17 +185,7 @@ public class ScreenSearchParityTests
     /// </summary>
     /// <param name="body">The body to measure. Must not suspend.</param>
     /// <returns>The average number of bytes per call.</returns>
-    private static long Measure(Action body)
-    {
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < Iterations; i++)
-        {
-            body();
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        return allocated / Iterations;
-    }
+    private static long Measure(Action body) => AllocMeasure.Measure(body, Iterations);
 
     /// <summary>A haystack, escaped, so a failure message is readable.</summary>
     /// <param name="text">The text to escape.</param>

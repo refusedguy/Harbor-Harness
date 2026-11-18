@@ -14,15 +14,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public sealed class FloatingTerminalPaneTests
 {
-    private static ChatScreen BuildScreen()
-    {
-        var screen = ChatScreen.Build(
-            new ComposerController(),
-            new StatusViewModel { Model = "m" },
-            includeSidebar: false);
-        screen.Tree.Solve(80, 24);
-        return screen;
-    }
+    private static ChatScreen BuildScreen() => ScreenFixtures.BuildScreen(80, 24);
 
     /// <summary>Drains a scripted source into the controller, as the REPL cascade would.</summary>
     private static void DrainTo(VirtualInputSource source, FloatingTerminalController controller)

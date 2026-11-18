@@ -32,15 +32,7 @@ public class SheetOverlayTests
         return sheet;
     }
 
-    private static ChatScreen BuildScreen()
-    {
-        var screen = ChatScreen.Build(
-            new ComposerController(),
-            new StatusViewModel { Model = "m" },
-            includeSidebar: false);
-        screen.Tree.Solve(80, 24);
-        return screen;
-    }
+    private static ChatScreen BuildScreen() => ScreenFixtures.BuildScreen(80, 24);
 
     // ------------------------------------------------------------- seating --
 
