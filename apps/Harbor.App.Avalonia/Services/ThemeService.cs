@@ -20,6 +20,12 @@ public sealed class ThemeService : IThemeService
     private readonly ILogger<ThemeService> _logger;
     private global::Avalonia.Application? _app;
 
+    // G65: "system" is a live choice, not a one-shot fallback. Once selected,
+    // the chrome follows the OS variant and the event stays attached until an
+    // explicit light/dark/palette choice takes control back.
+    private bool _followSystem;
+    private bool _systemHookAttached;
+
     public ThemeService(ILogger<ThemeService> logger)
     {
         _logger = logger;
@@ -98,8 +104,9 @@ public sealed class ThemeService : IThemeService
     ///         in the app was undone by the next launch.
     ///     </para>
     ///     <para>
-    ///         The variant arms are unchanged, so <c>system</c> and an unrecognised
-    ///         name still mean "the default dark theme" exactly as before. What is new
+    ///         The <c>light</c> and <c>dark</c> arms are unchanged. <c>system</c> (G65)
+    ///         now hands variant control to Avalonia's <see cref="ThemeVariant.Default" />
+    ///         and follows OS changes instead of falling through to dark. What is new
     ///         is that a name the CATALOG recognises is no longer indistinguishable
     ///         from one it does not.
     ///     </para>
@@ -116,6 +123,9 @@ public sealed class ThemeService : IThemeService
                 return;
             case "dark":
                 ApplyDark();
+                return;
+            case "system":
+                ApplySystem();
                 return;
         }
 
@@ -156,6 +166,8 @@ public sealed class ThemeService : IThemeService
     {
         if (_app is null) return false;
 
+        // An explicit palette wins over a previously selected "system" mode.
+        _followSystem = false;
         HdsThemePreview? palette = HdsThemeCatalog.Find(name);
         if (palette is null) return false;
 
@@ -172,6 +184,7 @@ public sealed class ThemeService : IThemeService
     public void ApplyDark()
     {
         if (_app is null) return;
+        _followSystem = false;
         ApplyHds("CatppuccinMocha");
         _app.RequestedThemeVariant = ThemeVariant.Dark;
         IsDark = true;
@@ -181,10 +194,43 @@ public sealed class ThemeService : IThemeService
     public void ApplyLight()
     {
         if (_app is null) return;
+        _followSystem = false;
         ApplyHds("Lumen");
         _app.RequestedThemeVariant = ThemeVariant.Light;
         IsDark = false;
         ThemeServiceLog.SwitchedToLight(_logger);
+    }
+
+    /// <summary>
+    ///     Hand variant control to the OS. <see cref="ThemeVariant.Default" /> makes
+    ///     Avalonia resolve light/dark from the platform, and the
+    ///     <c>ActualThemeVariantChanged</c> hook keeps both the chrome and the HDS
+    ///     palette in step when the user changes the OS setting while the app runs.
+    /// </summary>
+    private void ApplySystem()
+    {
+        if (_app is null) return;
+        _followSystem = true;
+        if (!_systemHookAttached)
+        {
+            _app.ActualThemeVariantChanged += OnSystemThemeVariantChanged;
+            _systemHookAttached = true;
+        }
+        _app.RequestedThemeVariant = ThemeVariant.Default;
+        ApplyVariantCore(_app.ActualThemeVariant != ThemeVariant.Light);
+    }
+
+    private void OnSystemThemeVariantChanged(object? sender, EventArgs e)
+    {
+        if (!_followSystem || _app is null) return;
+        ApplyVariantCore(_app.ActualThemeVariant != ThemeVariant.Light);
+    }
+
+    private void ApplyVariantCore(bool isDark)
+    {
+        ApplyHds(isDark ? "CatppuccinMocha" : "Lumen");
+        IsDark = isDark;
+        ThemeServiceLog.SystemVariantApplied(_logger, isDark ? "dark" : "light");
     }
 
     public void Toggle()
@@ -196,6 +242,7 @@ public sealed class ThemeService : IThemeService
     public void SetThemeVariant(bool isDark)
     {
         if (_app is null) return;
+        _followSystem = false;
         _app.RequestedThemeVariant = isDark ? ThemeVariant.Dark : ThemeVariant.Light;
         IsDark = isDark;
         ThemeServiceLog.VariantSet(_logger, isDark ? "dark" : "light");
@@ -306,5 +353,8 @@ internal static partial class ThemeServiceLog
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Theme JSON applied ({Length} chars)")]
     public static partial void JsonApplied(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Following system theme variant ({Variant})")]
+    public static partial void SystemVariantApplied(ILogger logger, string variant);
 }
 
