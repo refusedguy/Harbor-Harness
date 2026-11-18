@@ -1,0 +1,9 @@
+node Panel@1:1 claimed=false
+  op new("main")@1:1
+  op title("Files")@2:6
+  node FilterList@3:5 claimed=true
+    op new("files")@3:5
+    op height(10)@4:10
+    op multiple(true)@5:10
+  node Text@6:5 claimed=false
+    op new("done")@6:5

@@ -19,10 +19,20 @@ public sealed class SpecNode
     /// <summary>Creates a node for a kind and a 1-based source line.</summary>
     /// <param name="kind">Component kind.</param>
     /// <param name="sourceLine">Line in the markup file, one-based.</param>
-    public SpecNode(SpecKind kind, int sourceLine)
+    /// <remarks>The source column is unknown and recorded as 1.</remarks>
+    public SpecNode(SpecKind kind, int sourceLine) : this(kind, sourceLine, 1)
+    {
+    }
+
+    /// <summary>Creates a node for a kind and a 1-based source span.</summary>
+    /// <param name="kind">Component kind.</param>
+    /// <param name="sourceLine">Line in the markup file, one-based.</param>
+    /// <param name="sourceColumn">Column of the kind identifier, one-based.</param>
+    public SpecNode(SpecKind kind, int sourceLine, int sourceColumn)
     {
         Kind = kind;
         SourceLine = sourceLine;
+        SourceColumn = sourceColumn;
     }
 
     /// <summary>Component kind.</summary>
@@ -30,6 +40,9 @@ public sealed class SpecNode
 
     /// <summary>Line in the markup file, one-based.</summary>
     public int SourceLine { get; }
+
+    /// <summary>Column of the kind identifier in the markup file, one-based.</summary>
+    public int SourceColumn { get; }
 
     /// <summary>Recorded operations in source order.</summary>
     public IReadOnlyList<SpecOp> Operations => _operations;
@@ -87,6 +100,13 @@ public sealed class SpecNode
 
         _claimed = true;
     }
+
+    /// <summary>
+    ///     Renders this subtree as a deterministic text tree. No renderer or
+    ///     runtime state is involved, so the result is stable enough for a
+    ///     committed snapshot.
+    /// </summary>
+    public string DebugTree() => SpecTreeDumper.DebugTree(this);
 
     internal void MarkParented() => Parent = this;
 

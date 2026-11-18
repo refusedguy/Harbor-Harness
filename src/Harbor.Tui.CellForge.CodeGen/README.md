@@ -8,7 +8,13 @@ Build-time Roslyn component for the CellForge markup DSL (issue #2424). It sits 
 - `MarkupParser.Parse(string)` reads `.harbor-ui` text into a `MarkupParseResult`. The result carries a `SpecArena` and a list of `MarkupDiagnostic` values with line and column.
 - `MarkupParseResult` and `MarkupDiagnostic` are the value types returned by the parser.
 
-`SpecArena`, `SpecNode`, `SpecOp`, `SpecValue`, `SpecKind`, `SpecValueKind` and `SpecNodeReuseException` live in `Harbor.Abstractions.Contracts` under `Harbor.Abstractions.Dsl`.
+`SpecArena`, `SpecNode`, `SpecOp`, `SpecValue`, `SpecKind`, `SpecValueKind`, `SpecTreeDumper` and `SpecNodeReuseException` live in `Harbor.Abstractions.Contracts` under `Harbor.Abstractions.Dsl`.
+
+Every `SpecNode` carries a 1-based `SourceLine` and `SourceColumn`; every `SpecOp` carries the same pair.
+The parser fills them from the indentation of the declaration or operation line, and the older two-argument
+constructors remain for callers that do not have a source location. `arena.DebugTree()`, `node.DebugTree()` and
+`SpecTreeDumper.DebugTree(...)` render the IR as a deterministic LF-terminated text tree (kind, operations,
+children, claim state). The dump needs no renderer, so snapshot tests can compare it directly.
 
 ## Grammar
 

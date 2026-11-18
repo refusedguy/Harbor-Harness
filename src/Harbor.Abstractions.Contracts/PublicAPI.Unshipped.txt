@@ -241,6 +241,8 @@ Harbor.Abstractions.Models.RunOutcome.Acceptance.init -> void
 Harbor.Abstractions.Dsl.SpecArena
 Harbor.Abstractions.Dsl.SpecArena.AddRoot(Harbor.Abstractions.Dsl.SpecNode! node) -> void
 Harbor.Abstractions.Dsl.SpecArena.CreateNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine) -> Harbor.Abstractions.Dsl.SpecNode!
+Harbor.Abstractions.Dsl.SpecArena.CreateNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine, int sourceColumn) -> Harbor.Abstractions.Dsl.SpecNode!
+Harbor.Abstractions.Dsl.SpecArena.DebugTree() -> string!
 Harbor.Abstractions.Dsl.SpecArena.Nodes.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecNode!>!
 Harbor.Abstractions.Dsl.SpecArena.Roots.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecNode!>!
 Harbor.Abstractions.Dsl.SpecArena.SpecArena() -> void
@@ -285,11 +287,14 @@ Harbor.Abstractions.Dsl.SpecNode.AddChild(Harbor.Abstractions.Dsl.SpecNode! chil
 Harbor.Abstractions.Dsl.SpecNode.AddOperation(Harbor.Abstractions.Dsl.SpecOp! op) -> void
 Harbor.Abstractions.Dsl.SpecNode.Children.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecNode!>!
 Harbor.Abstractions.Dsl.SpecNode.Claim() -> void
+Harbor.Abstractions.Dsl.SpecNode.DebugTree() -> string!
 Harbor.Abstractions.Dsl.SpecNode.IsClaimed.get -> bool
 Harbor.Abstractions.Dsl.SpecNode.Kind.get -> Harbor.Abstractions.Dsl.SpecKind
 Harbor.Abstractions.Dsl.SpecNode.Operations.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecOp!>!
+Harbor.Abstractions.Dsl.SpecNode.SourceColumn.get -> int
 Harbor.Abstractions.Dsl.SpecNode.SourceLine.get -> int
 Harbor.Abstractions.Dsl.SpecNode.SpecNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine) -> void
+Harbor.Abstractions.Dsl.SpecNode.SpecNode(Harbor.Abstractions.Dsl.SpecKind kind, int sourceLine, int sourceColumn) -> void
 Harbor.Abstractions.Dsl.SpecNodeReuseException
 Harbor.Abstractions.Dsl.SpecNodeReuseException.SpecNodeReuseException() -> void
 Harbor.Abstractions.Dsl.SpecNodeReuseException.SpecNodeReuseException(string! message) -> void
@@ -297,7 +302,13 @@ Harbor.Abstractions.Dsl.SpecNodeReuseException.SpecNodeReuseException(string! me
 Harbor.Abstractions.Dsl.SpecOp
 Harbor.Abstractions.Dsl.SpecOp.Arguments.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecValue>!
 Harbor.Abstractions.Dsl.SpecOp.Name.get -> string!
+Harbor.Abstractions.Dsl.SpecOp.SourceColumn.get -> int
+Harbor.Abstractions.Dsl.SpecOp.SourceLine.get -> int
 Harbor.Abstractions.Dsl.SpecOp.SpecOp(string! name, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecValue>! arguments) -> void
+Harbor.Abstractions.Dsl.SpecOp.SpecOp(string! name, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Dsl.SpecValue>! arguments, int sourceLine, int sourceColumn) -> void
+Harbor.Abstractions.Dsl.SpecTreeDumper
+static Harbor.Abstractions.Dsl.SpecTreeDumper.DebugTree(Harbor.Abstractions.Dsl.SpecArena! arena) -> string!
+static Harbor.Abstractions.Dsl.SpecTreeDumper.DebugTree(Harbor.Abstractions.Dsl.SpecNode! node) -> string!
 Harbor.Abstractions.Dsl.SpecValue
 Harbor.Abstractions.Dsl.SpecValue.Kind.get -> Harbor.Abstractions.Dsl.SpecValueKind
 Harbor.Abstractions.Dsl.SpecValue.SpecValue() -> void
