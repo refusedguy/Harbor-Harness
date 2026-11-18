@@ -42,6 +42,16 @@ public sealed class CompactionBehavior(
     // #2225: at most one background warm-up in flight for this behavior — the
     // loop holds one instance for its whole life. The task is tracked, not
     // abandoned, and TaskFireAndForget observes its fault (§FP-006).
+    // #2580: the check-then-set in StartPrecomputeIfNeeded is guarded by this
+    // lock. AgentLoop is a singleton shared by every session, so an unsynchronized
+    // check would let two sessions crossing the lead band start two warm-ups
+    // (duplicate billed LLM calls). Every read/write of _precomputeTask happens
+    // under the gate; the forget/continuation stays outside it. This mirrors
+    // TurnRunner._toolTableGate — the analogous guard on shared mutable state
+    // held by the same singleton. The field is NOT a one-shot memo: once the
+    // tracked task completes the next call may start a fresh warm-up, which is
+    // what lets a later session get its own summary.
+    private readonly object _precomputeGate = new();
     private Task? _precomputeTask;
 
     /// <summary>
@@ -186,25 +196,45 @@ public sealed class CompactionBehavior(
     ///     through <see cref="TaskFireAndForget" /> (§FP-006), never abandoned.
     ///     A compaction that does not opt in is a no-op.
     /// </summary>
+    /// <remarks>
+    ///     #2580: the whole check → create → publish sequence runs under
+    ///     <see cref="_precomputeGate" /> so two concurrent callers cannot both
+    ///     pass the in-flight guard and start a warm-up. Task creation is kept
+    ///     inside the gate on purpose: starting the task outside it and losing
+    ///     the race would leave an unobserved summarization running (the exact
+    ///     duplicate-spend defect). The lock covers only bounded CPU work — the
+    ///     provider call itself is awaited inside the returned task — and
+    ///     <see cref="TaskFireAndForget.Forget" /> is deliberately outside it.
+    /// </remarks>
     private void StartPrecomputeIfNeeded(
         string sessionId,
         IReadOnlyList<AgentMessage> messages,
         ModelInfo model,
         CancellationToken ct)
     {
-        if (ct.IsCancellationRequested || _precomputeTask is { IsCompleted: false })
+        if (ct.IsCancellationRequested)
         {
             return;
         }
 
-        if (compaction is not CompactionService precomputer
-            || !precomputer.ShouldPrecompute(messages, model))
+        Task<bool> task;
+        lock (_precomputeGate)
         {
-            return;
+            if (_precomputeTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            if (compaction is not CompactionService precomputer
+                || !precomputer.ShouldPrecompute(messages, model))
+            {
+                return;
+            }
+
+            task = precomputer.TryPrecomputeAsync(sessionId, messages, model, ct);
+            _precomputeTask = task;
         }
 
-        Task<bool> task = precomputer.TryPrecomputeAsync(sessionId, messages, model, ct);
-        _precomputeTask = task;
         TaskFireAndForget.Forget(
             task,
             ex => CompactionBehaviorLog.PrecompactionFailed(logger, ex, sessionId),
