@@ -64,7 +64,7 @@ internal static class PrGuideRunner
         };
 
         Result<IProcessHandle> started = processes.Start(spec);
-        if (started.IsFailure) return Result.Failure<string>(started.Error);
+        if (started.IsFailure) return started.ConvertFailure<string>();
         using IProcessHandle handle = started.Value;
 
         var stdout = new StringBuilder();
