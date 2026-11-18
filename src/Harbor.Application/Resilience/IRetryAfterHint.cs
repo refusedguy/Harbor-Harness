@@ -7,11 +7,12 @@ namespace Harbor.Application.Resilience;
 ///     <see cref="RetryOptions.EffectiveMaxRetryAfter" />.
 /// </summary>
 /// <remarks>
-///     No provider implements this yet (none propagates Retry-After today —
-///     verified by audit); the policy additionally reads
-///     <c>Exception.Data["RetryAfter"]</c> (<c>TimeSpan</c>, seconds as
-///     number, or seconds/HTTP-date as string). Either channel needs no
-///     contract change when a provider starts surfacing the header.
+///     No provider exception implements this interface today: a provider
+///     failure reaches the policy as an <see cref="Harbor.Abstractions.Events.LlmStreamErrorException" />
+///     raised from a terminal <see cref="Harbor.Abstractions.Events.ErrorEvent" />,
+///     whose <c>RetryAfter</c> metadata the retry decorator copies into
+///     <c>Exception.Data["RetryAfter"]</c> (#2615). The policy reads both
+///     channels, so either shape needs no contract change here.
 /// </remarks>
 public interface IRetryAfterHint
 {

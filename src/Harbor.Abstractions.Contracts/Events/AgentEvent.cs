@@ -306,9 +306,13 @@ public sealed record FinishEvent : LlmEvent;
 ///     Emitted on a streaming error. <see cref="Kind" /> classifies the
 ///     transport failure (ROP-A ПР.5) so the retry policy can distinguish
 ///     transient conditions from fatal ones without parsing the message.
+///     <see cref="RetryAfter" /> carries a server-provided retry delay (HTTP
+///     <c>Retry-After</c> on 429/503) to the retry policy without changing the
+///     event stream: it is transport metadata, not something a renderer shows.
 /// </summary>
 public sealed record ErrorEvent(
     string Message,
     string? Exception = null,
     ProviderErrorKind Kind = ProviderErrorKind.Unknown,
-    int? StatusCode = null) : LlmEvent;
+    int? StatusCode = null,
+    TimeSpan? RetryAfter = null) : LlmEvent;

@@ -16,10 +16,12 @@
       `Compat/IProviderCompatFlag.cs` with `DeepSeekReasonerCompatFlag` (:49) and
       `GroqMaxTokensCompatFlag` (:71), cataloged in `ProviderCompatFlags`
 - [x] Usage forwarding from stream end events (`OpenAiCompatibleLlmClient.cs:84`)
+- [x] Centralized retry for 429 / 5xx through the shared `ILlmClient` decorator
+      (`RetryLlmClientDecorator` + `IRetryPolicy` / `RetryOptions`); a server
+      `Retry-After` hint rides on the terminal `ErrorEvent` (#2615)
 
 ## TODO
 
-- [ ] Wire centralized retry for 429 / 5xx (helpers exist in `Harbor.Application/Resilience/RetryPolicyExtensions.cs`)
 - [ ] Extend quirk-flag coverage beyond DeepSeek/Groq where providers deviate further
 
 ## Known issues
@@ -29,5 +31,4 @@
 
 ## Next priorities
 
-1. **P2**: Decorate `ILlmClient` with the shared retry policy
-2. **P2**: Broaden quirk-flag profiles as new compatible providers are onboarded
+1. **P2**: Broaden quirk-flag profiles as new compatible providers are onboarded

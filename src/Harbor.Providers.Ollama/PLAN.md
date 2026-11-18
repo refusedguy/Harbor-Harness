@@ -12,10 +12,12 @@
 - [x] Local model name resolution; no API key needed (`OLLAMA_HOST` daemon)
 - [x] Cancellation token propagation through all HTTP calls
 - [x] Token-usage reporting on the final step event (`OllamaLlmClient.cs:325`)
+- [x] Centralized retry for transient 5xx through the shared `ILlmClient` decorator
+      (`RetryLlmClientDecorator` + `IRetryPolicy` / `RetryOptions`); a server
+      `Retry-After` hint rides on the terminal `ErrorEvent` (#2615)
 
 ## TODO
 
-- [ ] Wire centralized retry for transient 5xx (helpers exist in `Harbor.Application/Resilience/RetryPolicyExtensions.cs`)
 - [ ] Pull / list models endpoint from code paths that need it outside `/models`
 - [ ] Embeddings endpoint
 
@@ -26,4 +28,3 @@
 ## Next priorities
 
 1. **P2**: Embeddings endpoint support
-2. **P2**: Decorate `ILlmClient` with the shared retry policy
