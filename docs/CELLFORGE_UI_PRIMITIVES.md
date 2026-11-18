@@ -45,13 +45,13 @@ at commit `b1239b7b`, not a claim about future work.
 | P10 | Log view with follow, filter and wrap | widget shipped |
 | P11 | Breadcrumbs with back and forward | engine widget shipped |
 | P12 | Collapsible tree with aggregated hidden nodes | widget shipped |
-| P13 | Faceted history with session resume | open |
+| P13 | Faceted history with session resume | state primitive shipped |
 | P14 | Document renderer with pager keys and wrap | view shipped |
 | P15 | Inline image with capability negotiation | engine support shipped |
 
-Three items are open: P02, P05 and P13. This document takes P02 because its
-contract is the smallest of the three and it composes entirely from primitives
-that already exist.
+Three items were open when this catalog was written: P02, P05 and P13. P02 was
+implemented in #2884 as `TwoPaneState`, and P13 was later implemented as
+`FacetedHistoryState`. P05 remains the one open contract in this report.
 
 ## The primitive
 
@@ -187,6 +187,19 @@ A pull request that implements P02 should satisfy all of the following:
 - No application domain type appears in the primitive's public surface.
 - The two-pane gallery seeds keep painting, so the change does not break the
   existing golden frames.
+
+## P13: faceted history (shipped)
+
+P13 is implemented as [`FacetedHistory.cs`](../src/Harbor.Tui.CellForge.Engine/Rendering/FacetedHistory.cs).
+It keeps the primitive domain-free: a caller supplies prepared
+`HistoryEntry` records (identity, search text, detail and named facets), and the
+state owns only the query, the facet selections and the cursor. `Visible()` is a
+pure filter, `FacetValues(key)` counts a key's values against the *other*
+constraints so drill-down stays useful, and `Selected` reports the entry back
+to the caller. Facet constraints combine with AND across keys and OR within a
+key; free text is case-insensitive over the search text and detail. No exit
+code, cwd, host or duration type appears on the primitive's public surface, so
+session resume stays an application concern.
 
 ## Related documents
 
