@@ -11,6 +11,12 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
     // label so a slash command's description changing does not reset its rank.
     private readonly Dictionary<string, int> _invocations = new(StringComparer.Ordinal);
 
+    // #2682 Z03: exact-query aliases. A synonym ("quit") is rewritten to the
+    // canonical command text ("/exit") before the normal filter runs, so a
+    // user-configured vocabulary can reach a row without duplicating it.
+    // Case-insensitive by construction: palette queries are lower-cased.
+    protected readonly Dictionary<string, string> CommandAliases = new(StringComparer.OrdinalIgnoreCase);
+
     [ObservableProperty]
     private string _query = string.Empty;
 
@@ -40,6 +46,13 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
         {
             Results.Clear();
             string q = (query ?? string.Empty).Trim().ToLowerInvariant();
+            // #2682 Z03: resolve an exact alias before matching. Single-step
+            // only: an alias value is a command query, never another alias,
+            // so a bad settings entry cannot create a rewrite cycle.
+            if (q.Length > 0 && CommandAliases.TryGetValue(q, out string? canonical))
+            {
+                q = canonical.Trim().ToLowerInvariant();
+            }
             var matches = string.IsNullOrEmpty(q)
                 ? AllCommands
                 : AllCommands

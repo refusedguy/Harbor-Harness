@@ -68,6 +68,23 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
                 "slash", def.Invocation, def.Description, () => RunSlash(def.Invocation)));
         }
 
+        // #2682 Z03: seed the alias table with the vocabulary the CLI
+        // dispatcher already accepts ("h" -> "/help", "quit" -> "/exit",
+        // "m" -> "/model", ...). Without this, typing a documented alias in
+        // the Avalonia palette found nothing: neither the invocation nor the
+        // description contains the synonym. A settings layer can add more
+        // entries through the inherited CommandAliases dictionary.
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            foreach (string alias in def.Aliases)
+            {
+                if (!string.IsNullOrWhiteSpace(alias))
+                {
+                    CommandAliases[alias.Trim()] = def.Invocation;
+                }
+            }
+        }
+
         Refilter(string.Empty);
     }
 
