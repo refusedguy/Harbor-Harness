@@ -214,4 +214,36 @@ public class TransientFailurePolicyTests
     {
         await Assert.That(TransientFailurePolicy.DefaultFirstRetryDelay.TotalMilliseconds).IsEqualTo(200d);
     }
+
+    /// <summary>
+    ///     #2600: a caller can supply its own ladder without copying the formula.
+    ///     The reconnect client uses exactly these boundaries, so this pins the
+    ///     0.5 s base and 30 s cap it hands to the shared policy.
+    /// </summary>
+    [Test]
+    public async Task BackoffDelay_Parametrized_UsesCallerBoundaries()
+    {
+        TimeSpan baseDelay = TimeSpan.FromMilliseconds(500);
+        TimeSpan cap = TimeSpan.FromMilliseconds(30_000);
+
+        await Assert.That(TransientFailurePolicy.BackoffDelay(1, baseDelay, cap, jitter: false))
+            .IsEqualTo(baseDelay);
+        await Assert.That(TransientFailurePolicy.BackoffDelay(4, baseDelay, cap, jitter: false))
+            .IsEqualTo(TimeSpan.FromMilliseconds(4_000));
+        await Assert.That(TransientFailurePolicy.BackoffDelay(20, baseDelay, cap, jitter: false))
+            .IsEqualTo(cap);
+    }
+
+    /// <summary>The jitter flag multiplies the capped delay by a factor in [0.8, 1.2).</summary>
+    [Test]
+    public async Task BackoffDelay_Jitter_StaysInsideTwentyPercent()
+    {
+        TimeSpan oneSecond = TimeSpan.FromMilliseconds(1_000);
+        for (int i = 0; i < 20; i++)
+        {
+            double ms = TransientFailurePolicy.BackoffDelay(1, oneSecond, null, jitter: true).TotalMilliseconds;
+            await Assert.That(ms).IsGreaterThanOrEqualTo(800d);
+            await Assert.That(ms).IsLessThan(1_200d);
+        }
+    }
 }

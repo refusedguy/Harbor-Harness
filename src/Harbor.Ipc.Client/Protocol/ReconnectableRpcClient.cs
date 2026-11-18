@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Harbor.Abstractions.Resilience;
 
 namespace Harbor.Ipc.Protocol;
 
@@ -36,7 +37,10 @@ namespace Harbor.Ipc.Protocol;
 ///         client re-subscribes FIRST, presenting its last processed
 ///         <see cref="EventEnvelope.Sequence"/>; the server then replays the
 ///         missed range in order (<see cref="EventBroadcaster.MaxReplayEnvelopes"/>)
-///         or answers <c>ResyncRequired</c>.
+///         or answers <c>ResyncRequired</c>. The ladder's formula lives in
+///         <see cref="TransientFailurePolicy" />. This class supplies only its
+///         boundaries and the jitter flag (#2600), so reconnect tuning has one
+///         owner.
 ///     </para>
 ///     <para>
 ///         <b>Subscribe-before-snapshot:</b> when a (re)sync is needed the
@@ -49,14 +53,16 @@ namespace Harbor.Ipc.Protocol;
 /// </remarks>
 public sealed class ReconnectableRpcClient : IAsyncDisposable
 {
-    private const double BaseDelayMs = 500;
-    private const double MaxDelayMs = 30_000;
+    // Boundaries for the shared backoff ladder. The formula, the shift clamp and
+    // the jitter factor live in TransientFailurePolicy; the reconnect path only
+    // supplies its own 0.5 s → 30 s shape (#2600).
+    private static readonly TimeSpan ReconnectBaseDelay = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan ReconnectMaxDelay = TimeSpan.FromMilliseconds(30_000);
 
     private readonly object _lock = new();
     private readonly Func<CancellationToken, Task<IIpcClientTransport>> _transportFactory;
     private readonly Func<IIpcClientTransport, IRpcClient> _clientFactory;
     private readonly ILogger _logger;
-    private readonly Random _jitter = Random.Shared;
     private int _disposed;
 
     private IRpcClient? _current;
@@ -98,16 +104,20 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
         ILogger logger, string? psk = null)
         => transport => new MessagePackRpcClient(transport, logger, psk);
 
-    /// <summary>Backoff for the Nth consecutive failed attempt (1-based), with jitter.</summary>
+    /// <summary>
+    ///     Backoff for the Nth consecutive failed attempt (1-based), with jitter.
+    ///     Delegates to <see cref="TransientFailurePolicy" />
+    ///     so the reconnect ladder is the same formula the MCP transports use;
+    ///     only the boundaries differ.
+    /// </summary>
     public TimeSpan NextBackoffDelay()
     {
         lock (_lock)
         {
-            int shift = Math.Min(_attempt, 7);
-            double baseDelay = Math.Min(BaseDelayMs * Math.Pow(2, shift), MaxDelayMs);
-            double jittered = baseDelay * (0.8 + 0.4 * _jitter.NextDouble());
+            int failedAttempt = _attempt + 1;
             _attempt++;
-            return TimeSpan.FromMilliseconds(jittered);
+            return TransientFailurePolicy.BackoffDelay(
+                failedAttempt, ReconnectBaseDelay, ReconnectMaxDelay, jitter: true);
         }
     }
 
