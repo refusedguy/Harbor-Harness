@@ -26,12 +26,12 @@ public class ToolsCommandTests
 
     private static ToolDescriptor Descriptor(string name, string description) => new(
         ToolName.Create(name),
-        displayName: name,
-        description: description,
-        schema: JsonDocument.Parse("""{"type":"object","properties":{}}"""),
-        executionMode: ExecutionMode.Parallel,
-        promptSnippet: null,
-        promptGuidelines: []);
+        name,
+        description,
+        JsonDocument.Parse("""{"type":"object","properties":{}}"""),
+        ExecutionMode.Parallel,
+        null,
+        []);
 
     [Test]
     public async Task List_Text_IsSortedByName()
@@ -78,7 +78,7 @@ public class ToolsCommandTests
 
         await Assert.That(exit).IsEqualTo(1);
         await Assert.That(_err.ToString()).Contains("Unknown tool: missing");
-        await Assert.That(_out.ToString()).IsEmpty();
+        await Assert.That(_out.ToString()).IsEqualTo(string.Empty);
     }
 
     [Test]

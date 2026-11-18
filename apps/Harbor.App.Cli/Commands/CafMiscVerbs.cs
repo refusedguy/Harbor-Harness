@@ -1,8 +1,6 @@
 using System.Globalization;
 using ConsoleAppFramework;
-using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Hosting;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Commands;
@@ -212,8 +210,8 @@ internal static class CafToolsCommands
     {
         string[] tail = json ? [.. args, "--json"] : args;
         using var host = HostBuilder.Build(tail);
-        var registry = host.Services.GetRequiredService<IToolRegistry>();
-        return await new ToolsCommand(Console.Out, Console.Error, () => registry.GetAllTools())
+        return await new ToolsCommand(
+                Console.Out, Console.Error, () => CliInfrastructure.GetToolDescriptors(host.Services))
             .ExecuteAsync(tail).ConfigureAwait(false);
     }
 }

@@ -11,8 +11,7 @@ namespace Harbor.App.Cli.Commands;
 ///     <c>amp tools list</c> / <c>amp tools show --json</c>).
 /// </summary>
 /// <remarks>
-///     This command is a pure string-driven view over
-///     <see cref="IToolRegistry.GetAllTools" />: the registry snapshot is
+///     This command is a pure string-driven view over a registry snapshot
 ///     supplied by the caller, so the same code serves the CLI verb and the
 ///     unit tests. JSON is written with <see cref="Utf8JsonWriter" /> (no
 ///     reflection, AOT-safe). No new seam and no public API change.
