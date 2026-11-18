@@ -10,6 +10,14 @@ namespace Harbor.Desktop.ViewModels;
 /// <param name="Action">Callback invoked when the user activates this entry.</param>
 public sealed record CommandResultViewModel(string Kind, string Label, string Hint, Action Action)
 {
+    /// <summary>
+    ///     #2682 Z09: the hint as shown in a result row. Built-in commands
+    ///     carry a technical key (<c>CodeEditorView</c>) in <see cref="Hint" />;
+    ///     humanize it for display while the raw value stays searchable. Slash
+    ///     rows carry an already-readable description, so they pass through.
+    /// </summary>
+    public string DisplayHint => Kind == "command" ? CommandNameHumanizer.Humanize(Hint) : Hint;
+
     /// <summary>Icon glyph based on kind.</summary>
     public string Icon => Kind switch
     {
