@@ -247,6 +247,44 @@ public class GlobToolTests
             Directory.Delete(tempDir, true);
         }
     }
+
+    [Test]
+    public async Task ExecuteAsync_OutputIsUnchangedAfterPooling()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-glob-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        await File.WriteAllTextAsync(Path.Combine(tempDir, "a.cs"), "");
+        await File.WriteAllTextAsync(Path.Combine(tempDir, "b.cs"), "");
+
+        try
+        {
+            var tool = new GlobTool(NullLogger<GlobTool>.Instance);
+            var args = JsonDocument.Parse($"{{\"pattern\": \"*.cs\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
+            var ctx = TestAgents.CreateToolContext();
+
+            var result = await tool.ExecuteAsync(args, ctx);
+
+            // Exact golden output: header + sorted relative paths, no trailing newline.
+            await Assert.That(result.Output).IsEqualTo("Found 2 files:\na.cs\nb.cs");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public async Task GlobTool_UsesPooledBuilder_RelativeGate()
+    {
+        // #1097 (relative gate, one site): GlobTool.cs must build its result
+        // text from StringBuilderPool, zero `new StringBuilder` in this file.
+        // Scoped to this file on purpose: other cold-path builders remain
+        // separate #1097 slices rather than one absolute tree ban.
+        string path = RepoPaths.FindFile(Path.Combine("src", "Harbor.Tools.Builtin", "Tools", "Glob", "GlobTool.cs"));
+        string source = await File.ReadAllTextAsync(path);
+        await Assert.That(source.Contains("StringBuilderPool.Rent")).IsTrue();
+        await Assert.That(source.Contains("new StringBuilder")).IsFalse();
+    }
 }
 
 public class GrepToolTests

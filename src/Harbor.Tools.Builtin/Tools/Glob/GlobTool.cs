@@ -1,5 +1,5 @@
-using System.Text;
 using AutoCtor;
+using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 using Microsoft.Extensions.Logging;
@@ -160,7 +160,12 @@ public sealed partial class GlobTool : ITool
         List<string> relative,
         bool truncated)
     {
-        var sb = new StringBuilder(relative.Count * 40);
+        // #1097 (per-call builder): RenderResult runs on every glob invocation,
+        // so rent instead of allocating a fresh builder. ToString() materialises
+        // the result before the pooled builder returns on dispose (using var
+        // compiles to try/finally, so every exit path returns the rent).
+        using var pooled = StringBuilderPool.Rent(relative.Count * 40);
+        var sb = pooled.Builder;
         sb.Append("Found ").Append(relative.Count);
         if (truncated) sb.Append('+');
         sb.Append(" files");
