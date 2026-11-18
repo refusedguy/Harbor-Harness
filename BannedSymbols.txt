@@ -4,7 +4,7 @@
 # Ban Newtonsoft.Json — use System.Text.Json only.
 # RS0030 covers SOURCE CODE: it fires on a use of the symbol in our code, and
 # on nothing else. The package graph is a different question, and the `N:`
-# entry is what answers it: tools/check-test-packages.py reads the banned
+# entry is what answers it: the compiled check-test-packages gate reads the banned
 # names from THIS file (one source of truth, no second list) and fails when a
 # test or sample project resolves a banned package, directly or transitively.
 # Named exceptions live in tools/test-package-exceptions.txt, and
