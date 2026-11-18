@@ -583,33 +583,27 @@ public class HookRunnerTests
     // ── H01: subagent lifecycle (advisory) ───────────────────────────────
 
     [Test]
-    public async Task SubagentStart_RunsCommand()
+    public async Task SubagentLifecycleHooks_EachRunTheirOwnCommand()
     {
         if (!OperatingSystem.IsLinux())
             return;
-        string dir = NewTempDir();
-        string marker = Path.Combine(dir, "subagent-start-marker");
-        var runner = NewRunner(dir,
-            "{\"hooks\":{\"SubagentStart\":[{\"command\":\"touch " + marker + "\"}]}}");
 
-        await runner.RunSubagentStartAsync("child-1", "explore", "test-model");
+        // One body for both events: the two event points share the advisory
+        // dispatch, so a single table-driven check proves both keys resolve.
+        foreach ((string eventName, bool isStart) in new[] { ("SubagentStart", true), ("SubagentEnd", false) })
+        {
+            string dir = NewTempDir();
+            string marker = Path.Combine(dir, eventName + "-marker");
+            var runner = NewRunner(dir,
+                "{\"hooks\":{\"" + eventName + "\":[{\"command\":\"touch " + marker + "\"}]}}");
 
-        await Assert.That(File.Exists(marker)).IsTrue();
-    }
+            if (isStart)
+                await runner.RunSubagentStartAsync("child-1", "explore", "test-model");
+            else
+                await runner.RunSubagentEndAsync("child-1", "explore", "test-model");
 
-    [Test]
-    public async Task SubagentEnd_RunsCommand()
-    {
-        if (!OperatingSystem.IsLinux())
-            return;
-        string dir = NewTempDir();
-        string marker = Path.Combine(dir, "subagent-end-marker");
-        var runner = NewRunner(dir,
-            "{\"hooks\":{\"SubagentEnd\":[{\"command\":\"touch " + marker + "\"}]}}");
-
-        await runner.RunSubagentEndAsync("child-1", "explore", "test-model");
-
-        await Assert.That(File.Exists(marker)).IsTrue();
+            await Assert.That(File.Exists(marker)).IsTrue();
+        }
     }
 
     [Test]

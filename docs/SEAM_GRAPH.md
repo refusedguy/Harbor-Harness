@@ -154,7 +154,7 @@ Declared in [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abs
 - **Named by** 41 file(s) in 17 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia, Harbor.App.Avalonia.Tests, Harbor.App.Cli, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Hosting, Harbor.Hosting.Tests
 - **Registered in the container**: `IToolRegistry` → a factory (Singleton, [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs))
 - **Bypassed**: 2 direct construction(s) of the concrete type, 3 signature(s) naming the concrete type where the interface was the contract:
-  - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):188
+  - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):189
   - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):183
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):188
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):200
