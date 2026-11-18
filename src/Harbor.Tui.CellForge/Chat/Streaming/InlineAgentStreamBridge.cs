@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Events;
+using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge.Rendering;
 // #436: the finalized-block sink is engine-typed (InlineSession); the attrs
 // flowing in here are the Rendering vocabulary, converted value-identically
@@ -20,6 +21,10 @@ public sealed class InlineAgentStreamBridge : IDisposable
     private readonly IEventBus _bus;
     private readonly InlineSession _session;
     private readonly ComposerController _composer;
+    // #2651: one walker per bridge, created once. No per-event allocation on
+    // the streaming hot path. Both unions keep a single traversal in the UI.
+    private readonly InlineStreamEventVisitor _events;
+    private readonly InlineStreamLlmEventVisitor _llmEvents;
     private StreamBlock? _stream;
 
     /// <summary>
@@ -40,6 +45,8 @@ public sealed class InlineAgentStreamBridge : IDisposable
         _writer = writer;
         _session = session;
         _composer = composer;
+        _llmEvents = new InlineStreamLlmEventVisitor(this);
+        _events = new InlineStreamEventVisitor(this);
         _subscription = new EventSubscription(bus, HandleEvent);
         Subscription = _subscription.Subscription;
     }
@@ -60,42 +67,86 @@ public sealed class InlineAgentStreamBridge : IDisposable
 
     private ValueTask HandleEvent(AgentEvent evt, CancellationToken ct)
     {
-        switch (evt)
+        // #2651: the shared visitor is the only traversal over either union on
+        // this path. A new AgentEvent/LlmEvent member cannot be dropped in
+        // silence: it must get an explicit arm, and an unknown runtime kind is
+        // refused by VisitUnknown. Each arm below keeps its old switch body.
+        _events.Accept(evt);
+        return ValueTask.CompletedTask;
+    }
+
+    // ── Event dispatch (visitors, #2651) ────────────────────────────────────
+
+    /// <summary>
+    ///     Inline half of the <see cref="ChatScreenBridge.AgentEventVisitor" />
+    ///     dispatch. Every union member is declared explicitly; only six change
+    ///     inline state, the rest are inert. <c>VisitUnknown</c> is inherited
+    ///     and throws, so an unrecognised kind is never silently ignored.
+    /// </summary>
+    private sealed class InlineStreamEventVisitor(InlineAgentStreamBridge bridge)
+        : ChatScreenBridge.AgentEventVisitor
+    {
+        public override void Visit(AgentStartEvent e) { }
+        public override void Visit(TurnStartEvent e) { }
+
+        public override void Visit(MessageStartEvent e) =>
+            bridge._stream = new StreamBlock(Environment.TickCount64 & 0x7FFFFFFF);
+
+        public override void Visit(MessageUpdateEvent e) =>
+            bridge._llmEvents.Accept(e.LlmEvent);
+
+        public override void Visit(MessageEndEvent e) =>
+            bridge.FinishStream();
+
+        public override void Visit(ToolExecutionStartEvent e)
         {
-            case MessageStartEvent:
-                _stream = new StreamBlock(Environment.TickCount64 & 0x7FFFFFFF);
-                break;
-
-            case MessageUpdateEvent update when update.LlmEvent is TextDeltaEvent delta:
-                _stream?.AppendDelta(delta.Delta);
-                break;
-
-            case MessageUpdateEvent update when update.LlmEvent is ThinkingDeltaEvent thinking:
-                // O10 #1179: thinking accumulates for the collapsed one-liner
-                // committed on finish — never interleaved with the answer.
-                _stream?.AppendThinking(thinking.Delta);
-                break;
-
-            case MessageUpdateEvent update when update.LlmEvent is ThinkingEndEvent:
-                _stream?.CompleteThinking();
-                break;
-
-            case MessageEndEvent:
-                FinishStream();
-                break;
-
-            case ToolExecutionStartEvent tool:
-                FinishStream();
-                CommitLine($"⚙ {tool.ToolName}", StyleAttr.Dim);
-                break;
-
-            case AgentErrorEvent error:
-                FinishStream();
-                CommitLine($"! {error.Message}", StyleAttr.Bold);
-                break;
+            bridge.FinishStream();
+            bridge.CommitLine($"⚙ {e.ToolName}", StyleAttr.Dim);
         }
 
-        return ValueTask.CompletedTask;
+        public override void Visit(ToolExecutionUpdateEvent e) { }
+        public override void Visit(ToolExecutionEndEvent e) { }
+        public override void Visit(TurnEndEvent e) { }
+        public override void Visit(AgentEndEvent e) { }
+
+        public override void Visit(AgentErrorEvent e)
+        {
+            bridge.FinishStream();
+            bridge.CommitLine($"! {e.Message}", StyleAttr.Bold);
+        }
+
+        public override void Visit(PluginBlockedEvent e) { }
+        public override void Visit(CompactionStartedEvent e) { }
+        public override void Visit(CompactionCompletedEvent e) { }
+        public override void Visit(CompactionFailedEvent e) { }
+        public override void Visit(SessionStatsEvent e) { }
+        public override void Visit(SessionChangedEvent e) { }
+    }
+
+    /// <summary>
+    ///     Inline half of the <see cref="LlmEventVisitor" /> (#1494) dispatch:
+    ///     text and thinking deltas feed the live stream, every other kind is
+    ///     inert. <c>VisitUnknown</c> is inherited and throws.
+    /// </summary>
+    private sealed class InlineStreamLlmEventVisitor(InlineAgentStreamBridge bridge) : LlmEventVisitor
+    {
+        public override void Visit(TextStartEvent e) { }
+        public override void Visit(TextDeltaEvent e) => bridge._stream?.AppendDelta(e.Delta);
+        public override void Visit(TextEndEvent e) { }
+        public override void Visit(ThinkingStartEvent e) { }
+
+        // O10 #1179: thinking accumulates for the collapsed one-liner committed
+        // on finish — never interleaved with the answer.
+        public override void Visit(ThinkingDeltaEvent e) => bridge._stream?.AppendThinking(e.Delta);
+
+        public override void Visit(ThinkingEndEvent e) => bridge._stream?.CompleteThinking();
+        public override void Visit(ToolCallStartEvent e) { }
+        public override void Visit(ToolCallDeltaEvent e) { }
+        public override void Visit(ToolCallEndEvent e) { }
+        public override void Visit(StepStartEvent e) { }
+        public override void Visit(StepFinishEvent e) { }
+        public override void Visit(FinishEvent e) { }
+        public override void Visit(ErrorEvent e) { }
     }
 
     // ── Stream lifecycle ───────────────────────────────────────────────────
