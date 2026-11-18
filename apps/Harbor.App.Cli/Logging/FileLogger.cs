@@ -49,7 +49,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
         AppPrefix = appPrefix;
         LogDirectory = logDir;
         FileLevel = fileLevel;
-        Directory.CreateDirectory(logDir);
+        PrivateLogDirectory.Ensure(logDir);
 
         // Per-run filename: harbor-cli-2026-07-18_15-30-45.log
         // The seconds-resolution timestamp makes collisions effectively impossible
