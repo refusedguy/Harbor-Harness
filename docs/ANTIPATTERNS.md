@@ -576,6 +576,13 @@ public async Task DoWorkAsync(...)
 
 > **Exception:** `HostBuilder.Build` uses `.GetAwaiter().GetResult()` once
 > (synchronous DI setup, no SynchronizationContext). Marked with `#pragma warning disable RS0030`.
+> A second sanctioned site is `ToolsCatalog.CreateToolRegistry`: MCP `tools/list`
+> discovery is awaited there before any UI `SynchronizationContext` exists, and
+> `McpToolDiscovery` uses `ConfigureAwait(false)` on every await, so no continuation
+> resumes on the thread that blocks. It also takes the task through
+> `.GetAwaiter().GetResult()` (not `.Result`) so a fault surfaces unchanged rather
+> than wrapped in `AggregateException`. Both sites are catalogued in
+> `BannedSymbols.txt` and checked by the `banned-api-exemptions` gate.
 
 ### 16. Catching and re-wrapping exceptions inside library code
 

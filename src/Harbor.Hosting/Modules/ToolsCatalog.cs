@@ -306,8 +306,16 @@ internal static class ToolsCatalog
             // declares and an exact permission grant on every registered agent.
             // The composition root is synchronous (cf. ConfigurationModule's eager
             // loads); the wait happens before any UI synchronization context exists.
+            // RS0030: second sanctioned sync-over-async site (the first is
+            // HostBuilder.Build). Safe here because discovery uses
+            // ConfigureAwait(false) throughout, so no continuation resumes on a
+            // context this thread blocks. GetAwaiter().GetResult() (not .Result)
+            // propagates the original fault instead of an AggregateException.
+            // Catalogued in BannedSymbols.txt + docs/ANTIPATTERNS.md #15.
+#pragma warning disable RS0030
             int discovered = McpToolDiscovery.RegisterAsync(
-                mcpRegistry, registry, agentRegistry, ctx.LoggerFactory, ctx.Logger).Result;
+                mcpRegistry, registry, agentRegistry, ctx.LoggerFactory, ctx.Logger).GetAwaiter().GetResult();
+#pragma warning restore RS0030
             if (discovered > 0)
                 ToolsCatalogLog.McpToolsRegistered(ctx.Logger, discovered);
         }
