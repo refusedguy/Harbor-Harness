@@ -127,6 +127,10 @@ internal static class BuildRootEmitter
         };
         lines.AddRange(body);
         lines.Add("    }");
+
+        // #2518: layout nodes (Row/Column/Overlay) add a second builder to the
+        // same partial class, so no extra source has to reach the compilation.
+        lines.AddRange(SpecLayoutEmitter.EmitMethod(arena));
         lines.Add("}");
         return Lines(lines.ToArray());
     }

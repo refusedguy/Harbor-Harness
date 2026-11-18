@@ -286,6 +286,52 @@ public class MarkupGeneratorAdditionalTextTests
             .Contains("TargetPath = \"Fixtures/Other.harbor-ui\"");
     }
 
+    /// <summary>
+    ///     Issue #2518: layout nodes emit real runtime construction code into
+    ///     the phase-2 partial class. Row/Column map to FlexSplitNode, Overlay
+    ///     to ZStackNode, and .track maps to a FlexTrack factory.
+    /// </summary>
+    [Test]
+    public async Task Generator_LayoutNodes_EmitFlexSplitAndZStackWithTracks()
+    {
+        const string render = "global::Harbor.Tui.CellForge.Rendering.";
+        const string markup = """
+            row "main":
+                .gap 2
+                .justify space-between
+                text "a":
+                    .track fill 2
+                text "b":
+                    .track fixed 12
+                text "c":
+                    .track min 4
+                text "d":
+                    .track max 8
+                text "e":
+                    .track percent 0.5
+            column "side":
+                text "top"
+            overlay "stack":
+                text "front"
+            """;
+
+        var run = RunText(markup, "Fixtures/Layout.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var source = Source(run, ".BuildRoot.g.cs");
+
+        await Assert.That(source).Contains("INode? BuildLayout()");
+        await Assert.That(source)
+            .Contains($"FlexSplitNode({render}SplitDir.Horizontal, 2, {render}FlexJustify.SpaceBetween)");
+        await Assert.That(source).Contains($"FlexSplitNode({render}SplitDir.Vertical, 0)");
+        await Assert.That(source).Contains("ZStackNode()");
+        await Assert.That(source).Contains($"{render}FlexTrack.Fill(2f)");
+        await Assert.That(source).Contains($"{render}FlexTrack.Fixed(12)");
+        await Assert.That(source).Contains($"{render}FlexTrack.Min(4)");
+        await Assert.That(source).Contains($"{render}FlexTrack.Max(8)");
+        await Assert.That(source).Contains($"{render}FlexTrack.Percent(0.5f)");
+    }
+
     private static GeneratorDriverRunResult Run(AdditionalText file, AnalyzerConfigOptionsProvider options)
     {
         var compilation = CSharpCompilation.Create("MarkupWiring");
