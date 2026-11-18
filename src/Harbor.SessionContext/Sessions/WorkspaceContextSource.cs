@@ -4,8 +4,9 @@ namespace Harbor.Application.Sessions;
 
 /// <summary>
 ///     Discovers the workspace inputs of <see cref="SystemPromptContext" />:
-///     project context files (<c>AGENTS.md</c>, <c>CLAUDE.md</c>) from the
-///     session's working directory and skill files (<c>*.md</c>) from
+///     project context files (<c>AGENTS.md</c>, <c>CLAUDE.md</c>,
+///     <c>AGENT.md</c>) from the session's working directory and its ancestors
+///     (#2675 item 070) and skill files (<c>*.md</c>) from
 ///     <c>&lt;workdir&gt;/.harbor/skills</c> plus <c>~/.harbor/skills</c>
 ///     (ROP-C Z3 — the prompt builder rendered those sections, but the loop
 ///     hardcoded empty arrays).
@@ -35,7 +36,7 @@ public static class WorkspaceContextSource
     /// </summary>
     public static WorkspaceContextService Instance { get; } = new();
 
-    /// <summary>Project context files probed in the working directory.</summary>
+    /// <summary>Guidance file names probed in the working directory and its ancestors.</summary>
     public static string[] ContextFileNames => WorkspaceContextService.ContextFileNames;
 
     /// <summary>
