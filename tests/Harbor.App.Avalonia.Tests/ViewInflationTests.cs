@@ -8,6 +8,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
+using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -76,6 +77,25 @@ public class ViewInflationTests
     {
         var view = Activator.CreateInstance(viewType);
         await Assert.That(view).IsNotNull();
+    }
+
+    [Test]
+    public async Task SessionsFlyoutView_SessionList_IsVirtualized()
+    {
+        // #2681 G27: the sessions list can hold hundreds of rows, so an eager
+        // StackPanel realizes every one of them on flyout open. The AXAML sets
+        // VirtualizingStackPanel explicitly; pin the template the ListBox will
+        // actually build at runtime, not the source text. With no Application
+        // loaded, ItemsControl's default panel is a plain StackPanel, so this
+        // assertion fails without the explicit ItemsPanel and passes with it.
+        var view = new Views.Shell.SessionsFlyoutView();
+        ListBox list = view.GetLogicalDescendants().OfType<ListBox>().Single();
+
+        Panel? panel = list.ItemsPanel?.Build();
+
+        await Assert.That(panel is VirtualizingStackPanel).IsTrue()
+            .Because($"SessionsFlyout_List must realize only visible rows; its ItemsPanel built "
+                     + $"{panel?.GetType().Name ?? "null"}.");
     }
 
     [Test]
