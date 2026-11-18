@@ -856,3 +856,19 @@ keymap, `Entity<State>` вместо `UiStore` и ещё один глобал �
 
 - Полный текст, таблица соответствия идей влитым PR и список неприменимого:
   [ADR-029](ADR-029-gpui-kit-patterns-already-shipped.md).
+## ADR-030: отчёт GPUI (#2707) — все применимые паттерны уже в дереве, нового slice нет
+
+Issue #2707 — competitor research по движку Zed GPUI с шестью паттернами,
+применимыми к CellForge. Проверка `gh pr list --search` и файлов на
+`origin/dev` (`fc9aabde`) показала: все шесть уже влиты — #2396 (prepaint +
+стабильные element id), #2384 (Scene display list), #2389 (адресная
+инвалидация), #2395 (стек ключевых контекстов), #2386 (glyph cache
+cell-паттернов), #2394 (measured leaves); паттерн 1 усилен PR #2442, #2523,
+PR #2526 и #2722.
+
+Decided: product-код не меняется, новый slice не открывается, research-отчёт
+закрывается как уже реализованный. «Честно неприменимо» из отчёта остаётся
+отвергнутым; отдельного общего per-frame line layout cache не добавляем —
+per-frame reuse уже дают prepaint/ElementId и `TimelineLayoutCache`.
+
+- Полный текст: [ADR-030](ADR-030-gpui-report-patterns-already-landed.md).
