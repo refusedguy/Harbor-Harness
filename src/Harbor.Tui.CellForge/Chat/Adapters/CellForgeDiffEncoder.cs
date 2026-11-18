@@ -52,12 +52,15 @@ public static class CellForgeDiffEncoder
     /// <summary>Standalone encoder — callers supply both frames.</summary>
     public static ICellDiffEncoder Create() => new RowHashDiffEncoder();
 
-    // Static helper runs on the frame path: RowHashDiffEncoder retains its
-    // staging array across Encode calls (amortized, see its remarks), so a
-    // fresh instance per flush re-grows the scratch every frame. Reused
-    // per thread — Encode mutates staging, hence ThreadStatic, not shared.
+    // Static helper runs on the frame path: EngineLinkedEncoder retains both
+    // its snapshot ScreenBuffer and its portable encoder's staging array
+    // across EncodeCellForge calls (amortized, see its remarks), so a fresh
+    // instance per flush re-allocates and re-copies the whole field every
+    // frame. Reused per thread — Encode mutates staging and the snapshot,
+    // hence ThreadStatic, not shared. The encoder is bound to one engine, so
+    // a call with a different engine replaces it.
     [ThreadStatic]
-    private static RowHashDiffEncoder? _cachedEncoder;
+    private static EngineLinkedEncoder? _cachedLinkedEncoder;
 
     /// <summary>
     ///     Engine-linked encoder — diffs against the engine's current front
@@ -69,9 +72,10 @@ public static class CellForgeDiffEncoder
     /// <summary>
     ///     Encodes the delta from <paramref name="engine"/>'s front buffer
     ///     (the last frame the ANSI path flushed) to <paramref name="next"/>.
-    ///     The front crosses into the Rendering vocabulary through the narrow
-    ///     frame-source port; the portable encoder then diffs two Rendering
-    ///     buffers.
+    ///     This is a thin wrapper over <see cref="EngineLinkedEncoder"/>: the
+    ///     front crosses into the Rendering vocabulary through the narrow
+    ///     frame-source port, and the linked encoder retains its snapshot
+    ///     buffer between calls so the steady-state path allocates nothing.
     /// </summary>
     public static CellDiffBatch EncodeFromEngineFront(
         EngineCells.DiffEngine engine,
@@ -81,23 +85,12 @@ public static class CellForgeDiffEncoder
     {
         Ensure.NotNull(engine);
         Ensure.NotNull(next);
-        var prev = SnapshotFront(new EngineFrameSource(engine.Front));
-        _cachedEncoder ??= new RowHashDiffEncoder();
-        return _cachedEncoder.Encode(prev, next, hints, sequence);
-    }
+        if (_cachedLinkedEncoder is null || !ReferenceEquals(_cachedLinkedEncoder.Engine, engine))
+        {
+            _cachedLinkedEncoder = new EngineLinkedEncoder(engine);
+        }
 
-    /// <summary>
-    ///     Snapshots a frame into the Rendering vocabulary: exact
-    ///     cell-for-cell copy, then row-hash invalidation so the portable
-    ///     encoder rehashes what the copy touched (At() writes do not
-    ///     invalidate, same discipline as
-    ///     <see cref="Harbor.Tui.CellForge.Streaming.ScreenSession"/>).
-    /// </summary>
-    private static UIR.ScreenBuffer SnapshotFront(IFrameSource front)
-    {
-        var snap = new UIR.ScreenBuffer(front.Cols, front.Rows);
-        CopyFrameToRendering(front, snap);
-        return snap;
+        return _cachedLinkedEncoder.EncodeCellForge(next, hints, sequence);
     }
 
     private static void CopyFrameToRendering(IFrameSource src, UIR.ScreenBuffer dst)
@@ -135,6 +128,10 @@ public static class CellForgeDiffEncoder
 
         public EngineLinkedEncoder(EngineCells.DiffEngine engine) =>
             _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+
+        // The helper caches one of these per thread; it must know which engine
+        // the instance is bound to so a different engine replaces the cache.
+        internal EngineCells.DiffEngine Engine => _engine;
 
         /// <inheritdoc />
         public CellDiffBatch Encode(
