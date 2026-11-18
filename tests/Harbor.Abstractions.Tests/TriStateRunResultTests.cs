@@ -203,8 +203,10 @@ public class TriStateRunResultTests
             SealedAt, SealedAt, [], [], null, null, null);
         await Assert.That(legacy.Acceptance).IsEqualTo(RunAcceptance.NotOffered);
 
-        // Legacy Reconstruct: same signature as before B1.2.
-        AgentMessage[] messages = [Prompt()];
+        // Legacy Reconstruct: same signature as before B1.2. A terminal
+        // assistant message is needed for the execution axis to read Succeeded
+        // (#993); acceptance is still unsupplied.
+        AgentMessage[] messages = [Prompt(), Final()];
         RunOutcome outcome = Reconstruct(messages);
         await Assert.That(outcome.Acceptance).IsEqualTo(RunAcceptance.NotOffered);
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Succeeded);
