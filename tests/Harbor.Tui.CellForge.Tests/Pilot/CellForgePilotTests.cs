@@ -71,6 +71,24 @@ public sealed class CellForgePilotTests
     }
 
     [Test]
+    public async Task WaitForIdle_WaitsForBusSubscribers_BeforeReportingIdle()
+    {
+        await using var pilot = await CellForgePilot.LaunchAsync();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Func<AgentEvent, CancellationToken, ValueTask> handler = async (_, _) => await gate.Task;
+        using var subscription = pilot.Hook(handler);
+
+        Task publish = pilot.PublishAsync(TestEvents.AgentStart());
+        Task<bool> idle = pilot.WaitForIdleAsync();
+        await Assert.That(idle.IsCompleted).IsFalse();
+
+        gate.SetResult();
+        await publish;
+
+        await Assert.That(await idle).IsTrue();
+    }
+
+    [Test]
     public async Task WaitForEvent_ResolvesAlreadySeen_WithoutDelay()
     {
         await using var pilot = await CellForgePilot.LaunchAsync();
