@@ -1,4 +1,8 @@
 #nullable enable
+Harbor.Abstractions.Extensions.ProcessLaunchPolicy
+static Harbor.Abstractions.Extensions.ProcessLaunchPolicy.ApplyEnvironment(System.Diagnostics.ProcessStartInfo! psi, System.Collections.Generic.IReadOnlyList<string!>! allowedKeys) -> System.Collections.Generic.IReadOnlyList<string!>!
+static Harbor.Abstractions.Extensions.ProcessLaunchPolicy.EffectiveEnvironmentKeys(System.Collections.Generic.IReadOnlyList<string!>! allowedKeys) -> System.Collections.Generic.IReadOnlyList<string!>!
+static Harbor.Abstractions.Extensions.ProcessLaunchPolicy.InheritedEnvironmentKeys() -> System.Collections.Generic.IReadOnlyList<string!>!
 static Harbor.Abstractions.Extensions.StringTruncation.Clip(string! text, int max) -> string!
 Harbor.Abstractions.Models.TranscriptIntegrity
 Harbor.Abstractions.Models.TranscriptIntegrity.<Clone>$() -> Harbor.Abstractions.Models.TranscriptIntegrity!

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Application.Skills;
 
@@ -259,6 +260,10 @@ public static class SkillUpdater
         {
             psi.ArgumentList.Add(argument);
         }
+        // This caller intentionally inherits the parent environment; declare
+        // that through the shared allowlist owner (#2595) instead of bypassing
+        // it, so a future env-policy change lands here too.
+        ProcessLaunchPolicy.ApplyEnvironment(psi, ProcessLaunchPolicy.InheritedEnvironmentKeys());
 
         using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
         var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

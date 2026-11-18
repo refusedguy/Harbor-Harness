@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.ChangeTracking;
 
@@ -477,7 +478,7 @@ public static class CheckRunner
             for (int a = 0; a < spec.Args.Count; a++)
                 psi.ArgumentList.Add(spec.Args[a]);
         }
-        IReadOnlyList<string> envKeys = ApplyEnvironment(psi, passthrough);
+        IReadOnlyList<string> envKeys = ProcessLaunchPolicy.ApplyEnvironment(psi, CheckEnvKeys(passthrough));
 
         using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
         var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -578,21 +579,7 @@ public static class CheckRunner
     {
         // Cancelled before launch: no process existed, so the effective keys are
         // computed, not observed — the shape matches a check that never ran.
-        var keys = new List<string>(AllowedEnvKeys.Length + passthrough.Count);
-        for (int k = 0; k < AllowedEnvKeys.Length; k++)
-        {
-            if (Environment.GetEnvironmentVariable(AllowedEnvKeys[k]) is not null)
-                keys.Add(AllowedEnvKeys[k]);
-        }
-        for (int k = 0; k < passthrough.Count; k++)
-        {
-            string name = passthrough[k];
-            if (!string.IsNullOrWhiteSpace(name)
-                && !keys.Contains(name)
-                && Environment.GetEnvironmentVariable(name) is not null)
-                keys.Add(name);
-        }
-        keys.Sort(StringComparer.Ordinal);
+        IReadOnlyList<string> keys = ProcessLaunchPolicy.EffectiveEnvironmentKeys(CheckEnvKeys(passthrough));
         return new CheckResult(
             spec.Name, FormatCommand(spec.FileName, spec.Args), worktreePath,
             null, CheckOutcome.Cancelled, TimeSpan.Zero,
@@ -622,35 +609,18 @@ public static class CheckRunner
         return Result.Success(spec.Name);
     }
 
-    private static IReadOnlyList<string> ApplyEnvironment(ProcessStartInfo psi, IReadOnlyList<string> passthrough)
+    /// <summary>
+    ///     This runner's declared allowlist: the minimal base plus the
+    ///     contract-declared passthrough keys. The clear-and-copy mechanism is
+    ///     owned by <see cref="ProcessLaunchPolicy" /> (#2595); this method
+    ///     only decides WHICH keys this caller permits.
+    /// </summary>
+    private static IReadOnlyList<string> CheckEnvKeys(IReadOnlyList<string> passthrough)
     {
-        // Explicit minimal allowlist (the "env W" of the proof): PATH, HOME,
-        // LANG, TZ plus contract-declared passthrough. The block starts as a
-        // copy of the parent environment and is cleared first, so a planted
-        // secret in the parent process never reaches the child unless the
-        // operator declared its key.
-        psi.Environment.Clear();
         var keys = new List<string>(AllowedEnvKeys.Length + passthrough.Count);
-        for (int k = 0; k < AllowedEnvKeys.Length; k++)
-            AddEnvIfPresent(psi, keys, AllowedEnvKeys[k]);
-        for (int k = 0; k < passthrough.Count; k++)
-        {
-            string name = passthrough[k];
-            if (string.IsNullOrWhiteSpace(name) || keys.Contains(name))
-                continue;
-            AddEnvIfPresent(psi, keys, name);
-        }
-        keys.Sort(StringComparer.Ordinal);
+        keys.AddRange(AllowedEnvKeys);
+        keys.AddRange(passthrough);
         return keys;
-    }
-
-    private static void AddEnvIfPresent(ProcessStartInfo psi, List<string> keys, string name)
-    {
-        string? value = Environment.GetEnvironmentVariable(name);
-        if (value is null)
-            return;
-        psi.Environment[name] = value;
-        keys.Add(name);
     }
 
     private static string FormatCommand(string fileName, IReadOnlyList<string> args)
