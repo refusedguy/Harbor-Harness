@@ -1,4 +1,3 @@
-#error SAMPLE_COMPILE_CONTROL_2540
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
