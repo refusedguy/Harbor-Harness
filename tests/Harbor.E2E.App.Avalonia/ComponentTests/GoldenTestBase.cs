@@ -92,6 +92,13 @@ public abstract class GoldenTestBase : ComponentTestBase
         BrushKey = "ChatUserBrush",
     };
 
+    /// <summary>A status badge: a colored dot fixed by <paramref name="brushKey" /> and a label.</summary>
+    protected static StatusBadge StatusBadgeView(string status, string brushKey = "MochaGreen") => new()
+    {
+        StatusText = status,
+        BrushKey = brushKey,
+    };
+
     /// <summary>A toast surface carrying the given notifications.</summary>
     protected static ToastNotificationsView ToastView(params (ToastKind Kind, string Message)[] toasts)
     {
