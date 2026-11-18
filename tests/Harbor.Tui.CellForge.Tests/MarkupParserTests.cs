@@ -64,7 +64,7 @@ public class MarkupParserTests
         await Assert.That(result.IsValid).IsTrue();
         var root = result.Arena.Roots[0];
         await Assert.That(root.Id).IsEqualTo("files-panel");
-        await Assert.That(result.Arena.Nodes[2].Id).IsEqualTo("row-1");
+        await Assert.That(result.Arena.Nodes[1].Id).IsEqualTo("row-1");
         // .id is still a regular operation in the IR stream.
         await Assert.That(root.Operations.Any(o => o.Name == "id" && o.Arguments[0].Text == "files-panel")).IsTrue();
     }

@@ -144,6 +144,7 @@ public sealed class FlexSplitNode : ContainerNode
         _keys.Add(null);
         _tracks.Add(track);
         _frames.Add(default);
+        RefreshTrackSignature();
     }
 
     /// <summary>
