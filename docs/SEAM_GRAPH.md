@@ -131,7 +131,7 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | `IPluginSource` | [`src/Harbor.Plugins.Abstractions/IPluginSource.cs`](../src/Harbor.Plugins.Abstractions/IPluginSource.cs) | `CompositePluginSource`, `EmbeddedResourcePluginSource`, `FileSystemPluginSource`, `InMemoryPluginSource`, `TrustingPluginSource` | 9 | none | 5 |
 | `ITuiRendererFactory` | [`src/Harbor.Hosting/Modules/TuiBackendRegistry.cs`](../src/Harbor.Hosting/Modules/TuiBackendRegistry.cs) | `PlainTuiRendererFactory`, `AnsiTuiRendererFactory`, `CellForgeTuiRendererFactory`, `PluginTuiRendererFactory`, `SpectreTuiRendererFactory` (+5 more) | 4 | none | 10 |
 | `IHarborClient` | [`src/Harbor.Ipc.Abstractions/IHarborClient.cs`](../src/Harbor.Ipc.Abstractions/IHarborClient.cs) | `IpcHarborClient`, `InProcessHarborClient` / `FakeHarborClient`, `StubHarborClient` | 11 | a factory, `InProcessHarborClient` | 1 |
-| `IThemeApplier` | [`src/Harbor.Ui.Framework.Services/Services/IThemeApplier.cs`](../src/Harbor.Ui.Framework.Services/Services/IThemeApplier.cs) | none / `StubThemeApplier`, `RecordingThemeApplier` | 13 | a factory | 0 |
+| `INode` | [`src/Harbor.Tui.CellForge.Engine/Rendering/INode.cs`](../src/Harbor.Tui.CellForge.Engine/Rendering/INode.cs) | `ContainerNode`, `LeafNode` / `GlyphNode`, `SparseNode`, `FixedNode` | 11 | none | 0 |
 
 ## 3. Three seams in detail
 
