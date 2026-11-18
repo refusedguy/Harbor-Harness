@@ -1,0 +1,35 @@
+name: temp rebuild gates binary
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temp-rebuild-gates.yml'
+
+permissions: {}
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/gates/go.mod
+          cache: false
+      - name: Build the binary from its sources
+        run: tools/build-gates.sh
+      - name: Commit the rebuilt bytes to the PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/bin
+          if git diff --cached --quiet; then
+            echo "binary already matches sources"
+            exit 0
+          fi
+          git commit -m "ci: rebuilt gate binary from its sources [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
