@@ -84,6 +84,15 @@ internal static class BuildRootEmitter
             $"    internal static readonly string[] NodeIds = [{IdList(parse.Arena)}];",
         };
 
+        // #2435: the Debug-only swap point. A null field runs the compiled
+        // BuildRoot body; a non-null one replaces it without a new process.
+        // Release/AOT compilations drop both the field and the check, so the
+        // hook adds no dynamic code to the shipped binary.
+        lines.Add("#if DEBUG");
+        lines.Add("    /// <summary>#2435: dev-only override of this root's compiled body.</summary>");
+        lines.Add("    internal static System.Action<System.Action<int>, System.Action<int, string>, System.Action>? BuildRootOverride;");
+        lines.Add("#endif");
+
         // #2431: a comment per node and operation carries its 1-based source
         // position from the IR, so generated code points back to the markup.
         AppendPositionComments(lines, parse.Arena.Roots, 0);
@@ -130,6 +139,17 @@ internal static class BuildRootEmitter
             "    /// <summary>Builds the root cell tree for <see cref=\"TargetPath\"/>.</summary>",
             "    internal static void BuildRoot(ICellForgeRoot root)",
             "    {",
+            "#if DEBUG",
+            "        // #2435: the per-root field wins; the shared slot lets the",
+            "        // dev tooling swap the body without touching the host.",
+            "        var devOverride = BuildRootOverride",
+            "            ?? global::Harbor.Abstractions.Dsl.RootBuilderOverride.Current;",
+            "        if (devOverride is not null)",
+            "        {",
+            "            devOverride(root.Begin, root.Text, root.End);",
+            "            return;",
+            "        }",
+            "#endif",
         };
         lines.AddRange(body);
         lines.Add("    }");

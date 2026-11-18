@@ -360,3 +360,8 @@ override Harbor.Abstractions.Models.RetainedOutput.GetHashCode() -> int
 override Harbor.Abstractions.Models.RetainedOutput.ToString() -> string!
 static Harbor.Abstractions.Models.RetainedOutput.operator !=(Harbor.Abstractions.Models.RetainedOutput? left, Harbor.Abstractions.Models.RetainedOutput? right) -> bool
 static Harbor.Abstractions.Models.RetainedOutput.operator ==(Harbor.Abstractions.Models.RetainedOutput? left, Harbor.Abstractions.Models.RetainedOutput? right) -> bool
+Harbor.Abstractions.Dsl.RootBuilderOverride
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Clear() -> void
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Current.get -> System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>?
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Current.set -> void
+static Harbor.Abstractions.Dsl.RootBuilderOverride.Install(System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>? builder) -> System.Action<System.Action<int>!, System.Action<int, string!>!, System.Action!>?
