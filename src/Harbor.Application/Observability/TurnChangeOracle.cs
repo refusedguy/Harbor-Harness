@@ -108,6 +108,10 @@ public sealed class TurnChangeOracle : IDisposable
     private readonly IDisposable[] _subscriptions;
     private readonly ILogger<TurnChangeOracle>? _logger;
     private long _sequence;
+    // #2589: the event-bus callbacks run on threads other than Dispose(),
+    // so the write there must be visible to the guards in the On* handlers.
+    // Explicit Volatile.Read/Write pair the two without marking the field
+    // volatile, which would make it unusable by ref.
     private bool _disposed;
 
     /// <summary>
@@ -176,12 +180,12 @@ public sealed class TurnChangeOracle : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_disposed)
+        if (Volatile.Read(ref _disposed))
         {
             return;
         }
 
-        _disposed = true;
+        Volatile.Write(ref _disposed, true);
         foreach (IDisposable subscription in _subscriptions)
         {
             subscription.Dispose();
@@ -192,6 +196,11 @@ public sealed class TurnChangeOracle : IDisposable
 
     private ValueTask OnTurnStarted(TurnStartEvent evt, CancellationToken _)
     {
+        if (Volatile.Read(ref _disposed))
+        {
+            return ValueTask.CompletedTask;
+        }
+
         lock (_sync)
         {
             _turnIndexBySession[SessionKey(evt.SessionId)] = evt.TurnIndex;
@@ -209,6 +218,11 @@ public sealed class TurnChangeOracle : IDisposable
 
     private ValueTask OnToolStarted(ToolExecutionStartEvent evt, CancellationToken _)
     {
+        if (Volatile.Read(ref _disposed))
+        {
+            return ValueTask.CompletedTask;
+        }
+
         if (!WorkspaceMutators.Contains(evt.ToolName))
         {
             return ValueTask.CompletedTask;
@@ -241,6 +255,11 @@ public sealed class TurnChangeOracle : IDisposable
 
     private ValueTask OnToolEnded(ToolExecutionEndEvent evt, CancellationToken _)
     {
+        if (Volatile.Read(ref _disposed))
+        {
+            return ValueTask.CompletedTask;
+        }
+
         // The end event names the call but not the tool, so the target comes
         // from the start event. A call that never started has no target and
         // no verdict.
@@ -270,6 +289,15 @@ public sealed class TurnChangeOracle : IDisposable
 
     private ValueTask OnTurnEnded(TurnEndEvent evt, CancellationToken _)
     {
+        // #2589: a callback already in flight when the host tears the oracle
+        // down can still reach here. The volatile read pairs with the write in
+        // Dispose() so a destroyed oracle never appends a report or logs a
+        // summary after teardown.
+        if (Volatile.Read(ref _disposed))
+        {
+            return ValueTask.CompletedTask;
+        }
+
         string key = SessionKey(evt.SessionId);
         TurnChangeReport report = BuildReport(evt, key);
 

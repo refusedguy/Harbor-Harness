@@ -100,7 +100,7 @@ recorded, because they answer #44's topology question.
 | `apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61` | mandatory | Avalonia UI state router |
 | `apps/Harbor.App.Cli/Commands/DemoCommand.cs:238` | optional | demo renderer; no state depends on it |
 | `apps/Harbor.App.Cli/Demo/DemoCellForgeScreen.cs:278` | optional | the demo scene's own recorder; no state depends on it |
-| `src/Harbor.Application/Observability/TurnChangeOracle.cs:133,134,135,136` | mandatory | the per-turn summary the oracle reports; a dropped turn record is a wrong report |
+| `src/Harbor.Application/Observability/TurnChangeOracle.cs:137,138,139,140` | mandatory | the per-turn summary the oracle reports; a dropped turn record is a wrong report |
 | plugin subscriptions (#16 above) | optional | third-party extension point |
 | `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:32` | n/a | the proxy holds no subscription of its own — it forwards to the agent, and since #1561 the agent's subscription IS a bus subscription |
 
