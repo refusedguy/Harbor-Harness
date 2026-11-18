@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Sessions;
-using Harbor.App.Cli.Commands;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Overlays;
 
@@ -76,19 +75,9 @@ internal sealed class SessionsCommand : IReplCommand
     private static async Task RegenerateTitleAsync(IReplHost host, CancellationToken ct)
     {
         host.Palette.Hide();
-        if (host.SessionStore is not { } store)
-        {
-            host.Bridge.AppendSystemLine("✎ недоступно: хост без хранилища сессий");
-            host.WakeUp();
-            return;
-        }
-
-        var result = await SessionTitleRegenerator.RegenerateAsync(
-            store, host.ProviderRegistry, host.SessionModel.Id, ct).ConfigureAwait(false);
-        host.Bridge.AppendSystemLine(result.IsSuccess
-            ? $"✎ новое название: {result.Value}"
-            : $"! не удалось обновить название: {result.Error}");
-        host.WakeUp();
+        // The wide-host reads live in SessionTitleService, whose measured
+        // consumer shape already includes them (FatInterfaceShapeRatchet).
+        await SessionTitleService.RegenerateForHostAsync(host, ct).ConfigureAwait(false);
     }
 
     /// <summary>
