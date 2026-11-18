@@ -545,7 +545,7 @@ public sealed class SettingsPanel : Harbor.Tui.CellForge.Input.IFocusTarget
 
     private string DisplayValue(SettingEntry entry)
     {
-        string value = CurrentValue;
+        string value = _getValue(entry) ?? string.Empty;
         if (entry.Editor == SettingEditorKind.Toggle)
         {
             return value == "1" ? "[x]" : "[ ]";
