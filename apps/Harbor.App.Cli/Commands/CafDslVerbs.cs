@@ -5,6 +5,7 @@ using System.Text.Json;
 using ConsoleAppFramework;
 using Harbor.Abstractions.Dsl;
 using Harbor.Tui.CellForge.CodeGen;
+using Harbor.Tui.CellForge.CodeGen.DevReload;
 
 namespace Harbor.App.Cli.Commands;
 
@@ -49,6 +50,48 @@ internal static class DslDevCommands
             Console.Out.Write(result.Arena.DebugTree());
 
         return result.IsValid ? 0 : 1;
+    }
+
+    /// <summary>
+    ///     #2433: re-interprets markup in dev mode and reports the template
+    ///     diff decision. With one file it only builds and reports the initial
+    ///     template; with two, the second is the edited version and the
+    ///     interpreter reports patch, rebuild or restart.
+    /// </summary>
+    /// <param name="files">One or two .harbor-ui file paths (before, after).</param>
+    public static int Reload([Argument] params string[] files)
+    {
+        if (files.Length is < 1 or > 2)
+        {
+            Console.Error.WriteLine("dsl reload: expected a .harbor-ui file and an optional edited file.");
+            return 1;
+        }
+
+        foreach (var file in files)
+        {
+            if (!File.Exists(file))
+            {
+                Console.Error.WriteLine($"dsl reload: file not found: {file}");
+                return 1;
+            }
+        }
+
+        if (!DevReloadInterpreter.TryCreate(File.ReadAllText(files[0]), out var interpreter, out var error))
+        {
+            Console.Error.WriteLine("dsl reload: " + error);
+            return 1;
+        }
+
+        Console.Out.WriteLine(
+            $"initial: template={interpreter!.TemplateSignature} root={interpreter.LiveRootId} revision={interpreter.Revision}");
+        if (files.Length == 1)
+            return 0;
+
+        var result = interpreter.Reload(File.ReadAllText(files[1]));
+        Console.Out.WriteLine($"{result.Outcome}: {result.Reason}");
+        Console.Out.WriteLine(
+            $"live: root={result.LiveRootId} revision={result.Revision} preserved=[{string.Join(",", result.PreservedElementIds)}]");
+        return result.Outcome == ReloadOutcome.Rejected ? 1 : 0;
     }
 
     /// <summary>Prints the component table as a JSON schema or C# enum.</summary>
