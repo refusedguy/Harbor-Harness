@@ -78,7 +78,8 @@ internal static class RegistriesModule
         // #1055 slice 1 (graceful absence): no scripts anywhere — nothing to
         // serve. Report the absence in exactly one line. Startup stays fast,
         // the registries stay full, the exit stays normal.
-        int scriptCount = CountPluginScripts(globalPluginsDir) + CountPluginScripts(projectPluginsDir);
+        int scriptCount = CountPluginScripts(globalPluginsDir, ctx.Logger)
+                          + CountPluginScripts(projectPluginsDir, ctx.Logger);
         if (scriptCount == 0)
             return ReportPluginAbsence(ctx);
 
@@ -111,7 +112,7 @@ internal static class RegistriesModule
         return StartupPluginLoad.Empty();
     }
 
-    private static int CountPluginScripts(string dir)
+    private static int CountPluginScripts(string dir, ILogger logger)
     {
         try
         {
@@ -119,7 +120,9 @@ internal static class RegistriesModule
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Unreadable directory reads as absent — the host would skip it too.
+            // Unreadable directory reads as absent. The host would skip it too,
+            // but a plugin scope that cannot be enumerated is worth one line.
+            RegistriesModuleLog.PluginDirectoryUnreadable(logger, ex, dir);
             return 0;
         }
     }
@@ -152,4 +155,7 @@ internal static partial class RegistriesModuleLog
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "plugins: off (no host)")]
     public static partial void PluginsOffNoHost(ILogger logger);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Cannot read plugin directory '{Dir}' while counting startup scripts, treating it as empty")]
+    public static partial void PluginDirectoryUnreadable(ILogger logger, Exception ex, string dir);
 }
