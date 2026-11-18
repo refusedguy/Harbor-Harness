@@ -43,10 +43,10 @@ public class AnchoredOverlayGoldenTests
         menu.Paint(buffer, overlay.Bounds);
 
         await Assert.That(Art(buffer, 3, 6, 20)).IsEqualTo(
-            "+--------+\n"
-            + "|  Open O|\n"
-            + "|  Save S|\n"
-            + "+--------+");
+            "   +--------+\n"
+            + "   |> Open O|\n"
+            + "   |  Save S|\n"
+            + "   +--------+");
     }
 
     [Test]
@@ -63,10 +63,10 @@ public class AnchoredOverlayGoldenTests
 
         await Assert.That(overlay.Side).IsEqualTo(AnchorSide.Top);
         await Assert.That(Art(buffer, 1, 4, 20)).IsEqualTo(
-            "+--------+\n"
-            + "|  Open O|\n"
-            + "|  Save S|\n"
-            + "+--------+");
+            "   +--------+\n"
+            + "   |> Open O|\n"
+            + "   |  Save S|\n"
+            + "   +--------+");
     }
 
     [Test]
@@ -92,12 +92,12 @@ public class AnchoredOverlayGoldenTests
         menu.Paint(buffer, overlay.Bounds);
 
         await Assert.That(Art(buffer, 1, 6, 20)).IsEqualTo(
-            "+----------+\n"
-            + "|  File > F|\n"
-            + "|    New  N|\n"
-            + "|    Exit X|\n"
-            + "|  Help   H|\n"
-            + "+----------+");
+            "  +----------+\n"
+            + "  |  File > F|\n"
+            + "  |>   New  N|\n"
+            + "  |    Exit X|\n"
+            + "  |  Help   H|\n"
+            + "  +----------+");
     }
 
     [Test]
@@ -114,10 +114,10 @@ public class AnchoredOverlayGoldenTests
 
         await Assert.That(Art(buffer, 0, 4, 20)).IsEqualTo(
             "[ Action \u25be ]\n"
-            + "+--------+\n"
-            + "|  One 1|\n"
+            + "+-------+\n"
+            + "|> One 1|\n"
             + "|  Two 2|\n"
-            + "+--------+");
+            + "+-------+");
     }
 
     [Test]

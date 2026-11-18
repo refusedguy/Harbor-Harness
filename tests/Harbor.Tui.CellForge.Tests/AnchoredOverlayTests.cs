@@ -12,12 +12,6 @@ namespace Harbor.Tui.CellForge.Tests;
 // NOT CommandPalettePrimitive (#2321): no fuzzy search, aliases or history.
 public class AnchoredOverlayTests
 {
-    private static AnchoredMenu SimpleMenu() => new(
-    [
-        new MenuItem("open", "Open", "O"),
-        new MenuItem("save", "Save", "S"),
-    ]);
-
     private static AnchoredMenu TreeMenu(List<string> activated) => new(
     [
         new MenuItem("first", "First", "F"),
@@ -128,8 +122,7 @@ public class AnchoredOverlayTests
     public async Task Menu_AltMnemonicFiresHotkeyButShiftAndChordsDoNot()
     {
         var activated = new List<string>();
-        var menu = SimpleMenu();
-        menu.SetItems([new MenuItem("save", "Save", "S")]);
+        var menu = new AnchoredMenu([new MenuItem("save", "Save", "S")], activated.Add);
         menu.Open();
 
         await Assert.That(menu.HandleKey(KeyEvent.Char(new Rune('S'), KeyModifiers.Shift))).IsFalse();
