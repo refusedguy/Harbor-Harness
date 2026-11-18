@@ -86,4 +86,41 @@ internal static class CliArgs
         remaining = remainingList.ToArray();
         return scriptPath;
     }
+
+    /// <summary>
+    ///     F14: resolve a shareable prompt deep link into its prompt text. A
+    ///     link carries the prompt in its <c>prompt</c> query parameter, e.g.
+    ///     <c>https://example.com/new?prompt=Explain%20this+diff</c>. Parsing is
+    ///     deliberately scheme/host agnostic: the link is only a carrier for
+    ///     the query value, nothing in it is fetched or contacted.
+    /// </summary>
+    /// <returns>
+    ///     The decoded prompt, or <see langword="null" /> when <paramref name="url" />
+    ///     is empty or carries no non-blank <c>prompt</c> parameter.
+    /// </returns>
+    internal static string? ParsePromptLink(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+
+        int question = url.IndexOf('?');
+        if (question < 0 || question == url.Length - 1)
+            return null;
+
+        int fragment = url.IndexOf('#', question + 1);
+        string query = fragment >= 0 ? url[(question + 1)..fragment] : url[(question + 1)..];
+
+        foreach (string pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int equals = pair.IndexOf('=');
+            if (equals < 0)
+                continue;
+            string key = Uri.UnescapeDataString(pair[..equals].Replace('+', ' '));
+            if (!key.Equals("prompt", StringComparison.OrdinalIgnoreCase))
+                continue;
+            string value = Uri.UnescapeDataString(pair[(equals + 1)..].Replace('+', ' '));
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        return null;
+    }
 }

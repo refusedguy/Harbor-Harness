@@ -50,11 +50,21 @@ internal static class CafAskCommands
 {
     /// <summary>Ask the agent a one-shot question.</summary>
     /// <param name="script">Startup script path (re-attached by Program from the global --script).</param>
+    /// <param name="promptLink">
+    ///     F14: a shareable deep link whose <c>?prompt=...</c> query value becomes
+    ///     the prompt. An explicit positional prompt takes precedence and the
+    ///     link is ignored in that case; nothing is fetched from the URL.
+    /// </param>
     /// <param name="args">Prompt words (joined with spaces, as the manual verb does).</param>
     public static async Task<int> Ask(
         string? script = null,
-        [Argument]params string[] args) =>
-        await AskVerb.RunAsync(NullLogger.Instance, args, script).ConfigureAwait(false);
+        string? promptLink = null,
+        [Argument]params string[] args)
+    {
+        if (args.Length == 0 && CliArgs.ParsePromptLink(promptLink) is { } linked)
+            args = [linked];
+        return await AskVerb.RunAsync(NullLogger.Instance, args, script).ConfigureAwait(false);
+    }
 }
 
 /// <summary>
