@@ -249,9 +249,13 @@ public sealed class AnchoredMenu
         int count = Math.Min(_rows.Count, rect.Height - 2);
         for (int i = 0; i < count; i++)
         {
+            int y = rect.Y + 1 + i;
+            buffer.SetText(rect.X, y, "|", CellStyle.Plain);
+            buffer.SetText(rect.Right - 1, y, "|", CellStyle.Plain);
+
             var row = _rows[i];
             string text = RowText(row, i == _selected, inner);
-            buffer.SetText(rect.X + 1, rect.Y + 1 + i, text.AsSpan(0, Math.Min(text.Length, inner)),
+            buffer.SetText(rect.X + 1, y, text.AsSpan(0, Math.Min(text.Length, inner)),
                 i == _selected ? SelectedStyle : CellStyle.Plain);
         }
     }

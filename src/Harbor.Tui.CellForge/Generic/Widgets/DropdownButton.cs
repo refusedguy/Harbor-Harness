@@ -119,8 +119,20 @@ public sealed class DropdownButton : IFocusTarget
     /// </summary>
     public bool HandleKey(in KeyEvent key)
     {
-        if (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat
-            || !key.Modifiers.IsUnmodified())
+        if (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat)
+        {
+            return false;
+        }
+
+        // Shift+Tab is a focus gesture, not a rune: it reaches the trap even
+        // though the button's own command gate refuses modified keys.
+        if (IsOpen && key.Key == KeyCode.Tab
+            && (key.Modifiers == KeyModifiers.None || key.Modifiers == KeyModifiers.Shift))
+        {
+            return _overlay.HandleKey(key);
+        }
+
+        if (!key.Modifiers.IsUnmodified())
         {
             return false;
         }
