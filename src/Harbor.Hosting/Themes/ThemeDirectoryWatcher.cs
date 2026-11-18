@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Harbor.DesignSystem;
 
 namespace Harbor.Hosting.Themes;
@@ -76,10 +77,23 @@ public sealed class ThemeDirectoryWatcher : IDisposable
     private readonly Action<HarborTheme>? _onApplied;
     private readonly Action<string>? _onError;
     private readonly Timer _timer;
-    private readonly Dictionary<string, DateTime> _stamps = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTime> _stamps = new(StringComparer.OrdinalIgnoreCase);
+
+    // One poll at a time. A slow stat or load on a network mount can outlast the
+    // 500 ms timer; without the gate the next callback would enumerate _stamps
+    // while the first still writes it. A skipped tick is harmless because every
+    // poll re-reads the whole directory (#2618; same shape as PluginAutoReloader).
+    private int _pollGate;
+    private HarborTheme? _lastApplied;
 
     /// <summary>Theme applied by the most recent successful reload (null until the first change).</summary>
-    public HarborTheme? LastApplied { get; private set; }
+    /// <remarks>
+    ///     Written with release semantics on the timer thread and read with
+    ///     acquire semantics here: a thread that sees a new theme also sees the
+    ///     stamp updates that preceded it. The palette apply is ordered by
+    ///     <see cref="TerminalColorPalette" /> itself.
+    /// </remarks>
+    public HarborTheme? LastApplied => Volatile.Read(ref _lastApplied);
 
     /// <summary>Creates a watcher over a theme directory.</summary>
     /// <param name="directory">
@@ -111,7 +125,29 @@ public sealed class ThemeDirectoryWatcher : IDisposable
     private static Timer DisabledTimer() => new(_ => { }, null, Timeout.Infinite, Timeout.Infinite);
 
     /// <summary>One poll cycle — exposed for deterministic testing.</summary>
+    /// <remarks>
+    ///     Overlapping calls are dropped, not queued: a timer tick that arrives
+    ///     while a slow poll is still running adds no information over the next
+    ///     tick, and running it would race on <c>_stamps</c> (#2618).
+    /// </remarks>
     public void Poll()
+    {
+        if (Interlocked.CompareExchange(ref _pollGate, 1, 0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            PollCore();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _pollGate, 0);
+        }
+    }
+
+    private void PollCore()
     {
         string[] files;
         try
@@ -154,7 +190,7 @@ public sealed class ThemeDirectoryWatcher : IDisposable
 
         foreach (string gone in _stamps.Keys.Where(k => !seen.Contains(k)).ToList())
         {
-            _stamps.Remove(gone);
+            _stamps.TryRemove(gone, out _);
         }
     }
 
@@ -170,7 +206,7 @@ public sealed class ThemeDirectoryWatcher : IDisposable
         ThemeParseResult result = _store.LoadFile(path);
         if (result.IsSuccess)
         {
-            LastApplied = result.Theme;
+            Volatile.Write(ref _lastApplied, result.Theme);
             TerminalColorPalette.Apply(result.Theme);
             _onApplied?.Invoke(result.Theme);
         }

@@ -115,4 +115,87 @@ public class ThemeDirectoryWatcherTests
 
         await Assert.That(watcher.LastApplied).IsNull();
     }
+
+    /// <summary>
+    ///     #2618: a second tick while the first poll is inside a slow stat must
+    ///     be dropped. Before the gate the two callbacks iterated and wrote the
+    ///     stamp dictionary at the same time; the blocking store makes the
+    ///     overlap observable without relying on scheduling luck.
+    /// </summary>
+    [Test]
+    public async Task Poll_OverlappingTick_IsDropped()
+    {
+        string dir = TempDir();
+        try
+        {
+            TerminalColorPalette.Apply(HarborTheme.HarborDark);
+            await File.WriteAllTextAsync(Path.Combine(dir, "night.json"),
+                """{ "name": "night", "accent": "#1122ff" }""");
+
+            using var store = new BlockingFirstStatStore();
+            using var watcher = new ThemeDirectoryWatcher(dir, store, autoStart: false);
+
+            Task first = Task.Run(watcher.Poll);
+            try
+            {
+                if (!store.Entered.Wait(TimeSpan.FromSeconds(10)))
+                {
+                    throw new TimeoutException("The first poll never reached the store.");
+                }
+
+                // Would block in the store (and race on _stamps) without the gate.
+                watcher.Poll();
+
+                await Assert.That(store.StatCalls).IsEqualTo(1);
+            }
+            finally
+            {
+                store.Release();
+                await first;
+            }
+
+            await Assert.That(watcher.LastApplied?.Name).IsEqualTo("night");
+        }
+        finally
+        {
+            TerminalColorPalette.Apply(HarborTheme.HarborDark);
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>Blocks the first stat so the overlap window is deterministic.</summary>
+    private sealed class BlockingFirstStatStore : IThemeStore, IDisposable
+    {
+        private readonly IThemeStore _inner = new ThemeStore();
+        private readonly ManualResetEventSlim _entered = new();
+        private readonly ManualResetEventSlim _release = new();
+        private int _statCalls;
+
+        public ManualResetEventSlim Entered => _entered;
+        public int StatCalls => Volatile.Read(ref _statCalls);
+
+        public void Release() => _release.Set();
+
+        public bool TryGetLastWriteUtc(string path, out DateTime lastWriteUtc)
+        {
+            if (Interlocked.Increment(ref _statCalls) == 1)
+            {
+                _entered.Set();
+                if (!_release.Wait(TimeSpan.FromSeconds(10)))
+                {
+                    throw new TimeoutException("The overlapping poll was released too late.");
+                }
+            }
+
+            return _inner.TryGetLastWriteUtc(path, out lastWriteUtc);
+        }
+
+        public ThemeParseResult LoadFile(string path) => _inner.LoadFile(path);
+
+        public void Dispose()
+        {
+            _entered.Dispose();
+            _release.Dispose();
+        }
+    }
 }
