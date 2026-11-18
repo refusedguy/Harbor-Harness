@@ -33,6 +33,16 @@
                      SelectedItem="{Binding ActiveSession, Mode=TwoWay}"
                      Background="Transparent"
                      AutomationProperties.AutomationId="SessionsFlyout_List">
+                <!-- #2681 G27: the chat timeline is virtualized but the session
+                     list was not, so every row was realized on first paint. A
+                     project with hundreds of sessions paid that cost on every
+                     flyout open. Set the panel explicitly so this row count is
+                     bounded no matter which theme styles are loaded. -->
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                     <!-- FIX: items are SessionItemViewModel (SessionListViewModel.Sessions),
                          NOT SessionRowViewModel — the stale DataType made compiled
