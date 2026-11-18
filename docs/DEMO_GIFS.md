@@ -48,6 +48,50 @@ the pipe.
 ([`.gitignore`](../.gitignore)). Do not commit it, do not regenerate it as a
 deliverable, and do not treat its absence from a commit as something lost.
 
+### State coverage: what each GIF promises and who checks it
+
+The table above lists the four GIFs and their README slots. It does not say which
+states each GIF must show, or who checks them. The table below does. The first two
+columns come from the README alt text and the tape headers, and those are the
+source of truth. When a scene changes, update the matching row in the same commit
+that changes the tape or the README.
+
+| GIF | Promised state | Where the promise is recorded | Who checks |
+|---|---|---|---|
+| `hero` | Streaming markdown: headings, fenced code and an ordered list | README alt text; header of `demo/hero.tape` | Human, reading the step summary. The drift gate checks frames and duration only. |
+| `hero` | Tool call card on the timeline | README alt text; header of `demo/hero.tape` | Human |
+| `hero` | Approval gate, bash ask on CellForge | README alt text; header of `demo/hero.tape` | Human |
+| `hero` | Settled final screen after the run | tail of `demo/hero.tape`, set by `DEMO_TAPE_TAIL_SECONDS` | Machine, the reproducibility check compares the final screen |
+| `markdown` | Markdown streamed line by line into the timeline block | README alt text; header of `demo/markdown.tape` | Human |
+| `approval` | `ApprovalGateView` card held for a fixed number of frames, then committed | README alt text; header of `demo/approval.tape` | Human |
+| `approval` | Tool result rendered after the gate auto-approves | header of `demo/approval.tape` | Human |
+| `plain` | The hero scene through the plain renderer, with no frame painting | README alt text; header of `demo/plain.tape` | Human |
+| all four | The same distinct screens in the same order on two passes | `tools/gates/demo-repro/` | Machine, CI runs `reproducibility=true` when dispatched |
+| all four | Frame count, duration and size inside the baseline envelope | `assets/demo/baseline.json` | Machine, the CI drift gate |
+
+The machine checks are narrower than the table suggests. The `demo-repro`
+reproducibility mode records each tape twice and checks that the two passes agree
+on the number of distinct screens, on each screen pairwise within a dithering
+tolerance, and on the settled final screen. That is a check on the reproducibility
+of the screen sequence. It is not a check on semantic coverage. No name in the
+"Promised state" column is asserted by a gate. If the approval card disappeared
+from a GIF while size, frame count and duration stayed inside their budgets, the
+drift gate would still pass. The same gap is listed under
+[Known gaps](#known-gaps).
+
+Coverage today is complete inside the declared demo corpus and partial outside it:
+
+- 4 of 4 README slots are recorded.
+- 3 of 3 scripted scenes have a tape: `hero`, `markdown` and `approval`.
+- 2 of 3 TUI modes are recorded. `--tui cellforge` and `--tui plain` have tapes.
+  `--tui ansi` is accepted by `harbor demo` but no tape records it. The combined
+  `--scene all` run also exists in the command and is not used for any GIF.
+
+The four tapes do not cover states outside the demo command, such as deny and
+interactive ask at the permission gate, compaction, sessions, plugin hosting, MCP,
+diff view, the file tree or the Avalonia desktop. Those need their own recordings
+and are out of scope here.
+
 ## What an "intentional update" actually is
 
 This is the question the document exists to answer, so it is worth stating in a
