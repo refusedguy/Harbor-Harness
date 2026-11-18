@@ -22,7 +22,7 @@ public sealed class TileMapNodeTests
         var atlas = Atlas(3, 2);
         atlas.DefineAscii("box", ["A B", " C "], EngineCells.CellStyle.Plain);
 
-        var cells = atlas.Get("box")!.Value.Span;
+        var cells = atlas.Get("box")!.Value.ToArray();
         await Assert.That(cells.Length).IsEqualTo(6);
         await Assert.That(cells[0].Rune).IsEqualTo((int)'A');
         await Assert.That(cells[1].Rune).IsEqualTo(EngineCells.TileAtlas.TransparentRune);
