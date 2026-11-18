@@ -246,7 +246,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
-        SystemPromptAppend: "You are in PLAN mode. You can read and explore but cannot modify files. Produce a detailed plan for the user to approve."));
+        systemPromptAppend: "You are in PLAN mode. You can read and explore but cannot modify files. Produce a detailed plan for the user to approve."));
 
     /// <summary>
     ///     Returns the default <c>explore</c> sub-agent — fast read-only codebase explorer, 20 steps.
@@ -287,8 +287,8 @@ public sealed record AgentDefinition(
             new(WellKnownTools.WebFetch, "*", PermissionAction.Allow)
         }),
         20,
-        IsSubAgent: true,
-        SystemPromptAppend: "You are a fast codebase explorer. Quickly gather information and report back concisely."));
+        isSubAgent: true,
+        systemPromptAppend: "You are a fast codebase explorer. Quickly gather information and report back concisely."));
 
     /// <summary>
     ///     Returns the default <c>ask</c> mode — read-only question-answering, 50 steps.
@@ -357,7 +357,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         50,
-        SystemPromptAppend: "You are in ASK mode. Answer questions and explain code. Do not implement changes, do not modify files. When asked to change something, explain how instead."));
+        systemPromptAppend: "You are in ASK mode. Answer questions and explain code. Do not implement changes, do not modify files. When asked to change something, explain how instead."));
 
     /// <summary>
     ///     Returns the default <c>architect</c> mode — read-only software design, 100 steps.
@@ -413,7 +413,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
-        SystemPromptAppend: "You are in ARCHITECT mode. Design before code: explore the codebase, weigh trade-offs, and produce a concrete implementation plan for approval. Do not modify files."));
+        systemPromptAppend: "You are in ARCHITECT mode. Design before code: explore the codebase, weigh trade-offs, and produce a concrete implementation plan for approval. Do not modify files."));
 
     /// <summary>
     ///     Returns the default <c>debug</c> mode — failure diagnosis with approval-gated fixes, 50 steps.
@@ -478,7 +478,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
         }),
         50,
-        SystemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval."));
+        systemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval."));
 
     /// <summary>
     ///     Returns the default <c>orchestrator</c> mode — work decomposition and delegation, 100 steps.
@@ -537,7 +537,7 @@ public sealed record AgentDefinition(
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
-        SystemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done."));
+        systemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done."));
 
     /// <summary>
     ///     Returns a copy of this agent bound to a different model and provider.
