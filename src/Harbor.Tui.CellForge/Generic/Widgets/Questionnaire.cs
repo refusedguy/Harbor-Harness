@@ -356,7 +356,9 @@ public sealed class Questionnaire
                 return GoBack();
             case KeyCode.Enter:
                 return Confirm();
-            case KeyCode.Char when key.Character == new Rune(' ') && _focus < step.Values.Count:
+            case KeyCode.Char when key.Character == new Rune(' ')
+                && key.Modifiers.AcceptsTypedChar()
+                && _focus < step.Values.Count:
                 ToggleChoice(step, step.Values[_focus]);
                 return true;
         }

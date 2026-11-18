@@ -42,9 +42,9 @@ public class QuestionnaireTests
             "Step 1/2  Your name",
             Bar(Width, 24),
             "  Pick one or type another.",
-            "  ( ) Ada",
+            "> ( ) Ada",
             "  ( ) Grace",
-            "> type an answer",
+            "  type an answer",
             "  [Enter] Next  [Esc] Back");
 
         await Assert.That(questionnaire.DesiredHeight).IsEqualTo(7);
@@ -78,14 +78,14 @@ public class QuestionnaireTests
         string[] second = Lines(questionnaire);
         await Assert.That(second[0]).IsEqualTo("Step 2/2  Detail");
         await Assert.That(second[1]).IsEqualTo(Bar(Width, Width));
-        await Assert.That(second[2]).IsEqualTo("  ( ) Short");
+        await Assert.That(second[2]).IsEqualTo("> ( ) Short");
         await Assert.That(second[3]).IsEqualTo("  ( ) Long");
         await Assert.That(second[4]).IsEqualTo("  [Enter] Submit  [Esc] Back");
 
         await Assert.That(questionnaire.GoBack()).IsTrue();
         await Assert.That(questionnaire.CurrentIndex).IsEqualTo(0);
         await Assert.That(questionnaire.Answer("name").Choice).IsEqualTo("Ada");
-        await Assert.That(Lines(questionnaire)[3]).IsEqualTo("  (x) Ada");
+        await Assert.That(Lines(questionnaire)[3]).IsEqualTo("> (x) Ada");
     }
 
     [Test]

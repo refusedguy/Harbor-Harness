@@ -300,6 +300,11 @@ public class KeyGateFamilyRules
         // but V is a bound shifted rune, so its gate is the buffer one —
         // refuse Ctrl/Alt/Meta and admit Shift, exactly like DiffViewerOverlay's G.
         new("CopyMode", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/CopyMode.cs"),
+        // Questionnaire (#2383): the host-driven wizard. On choice rows space
+        // is a bound rune, gated with AcceptsTypedChar so Shift is admitted and
+        // Ctrl/Alt/Meta chords fall through; on the freeform row runes reach
+        // GenericTextField's buffer. Both halves are Buffer, so one row.
+        new("Questionnaire", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/Questionnaire.cs"),
         // ListPromptEngine (#1215, epic #1195): the Spectre List-prompt port
         // behind the palette/file-picker query lists. Char keys extend the
         // search text through AcceptsTypedChar (admits Shift, refuses
