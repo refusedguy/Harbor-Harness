@@ -73,6 +73,18 @@
     -->
     <PackageReference Include="TUnit.Assertions" />
     <PackageReference Include="CSharpFunctionalExtensions" />
+    <!--
+      #2704 T05: the shared culture fixture derives from TUnit's CultureAttribute,
+      which sets both CurrentCulture and CurrentUICulture around a test and puts
+      the ambient values back afterwards. The library needs the attribute type
+      at compile time; this is a <PackageReference> edge only, so the pinned
+      <ProjectReference> closure above stays at three assemblies.
+
+      TUnit is already resolved in every test project through
+      Directory.Build.targets, so this declares the dependency instead of
+      leaning on the consumer to supply the type.
+    -->
+    <PackageReference Include="TUnit" />
   </ItemGroup>
 
 </Project>
