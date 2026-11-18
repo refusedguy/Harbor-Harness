@@ -169,7 +169,8 @@ internal static class IssueProjection
         string? url = null;
         foreach (string line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (Uri.TryCreate(line, UriKind.Absolute, out Uri? parsed) && parsed.Scheme is "http" or "https")
+            if (line.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 url = line;
         }
 
