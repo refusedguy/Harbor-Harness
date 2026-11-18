@@ -92,6 +92,70 @@ interactive ask at the permission gate, compaction, sessions, plugin hosting, MC
 diff view, the file tree or the Avalonia desktop. Those need their own recordings
 and are out of scope here.
 
+## Measured shape of the four GIFs
+
+The drift gate reports bytes, frame count and duration, but it does not explain
+why 12 fps is the right cadence or how much of a GIF is actual motion. The
+numbers below were measured on 2026-11-18 against the committed artifacts (the
+four blobs under `assets/demo/` had not changed since 2026-09-29). They are a
+dated snapshot, not a baseline: the gate's envelope lives in
+[`assets/demo/baseline.json`](../assets/demo/baseline.json) and is rewritten by
+the workflow on `dev`, never by a pull request.
+
+All four GIFs are 1200x620. GIF stores delays in centiseconds: two thirds of the
+frames carry 8 cs and one third carry 9 cs, mean 8.333 cs, which is exactly
+12 fps. `ffprobe` prints `avg_frame_rate=25/2` because it rounds the 9 cs frames
+down to 8 cs. That is a container artifact, not a frame-rate change; the real
+cadence is the `GIF_FPS=12` pinned in
+[`demo/toolchain.lock`](../demo/toolchain.lock) and the `Set Framerate 12` in
+every tape.
+
+| GIF | Bytes | Frames | Duration | Real fps | Delays (cs) | Unique screens | Transitions/s | Frames with a new screen |
+|---|---:|---:|---:|---:|---|---:|---:|---:|
+| `hero` | 286 432 | 216 | 18 000 ms | 12.0 | 8: 144, 9: 72 | 17 | 1.72 | 7.87 % |
+| `markdown` | 240 094 | 204 | 17 000 ms | 12.0 | 8: 136, 9: 68 | 16 | 1.71 | 7.84 % |
+| `approval` | 267 129 | 312 | 26 000 ms | 12.0 | 8: 208, 9: 104 | 25 | 1.81 | 8.01 % |
+| `plain` | 169 574 | 132 | 11 000 ms | 12.0 | 8: 88, 9: 44 | 10 | 1.55 | 7.58 % |
+
+The total is 963 229 B (940.7 KiB). The largest file is 5.5 % of the 5 MiB
+absolute budget, so the `+20 %` relative limit is the binding byte check.
+
+Playback is event-driven. About 92 % of frames repeat a screen that is already
+on the timeline; roughly one new screen and 1.5 to 1.8 screen transitions happen
+per second. The screen changes when the mock LLM emits another line, when an
+approval card is painted or when the scene settles. Lowering the frame rate would
+shorten the holds without adding states, and it is a recording-input change:
+it needs a full re-record and a green drift gate, so it is not a local edit.
+
+Size cannot be pinned the way frame count can. Twenty-five recordings of one
+unchanged tape produced 22 distinct `hero` sizes (287 428 to 303 650 B, a 5.64 %
+spread) and 23 distinct frame digests at identical pixels. That is why the gate
+checks only `+20 %` and 5 MiB and why there is no byte-size ratchet. There is no
+separate size optimizer either: the encoder's 256-color palette,
+`stats_mode=diff` and Bayer dither 3 are set in `tools/gates/demo-repro/`, and
+growth in the history came from deterministic pacing and the CellForge switch
+(#639), not from an omitted optimization step.
+
+To reproduce the walk, ask the compiled gate for one GIF's shape; it is the
+single GIF reader, so the python checks delegate to it instead of walking
+blocks again:
+
+```bash
+for name in hero markdown approval plain; do
+  tools/bin/harbor-gates-linux-x64 demo-repro measure \
+    --input assets/demo/${name}-compressed.gif
+done
+
+# Cross-check the raster, frame count and the two frame-rate columns.
+ffprobe -v error -select_streams v:0 \
+  -show_entries stream=width,height,nb_frames,r_frame_rate,avg_frame_rate,duration \
+  -of default=noprint_wrappers=1 assets/demo/hero-compressed.gif
+```
+
+`measure` prints `bytes`, `width`, `height`, `frames`, `durationMs`, `delays`,
+`uniqueFrames`, `fileSha256` and `framesSha256` as JSON. Everything else in the
+table above is arithmetic over those fields.
+
 ## What an "intentional update" actually is
 
 This is the question the document exists to answer, so it is worth stating in a
