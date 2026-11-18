@@ -16,71 +16,89 @@ public sealed record LspServerDefinition(
     string[] Args,
     IReadOnlyList<string> Extensions)
 {
+    /// <summary>
+    ///     LSP language id sent in <c>textDocument/didOpen</c>. Builtin servers
+    ///     declare it explicitly; a custom definition that does not declare it
+    ///     keeps the historical fallback to the lowercased language name.
+    /// </summary>
+    public string LanguageId { get; init; } = Language.ToLowerInvariant();
+
     /// <summary>typescript-language-server (ts/tsx/js/jsx).</summary>
     public static LspServerDefinition TypeScript { get; } = new(
         "typescript", "TypeScript",
         "typescript-language-server", ["--stdio"],
-        [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+        [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"])
+    { LanguageId = "typescript" };
 
     /// <summary>pyright-langserver (py).</summary>
     public static LspServerDefinition Python { get; } = new(
         "python", "Python",
         "pyright-langserver", ["--stdio"],
-        [".py", ".pyi"]);
+        [".py", ".pyi"])
+    { LanguageId = "python" };
 
     /// <summary>gopls (go).</summary>
     public static LspServerDefinition Go { get; } = new(
         "go", "Go",
         "gopls", ["run"],
-        [".go"]);
+        [".go"])
+    { LanguageId = "go" };
 
     /// <summary>rust-analyzer (rs).</summary>
     public static LspServerDefinition Rust { get; } = new(
         "rust", "Rust",
         "rust-analyzer", [],
-        [".rs"]);
+        [".rs"])
+    { LanguageId = "rust" };
 
     /// <summary>csharp-ls (cs).</summary>
     public static LspServerDefinition CSharp { get; } = new(
         "csharp", "C#",
         "csharp-ls", [],
-        [".cs"]);
+        [".cs"])
+    { LanguageId = "csharp" };
 
     /// <summary>clangd (C/C++).</summary>
     public static LspServerDefinition Clangd { get; } = new(
         "clangd", "C/C++",
         "clangd", [],
-        [".c", ".h", ".cpp", ".hpp", ".cc", ".cxx"]);
+        [".c", ".h", ".cpp", ".hpp", ".cc", ".cxx"])
+    { LanguageId = "c/c++" };
 
     /// <summary>Eclipse JDT language server (Java).</summary>
     public static LspServerDefinition Java { get; } = new(
         "java", "Java",
         "jdtls", [],
-        [".java"]);
+        [".java"])
+    { LanguageId = "java" };
 
     /// <summary>vscode-html-language-server (HTML).</summary>
     public static LspServerDefinition Html { get; } = new(
         "html", "HTML",
         "vscode-html-language-server", ["--stdio"],
-        [".html", ".htm"]);
+        [".html", ".htm"])
+    { LanguageId = "html" };
 
     /// <summary>vscode-css-language-server (CSS/SCSS/Less).</summary>
     public static LspServerDefinition Css { get; } = new(
         "css", "CSS",
         "vscode-css-language-server", ["--stdio"],
-        [".css", ".scss", ".less"]);
+        [".css", ".scss", ".less"])
+    { LanguageId = "css" };
 
     /// <summary>vscode-json-language-server (JSON).</summary>
     public static LspServerDefinition Json { get; } = new(
         "json", "JSON",
         "vscode-json-language-server", ["--stdio"],
-        [".json", ".jsonc"]);
+        [".json", ".jsonc"])
+    { LanguageId = "json" };
 
     /// <summary>lua-language-server (Lua).</summary>
     public static LspServerDefinition Lua { get; } = new(
         "lua", "Lua",
         "lua-language-server", [],
-        [".lua"]);
+        [".lua"])
+    { LanguageId = "lua" };
 
     /// <summary>The builtin language servers, in default startup order.</summary>
     public static IReadOnlyList<LspServerDefinition> Builtin { get; } =
