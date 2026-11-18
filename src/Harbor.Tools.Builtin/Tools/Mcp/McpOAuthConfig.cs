@@ -50,10 +50,6 @@ public sealed record McpOAuthConfig
     /// <summary>Loopback port for the browser-redirect listener. 0 → any free port.</summary>
     public int RedirectPort { get; init; }
 
-    /// <summary>Parse the <c>auth</c> block of an mcp.json remote entry. Unknown fields ignored.</summary>
-    public static McpOAuthConfig? Parse(JsonElement element) =>
-        ParseResult(element).Match(static cfg => cfg.HasValue ? cfg.Value : null, _ => null);
-
     /// <summary>
     ///     Result railway for the <c>auth</c> block (#201 A6): a missing
     ///     <c>auth</c> block is <c>Success(Maybe.None)</c> (valid no-auth server —

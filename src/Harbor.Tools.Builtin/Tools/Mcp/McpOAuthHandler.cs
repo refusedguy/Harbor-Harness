@@ -204,8 +204,9 @@ public sealed class McpOAuthHandler : IDisposable
         if (string.IsNullOrEmpty(clientId) && endpoints.RegistrationEndpoint is not null)
         {
             string redirectProbe = LoopbackRedirectUri(0);
-            string? registered = await McpOAuthFlow.RegisterClientAsync(
-                _http, endpoints.RegistrationEndpoint, redirectProbe, _config.Scopes, cancellationToken).ConfigureAwait(false);
+            string? registered = (await McpOAuthFlow.RegisterClientResultAsync(
+                    _http, endpoints.RegistrationEndpoint, redirectProbe, _config.Scopes, cancellationToken).ConfigureAwait(false))
+                .Match(static id => id.HasValue ? id.Value : null, static _ => null);
             if (!string.IsNullOrEmpty(registered))
             {
                 clientId = registered;
@@ -351,7 +352,8 @@ public sealed class McpLoopbackListener : IAsyncDisposable
             var buffer = new byte[8192];
             int read = await stream.ReadAsync(buffer, timeout.Token).ConfigureAwait(false);
             string request = Encoding.ASCII.GetString(buffer, 0, read);
-            string? code = ParseQuery(request, "code", expectedState);
+            string? code = McpLoopbackListener.ParseQueryResult(request, "code", expectedState)
+                .Match(static parsed => parsed.HasValue ? parsed.Value : null, static _ => null);
             string body = code is not null
                 ? "<html><body><h1>Harbor: login complete — return to the terminal.</h1></body></html>"
                 : "<html><body><h1>Harbor: login failed (state mismatch) — retry.</h1></body></html>";
@@ -367,9 +369,6 @@ public sealed class McpLoopbackListener : IAsyncDisposable
             return null;
         }
     }
-
-    public static string? ParseQuery(string requestLine, string key, string expectedState) =>
-        ParseQueryResult(requestLine, key, expectedState).Match(static code => code.HasValue ? code.Value : null, _ => null);
 
     /// <summary>
     ///     Result railway for the loopback redirect (#201 A7): a well-formed

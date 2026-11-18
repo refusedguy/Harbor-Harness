@@ -137,24 +137,6 @@ public static class McpOAuthFlow
     }
 
     /// <summary>
-    ///     Dynamic client registration (RFC7591). Returns the assigned client
-    ///     id, or null when the server has no registration endpoint or rejects.
-    ///     Compat wrapper over <see cref="RegisterClientResultAsync" />: transport
-    ///     problems map to null (callers fall back to the default client id).
-    /// </summary>
-    public static async Task<string?> RegisterClientAsync(
-        HttpClient http,
-        string registrationEndpoint,
-        string redirectUri,
-        IReadOnlyList<string> scopes,
-        CancellationToken cancellationToken = default)
-    {
-        Result<Maybe<string>> registered = await RegisterClientResultAsync(
-            http, registrationEndpoint, redirectUri, scopes, cancellationToken).ConfigureAwait(false);
-        return registered.Match(static id => id.HasValue ? id.Value : null, _ => null);
-    }
-
-    /// <summary>
     ///     Result railway for dynamic client registration (#201 A6): a server
     ///     rejection stays <c>Success(Maybe.None)</c> (callers fall back to the default
     ///     client id — same as before); unreachable/timeout/malformed responses

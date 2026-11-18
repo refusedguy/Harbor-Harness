@@ -181,7 +181,8 @@ public sealed class McpServersConfigLoader
                     if (h.Value.ValueKind == JsonValueKind.String)
                         cfg.Headers[h.Name] = h.Value.GetString()!;
             }
-            cfg.OAuth = McpOAuthConfig.Parse(server.Value);
+            cfg.OAuth = McpOAuthConfig.ParseResult(server.Value)
+                .Match(static oauth => oauth.HasValue ? oauth.Value : null, static _ => null);
 
             map[server.Name] = cfg;
         }

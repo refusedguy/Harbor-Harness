@@ -244,7 +244,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                                 headers[h.Name] = h.Value.GetString()!;
                     }
 
-                    McpOAuthConfig? oauth = McpOAuthConfig.Parse(value);
+                    McpOAuthConfig? oauth = McpOAuthConfig.ParseResult(value).Match(static cfg => cfg.HasValue ? cfg.Value : null, static _ => null);
                     registration = Register(
                         name, urlEl.GetString() ?? string.Empty, transport ?? McpTransportNames.Http, headers, oauth);
                 }
