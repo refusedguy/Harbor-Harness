@@ -328,6 +328,18 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
+        // Sheet (issue #2376): an open sheet owns the keystroke like the other
+        // modal overlays. SheetOverlay.HandleKey consumes Escape (close) and
+        // Tab / Shift+Tab (the FocusRouter trap); every other key is swallowed
+        // here, so nothing beneath the modal barrier receives it. The host
+        // calls the sheet directly — no new overlay key route is introduced.
+        if (host.Sheet.IsOpen)
+        {
+            _ = host.Sheet.HandleKey(key);
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
         // Image zoom viewer (issue #387) is MODAL, so it forms the outermost
         // input barrier: it claims keys BEFORE the palette, the setup guide,
         // the approval gate, the tool cards and the composer — a zoomed

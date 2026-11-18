@@ -594,6 +594,13 @@ public sealed record ChatScreen(
     /// </summary>
     public FloatingTerminalController FloatingTerminal { get; } = new();
 
+    /// <summary>
+    /// Edge sheet (issue #2376). The host owns its open/progress state;
+    /// <see cref="SyncOverlays"/> seats its layer on the same z-stack as the
+    /// other overlays, so no new overlay plane is introduced.
+    /// </summary>
+    public SheetOverlay Sheet { get; } = new();
+
     private DialogOverlayLayer? _dialogLayer;
     private ToastOverlayLayer? _toastLayer;
     private DiffViewerOverlayLayer? _diffLayer;
@@ -601,6 +608,7 @@ public sealed record ChatScreen(
     private ImageViewerOverlayLayer? _imageLayer;
     private MarkupOverlayLayer? _markupLayer;
     private FloatingTerminalOverlayLayer? _floatingLayer;
+    private SheetOverlayLayer? _sheetLayer;
 
     /// <summary>Ratio the tab-strip split was last driven to, so a frame that
     /// re-derives the SAME row count claims no damage it did not cause — the
@@ -629,6 +637,7 @@ public sealed record ChatScreen(
         _imageLayer ??= new ImageViewerOverlayLayer(ImageViewer);
         _markupLayer ??= new MarkupOverlayLayer(Markup);
         _floatingLayer ??= new FloatingTerminalOverlayLayer(FloatingTerminal);
+        _sheetLayer ??= new SheetOverlayLayer(Sheet);
         _dialogLayer.Sync(viewport);
         _toastLayer.Sync(viewport);
         _diffLayer.Sync(viewport);
@@ -636,6 +645,7 @@ public sealed record ChatScreen(
         _imageLayer.Sync(viewport);
         _markupLayer.Sync(viewport);
         _floatingLayer.Sync(viewport);
+        _sheetLayer.Sync(viewport);
         if (_dialogLayer.Visible)
         {
             Tree.Overlays.Push(_dialogLayer);
@@ -695,6 +705,17 @@ public sealed record ChatScreen(
         else
         {
             Tree.Overlays.Remove(FloatingTerminalOverlayLayer.LayerId);
+        }
+
+        // The sheet (issue #2376) occupies the same modal plane as the floating
+        // pane; it paints above that pane and below the transient toasts.
+        if (_sheetLayer.Visible)
+        {
+            Tree.Overlays.Push(_sheetLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(SheetOverlayLayer.LayerId);
         }
 
         if (_toastLayer.Visible)
