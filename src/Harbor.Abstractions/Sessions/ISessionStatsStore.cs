@@ -17,6 +17,8 @@
 // the stats semantics — including the three-way divergence the docs below
 // record.
 
+using Harbor.Abstractions.Models;
+
 namespace Harbor.Abstractions.Sessions;
 
 /// <summary>
