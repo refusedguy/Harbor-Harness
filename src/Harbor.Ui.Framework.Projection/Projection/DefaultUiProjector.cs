@@ -54,16 +54,16 @@ namespace Harbor.Ui.Framework.Projection;
 ///         <b>Thread-safety (#605):</b> the projector holds one mutable field —
 ///         the projection cache — and it is <c>volatile</c>. Publication is
 ///         therefore safe: a caller either reads <see langword="null" /> or a
-///         fully-initialised <see cref="ProjectionCache" />, never a reference
-///         whose fields are still at their defaults. The cache object is written
-///         once, in the single object initialiser at the end of
-///         <see cref="Project" />, and is never mutated afterwards, so a shared
-///         instance cannot hand out a torn model. The first-occurrence map is
-///         persistent (<see cref="ImmutableDictionary{TKey,TValue}" />): an
-///         append derives a NEW map by structural sharing and publishes it with
-///         the next cache, leaving every earlier cache unchanged. This is the
-///         same release/acquire pair <c>UiStore._state</c> documents for exactly
-///         the same reason, and it is what makes the desktop host's
+///         fully-initialised <see cref="ProjectionSnapshot" />, never a reference
+///         whose members are still at their defaults. <see cref="CreateSnapshot" />
+///         is the only construction site, and the snapshot is never changed
+///         afterwards, so a shared instance cannot hand out a torn model. The
+///         first-occurrence map is persistent
+///         (<see cref="ImmutableDictionary{TKey,TValue}" />): an append derives a
+///         NEW map by structural sharing and publishes it with the next snapshot,
+///         leaving every earlier one unchanged. This is the same release/acquire
+///         pair <c>UiStore._state</c> documents for exactly the same reason, and
+///         it is what makes the desktop host's
 ///         <c>AddSingleton&lt;DefaultUiProjector&gt;</c> honest.
 ///     </para>
 ///     <para>
@@ -89,12 +89,12 @@ public sealed class DefaultUiProjector : IUiProjector
     // (apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs), so Project
     // must be safe to call from more than one thread. `volatile` supplies the
     // release on the write below and the acquire on the read in Project, which
-    // is what makes the six `required` models of ProjectionCache visible to a
+    // is what makes the `required` members of ProjectionSnapshot visible to a
     // second thread the moment it can see the reference. Without it, ECMA-335
-    // permits observing the reference while the fields are still default —
+    // permits observing the reference while the members are still default —
     // turning a cache miss into a NullReferenceException at the three reuse
     // sites below. Same rationale UiStore._state records at UiStore.cs:66-71.
-    private volatile ProjectionCache? _cache;
+    private volatile ProjectionSnapshot? _cache;
 
     /// <inheritdoc />
     public UiScreenModel Project(UiState state)
@@ -180,36 +180,7 @@ public sealed class DefaultUiProjector : IUiProjector
                 StateRevision: ComputeRevision(state));
         }
 
-        _cache = new ProjectionCache
-        {
-            State = state,
-            Screen = screen,
-            Transcript = transcript,
-            Lines = state.Chat.Lines,
-            BaseRendered = history.Rendered,
-            BaseBlocks = history.Blocks,
-            FirstIndex = history.FirstIndex,
-            IsStreaming = state.Chat.IsStreaming,
-            ThinkBuf = thinkBuf,
-            TextBuf = textBuf,
-            TailRendered = tail.Rendered,
-            TailBlocks = tail.Blocks,
-            Model = state.Chat.Model,
-            Provider = state.Chat.Provider,
-            AgentName = state.Chat.AgentName,
-            Status = state.Chat.Status,
-            InputText = state.Ui.Input.Text,
-            IsAgentRunning = state.Chat.IsAgentRunning,
-            ShouldQuit = state.Ui.ShouldQuit,
-            Focus = state.Ui.Focus,
-            Cost = state.Chat.Cost,
-            TotalLines = state.Ui.TotalLines,
-            ViewportLines = state.Ui.ViewportLines,
-            ScrollOffset = state.Ui.ScrollOffset,
-            Header = chrome.Header,
-            StatusBar = chrome.StatusBar,
-            Input = chrome.Input
-        };
+        _cache = CreateSnapshot(state, screen, transcript, chrome, history, tail, thinkBuf, textBuf);
 
         return screen;
     }
@@ -235,25 +206,25 @@ public sealed class DefaultUiProjector : IUiProjector
     private readonly record struct TailModels(ImmutableArray<UiRenderedLine> Rendered, ImmutableArray<UiBlock> Blocks, bool Unchanged);
 
     /// <summary>Projects header / status bar / input, reusing cached models when the chrome fingerprint matches.</summary>
-    private static ChromeModels ProjectChrome(UiState state, ProjectionCache? cache)
+    private static ChromeModels ProjectChrome(UiState state, ProjectionSnapshot? cache)
     {
         // ── Chrome fingerprint (header / status bar / input) ──
         bool chromeSame = cache is not null
-            && ReferenceEquals(cache.Model, state.Chat.Model)
-            && ReferenceEquals(cache.Provider, state.Chat.Provider)
-            && ReferenceEquals(cache.AgentName, state.Chat.AgentName)
-            && ReferenceEquals(cache.Status, state.Chat.Status)
-            && ReferenceEquals(cache.InputText, state.Ui.Input.Text)
-            && cache.IsAgentRunning == state.Chat.IsAgentRunning
-            && cache.IsStreaming == state.Chat.IsStreaming
-            && cache.ShouldQuit == state.Ui.ShouldQuit
-            && cache.Focus == state.Ui.Focus
-            && cache.Cost == state.Chat.Cost
-            && cache.TotalLines == state.Ui.TotalLines
-            && cache.ViewportLines == state.Ui.ViewportLines
-            && cache.ScrollOffset == state.Ui.ScrollOffset;
+            && ReferenceEquals(cache.Chrome.Model, state.Chat.Model)
+            && ReferenceEquals(cache.Chrome.Provider, state.Chat.Provider)
+            && ReferenceEquals(cache.Chrome.AgentName, state.Chat.AgentName)
+            && ReferenceEquals(cache.Chrome.Status, state.Chat.Status)
+            && ReferenceEquals(cache.Chrome.InputText, state.Ui.Input.Text)
+            && cache.Chrome.IsAgentRunning == state.Chat.IsAgentRunning
+            && cache.Tail.IsStreaming == state.Chat.IsStreaming
+            && cache.Chrome.ShouldQuit == state.Ui.ShouldQuit
+            && cache.Chrome.Focus == state.Ui.Focus
+            && cache.Chrome.Cost == state.Chat.Cost
+            && cache.Chrome.TotalLines == state.Ui.TotalLines
+            && cache.Chrome.ViewportLines == state.Ui.ViewportLines
+            && cache.Chrome.ScrollOffset == state.Ui.ScrollOffset;
 
-        var header = chromeSame ? cache!.Header : new UiHeaderModel(
+        var header = chromeSame ? cache!.Chrome.Header : new UiHeaderModel(
             Model: state.Chat.Model,
             Provider: state.Chat.Provider,
             AgentName: state.Chat.AgentName,
@@ -263,9 +234,9 @@ public sealed class DefaultUiProjector : IUiProjector
             Cost: state.Chat.Cost,
             FooterText: ProjectFooter(state));
 
-        var statusBar = chromeSame ? cache!.StatusBar : ProjectStatusBar(state);
+        var statusBar = chromeSame ? cache!.Chrome.StatusBar : ProjectStatusBar(state);
 
-        var input = chromeSame ? cache!.Input : new UiInputModel(
+        var input = chromeSame ? cache!.Chrome.Input : new UiInputModel(
             Text: state.Ui.Input.Text,
             Caret: state.Ui.Input.Text.Length,
             IsEnabled: !state.Chat.IsAgentRunning,
@@ -275,17 +246,17 @@ public sealed class DefaultUiProjector : IUiProjector
     }
 
     /// <summary>Projects history rows, reusing the cached prefix on append-only transcript growth.</summary>
-    private static HistoryModels ProjectHistory(UiState state, ProjectionCache? cache)
+    private static HistoryModels ProjectHistory(UiState state, ProjectionSnapshot? cache)
     {
         // ── History rows ──
-        bool linesSame = cache is not null && state.Chat.Lines.Equals(cache.Lines);
+        bool linesSame = cache is not null && state.Chat.Lines.Equals(cache.History.Lines);
         ImmutableArray<UiRenderedLine> baseRendered;
         ImmutableArray<UiBlock> baseBlocks;
         if (linesSame)
         {
-            baseRendered = cache!.BaseRendered;
-            baseBlocks = cache.BaseBlocks;
-            return new HistoryModels(baseRendered, baseBlocks, Unchanged: true, FirstIndex: cache.FirstIndex);
+            baseRendered = cache!.History.Rendered;
+            baseBlocks = cache.History.Blocks;
+            return new HistoryModels(baseRendered, baseBlocks, Unchanged: true, FirstIndex: cache.FirstIndex.Map);
         }
 
         // Common-prefix scan: transcript updates are append-only in the
@@ -294,8 +265,8 @@ public sealed class DefaultUiProjector : IUiProjector
         int commonPrefix = 0;
         if (cache is not null)
         {
-            int limit = Math.Min(cache.Lines.Length, state.Chat.Lines.Length);
-            while (commonPrefix < limit && cache.Lines[commonPrefix].Equals(state.Chat.Lines[commonPrefix]))
+            int limit = Math.Min(cache.History.Lines.Length, state.Chat.Lines.Length);
+            while (commonPrefix < limit && cache.History.Lines[commonPrefix].Equals(state.Chat.Lines[commonPrefix]))
             {
                 commonPrefix++;
             }
@@ -307,16 +278,12 @@ public sealed class DefaultUiProjector : IUiProjector
         // full map stays for a changed prefix: entries left over from beyond
         // the common prefix would return stale first-occurrence indices once
         // the history is rewritten underneath them.
-        bool pureAppend = cache is not null
-            && commonPrefix == cache.Lines.Length
-            && cache.FirstIndex is not null;
-
         var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(state.Chat.Lines.Length);
         var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(state.Chat.Lines.Length);
         if (commonPrefix > 0)
         {
-            renderedBuilder.AddRange(cache!.BaseRendered.AsSpan().Slice(0, commonPrefix));
-            blockBuilder.AddRange(cache.BaseBlocks.AsSpan().Slice(0, commonPrefix));
+            renderedBuilder.AddRange(cache!.History.Rendered.AsSpan().Slice(0, commonPrefix));
+            blockBuilder.AddRange(cache.History.Blocks.AsSpan().Slice(0, commonPrefix));
         }
 
         void Emit(int i, int firstIndex)
@@ -344,9 +311,11 @@ public sealed class DefaultUiProjector : IUiProjector
         // allocations every fold, which the #1535 per-change budget rejects.
         // A persistent map keeps extension proportional to the appended lines.
         ImmutableDictionary<ChatLine, int> firstOccurrence;
-        if (pureAppend)
+        if (cache is not null
+            && commonPrefix == cache.History.Lines.Length
+            && cache.FirstIndex.Map is { } cachedFirstIndex)
         {
-            firstOccurrence = cache!.FirstIndex!;
+            firstOccurrence = cachedFirstIndex;
             for (int i = commonPrefix; i < state.Chat.Lines.Length; i++)
             {
                 ChatLine line = state.Chat.Lines[i];
@@ -397,22 +366,22 @@ public sealed class DefaultUiProjector : IUiProjector
     }
 
     /// <summary>Projects the streaming tail, rebuilding only when a buffer reference changed.</summary>
-    private static TailModels ProjectTail(UiState state, ProjectionCache? cache, string? thinkBuf, string? textBuf)
+    private static TailModels ProjectTail(UiState state, ProjectionSnapshot? cache, string? thinkBuf, string? textBuf)
     {
         // ── Streaming tail (rebuilt only when a buffer reference changed) ──
         // Reference equality suffices: buffers are immutable strings replaced
         // wholesale on flush, so a changed reference IS changed content.
         bool tailSame = cache is not null
-            && cache.IsStreaming == state.Chat.IsStreaming
-            && ReferenceEquals(cache.ThinkBuf, thinkBuf)
-            && ReferenceEquals(cache.TextBuf, textBuf);
+            && cache.Tail.IsStreaming == state.Chat.IsStreaming
+            && ReferenceEquals(cache.Tail.ThinkBuf, thinkBuf)
+            && ReferenceEquals(cache.Tail.TextBuf, textBuf);
 
         ImmutableArray<UiRenderedLine> tailRendered;
         ImmutableArray<UiBlock> tailBlocks;
         if (tailSame)
         {
-            tailRendered = cache!.TailRendered;
-            tailBlocks = cache.TailBlocks;
+            tailRendered = cache!.Tail.Rendered;
+            tailBlocks = cache.Tail.Blocks;
         }
         else
         {
@@ -470,88 +439,114 @@ public sealed class DefaultUiProjector : IUiProjector
     }
 
     /// <summary>
-    ///     Snapshot of the last projection and its cache keys. Written once, in a single
-    ///     object initializer at the end of <see cref="Project" />, and read-only thereafter.
+    ///     Immutable snapshot of the last projection. <see cref="CreateSnapshot" /> is the
+    ///     only construction site; the three fingerprint records group the keys by the
+    ///     projector that reads them.
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         <see cref="FirstIndex" /> is read-only too. <see cref="ProjectHistory" />
-    ///         derives a new persistent map on a pure append (issue #1535) by
-    ///         structural sharing, so no earlier cache is mutated and no lock is
-    ///         needed. A full-map rebuild still happens on a changed prefix,
-    ///         where entries beyond that prefix would answer stale
-    ///         first-occurrence indices. Each published map covers the cached
-    ///         <see cref="Lines" /> exactly.
+    ///         <see cref="FirstIndex" /> holds the persistent first-occurrence map, kept
+    ///         apart from the snapshot because <see cref="ProjectHistory" /> replaces it by
+    ///         structural sharing on a pure append (issue #1535). A changed prefix rebuilds
+    ///         it. Every published map covers <see cref="HistoryFingerprint.Lines" /> exactly.
     ///     </para>
     ///     <para>
-    ///         The six members marked <see langword="required" /> are <b>never</b> absent —
-    ///         they are either assigned by that initializer or the type does not exist yet.
-    ///         They used to be declared <c>= null!</c>, which is a lie the compiler was asked
-    ///         to accept: nothing stopped a second construction site from forgetting one, and
-    ///         a forgotten member would surface as a <see cref="NullReferenceException" /> at
-    ///         one of the three reuse sites below (<see cref="Project" /> lines 70, 112 and
-    ///         134) with nothing pointing back at the cache.
+    ///         Every member is <see langword="required" />: the factory assigns all of them,
+    ///         and a new construction site cannot forget one and still compile. Absence is
+    ///         not a valid state here, so <c>Maybe&lt;T&gt;</c> would only move the null
+    ///         somewhere else.
     ///     </para>
     ///     <para>
-    ///         <see langword="required" /> is the fix rather than
-    ///         <c>Maybe&lt;T&gt;</c>: absence is not the model here — there is no
-    ///         "widget in another state" and no working default to fall back to, so making
-    ///         the members optional would only move the null somewhere else. Requiring them
-    ///         makes the compiler state the invariant instead of a comment.
-    ///     </para>
-    ///     <para>
-    ///         Every dereference of this cache is guarded by a <c>ReferenceEquals</c> or a
-    ///         fingerprint comparison against the state being projected, so <b>publication</b>
-    ///         is the one remaining assumption. #605 closed it: the field holding this cache
-    ///         is <c>volatile</c>, so a second thread that can see the reference is
-    ///         guaranteed to see every member below assigned, even though the desktop host
-    ///         registers the projector as a singleton. Nothing in this object is mutated
-    ///         after publication, including <see cref="FirstIndex" />, so the release/acquire
-    ///         pair is sufficient without a lock.
+    ///         Every read is guarded by a <c>ReferenceEquals</c> or a fingerprint comparison
+    ///         against the state being projected. Publication is the one remaining
+    ///         assumption. #605 closed it by making the field <c>volatile</c>, so a second
+    ///         thread that sees the reference sees the members too. Nothing in the snapshot
+    ///         or the map changes after publication, so no lock is needed.
     ///     </para>
     /// </remarks>
-    private sealed class ProjectionCache
+    private sealed record ProjectionSnapshot
     {
-        public required UiState State;
-        public required UiScreenModel Screen;
-        public required UiTranscriptModel Transcript;
-
-        // History rows: keyed by the Lines backing-array reference.
-        public ImmutableArray<ChatLine> Lines;
-        public ImmutableArray<UiRenderedLine> BaseRendered;
-        public ImmutableArray<UiBlock> BaseBlocks;
-
-        // First-occurrence map over `Lines` (issue #1535): for every line, the
-        // index of its first equal occurrence — the BlockId semantics. Covers
-        // `Lines` exactly by construction. A pure append derives a new map by
-        // structural sharing; a changed prefix rebuilds it. Never mutated once
-        // published, so volatile publication is enough for concurrent readers.
-        public ImmutableDictionary<ChatLine, int>? FirstIndex;
-
-        // Streaming tail: keyed by IsStreaming + normalized buffer references.
-        public bool IsStreaming;
-        public string? ThinkBuf;
-        public string? TextBuf;
-        public ImmutableArray<UiRenderedLine> TailRendered;
-        public ImmutableArray<UiBlock> TailBlocks;
-
-        // Chrome fingerprint + reusable chrome models.
-        public string Model = string.Empty;
-        public string Provider = string.Empty;
-        public string AgentName = string.Empty;
-        public string Status = string.Empty;
-        public string? InputText;
-        public bool IsAgentRunning;
-        public bool ShouldQuit;
-        public FocusMode Focus;
-        public CostSnapshot Cost;
-        public int TotalLines;
-        public int ViewportLines;
-        public int ScrollOffset;
-        public required UiHeaderModel Header;
-        public required UiStatusBarModel StatusBar;
-        public required UiInputModel Input;
+        public required UiState State { get; init; }
+        public required UiScreenModel Screen { get; init; }
+        public required UiTranscriptModel Transcript { get; init; }
+        public required HistoryFingerprint History { get; init; }
+        public required TailFingerprint Tail { get; init; }
+        public required ChromeFingerprint Chrome { get; init; }
+        public required FirstIndexHolder FirstIndex { get; init; }
     }
+
+    /// <summary>History rows, keyed by the <see cref="HistoryFingerprint.Lines" /> backing-array reference.</summary>
+    private readonly record struct HistoryFingerprint(
+        ImmutableArray<ChatLine> Lines,
+        ImmutableArray<UiRenderedLine> Rendered,
+        ImmutableArray<UiBlock> Blocks);
+
+    /// <summary>Streaming tail, keyed by the streaming flag and normalized buffer references.</summary>
+    private readonly record struct TailFingerprint(
+        bool IsStreaming,
+        string? ThinkBuf,
+        string? TextBuf,
+        ImmutableArray<UiRenderedLine> Rendered,
+        ImmutableArray<UiBlock> Blocks);
+
+    /// <summary>Chrome inputs and the reusable chrome models.</summary>
+    private readonly record struct ChromeFingerprint(
+        string Model,
+        string Provider,
+        string AgentName,
+        string Status,
+        string? InputText,
+        bool IsAgentRunning,
+        bool ShouldQuit,
+        FocusMode Focus,
+        CostSnapshot Cost,
+        int TotalLines,
+        int ViewportLines,
+        int ScrollOffset,
+        UiHeaderModel Header,
+        UiStatusBarModel StatusBar,
+        UiInputModel Input);
+
+    /// <summary>The persistent first-occurrence map, held apart from the immutable snapshot.</summary>
+    private readonly record struct FirstIndexHolder
+    {
+        public required ImmutableDictionary<ChatLine, int>? Map { get; init; }
+    }
+
+    private static ProjectionSnapshot CreateSnapshot(
+        UiState state,
+        UiScreenModel screen,
+        UiTranscriptModel transcript,
+        ChromeModels chrome,
+        HistoryModels history,
+        TailModels tail,
+        string? thinkBuf,
+        string? textBuf) =>
+        new()
+        {
+            State = state,
+            Screen = screen,
+            Transcript = transcript,
+            History = new HistoryFingerprint(state.Chat.Lines, history.Rendered, history.Blocks),
+            Tail = new TailFingerprint(state.Chat.IsStreaming, thinkBuf, textBuf, tail.Rendered, tail.Blocks),
+            Chrome = new ChromeFingerprint(
+                state.Chat.Model,
+                state.Chat.Provider,
+                state.Chat.AgentName,
+                state.Chat.Status,
+                state.Ui.Input.Text,
+                state.Chat.IsAgentRunning,
+                state.Ui.ShouldQuit,
+                state.Ui.Focus,
+                state.Chat.Cost,
+                state.Ui.TotalLines,
+                state.Ui.ViewportLines,
+                state.Ui.ScrollOffset,
+                chrome.Header,
+                chrome.StatusBar,
+                chrome.Input),
+            FirstIndex = new FirstIndexHolder { Map = history.FirstIndex }
+        };
 
     private static UiStatusBarModel ProjectStatusBar(UiState state)
     {
@@ -590,7 +585,7 @@ public sealed class DefaultUiProjector : IUiProjector
         throw ChatRolePresentation.Unhandled(role);
     }
 
-    private static DateTime ResolveTailTimestamp(UiState state, ProjectionCache? cache)
+    private static DateTime ResolveTailTimestamp(UiState state, ProjectionSnapshot? cache)
     {
         if (state.Chat.Lines.Length > 0)
         {
@@ -601,7 +596,7 @@ public sealed class DefaultUiProjector : IUiProjector
 
         if (cache is not null)
         {
-            foreach (var row in cache.TailRendered)
+            foreach (var row in cache.Tail.Rendered)
             {
                 if (row.TimestampUtc != default)
                     return row.TimestampUtc;
