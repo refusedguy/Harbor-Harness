@@ -1,6 +1,7 @@
 using System.Text;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Input;
+using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -225,7 +226,7 @@ public sealed class MarkupOverlay
 
         string dims = markup.SourceWidth > 0 ? $"{markup.SourceWidth}×{markup.SourceHeight}" : "no dims";
         string header = $"{markup.SourceName}  {dims}  [{ToolName(markup.ActiveTool)}] {markup.Model.Items.Length} ann";
-        buffer.SetText(box.X + 1, box.Y + 1, Harbor.Abstractions.Extensions.StringTruncation.Truncate(header, innerW, string.Empty),
+        buffer.SetText(box.X + 1, box.Y + 1, UnicodeTruncation.Truncate(header, innerW, string.Empty),
             new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
 
         var image = ComputeImageRect(box);
@@ -247,20 +248,20 @@ public sealed class MarkupOverlay
         int footerY = box.Bottom - 2;
         if (!string.IsNullOrEmpty(markup.Error))
         {
-            buffer.SetText(box.X + 1, footerY - 2, Harbor.Abstractions.Extensions.StringTruncation.Truncate("! " + markup.Error, innerW, string.Empty), ChatPalette.ToolError);
+            buffer.SetText(box.X + 1, footerY - 2, UnicodeTruncation.Truncate("! " + markup.Error, innerW, string.Empty), ChatPalette.ToolError);
         }
         else if (!string.IsNullOrEmpty(markup.SavedPath))
         {
-            buffer.SetText(box.X + 1, footerY - 2, Harbor.Abstractions.Extensions.StringTruncation.Truncate("saved: " + SavedName(markup.SavedPath), innerW, string.Empty), ChatPalette.ToolOk);
+            buffer.SetText(box.X + 1, footerY - 2, UnicodeTruncation.Truncate("saved: " + SavedName(markup.SavedPath), innerW, string.Empty), ChatPalette.ToolOk);
         }
 
         if (markup.ActiveTool == MarkupKind.Text)
         {
-            buffer.SetText(box.X + 1, footerY - 1, Harbor.Abstractions.Extensions.StringTruncation.Truncate("Text: " + markup.PendingText + "|", innerW, string.Empty), ChatPalette.ToolArgs);
+            buffer.SetText(box.X + 1, footerY - 1, UnicodeTruncation.Truncate("Text: " + markup.PendingText + "|", innerW, string.Empty), ChatPalette.ToolArgs);
         }
 
         const string Hints = "1/2/3|space|arrows|S+arrs|u undo|^R redo|del|^S save|^Enter send|esc close";
-        buffer.SetText(box.X + 1, footerY, Harbor.Abstractions.Extensions.StringTruncation.Truncate(Hints, innerW, string.Empty), ChatPalette.Dim);
+        buffer.SetText(box.X + 1, footerY, UnicodeTruncation.Truncate(Hints, innerW, string.Empty), ChatPalette.Dim);
     }
 
     private AppMsg? HandleChar(in KeyEvent key, MarkupOverlayState markup)
