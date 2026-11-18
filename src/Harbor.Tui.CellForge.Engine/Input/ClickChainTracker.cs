@@ -77,9 +77,11 @@ internal sealed class ClickChainTracker
             && Math.Abs((long)click.Row - _row) <= _tolerance
             && _time.GetElapsedTime(_previousTimestamp, now) < _window;
 
-        ClickChain chain = chained && _previousChain < ClickChain.Triple
-            ? (ClickChain)((int)_previousChain + 1)
-            : ClickChain.Single;
+        ClickChain chain = !chained
+            ? ClickChain.Single
+            : _previousChain == ClickChain.Triple
+                ? ClickChain.Triple
+                : (ClickChain)((int)_previousChain + 1);
 
         _hasPrevious = true;
         _previousTimestamp = now;
