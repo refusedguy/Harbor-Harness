@@ -25,7 +25,8 @@
     <ItemsControl ItemsSource="{Binding Toasts}"
                   HorizontalAlignment="Right"
                   VerticalAlignment="Bottom"
-                  Background="Transparent">
+                  Background="Transparent"
+                  AutomationProperties.LiveSetting="Polite">
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
                 <StackPanel Orientation="Vertical" Spacing="8" />
