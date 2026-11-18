@@ -150,18 +150,7 @@ public sealed partial class DialogOverlay
             buffer.SetText(x, y, caption, new CellStyle(ChatPalette.Muted));
             y++;
         }
-        string[] reason = _editor.Text.Split('\n');
-        var caretStyle = new CellStyle(ChatPalette.Accent);
-        for (int i = 0; i < reason.Length && i < MaxApprovalReasonRows && y < bottom; i++)
-        {
-            string row = (i == 0 ? "› " : "  ") + reason[i];
-            if (row.Length > innerW)
-            {
-                row = row[..Math.Max(0, innerW - 1)] + "…";
-            }
-            buffer.SetText(x, y, row, i == 0 ? caretStyle : ChatPalette.ToolArgs);
-            y++;
-        }
+        PaintEditorLines(buffer, x, y, innerW, Math.Min(MaxApprovalReasonRows, bottom - y));
     }
 
     /// <summary>
@@ -252,16 +241,45 @@ public sealed partial class DialogOverlay
         {
             return;
         }
-        string[] lines = _editor.Text.Split('\n');
-        var caretStyle = new CellStyle(ChatPalette.Accent);
-        for (int i = 0; i < lines.Length && i < available; i++)
+        PaintEditorLines(buffer, x, y, innerW, available);
+    }
+
+    /// <summary>
+    /// Shared editor-body painter for approval and multiline dialogs. Walks the
+    /// editor text as a <see cref="ReadOnlySpan{T}"/> via <c>IndexOf('\n')</c>
+    /// so a frame with an open dialog no longer allocates the intermediate
+    /// <c>string[]</c> (and its per-line substrings) that <c>Split</c> produced.
+    /// The gutter (<c>› </c> on the first row, two spaces after), the ellipsis
+    /// truncation at <paramref name="innerW"/>, and the caret/body styles are
+    /// kept byte-identical to the two loops this replaces.
+    /// </summary>
+    private void PaintEditorLines(ScreenBuffer buffer, int x, int y, int innerW, int maxRows)
+    {
+        if (maxRows <= 0)
         {
-            string row = (i == 0 ? "› " : "  ") + lines[i];
+            return;
+        }
+
+        var caretStyle = new CellStyle(ChatPalette.Accent);
+        ReadOnlySpan<char> rest = _editor.Text.AsSpan();
+        for (int i = 0; i < maxRows; i++)
+        {
+            int newline = rest.IndexOf('\n');
+            ReadOnlySpan<char> line = newline < 0 ? rest : rest[..newline];
+
+            string prefix = i == 0 ? "› " : "  ";
+            string row = string.Concat(prefix.AsSpan(), line);
             if (row.Length > innerW)
             {
                 row = row[..Math.Max(0, innerW - 1)] + "…";
             }
             buffer.SetText(x, y + i, row, i == 0 ? caretStyle : ChatPalette.ToolArgs);
+
+            if (newline < 0)
+            {
+                break;
+            }
+            rest = rest[(newline + 1)..];
         }
     }
 
