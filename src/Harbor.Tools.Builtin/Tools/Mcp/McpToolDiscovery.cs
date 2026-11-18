@@ -33,10 +33,9 @@ internal static class McpToolDiscovery
     // the same hard bound the server applies to its own chain.
     internal const int MaxPagesPerServer = 64;
 
-    /// <param name="RequiresApproval">
-    ///     True when the server declared <c>_meta.anthropic/requiresUserInteraction</c>,
-    ///     in which case the discovery grant is Ask First rather than Allow.
-    /// </param>
+    // RequiresApproval: true when the server declared
+    // _meta.anthropic/requiresUserInteraction, in which case the discovery grant
+    // is Ask First rather than Allow.
     internal sealed record DiscoveredTool(
         string Server,
         string RemoteName,
