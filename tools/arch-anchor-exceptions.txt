@@ -33,5 +33,5 @@ tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrit
 tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrityTests.cs:255 | the probe fixture is a synthetic source file whose own line numbers are the input
 tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrityTests.cs:423 | the probe fixture is a synthetic source file whose own line numbers are the input
 tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrityTests.cs:467 | the probe fixture is a synthetic source file whose own line numbers are the input
-tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs | apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:162 | the analyzer's own diagnostic text names the line of the SYNTHETIC source it was given
-tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs | apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:168 | the analyzer's own diagnostic text names the line of the SYNTHETIC source it was given
+tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs | apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:189 | the analyzer's own diagnostic text names the line of the SYNTHETIC source it was given
+tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs | apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:195 | the analyzer's own diagnostic text names the line of the SYNTHETIC source it was given

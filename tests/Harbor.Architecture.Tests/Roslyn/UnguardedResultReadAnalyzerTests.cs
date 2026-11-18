@@ -431,8 +431,8 @@ public sealed class UnguardedResultReadAnalyzerTests
         // is protected by a guard the dominance model recognises.
         var expectedSites = new List<string>
         {
-            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:162",
-            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:168",
+            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:189",
+            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:195",
         };
 
         await Assert.That(string.Join(" | ", analyzerSites)).IsEqualTo(string.Join(" | ", expectedSites))
