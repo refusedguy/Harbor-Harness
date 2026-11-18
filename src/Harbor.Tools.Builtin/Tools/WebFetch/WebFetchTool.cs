@@ -210,6 +210,7 @@ public sealed partial class WebFetchTool : ITool
             }
             catch (Exception ex)
             {
+                WebFetchToolLog.ResponseBodyReadFailed(_logger, ex);
                 return ToolResult.Error($"Failed to read response body: {ex.Message}");
             }
 
@@ -303,14 +304,24 @@ public sealed partial class WebFetchTool : ITool
 
         // ROP-A Z1 п.2: one exception classifier instead of two hand-copied
         // catch ladders (send loop here, DNS gate below).
-        Result<FetchOk> SendFailure(Exception ex) => Result.Failure<FetchOk>(
-            ex is OperationCanceledException
-                ? CancelOrTimeoutMessage(ct, ex)
-                : ex switch
-                {
-                    HttpRequestException h => $"HTTP request failed: {h.Message}",
-                    _ => $"webfetch failed: {ex.Message}"
-                });
+        Result<FetchOk> SendFailure(Exception ex)
+        {
+            if (ex is not OperationCanceledException)
+            {
+                // Exception type only: HttpRequestException.Message can embed
+                // the full URL (query strings are frequently PII).
+                WebFetchToolLog.SendFailed(_logger, ex.GetType().Name);
+            }
+
+            return Result.Failure<FetchOk>(
+                ex is OperationCanceledException
+                    ? CancelOrTimeoutMessage(ct, ex)
+                    : ex switch
+                    {
+                        HttpRequestException h => $"HTTP request failed: {h.Message}",
+                        _ => $"webfetch failed: {ex.Message}"
+                    });
+        }
 
         for (int hop = 0; hop <= MaxRedirectHops + 1; hop++)
         {
@@ -620,4 +631,10 @@ internal static partial class WebFetchToolLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "WebFetch blocked SSRF attempt: {Url} resolves to non-public address {Address}")]
     public static partial void BlockedSsrfAttempt(ILogger logger, Uri url, IPAddress address);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "WebFetch send failed ({ExceptionType})")]
+    public static partial void SendFailed(ILogger logger, string exceptionType);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "WebFetch could not read the response body")]
+    public static partial void ResponseBodyReadFailed(ILogger logger, Exception ex);
 }

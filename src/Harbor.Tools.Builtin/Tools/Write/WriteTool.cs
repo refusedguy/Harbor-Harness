@@ -121,6 +121,7 @@ public sealed partial class WriteTool : ITool
             }
             catch (Exception ex)
             {
+                WriteToolLog.VersionCheckReadFailed(_logger, ex, path);
                 return ToolResult.Error(
                     $"Failed to read {path} for the version check: {ex.Message}");
             }
@@ -161,10 +162,12 @@ public sealed partial class WriteTool : ITool
         }
         catch (UnauthorizedAccessException ex)
         {
+            WriteToolLog.AccessDenied(_logger, ex, path);
             return ToolResult.Error($"Access denied: {ex.Message}");
         }
         catch (IOException ex)
         {
+            WriteToolLog.IoFailed(_logger, ex, path);
             return ToolResult.Error($"I/O error: {ex.Message}");
         }
         catch (Exception ex)
@@ -215,4 +218,13 @@ internal static partial class WriteToolLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Write rejected — file version changed: {Path}: {Reason}")]
     public static partial void VersionMismatch(ILogger logger, string path, string reason);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Could not read {Path} for the version check")]
+    public static partial void VersionCheckReadFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Access denied writing {Path}")]
+    public static partial void AccessDenied(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "I/O error writing {Path}")]
+    public static partial void IoFailed(ILogger logger, Exception ex, string path);
 }

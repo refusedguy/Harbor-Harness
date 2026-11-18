@@ -96,6 +96,7 @@ public sealed partial class ReadTool : ITool
         }
         catch (Exception ex)
         {
+            ReadToolLog.StatFailed(_logger, ex, path);
             return ToolResult.Error($"Cannot stat file: {ex.Message}");
         }
 
@@ -245,6 +246,7 @@ public sealed partial class ReadTool : ITool
         catch (Exception ex)
         {
             // ROP-A П.13: boundary message policy lives in one handler.
+            ReadToolLog.ReadFailed(_logger, ex, path);
             return ToolResult.Error(ToolErrors.Handler(WellKnownTools.Read, cancellationToken, failurePrefix: "Failed to read: ")(ex));
         }
 
@@ -403,4 +405,10 @@ internal static partial class ReadToolLog
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "File version unavailable for {Path}: {Error}")]
     public static partial void VersionUnavailable(ILogger logger, string path, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Cannot stat file for read: {Path}")]
+    public static partial void StatFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Read failed for {Path}")]
+    public static partial void ReadFailed(ILogger logger, Exception ex, string path);
 }

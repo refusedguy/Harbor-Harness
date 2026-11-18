@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Threading.Channels;
 using Harbor.Providers.Internal;
 using Harbor.Providers.OpenAiCompatible.Compat;
@@ -224,7 +223,9 @@ public sealed class OpenAiCompatibleLlmClient : ProviderLlmClientBase, ILlmClien
         {
             OpenAiCompatibleLlmClientLog.BuildRequestSummary(
                 _logger, request.Model, request.Tools.Count, request.ToolChoice?.ToString() ?? "null", request.Messages.Count);
-            OpenAiCompatibleLlmClientLog.BuildRequestPayload(_logger, Encoding.UTF8.GetString(body));
+            // SECURITY: the request body contains full prompts and tool
+            // arguments (frequently PII and file contents). Only log the
+            // request's shape above; never serialize `body` into a log sink.
         }
 
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
@@ -365,8 +366,5 @@ internal static partial class OpenAiCompatibleLlmClientLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "BuildRequest: model={Model} tools={ToolCount} toolChoice={ToolChoice} messages={MsgCount}")]
     public static partial void BuildRequestSummary(ILogger logger, string model, int toolCount, string toolChoice, int msgCount);
-
-    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "BuildRequest payload:\n{Payload}")]
-    public static partial void BuildRequestPayload(ILogger logger, string payload);
 }
 

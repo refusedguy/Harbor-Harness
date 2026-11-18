@@ -446,7 +446,14 @@ public sealed class DynamicModelCatalog : IModelCatalog
         // failure text.
         return await Result.Try(
                 () => File.ReadAllTextAsync(path, ct),
-                ex => $"Cache read failed: {ex.Message}")
+                ex =>
+                {
+                    // A cache read failure is otherwise invisible: the
+                    // Compensate chain folds it into a generic fallback and
+                    // the caller only sees the FETCH error text.
+                    DynamicModelCatalogLog.CacheReadFailed(_logger, ex, config.Id, path);
+                    return $"Cache read failed: {ex.Message}";
+                })
             .Bind(json => ParseModelsResponse(json, config))
             .ConfigureAwait(false);
     }
@@ -721,4 +728,7 @@ internal static partial class DynamicModelCatalogLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Could not stamp the catalogue freshness mark on '{Path}'; the file keeps its own write time")]
     public static partial void FreshnessStampFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Could not read cached model catalog for {Provider} at '{Path}'; falling back")]
+    public static partial void CacheReadFailed(ILogger logger, Exception ex, string provider, string path);
 }
