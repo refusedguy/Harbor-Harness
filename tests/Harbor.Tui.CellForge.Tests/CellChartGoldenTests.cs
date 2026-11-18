@@ -1,4 +1,5 @@
 using Harbor.TestKit;
+using Harbor.Tui.CellForge.Widgets;
 using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
