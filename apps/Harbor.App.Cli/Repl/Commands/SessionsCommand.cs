@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Cli.Commands;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Overlays;
 
@@ -31,6 +32,7 @@ internal sealed class SessionsCommand : IReplCommand
             {
                 new("switch", "Switch Session", "Browse and switch to recent chat session", string.Empty, "Actions"),
                 new("tree", "Branch Tree", "Show session fork / lineage tree", string.Empty, "Actions"),
+                new("retitle", "Regenerate Title", "Ask the model for a fresh title for this session", string.Empty, "Actions"),
                 new("new", "New Session", "Start a fresh chat session", string.Empty, "Actions")
             },
             OnCommitAsync: (item, frameCt) => HandleMenuAsync(host, item, frameCt)));
@@ -52,12 +54,41 @@ internal sealed class SessionsCommand : IReplCommand
             return;
         }
 
+        if (item.Id == "retitle")
+        {
+            await RegenerateTitleAsync(host, ct).ConfigureAwait(false);
+            return;
+        }
+
         if (item.Id == "new")
         {
             await new NewSessionCommand().ExecuteAsync(new ReplCommandContext(host, "new"), ct).ConfigureAwait(false);
             host.Palette.Hide();
             host.WakeUp();
         }
+    }
+
+    /// <summary>
+    ///     Title regeneration from the sessions menu (issue #2684 S06). The
+    ///     shared core is the same one <c>harbor sessions retitle</c> uses, so
+    ///     the palette and the CLI cannot drift apart.
+    /// </summary>
+    private static async Task RegenerateTitleAsync(IReplHost host, CancellationToken ct)
+    {
+        host.Palette.Hide();
+        if (host.SessionStore is not { } store)
+        {
+            host.Bridge.AppendSystemLine("✎ недоступно: хост без хранилища сессий");
+            host.WakeUp();
+            return;
+        }
+
+        var result = await SessionTitleRegenerator.RegenerateAsync(
+            store, host.ProviderRegistry, host.SessionModel.Id, ct).ConfigureAwait(false);
+        host.Bridge.AppendSystemLine(result.IsSuccess
+            ? $"✎ новое название: {result.Value}"
+            : $"! не удалось обновить название: {result.Error}");
+        host.WakeUp();
     }
 
     /// <summary>
