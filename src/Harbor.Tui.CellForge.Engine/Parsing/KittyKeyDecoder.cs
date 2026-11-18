@@ -74,6 +74,52 @@ public static class KittyKeyDecoder
             case 127:
                 key = KeyCode.Backspace;
                 break;
+            // Kitty functional key codes (kitty keyboard protocol, §Functional
+            // key definitions). These live in the Unicode private-use area,
+            // so without these cases they fell through to Unknown and lost
+            // their physical keypad identity.
+            case 57399:
+                key = KeyCode.Keypad0;
+                break;
+            case 57400:
+                key = KeyCode.Keypad1;
+                break;
+            case 57401:
+                key = KeyCode.Keypad2;
+                break;
+            case 57402:
+                key = KeyCode.Keypad3;
+                break;
+            case 57403:
+                key = KeyCode.Keypad4;
+                break;
+            case 57404:
+                key = KeyCode.Keypad5;
+                break;
+            case 57405:
+                key = KeyCode.Keypad6;
+                break;
+            case 57406:
+                key = KeyCode.Keypad7;
+                break;
+            case 57407:
+                key = KeyCode.Keypad8;
+                break;
+            case 57408:
+                key = KeyCode.Keypad9;
+                break;
+            case 57409:
+                key = KeyCode.KeypadDecimal;
+                break;
+            case 57412:
+                key = KeyCode.KeypadMinus;
+                break;
+            case 57413:
+                key = KeyCode.KeypadPlus;
+                break;
+            case 57414:
+                key = KeyCode.KeypadEnter;
+                break;
             case >= 32 and not 127 when primary is < 57344 or > 63743:
                 // Printable (excluding the Unicode private-use area where
                 // kitty parks its functional keys).

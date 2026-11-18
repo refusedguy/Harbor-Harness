@@ -104,13 +104,50 @@ public class GoldenKittyKeyTests
     }
 
     [Test]
+    [Arguments(57399, EngineInput.KeyCode.Keypad0)]
+    [Arguments(57400, EngineInput.KeyCode.Keypad1)]
+    [Arguments(57401, EngineInput.KeyCode.Keypad2)]
+    [Arguments(57402, EngineInput.KeyCode.Keypad3)]
+    [Arguments(57403, EngineInput.KeyCode.Keypad4)]
+    [Arguments(57404, EngineInput.KeyCode.Keypad5)]
+    [Arguments(57405, EngineInput.KeyCode.Keypad6)]
+    [Arguments(57406, EngineInput.KeyCode.Keypad7)]
+    [Arguments(57407, EngineInput.KeyCode.Keypad8)]
+    [Arguments(57408, EngineInput.KeyCode.Keypad9)]
+    [Arguments(57409, EngineInput.KeyCode.KeypadDecimal)]
+    [Arguments(57412, EngineInput.KeyCode.KeypadMinus)]
+    [Arguments(57413, EngineInput.KeyCode.KeypadPlus)]
+    [Arguments(57414, EngineInput.KeyCode.KeypadEnter)]
+    public async Task Keypad_Functional_Codes_Decode_To_Distinct_Keys(int code, EngineInput.KeyCode expected)
+    {
+        var events = T.Feed(_parser, $"\u001B[{code}u");
+
+        await Assert.That(events.Length).IsEqualTo(1);
+        await A.IsKey(events[0], expected, kitty: true);
+    }
+
+    [Test]
+    public async Task Keypad_Digit_Is_Distinct_From_Top_Row_Digit()
+    {
+        // The whole point of the primitive: physical position survives decode.
+        var keypad = T.Feed(new EscapeSequenceParser(), "\u001B[57399u");
+        var topRow = T.Feed(new EscapeSequenceParser(), "\u001B[48u");
+
+        await Assert.That(keypad[0].Key.Key).IsEqualTo(EngineInput.KeyCode.Keypad0);
+        await Assert.That(topRow[0].Key.Key).IsEqualTo(EngineInput.KeyCode.Char);
+        await Assert.That(topRow[0].Key.Character.Value).IsEqualTo('0');
+    }
+
+    [Test]
     public async Task Unmapped_Functional_Codepoints_Preserve_Raw_Codepoint()
     {
-        var events = T.Feed(_parser, "\u001B[57414u");
+        // 57415 is KP_EQUAL: a functional code deliberately outside the
+        // keypad set we map, so the Unknown fallback still has a golden vector.
+        var events = T.Feed(_parser, "\u001B[57415u");
 
         await Assert.That(events.Length).IsEqualTo(1);
         await Assert.That(events[0].Key.Key).IsEqualTo(EngineInput.KeyCode.Unknown);
-        await Assert.That((int)events[0].Key.Codepoint).IsEqualTo(57414);
+        await Assert.That((int)events[0].Key.Codepoint).IsEqualTo(57415);
         await Assert.That(events[0].Key.IsKittyEncoded).IsTrue();
     }
 

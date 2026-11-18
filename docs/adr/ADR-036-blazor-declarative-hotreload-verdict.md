@@ -1,4 +1,4 @@
-# ADR-032: Blazor declarative UI и Hot Reload vs Harbor DSL. Сравнение и вердикт
+# ADR-036: Blazor declarative UI и Hot Reload vs Harbor DSL. Сравнение и вердикт
 
 > **Status (2026-11-18):** dated record, not normative. Источник: issue
 > [#2695](https://github.com/refusedguy/Harbor-Harness/issues/2695), competitor
@@ -7,7 +7,8 @@
 > документацию: ни кода, ни гейтов, ни порогов, ни AOT-настроек.
 
 - Дата: 2026-11-18
-- База исследования: `origin/dev` = `09a673bc558c6da2f670c46f87ee0abfdb6e66b4`
+- База исследования: `origin/dev` = `09a673bc558c6da2f670c46f87ee0abfdb6e66b4`;
+  запись перебазирована на `origin/dev` = `eb3797d35ad64204127f962700ce3b5de4ab151d`
 - Затрагивает: только этот ADR и индекс [DECISIONS.md](DECISIONS.md)
 
 ## §1. Вопрос
