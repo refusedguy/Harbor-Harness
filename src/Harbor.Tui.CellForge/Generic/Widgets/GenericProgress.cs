@@ -28,9 +28,17 @@ public static class GenericProgressBar
     public static double ClampRatio(double ratio) =>
         double.IsNaN(ratio) ? 0 : Math.Clamp(ratio, 0, 1);
 
-    /// <summary>Visible label text for <paramref name="state"/> (percent when null).</summary>
-    public static string LabelText(GenericProgressState state) =>
-        state.Label ?? ((int)Math.Round(ClampRatio(state.Ratio) * 100, MidpointRounding.AwayFromZero) + "%");
+    /// <summary>
+    ///     Visible label text for <paramref name="state"/> (percent when null),
+    ///     with an optional suffix such as <see cref="ProgressEta.Suffix"/>.
+    ///     An explicitly empty label stays empty: hiding the label also hides
+    ///     the suffix.
+    /// </summary>
+    public static string LabelText(GenericProgressState state, string? suffix = null)
+    {
+        string label = state.Label ?? ((int)Math.Round(ClampRatio(state.Ratio) * 100, MidpointRounding.AwayFromZero) + "%");
+        return string.IsNullOrEmpty(suffix) || label.Length == 0 ? label : label + " " + suffix;
+    }
 
     /// <summary>Filled cell count for <paramref name="width"/> columns.</summary>
     public static int FilledCells(double ratio, int width) =>
