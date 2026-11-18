@@ -164,6 +164,8 @@ public sealed class RetryLlmClientDecorator : ILlmClient
             // Transient budget exhausted: the consumer still receives exactly
             // one terminal ErrorEvent — the delivery contract of every pump —
             // instead of a thrown exception from StreamAsync.
+            RetryLlmClientLog.TransientStreamRetryExhausted(
+                _logger, _inner.ProviderId.Value, lex.Kind.ToString(), lex.StatusCode);
             exhausted = lex;
         }
 
@@ -276,4 +278,7 @@ internal static partial class RetryLlmClientLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Transient provider stream failure for {Provider} at attempt {Attempt} — retrying: {Message}")]
     public static partial void TransientStreamRetry(ILogger logger, string provider, int attempt, string message);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Transient retry budget exhausted for {Provider} ({Kind}, status {StatusCode}); delivering terminal error event")]
+    public static partial void TransientStreamRetryExhausted(ILogger logger, string provider, string kind, int? statusCode);
 }

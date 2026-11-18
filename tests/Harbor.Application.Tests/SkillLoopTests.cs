@@ -14,6 +14,7 @@ using Harbor.Application.Sessions;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.Application.Tests;
 
@@ -30,8 +31,14 @@ public class SkillLoopTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); }
-        catch (IOException) { /* temp dir cleanup is best-effort */ }
-        catch (UnauthorizedAccessException) { /* temp dir cleanup is best-effort */ }
+        catch (IOException ex)
+        {
+            TestContext.Current?.Output.WriteLine($"skill-loop cleanup failed for {_root}: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            TestContext.Current?.Output.WriteLine($"skill-loop cleanup denied for {_root}: {ex.Message}");
+        }
     }
 
     [Test]

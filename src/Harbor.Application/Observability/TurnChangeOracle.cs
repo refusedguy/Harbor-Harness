@@ -516,6 +516,10 @@ public sealed class TurnChangeOracle : IDisposable
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
+            // The declared path cannot be resolved; the oracle drops it. The
+            // raw value is deliberately not logged (it may carry user data).
+            if (_logger is not null)
+                TurnChangeOracleLog.TargetPathRejected(_logger, ex);
             return null;
         }
 
@@ -526,6 +530,8 @@ public sealed class TurnChangeOracle : IDisposable
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
+            if (_logger is not null)
+                TurnChangeOracleLog.TargetPathRejected(_logger, ex);
             return null;
         }
 
@@ -655,4 +661,10 @@ internal static partial class TurnChangeOracleLog
         Level = LogLevel.Debug,
         Message = "Turn change oracle: cannot read '{Path}' — the path is reported as unverified")]
     public static partial void FingerprintFailed(ILogger logger, Exception exception, string path);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Debug,
+        Message = "Turn change oracle: a declared path could not be resolved and was dropped")]
+    public static partial void TargetPathRejected(ILogger logger, Exception exception);
 }

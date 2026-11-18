@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Skills;
+using TUnit.Core;
 
 namespace Harbor.Core.Tests;
 
@@ -282,8 +283,14 @@ public class SkillRegistryTests
         finally
         {
             try { Directory.Delete(root, recursive: true); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (IOException ex)
+            {
+                TestContext.Current?.Output.WriteLine($"skill-registry cleanup failed for {root}: {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                TestContext.Current?.Output.WriteLine($"skill-registry cleanup denied for {root}: {ex.Message}");
+            }
         }
     }
 

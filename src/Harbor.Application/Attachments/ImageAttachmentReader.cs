@@ -94,6 +94,7 @@ public sealed class ImageAttachmentReader
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            ImageAttachmentReaderLog.ImageLengthProbeFailed(_logger, ex, path);
             return Result.Failure<ImageAttachment>($"Cannot read image {path}: {ex.Message}");
         }
 
@@ -220,5 +221,8 @@ internal static partial class ImageAttachmentReaderLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Vision check skipped for {Provider}/{Model}: catalog unavailable ({Error})")]
     public static partial void VisionCheckSkipped(ILogger logger, string provider, string model, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Failed to stat image {Path} for its length")]
+    public static partial void ImageLengthProbeFailed(ILogger logger, Exception ex, string path);
 
 }

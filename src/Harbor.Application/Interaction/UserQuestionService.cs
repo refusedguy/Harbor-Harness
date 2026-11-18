@@ -170,17 +170,19 @@ public sealed class UserQuestionService : IUserQuestionService
     ///     cancellation callback break the outcome.
     /// </summary>
     /// <param name="cts">The source to cancel.</param>
-    private static void CancelQuietly(CancellationTokenSource cts)
+    private void CancelQuietly(CancellationTokenSource cts)
     {
         try
         {
             cts.Cancel();
         }
-        catch (AggregateException)
+        catch (AggregateException ex)
         {
             // A callback the presenter registered threw. The window is what
             // matters here, and it has already closed; the throw is not the
-            // caller's problem.
+            // caller's problem. It is still a subsystem fault worth a line:
+            // swallowing it used to hide why a presenter misbehaved.
+            UserQuestionServiceLog.CancelCallbackFailed(_logger, ex);
         }
     }
 
@@ -213,4 +215,7 @@ internal static partial class UserQuestionServiceLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "ask_user_question: the presenter failed after the wait window closed")]
     public static partial void PresenterFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "ask_user_question: a presenter cancellation callback threw while closing the wait window")]
+    public static partial void CancelCallbackFailed(ILogger logger, Exception ex);
 }

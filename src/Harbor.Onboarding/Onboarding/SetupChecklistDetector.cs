@@ -208,6 +208,11 @@ public sealed class SetupChecklistDetector
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Workspace detection silently degraded to "no workspace", which
+            // left every filesystem-backed checklist item pending with no
+            // hint about the probe that failed.
+            if (_logger is not null)
+                SetupChecklistDetectorLog.WorkspaceProbeFailed(_logger, ex);
             return null;
         }
     }
@@ -230,5 +235,8 @@ internal static partial class SetupChecklistDetectorLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Setup checklist: key probe failed — task stays pending")]
     public static partial void KeyProbeFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Setup checklist: workspace probe failed — treating the workspace as absent")]
+    public static partial void WorkspaceProbeFailed(ILogger logger, Exception ex);
 
 }

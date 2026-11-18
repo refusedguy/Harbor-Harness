@@ -342,14 +342,14 @@ public sealed class HookRunner : IHookRunner
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            KillQuietly(proc);
+            KillQuietly(proc, entry.Command);
             throw;
         }
         catch (OperationCanceledException)
         {
             // The write stalled past the hook ceiling (the hook never reads
             // stdin): the same verdict as any other timeout.
-            KillQuietly(proc);
+            KillQuietly(proc, entry.Command);
             return HookAttempt.Failed(
                 $"Hook '{entry.Command}' timed out after {timeout.TotalSeconds:0.#}s and was killed.", "", "");
         }
@@ -368,7 +368,7 @@ public sealed class HookRunner : IHookRunner
         }
         catch (Exception ex)
         {
-            _ = ex;
+            HookRunnerLog.StdinCloseFailed(_logger, ex, entry.Command);
         }
 
         stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
@@ -379,14 +379,14 @@ public sealed class HookRunner : IHookRunner
         Task done = await Task.WhenAny(exited.Task, Task.Delay(Timeout.InfiniteTimeSpan, timeoutCts.Token)).ConfigureAwait(false);
         if (!ReferenceEquals(done, exited.Task))
         {
-            KillQuietly(proc);
+            KillQuietly(proc, entry.Command);
             try
             {
                 await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                _ = ex;
+                HookRunnerLog.HookDrainFailed(_logger, ex, entry.Command);
             }
 
             ct.ThrowIfCancellationRequested();
@@ -501,7 +501,7 @@ public sealed class HookRunner : IHookRunner
             stdout, stderr);
     }
 
-    private static void KillQuietly(Process proc)
+    private void KillQuietly(Process proc, string command)
     {
         try
         {
@@ -509,8 +509,10 @@ public sealed class HookRunner : IHookRunner
         }
         catch (Exception ex)
         {
-            // Best-effort kill: already-exited is the normal race.
-            _ = ex;
+            // Best-effort kill: already-exited is the normal race. It used to
+            // be swallowed with `_ = ex`, losing the reason when a hook really
+            // could not be killed.
+            HookRunnerLog.HookKillFailed(_logger, ex, command);
         }
     }
 
@@ -566,5 +568,14 @@ internal static partial class HookRunnerLog
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Debug, Message = "Hook '{Command}' exited before the stdin write landed; draining output")]
     public static partial void HookStdinDrainRace(ILogger logger, Exception ex, string command);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "Hook '{Command}' stdin could not be closed after the write")]
+    public static partial void StdinCloseFailed(ILogger logger, Exception ex, string command);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "Hook '{Command}' output drain failed after the process was killed")]
+    public static partial void HookDrainFailed(ILogger logger, Exception ex, string command);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "Hook '{Command}' could not be killed during timeout cleanup")]
+    public static partial void HookKillFailed(ILogger logger, Exception ex, string command);
 
 }
