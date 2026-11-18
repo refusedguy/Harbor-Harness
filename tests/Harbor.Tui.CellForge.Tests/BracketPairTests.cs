@@ -28,12 +28,12 @@ public class BracketPairTests
         var outer = BracketPair.Find(lines, 0, 0);
         await Assert.That(outer.IsMatch).IsTrue();
         await At(outer.Open, 0, 0);
-        await At(outer.Close, 0, 3);
+        await At(outer.Close, 0, 4);
 
         var inner = BracketPair.Find(lines, 0, 1);
         await Assert.That(inner.IsMatch).IsTrue();
         await At(inner.Open, 0, 1);
-        await At(inner.Close, 0, 2);
+        await At(inner.Close, 0, 3);
     }
 
     [Test]
