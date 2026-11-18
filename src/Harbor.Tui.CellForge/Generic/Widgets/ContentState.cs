@@ -107,10 +107,10 @@ public readonly record struct ContentState(
         switch (Presentation)
         {
             case ContentPresentation.Loading:
-                PaintSkeleton(buffer, rect, Math.Max(0, SkeletonRows), tick, resolved);
+                ContentSkeleton.Paint(buffer, rect, Math.Max(0, SkeletonRows), tick, resolved);
                 break;
             case ContentPresentation.Empty:
-                PaintEmpty(buffer, rect, resolved);
+                ContentEmpty.Paint(buffer, rect, EmptyText, EmptyAction, resolved);
                 break;
             case ContentPresentation.Ready:
             default:

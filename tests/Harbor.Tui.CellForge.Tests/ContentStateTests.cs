@@ -26,13 +26,8 @@ public class ContentStateTests
         state.Paint(buffer, new Rect(0, 0, cols, rows), tick);
 
         string[] raw = ScreenFixtures.Art(buffer).Split('\n');
-        var lines = new string[rows];
-        for (int i = 0; i < rows; i++)
-        {
-            lines[i] = (i < raw.Length ? raw[i] : string.Empty).TrimEnd();
-        }
-
-        string art = string.Join("\n", lines);
+        string art = string.Join("\n", Enumerable.Range(0, rows)
+            .Select(i => (i < raw.Length ? raw[i] : string.Empty).TrimEnd()));
         string document = $"# golden: {name} ({cols}x{rows})\n" + art + "\n";
         string expected = Golden.VerifyText(FixtureDir(), name, document);
         await Assert.That(expected).IsEqualTo(document);
