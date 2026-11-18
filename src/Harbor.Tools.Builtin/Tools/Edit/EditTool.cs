@@ -132,6 +132,7 @@ public sealed partial class EditTool : ITool
         }
         catch (Exception ex)
         {
+            EditToolLog.InvalidPath(_logger, ex);
             return ToolResult.Error($"Invalid path: {ex.Message}");
         }
 
@@ -159,6 +160,7 @@ public sealed partial class EditTool : ITool
         }
         catch (Exception ex)
         {
+            EditToolLog.ReadFailed(_logger, ex, path);
             return ToolResult.Error($"Failed to read: {ex.Message}");
         }
 
@@ -184,6 +186,7 @@ public sealed partial class EditTool : ITool
         }
         catch (Exception ex)
         {
+            EditToolLog.DecodeFailed(_logger, ex, path);
             return ToolResult.Error($"Failed to read: {ex.Message}");
         }
 
@@ -237,6 +240,7 @@ public sealed partial class EditTool : ITool
         }
         catch (Exception ex)
         {
+            EditToolLog.ApplyFailed(_logger, ex, path);
             return ToolResult.Error($"Edit failed: {ex.Message}");
         }
 
@@ -519,4 +523,16 @@ internal static partial class EditToolLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Edit rejected — file version changed: {Path}: {Reason}")]
     public static partial void VersionMismatch(ILogger logger, string path, string reason);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Invalid edit path")]
+    public static partial void InvalidPath(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Could not read {Path} for edit")]
+    public static partial void ReadFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Could not decode {Path} as text for edit")]
+    public static partial void DecodeFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Edit apply failed for {Path}")]
+    public static partial void ApplyFailed(ILogger logger, Exception ex, string path);
 }

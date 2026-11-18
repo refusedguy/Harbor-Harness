@@ -132,6 +132,9 @@ public sealed class RequestDispatcher
         }
         catch (Exception ex)
         {
+            // Only the request TYPE is logged. The payload can carry prompts,
+            // file contents or other PII, so it never reaches a log sink.
+            RequestDispatcherLog.HandlerThrew(_logger, ex, request.GetType().Name);
             return new ErrorResponse { RequestId = request.RequestId, Message = ex.Message };
         }
     }
@@ -175,4 +178,7 @@ internal static partial class RequestDispatcherLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "No IPC request handler is registered for {RequestType}. It is not a member of the tagged {HarborRequest} union, so no handler can be registered for it; the server declined it rather than answering with a placeholder. This should be unreachable — if it fires, the wire union and HarborRequestTypes.All have drifted apart.")]
     public static partial void NoHandlerRegistered(ILogger logger, string requestType, string harborRequest);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "IPC handler for {RequestType} threw; the server returned an ErrorResponse to the client")]
+    public static partial void HandlerThrew(ILogger logger, Exception ex, string requestType);
 }

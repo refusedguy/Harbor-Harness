@@ -119,6 +119,27 @@ public class WebFetchToolTests
         await Assert.That(result.Output).Contains("HTTP request failed");
     }
 
+    [Test]
+    public async Task ExecuteAsync_HttpRequestException_LogsFailureWithoutSecret()
+    {
+        const string secretMarker = "SECRET_QUERY_VALUE_7B31";
+        var logger = new CapturingLogger<WebFetchTool>();
+        var tool = new WebFetchTool(
+            logger,
+            () => new HttpClient(new StubHttpMessageHandler(_ => throw new HttpRequestException(
+                $"connection refused for https://example.com/?token={secretMarker}"))),
+            allowedHosts: ["*"]);
+        var args = JsonDocument.Parse("""{"url":"https://example.com/"}""").RootElement;
+
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
+
+        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(logger.Capture.Messages.Any(m => m.Contains("WebFetch send failed"))).IsTrue().Because(
+            "a failed HTTP send must leave a signal in the operator log, not only in the tool result");
+        await Assert.That(logger.Capture.Contains(secretMarker)).IsFalse().Because(
+            "HttpRequestException.Message can embed the URL and its query string; only the exception type is logged");
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private static WebFetchTool NewTool(Func<HttpRequestMessage, HttpResponseMessage> responder)
