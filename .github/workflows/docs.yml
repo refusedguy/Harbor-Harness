@@ -193,6 +193,12 @@ on:
       # that edits a palette, the gate or its table entry must run it.
       - 'tools/check-contrast.py'
       - 'apps/Harbor.App.Avalonia/Themes/*.axaml'
+      # #433. The accessible-name gate reads every View AXAML and ratchets the
+      # controls that are nameless today. A PR that edits a view, the gate,
+      # its ratchet or its table entry must run it.
+      - 'tools/check-accessible-names.py'
+      - 'tools/accessible-names-baseline.txt'
+      - 'apps/Harbor.App.Avalonia/Views/**/*.axaml'
       # #1558. The result-chain census scans `src/` and `apps/` for the
       # `if (x.IsFailure)` guard sites and ratchets the count of chain
       # candidates, so a PR that edits the gate or the baseline must run it —
@@ -1458,6 +1464,27 @@ jobs:
         run: python3 tools/check-contrast.py --min-pairs 8
       - name: Prove the contrast gate fires on a planted violation
         run: python3 tools/check-contrast.py --self-test
+
+  # #433. The other half of the WCAG 2.1 AA audit. A C# test can inflate a
+  # view, but it cannot tell a reviewer which AXAML line lost the name, and it
+  # cannot run on the pull request that broke the build. This gate reads the
+  # View AXAML: a focusable control with no Content, ToolTip.Tip or
+  # AutomationProperties.Name fails with file:line unless it is one of the
+  # 20 rows the tree already carries in the ratchet. The second step plants a
+  # nameless control and a stale ratchet row, so a gate that stopped finding
+  # anything cannot stay green.
+  accessible-names:
+    name: accessible names
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Gate the accessible names of interactive Avalonia controls
+        run: python3 tools/check-accessible-names.py --baseline tools/accessible-names-baseline.txt --min-files 46 --min-controls 96 --min-baseline 20
+      - name: Prove the accessible-name gate fires on a planted violation
+        run: python3 tools/check-accessible-names.py --self-test
 
   # #1888. Eleventh question, and the only one about the gates themselves:
   # not "do the links resolve" and not "is the file shaped right" and not

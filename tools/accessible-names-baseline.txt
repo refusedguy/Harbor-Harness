@@ -1,0 +1,21 @@
+# ratchet for tools/check-accessible-names.py: one row per nameless interactive control the tree already carries. Rows may only shrink.
+apps/Harbor.App.Avalonia/Views/ChatView.axaml:41:ListBox
+apps/Harbor.App.Avalonia/Views/Chrome/TitleBarView.axaml:12:Button
+apps/Harbor.App.Avalonia/Views/CodeEditorView.axaml:78:TextBox
+apps/Harbor.App.Avalonia/Views/Components/EmptyState.axaml:56:Button
+apps/Harbor.App.Avalonia/Views/Components/SegmentedControl.axaml:14:ListBox
+apps/Harbor.App.Avalonia/Views/Dev/ComponentGalleryView.axaml:41:TextBox
+apps/Harbor.App.Avalonia/Views/Dev/ComponentGalleryView.axaml:42:TextBox
+apps/Harbor.App.Avalonia/Views/DiffView.axaml:17:TextBox
+apps/Harbor.App.Avalonia/Views/DiffView.axaml:20:TextBox
+apps/Harbor.App.Avalonia/Views/OnboardingWindow.axaml:145:CheckBox
+apps/Harbor.App.Avalonia/Views/OnboardingWindow.axaml:199:TextBox
+apps/Harbor.App.Avalonia/Views/OnboardingWindow.axaml:247:ComboBox
+apps/Harbor.App.Avalonia/Views/OnboardingWindow.axaml:251:TextBox
+apps/Harbor.App.Avalonia/Views/ProviderBrowserView.axaml:27:ListBox
+apps/Harbor.App.Avalonia/Views/Shell/ComposerView.axaml:57:TextBox
+apps/Harbor.App.Avalonia/Views/Shell/SessionsFlyoutView.axaml:27:TextBox
+apps/Harbor.App.Avalonia/Views/Shell/SessionsFlyoutView.axaml:32:ListBox
+apps/Harbor.App.Avalonia/Views/Shell/StatusBarView.axaml:39:Button
+apps/Harbor.App.Avalonia/Views/Terminal/TerminalPaneControl.axaml:24:TextBox
+apps/Harbor.App.Avalonia/Views/Terminal/TerminalPaneControl.axaml:38:TextBox
