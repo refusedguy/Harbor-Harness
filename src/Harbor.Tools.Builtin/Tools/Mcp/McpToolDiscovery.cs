@@ -126,6 +126,10 @@ internal static class McpToolDiscovery
                                 continue;
                             }
 
+                            // MCP Apps: an app-only tool must never enter the
+                            // model-facing catalog. See IsVisibleToModel.
+                            if (!IsVisibleToModel(entry)) continue;
+
                             string? remoteName = nameElement.GetString();
                             if (string.IsNullOrWhiteSpace(remoteName)) continue;
 
@@ -155,6 +159,50 @@ internal static class McpToolDiscovery
         }
 
         return discovered;
+    }
+
+    /// <summary>
+    ///     MCP Apps visibility filter for the model-facing tool catalog. A tool may
+    ///     declare <c>_meta.ui.visibility</c> as an array of "model" and/or "app"
+    ///     (MCP Apps spec 2026-01-26). When the field is absent the tool is visible
+    ///     to both; when present it is visible to the model only if the array
+    ///     contains "model". A malformed (non-array) declaration is treated as
+    ///     app-only so a broken server cannot leak tools into the prompt.
+    /// </summary>
+    /// <remarks>
+    ///     This is the discovery-side counterpart of goose-agent's
+    ///     <c>is_tool_visible_to_model</c>. Filtering here, before the adapter
+    ///     exists, keeps app-only tools out of both the prompt and the dispatcher
+    ///     without a second registry pass.
+    /// </remarks>
+    internal static bool IsVisibleToModel(JsonElement tool)
+    {
+        if (tool.ValueKind != JsonValueKind.Object
+            || !tool.TryGetProperty("_meta", out JsonElement meta)
+            || meta.ValueKind != JsonValueKind.Object
+            || !meta.TryGetProperty("ui", out JsonElement ui)
+            || ui.ValueKind != JsonValueKind.Object
+            || !ui.TryGetProperty("visibility", out JsonElement visibility))
+        {
+            // No declaration: default visible to both model and app.
+            return true;
+        }
+
+        if (visibility.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (JsonElement entry in visibility.EnumerateArray())
+        {
+            if (entry.ValueKind == JsonValueKind.String
+                && string.Equals(entry.GetString(), "model", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
