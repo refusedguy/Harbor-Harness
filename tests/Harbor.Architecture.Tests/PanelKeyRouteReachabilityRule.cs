@@ -31,11 +31,11 @@
 //   * `CellForgeLogsPanel.OnKey` handles F12 by dispatching
 //     `AppMsg.TogglePanel("logs")` — and F12 is ALREADY bound globally to
 //     `ChatAction.ToggleLogsPanel` (`ChatKeyMap._entries`), which the reducer
-//     applies as the same `TogglePanel(state, "logs")` (`AppReducer.UpdateKeyGeneric`).
+//     applies as the same `TogglePanel(state, "logs")` (`KeyActionRegistry`).
 //     The dead override is a byte-for-byte duplicate of a live hotkey.
 //   * `CellForgeHelpPanel.OnKey` handles '?' the same way, and '?' is already
 //     bound to `ChatAction.HelpPanel` → `TogglePanel(state, "help")`
-//     (`ChatKeyMap._entries`, `AppReducer.UpdateKeyGeneric`).
+//     (`ChatKeyMap._entries`, `KeyActionRegistry`).
 //   * `CellForgeSkillFreshnessPanel.OnKey` is `=> false` — it wants nothing.
 //   * That leaves `CellForgeFileTreePanel` (j/k/h/l + Enter navigation),
 //     `CellForgeDiagnosticsPanel` (j/k cursor) and `CellForgeSubagentsPanel`
