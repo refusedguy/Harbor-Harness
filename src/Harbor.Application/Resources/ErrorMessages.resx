@@ -53,4 +53,7 @@
   <data name="InvalidHarborMode">
     <value>Unknown HARBOR_MODE: '{Mode}'. Expected one of: inprocess, ipc-server, ipc-client.</value>
   </data>
+  <data name="AgentFailed">
+    <value>Agent failed: {0}</value>
+  </data>
 </root>
