@@ -216,7 +216,18 @@ public sealed class CopyMode
     /// <summary>Left press anchors the mouse selection. Other buttons pass through.</summary>
     public bool OnPress(int x, int y, MouseButton button) => _selection.OnPress(x, y, button);
 
-    /// <summary>Drag extends the mouse selection.</summary>
+    /// <summary>
+    /// Enables edge auto-scroll for mouse drags inside <paramref name="viewport"/>.
+    /// The shift is applied by <see cref="SelectionEngine.OnDrag"/>, which this
+    /// mode drives for both mouse and keyboard selections (issue #2493).
+    /// </summary>
+    public void ConfigureAutoScroll(Harbor.Tui.CellForge.Rendering.Rect viewport, int lines) =>
+        _selection.ConfigureAutoScroll(viewport, lines);
+
+    /// <summary>Disables edge auto-scroll; drags use raw coordinates.</summary>
+    public void DisableAutoScroll() => _selection.DisableAutoScroll();
+
+    /// <summary>Drag extends the mouse selection (edge bands shift the viewport).</summary>
     public void OnDrag(int x, int y) => _selection.OnDrag(x, y);
 
     /// <summary>

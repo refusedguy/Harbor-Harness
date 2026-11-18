@@ -224,4 +224,18 @@ public class CopyModeTests
         await Assert.That(result.ClipboardSequence).IsNotNull();
         await Assert.That(ClipboardText(result.ClipboardSequence!)).IsEqualTo("あb");
     }
+
+    [Test]
+    public async Task ConfigureAutoScroll_ForwardsShiftToMouseSelection()
+    {
+        var mode = new CopyMode();
+        mode.ConfigureAutoScroll(new EngineCells.Rect(0, 0, 10, 5), 1);
+        await Assert.That(mode.OnPress(0, 2, MouseButton.Left)).IsTrue();
+        mode.OnDrag(9, 4);
+
+        var rect = mode.SelectionRect(10, 5);
+        await Assert.That(rect).IsNotNull();
+        await Assert.That(rect!.Value.Y).IsEqualTo(1);
+        await Assert.That(rect.Value.Height).IsEqualTo(4);
+    }
 }

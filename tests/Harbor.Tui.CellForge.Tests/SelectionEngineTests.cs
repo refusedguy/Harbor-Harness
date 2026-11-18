@@ -134,4 +134,71 @@ public class SelectionEngineTests
         var text = engine.OnRelease(5, 5, 40, 10, (x, y) => Cell.Blank);
         await Assert.That(text).IsNull(); // second press reset the anchor
     }
+
+    [Test]
+    public async Task ConfigureAutoScroll_DownBand_GrowsSelectionOneRowPerDrag()
+    {
+        var engine = new SelectionEngine();
+        engine.ConfigureAutoScroll(new EngineCells.Rect(0, 0, 10, 5), 1);
+        engine.OnPress(0, 2, MouseButton.Left);
+
+        engine.OnDrag(9, 4);
+        var first = engine.NormalizedRect(10, 5);
+        await Assert.That(first).IsNotNull();
+        await Assert.That(first!.Value.X).IsEqualTo(0);
+        await Assert.That(first.Value.Y).IsEqualTo(1);
+        await Assert.That(first.Value.Width).IsEqualTo(10);
+        await Assert.That(first.Value.Height).IsEqualTo(4);
+
+        engine.OnDrag(9, 4);
+        var second = engine.NormalizedRect(10, 5);
+        await Assert.That(second).IsNotNull();
+        await Assert.That(second!.Value.Y).IsEqualTo(0);
+        await Assert.That(second.Value.Height).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task ConfigureAutoScroll_UpBand_GrowsSelectionUpwards()
+    {
+        var engine = new SelectionEngine();
+        engine.ConfigureAutoScroll(new EngineCells.Rect(0, 0, 10, 5), 1);
+        engine.OnPress(3, 2, MouseButton.Left);
+
+        engine.OnDrag(3, 0);
+        var rect = engine.NormalizedRect(10, 5);
+        await Assert.That(rect).IsNotNull();
+        await Assert.That(rect!.Value.X).IsEqualTo(3);
+        await Assert.That(rect.Value.Y).IsEqualTo(0);
+        await Assert.That(rect.Value.Width).IsEqualTo(1);
+        await Assert.That(rect.Value.Height).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task ConfigureAutoScroll_OutsideBands_UsesRawDragCoordinates()
+    {
+        var engine = new SelectionEngine();
+        engine.ConfigureAutoScroll(new EngineCells.Rect(0, 0, 10, 5), 1);
+        engine.OnPress(0, 2, MouseButton.Left);
+        engine.OnDrag(5, 2);
+
+        var rect = engine.NormalizedRect(10, 5);
+        await Assert.That(rect).IsNotNull();
+        await Assert.That(rect!.Value.Y).IsEqualTo(2);
+        await Assert.That(rect.Value.Height).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task DisableAutoScroll_RestoresRawDragCoordinates()
+    {
+        var engine = new SelectionEngine();
+        engine.ConfigureAutoScroll(new EngineCells.Rect(0, 0, 10, 5), 1);
+        engine.DisableAutoScroll();
+        engine.OnPress(0, 2, MouseButton.Left);
+        engine.OnDrag(9, 4);
+
+        var rect = engine.NormalizedRect(10, 5);
+        await Assert.That(rect).IsNotNull();
+        await Assert.That(rect!.Value.Y).IsEqualTo(2);
+        await Assert.That(rect.Value.Height).IsEqualTo(3);
+    }
 }
