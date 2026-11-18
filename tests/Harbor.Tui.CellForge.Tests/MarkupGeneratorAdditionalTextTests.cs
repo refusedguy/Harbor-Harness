@@ -344,6 +344,28 @@ public class MarkupGeneratorAdditionalTextTests
         await Assert.That(source).Contains("\"files-panel\"");
     }
 
+    /// <summary>
+    ///     #2438: the declared .id reaches the automation protocol through
+    ///     BuildRoot, not through a test double.
+    /// </summary>
+    [Test]
+    public async Task Generator_BuildRoot_EmitsTestIdCallsFromDeclaredIds()
+    {
+        const string markup = """
+            panel "main":
+                .id "files-panel"
+                text "x":
+                    .id "row-1"
+            """;
+        var run = RunText(markup, "Fixtures/TestIds.harbor-ui");
+
+        await Assert.That(run.Diagnostics.Length).IsEqualTo(0);
+        var buildRoot = Source(run, ".BuildRoot.g.cs");
+        await Assert.That(buildRoot).Contains("root.TestId(0, \"files-panel\")");
+        await Assert.That(buildRoot).Contains("root.TestId(1, \"row-1\")");
+        await Assert.That(Source(run, ContractHint)).Contains("void TestId(int sequence, string testId)");
+    }
+
     [Test]
     public async Task Generator_KeyedChild_UsesNamedAddOverload()
     {

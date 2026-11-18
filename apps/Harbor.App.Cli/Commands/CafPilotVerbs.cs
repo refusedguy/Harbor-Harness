@@ -88,6 +88,8 @@ internal static class CafPilotVerbs
         app.Add("dsl check", DslDevCommands.Check);
         app.Add("dsl types", DslDevCommands.Types);
         app.Add("dsl reload", DslDevCommands.Reload);
+        // #2438: headless automation protocol (getTree, clock, testId).
+        app.Add("dsl automation", DslAutomationCommands.Automation);
 #endif
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;
