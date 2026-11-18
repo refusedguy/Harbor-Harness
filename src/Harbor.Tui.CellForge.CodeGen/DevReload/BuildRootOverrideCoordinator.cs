@@ -88,6 +88,7 @@ public sealed class BuildRootOverrideCoordinator
     private bool _installed;
     private int _generation;
 
+    /// <summary>Captures the host resources that a root-body swap must keep alive.</summary>
     /// <param name="host">The long-lived host object.</param>
     /// <param name="eventLoop">The render/event loop, which keeps running.</param>
     /// <param name="capabilityProbe">The already-run capability probe.</param>
