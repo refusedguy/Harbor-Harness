@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Harbor.App.Avalonia.ViewModels;
 
 namespace Harbor.App.Avalonia.Views.Components;
 
