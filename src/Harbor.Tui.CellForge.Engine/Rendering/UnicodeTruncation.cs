@@ -15,8 +15,8 @@ namespace Harbor.Tui.CellForge.Rendering;
 ///         Unlike <c>StringTruncation.Truncate</c> (UTF-16 char count), this walks
 ///         <see cref="Rune"/>s and bills each one through <see cref="UnicodeWidth.Width(Rune)"/>,
 ///         so an emoji takes two cells and a combining mark travels with its base
-///         at zero cost. The <paramref name="suffix"/> is reserved <b>within</b>
-///         <paramref name="cells"/>: pass <see cref="string.Empty"/> for a hard
+///         at zero cost. The <c>suffix</c> is reserved <b>within</b>
+///         <c>cells</c>: pass <see cref="string.Empty"/> for a hard
 ///         clip (tab strip, overlay headers) or <see cref="Ellipsis"/> for a cut
 ///         marker (column grid, diff rows).
 ///     </para>
