@@ -32,9 +32,10 @@ internal static class HelpVerbs
 
     internal static int PrintHelp()
     {
-        Console.WriteLine("""
+        string usageVerbs = CliVerbCatalog.FormatUsageVerbs();
+        Console.WriteLine($"""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|run (task agent=<name> <prompt>|change agent=<name> "<task>" [--dry-run]|list)|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [{usageVerbs}] [--script <path>]
 
                           run change      Verified-change chain (S9, #397): pin, isolate, freeze, checks, report (ends Reported).
                                             Exits: 0 reported, all checks passed; 1 reported, a check failed; 2 bad usage; 3 pre-flight conflict; 4 named-stage failure.

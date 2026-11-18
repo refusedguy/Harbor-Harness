@@ -159,7 +159,7 @@ it. `harbor-gates --list` prints the same table.
 | `check-public-api-resign` | a change to the frozen surface is re-signed in the same commit |
 | `check-reference-trimmer` | does any project in the tree reference a package the compiler never uses |
 | `check-shard-balance` | are the CI test shards balanced by what their projects cost |
-| `check-xml-doc-coverage` | every public member of the frozen contract assembly carries an XML doc |
+| `check-xml-doc-coverage` | every public member of the frozen contract assemblies (Harbor.Abstractions.Contracts and Harbor.Abstractions) carries an XML doc |
 | `codemod-test-events` | the hand-built test events and messages move onto the shared builders |
 | `codemod-tool-names` | the tool-name literals move onto the WellKnownTools catalog |
 | `coverage-report` | the per-project and per-file coverage report of a run |

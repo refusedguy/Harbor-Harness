@@ -227,7 +227,7 @@ var treeGates = []treeGate{
 	{
 		name:  "check-xml-doc-coverage",
 		needs: "the tree",
-		args:  []string{"--min-members", "493", "--min-documented", "478", "--min-coverage", "0.96"},
+		args:  []string{"--min-members", "1344", "--min-documented", "1324", "--min-coverage", "0.98"},
 	},
 	{
 		name:  "ci-shard-slices",

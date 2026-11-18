@@ -141,8 +141,10 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
     {
         private readonly PartVisitor _parts = new(owner);
 
+        /// <inheritdoc />
         public override int Visit(UserMessage message) => owner.Estimate(message.Content) + 100;
 
+        /// <inheritdoc />
         public override int Visit(AssistantMessage message)
         {
             _parts.Reset();
@@ -150,6 +152,7 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
             return _parts.Total + 100;
         }
 
+        /// <inheritdoc />
         public override int Visit(ToolResultMessage message)
         {
             var results = message.Results;
@@ -188,18 +191,21 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
 
         internal void Reset() => Total = 0;
 
+        /// <inheritdoc />
         public override PartVisitor Visit(TextPart part)
         {
             Total += owner.Estimate(part.Text);
             return this;
         }
 
+        /// <inheritdoc />
         public override PartVisitor Visit(ThinkingPart part)
         {
             Total += owner.Estimate(part.Text);
             return this;
         }
 
+        /// <inheritdoc />
         public override PartVisitor Visit(ToolCallPart part)
         {
             // Cache GetRawText() — it allocates a new string every call and is on the
