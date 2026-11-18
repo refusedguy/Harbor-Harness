@@ -104,6 +104,46 @@ public class SessionSearchRunnerTests
     }
 
     [Test]
+    public async Task Rich_Filter_Selects_Session_By_Label()
+    {
+        var withMatch = await SessionFixtures.SeedAsync(_store, "bug triage", User("shared-needle"));
+        await SessionFixtures.SeedAsync(_store, "feature work", User("shared-needle"));
+
+        int exit = await SearchAsync("shared-needle", filter: "label:bug");
+
+        await Assert.That(exit).IsEqualTo(0);
+        await Assert.That(_out.ToString()).Contains(withMatch.Id);
+        await Assert.That(_out.ToString()).Contains("[bug triage]");
+        await Assert.That(_out.ToString().Contains("[feature work]", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
+    public async Task Rich_Filter_Ands_Keys_And_Honours_Model()
+    {
+        await SessionFixtures.SeedAsync(_store, "a", User("model-needle"));
+        var matching = await SessionFixtures.SeedAsync(_store, "b", User("model-needle"));
+        matching = matching with { Model = "kilocode/tencent/hy3:free" };
+        await _store.UpdateAsync(matching);
+
+        int exit = await SearchAsync("model-needle", filter: "model:hy3 label:b");
+
+        await Assert.That(exit).IsEqualTo(0);
+        await Assert.That(_out.ToString()).Contains(matching.Id);
+    }
+
+    [Test]
+    public async Task Invalid_Filter_Is_Argument_Error_And_Does_Not_Scan()
+    {
+        await SessionFixtures.SeedAsync(_store, "a", User("filter-needle"));
+
+        int exit = await SearchAsync("filter-needle", filter: "visibility:private");
+
+        await Assert.That(exit).IsEqualTo(2);
+        await Assert.That(_err.ToString().Contains("Unsupported filter key", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(_out.ToString().Contains("filter-needle", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
     public async Task NoMatches_Returns_One_And_Reports()
     {
         await SessionFixtures.SeedAsync(_store, "empty-ish", User("nothing special"));
