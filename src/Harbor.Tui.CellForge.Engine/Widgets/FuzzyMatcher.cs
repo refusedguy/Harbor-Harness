@@ -102,6 +102,32 @@ public static class FuzzyMatcher
         }
     }
 
+    // A palette refilters on every keystroke. Filter used to allocate two
+    // lists per call (the scored tuples and the materialized result) and
+    // AutocompleteFilter allocated a third (the mode-scoped copy) before even
+    // reaching it. Both ranking buffers are [ThreadStatic]: a keystroke never
+    // shares storage with another renderer's thread, and a result stays stable
+    // until the next Filter call on this thread. Callers that keep a result
+    // across refilters (CommandPaletteView, FilePickerView) copy it into their
+    // own list; the cache above is thread-local for the same reason.
+    private static class FilterScratch<T>
+    {
+        [ThreadStatic]
+        public static List<(T Item, int Score)>? Ranked;
+
+        [ThreadStatic]
+        public static List<T>? Matches;
+    }
+
+    // Cached once per closed T instead of allocating a Comparison<T>-based
+    // comparer on every Sort call (List<T>.Sort(Comparison<T>) wraps it).
+    private sealed class RankedComparer<T> : IComparer<(T Item, int Score)>
+    {
+        public static readonly RankedComparer<T> Instance = new();
+
+        public int Compare((T Item, int Score) x, (T Item, int Score) y) => y.Score.CompareTo(x.Score);
+    }
+
     /// <summary>Number of cached (query, candidate) entries on this thread (≤ 4096).</summary>
     public static int CacheCount => t_cache?.Count ?? 0;
 
@@ -182,31 +208,91 @@ public static class FuzzyMatcher
     /// Stable for equal scores — suggested order survives.
     /// Repeated filters with the same query hit the <see cref="Score" /> cache.
     /// </summary>
-    public static List<T> Filter<T>(string query, IReadOnlyList<T> candidates, Func<T, string> textOf)
+    /// <remarks>
+    /// An empty query returns <paramref name="candidates" /> itself — no copy.
+    /// A non-empty query scores into a <c>[ThreadStatic]</c> ranked buffer and
+    /// materializes into a second thread-local buffer, so a keystroke allocates
+    /// no lists. The returned list is valid until the next <c>Filter</c> call
+    /// on this thread; callers that keep it across refilters must copy it.
+    /// </remarks>
+    public static IReadOnlyList<T> Filter<T>(string query, IReadOnlyList<T> candidates, Func<T, string> textOf) =>
+        FilterCore<T, int>(query, candidates, textOf, state: 0, include: null);
+
+    /// <summary>
+    /// Same ranking, but only candidates accepted by <paramref name="include" />
+    /// are scored. The predicate runs in the scoring pass, so a caller that
+    /// narrows by a second axis (e.g. trigger mode) needs no intermediate list.
+    /// <paramref name="state" /> is passed to the predicate instead of being
+    /// captured, so the delegate can be static and allocation-free.
+    /// </summary>
+    /// <remarks>
+    /// The included subset still comes from the thread-local result buffer,
+    /// even for an empty query — unlike the predicate-free overload there is
+    /// no source list to hand back unchanged.
+    /// </remarks>
+    internal static IReadOnlyList<T> Filter<T, TState>(
+        string query,
+        IReadOnlyList<T> candidates,
+        Func<T, string> textOf,
+        TState state,
+        Func<T, TState, bool> include) =>
+        FilterCore(query, candidates, textOf, state, include);
+
+    private static IReadOnlyList<T> FilterCore<T, TState>(
+        string query,
+        IReadOnlyList<T> candidates,
+        Func<T, string> textOf,
+        TState state,
+        Func<T, TState, bool>? include)
     {
         ArgumentNullException.ThrowIfNull(textOf);
 
-        var result = new List<T>(candidates.Count);
         if (query.Length == 0)
         {
-            result.AddRange(candidates);
-            return result;
+            if (include is null)
+            {
+                return candidates; // empty query: hand back the source, no copy, no sort
+            }
+
+            // With a predicate there is no single source list to return: keep
+            // the original order (the old scoped-then-passthrough behavior).
+            List<T> included = FilterScratch<T>.Matches ??= new(candidates.Count);
+            included.Clear();
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (include(candidates[i], state))
+                {
+                    included.Add(candidates[i]);
+                }
+            }
+
+            return included;
         }
 
-        var scored = new List<(T Item, int Score)>(candidates.Count);
+        List<(T Item, int Score)> ranked = FilterScratch<T>.Ranked ??= new(candidates.Count);
+        ranked.Clear();
         for (int i = 0; i < candidates.Count; i++)
         {
-            int? score = Score(query, textOf(candidates[i]));
+            T candidate = candidates[i];
+            if (include is not null && !include(candidate, state))
+            {
+                continue;
+            }
+
+            int? score = Score(query, textOf(candidate));
             if (score.HasValue)
             {
-                scored.Add((candidates[i], score.Value - i)); // earlier entries win ties
+                ranked.Add((candidate, score.Value - i)); // earlier entries win ties
             }
         }
 
-        scored.Sort(static (a, b) => b.Score.CompareTo(a.Score));
-        foreach (var (item, _) in scored)
+        ranked.Sort(RankedComparer<T>.Instance);
+
+        List<T> result = FilterScratch<T>.Matches ??= new(ranked.Count);
+        result.Clear();
+        for (int i = 0; i < ranked.Count; i++)
         {
-            result.Add(item);
+            result.Add(ranked[i].Item);
         }
 
         return result;

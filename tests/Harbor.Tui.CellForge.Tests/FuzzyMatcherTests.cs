@@ -97,7 +97,7 @@ public class FuzzyMatcherTests
     public async Task Filter_KeepsOnlyMatches_AndRanksBestFirst()
     {
         var items = new[] { "quit session", "clear", "session fork", "help" };
-        List<string> ranked = FuzzyMatcher.Filter("ses", items, static s => s);
+        IReadOnlyList<string> ranked = FuzzyMatcher.Filter("ses", items, static s => s);
 
         await Assert.That(ranked).Count().IsEqualTo(2);
         await Assert.That(ranked[0]).IsEqualTo("session fork"); // boundary hit beats mid-word
@@ -107,7 +107,7 @@ public class FuzzyMatcherTests
     public async Task Filter_EmptyQuery_ReturnsAllInOrder()
     {
         var items = new[] { "b", "a", "c" };
-        List<string> ranked = FuzzyMatcher.Filter("", items, static s => s);
+        IReadOnlyList<string> ranked = FuzzyMatcher.Filter("", items, static s => s);
 
         await Assert.That(ranked).IsEquivalentTo(["b", "a", "c"]);
     }
@@ -116,7 +116,7 @@ public class FuzzyMatcherTests
     public async Task Filter_EqualScores_StableByInputOrder()
     {
         var items = new[] { "aa", "ab" };
-        List<string> ranked = FuzzyMatcher.Filter("a", items, static s => s);
+        IReadOnlyList<string> ranked = FuzzyMatcher.Filter("a", items, static s => s);
 
         await Assert.That(ranked[0]).IsEqualTo("aa");
         await Assert.That(ranked[1]).IsEqualTo("ab");
@@ -221,9 +221,12 @@ public class FuzzyMatcherTests
 
         FuzzyMatcher.ClearCache();
         int before = FuzzyMatcher.CacheCount;
-        List<string> first = FuzzyMatcher.Filter("ses", catalog, static s => s);
+        // Filter reuses a thread-local buffer, so snapshot each pass before
+        // the next one overwrites it — otherwise the ranking comparison below
+        // would compare the buffer with itself.
+        IReadOnlyList<string> first = FuzzyMatcher.Filter("ses", catalog, static s => s).ToArray();
         int afterFirst = FuzzyMatcher.CacheCount;
-        List<string> second = FuzzyMatcher.Filter("ses", catalog, static s => s);
+        IReadOnlyList<string> second = FuzzyMatcher.Filter("ses", catalog, static s => s).ToArray();
         int afterSecond = FuzzyMatcher.CacheCount;
 
         await Assert.That(first.Count).IsGreaterThan(0);

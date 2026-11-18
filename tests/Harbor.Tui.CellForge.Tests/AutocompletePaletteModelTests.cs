@@ -70,7 +70,7 @@ public class AutocompletePaletteModelTests
             new("d", "src/app", string.Empty, AutocompleteMode.Directory),
         };
 
-        List<AutocompleteItem> result = AutocompleteFilter.Filter(string.Empty, rows, AutocompleteMode.Command);
+        IReadOnlyList<AutocompleteItem> result = AutocompleteFilter.Filter(string.Empty, rows, AutocompleteMode.Command);
         await Assert.That(result.Count).IsEqualTo(1);
         await Assert.That(result[0].Id).IsEqualTo("help");
     }
@@ -84,7 +84,7 @@ public class AutocompletePaletteModelTests
             Command("branch", "Branch Session"),
         };
 
-        List<AutocompleteItem> result = AutocompleteFilter.Filter("br", rows, AutocompleteMode.Command);
+        IReadOnlyList<AutocompleteItem> result = AutocompleteFilter.Filter("br", rows, AutocompleteMode.Command);
         await Assert.That(result.Count).IsEqualTo(1);
         await Assert.That(result[0].Id).IsEqualTo("branch");
     }
