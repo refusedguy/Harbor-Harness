@@ -263,6 +263,17 @@ jobs:
           done
           tools/bin/harbor-gates-linux-x64 demo-repro report --dir assets/demo
 
+      # State coverage (issue #2509). The steps above pin the envelope, and the
+      # record-twice check pins the sequence, but neither asks whether every
+      # promised state is still on screen: a recording can keep its frame count,
+      # duration and final screen while losing the approval card. This compares
+      # the distinct screens found in each GIF with the floor pinned in
+      # demo/toolchain.lock and prints found vs minimum into the step summary.
+      # Its failure path is proven by check-demo-screens.py --self-test in
+      # docs.yml, which runs on a pull request that edits this gate.
+      - name: Screen coverage (distinct screens vs minimum)
+        run: python3 tools/check-demo-screens.py --dir assets/demo
+
       # Size/quality drift gate. Stdlib-only GIF walker (no decoder, no extra
       # package): reads block structure, per-frame delays and the raw LZW
       # payload bytes, which is all the comparison needs.
