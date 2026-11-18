@@ -188,7 +188,7 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
 - **Named by** 56 file(s) in 26 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia.Tests, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Benchmarks, Harbor.Config.Tests, Harbor.Core.Tests, Harbor.Hosting
 - **Registered in the container**: **no DI registration**
 - **Bypassed**: 3 direct construction(s) of the concrete type, 0 signature(s) naming the concrete type where the interface was the contract:
-  - `RetryLlmClientDecorator` instead of `ILlmClient`, construction at [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs):265
+  - `RetryLlmClientDecorator` instead of `ILlmClient`, construction at [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs):267
   - `OllamaLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Hosting/Modules/ProviderFactories.cs`](../src/Harbor.Hosting/Modules/ProviderFactories.cs):127
   - `InstrumentedLlmClient` instead of `ILlmClient`, construction at [`src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs`](../src/Harbor.Telemetry.Core/InstrumentedLlmClient.cs):26
 
