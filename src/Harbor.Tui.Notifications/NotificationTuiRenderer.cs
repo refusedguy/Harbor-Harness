@@ -227,6 +227,13 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
     /// </summary>
     private static INotificationBackend DetectBackend(INotificationProcessRunner processRunner)
     {
+        // N07: an explicit opt-in for headless/SSH sessions. The notification
+        // renderer writes no other terminal output, so an OSC 777 sequence on
+        // stdout cannot interleave with a frame. Opt-in wins over the platform
+        // default: an SSH session has no notify-send / osascript / msg to use.
+        if (Environment.GetEnvironmentVariable("HARBOR_NOTIFY_OSC777") == "1")
+            return new Osc777NotificationBackend(Console.Out);
+
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             return new LinuxNotifySendBackend(processRunner);
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
