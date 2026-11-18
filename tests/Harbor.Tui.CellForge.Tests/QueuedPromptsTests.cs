@@ -88,6 +88,37 @@ public class ComposerQueuedPromptsTests
         composer.EnqueueQueued("b");
         await Assert.That(composer.QueuedCounterText()).IsEqualTo("⏳ 2 queued");
     }
+
+    [Test]
+    public async Task QueuedPrompts_IsStableAcrossReads_AndTracksEveryMutation()
+    {
+        var composer = new ComposerController();
+        var empty = composer.QueuedPrompts;
+        await Assert.That(ReferenceEquals(empty, composer.QueuedPrompts)).IsTrue();
+
+        composer.EnqueueQueued("a");
+        composer.EnqueueQueued("b");
+        var afterEnqueue = composer.QueuedPrompts;
+        await Assert.That(afterEnqueue.Count).IsEqualTo(2);
+        await Assert.That(afterEnqueue[0]).IsEqualTo("a");
+        await Assert.That(afterEnqueue[1]).IsEqualTo("b");
+        await Assert.That(ReferenceEquals(afterEnqueue, composer.QueuedPrompts)).IsTrue();
+
+        composer.TryDequeueQueued(out _);
+        await Assert.That(composer.QueuedPrompts.Count).IsEqualTo(1);
+        await Assert.That(composer.QueuedPrompts[0]).IsEqualTo("b");
+
+        composer.TryUndoQueued(out _);
+        await Assert.That(composer.QueuedPrompts.Count).IsEqualTo(0);
+
+        composer.EnqueueQueued("c");
+        composer.ClearQueued();
+        await Assert.That(composer.QueuedPrompts.Count).IsEqualTo(0);
+
+        composer.EnqueueQueued("d");
+        composer.ClearQueuedReturningLast(out _);
+        await Assert.That(composer.QueuedPrompts.Count).IsEqualTo(0);
+    }
 }
 
 public class StreamCoalescerQueueTests

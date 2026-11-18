@@ -79,11 +79,20 @@ public sealed class ComposerController
     /// <summary>Waiting prompts, oldest-first.</summary>
     private readonly List<string> _queued = [];
 
+    /// <summary>
+    /// Cached materialization of <see cref="_queued"/>, rebuilt only on mutation so
+    /// a render-time read (<c>QueuedPromptDock.Open</c>) allocates nothing (#2653).
+    /// </summary>
+    private IReadOnlyList<string> _queuedSnapshot = Array.Empty<string>();
+
     /// <summary>Number of prompts waiting for the agent to idle (dock-counter source).</summary>
     public int QueuedCount => _queued.Count;
 
     /// <summary>Oldest-first snapshot of the waiting prompts (queue-dialog source).</summary>
-    public IReadOnlyList<string> QueuedPrompts => _queued.ToArray();
+    public IReadOnlyList<string> QueuedPrompts => _queuedSnapshot;
+
+    /// <summary>Rebuilds the cached view after any change to <see cref="_queued"/>.</summary>
+    private void RefreshQueuedSnapshot() => _queuedSnapshot = _queued.ToArray();
 
     /// <summary>Dock-counter line for the prompt rail; null when the queue is empty.</summary>
     public string? QueuedCounterText() =>
@@ -100,6 +109,7 @@ public sealed class ComposerController
         }
 
         _queued.Add(trimmed);
+        RefreshQueuedSnapshot();
     }
 
     /// <summary>FIFO take for the idle drain; false when the queue is empty.</summary>
@@ -113,6 +123,7 @@ public sealed class ComposerController
 
         text = _queued[0];
         _queued.RemoveAt(0);
+        RefreshQueuedSnapshot();
         return true;
     }
 
@@ -129,11 +140,16 @@ public sealed class ComposerController
         int last = _queued.Count - 1;
         text = _queued[last];
         _queued.RemoveAt(last);
+        RefreshQueuedSnapshot();
         return true;
     }
 
     /// <summary>Drops every waiting prompt (session switch: the queue never survives it).</summary>
-    public void ClearQueued() => _queued.Clear();
+    public void ClearQueued()
+    {
+        _queued.Clear();
+        RefreshQueuedSnapshot();
+    }
 
     /// <summary>Abort path: drops the queue but hands the newest payload back
     /// instead of losing it (opencode's cancel→composer); false when empty.</summary>
@@ -147,6 +163,7 @@ public sealed class ComposerController
 
         last = _queued[^1];
         _queued.Clear();
+        RefreshQueuedSnapshot();
         return true;
     }
 
