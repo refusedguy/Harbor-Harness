@@ -104,14 +104,17 @@ internal static class TaskArgs
 
         if (isSchedule)
         {
-            if (!flags.TryGetValue("--cron", out string cron) || string.IsNullOrWhiteSpace(cron))
+            string? cron = flags.GetValueOrDefault("--cron");
+            if (string.IsNullOrWhiteSpace(cron))
                 return Result.Failure<TaskRequest>("task schedule: --cron is required.");
-            if (!flags.TryGetValue("--prompt", out string prompt) || string.IsNullOrWhiteSpace(prompt))
+            string? prompt = flags.GetValueOrDefault("--prompt");
+            if (string.IsNullOrWhiteSpace(prompt))
                 return Result.Failure<TaskRequest>("task schedule: --prompt is required.");
             if (prompt.Length > MaxPromptLength)
                 return Result.Failure<TaskRequest>($"task schedule: --prompt must be at most {MaxPromptLength} characters.");
 
-            string name = flags.TryGetValue("--name", out string supplied) && !string.IsNullOrWhiteSpace(supplied)
+            string? supplied = flags.GetValueOrDefault("--name");
+            string name = !string.IsNullOrWhiteSpace(supplied)
                 ? supplied
                 : DeriveName(prompt);
             Result nameValidation = ValidateName(name);
@@ -119,7 +122,8 @@ internal static class TaskArgs
                 return nameValidation.ConvertFailure<TaskRequest>();
 
             string? webhook = null;
-            if (flags.TryGetValue("--webhook", out string hook) && !string.IsNullOrWhiteSpace(hook))
+            string? hook = flags.GetValueOrDefault("--webhook");
+            if (!string.IsNullOrWhiteSpace(hook))
             {
                 bool validHook = false;
                 try
