@@ -7,7 +7,8 @@
 # CLI equivalent:        ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli \
 #                          --demo --scene markdown --tui cellforge --chunk-delay 0
 # CI regenerates all tapes: .github/workflows/demo.yml (pinned toolchain in
-# demo/toolchain.lock; every GIF is frame-normalised by tools/demo_repro.py).
+# demo/toolchain.lock; every GIF is frame-normalised by the compiled gate in
+# tools/gates/demo-repro/).
 #
 # Determinism: the cell-diff backend owns the alternate screen, so there is no
 # output pipe to scrub or pace. The mock LLM streams every delta in one burst

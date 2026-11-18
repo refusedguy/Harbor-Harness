@@ -13,8 +13,9 @@
 #   ttyd     — the PTY server the recorder drives
 #   ffmpeg   — pinned like everything else. The GitHub runner image does not ship
 #              ffmpeg at all (vhs-action used to install the *latest* one on the
-#              fly), and `tools/demo_repro.py` needs it to re-pace the captures.
-#              Versioned, immutable release tag — not a rolling "latest".
+#              fly), and the compiled demo-repro gate (tools/gates/demo-repro/)
+#              needs it to re-pace the captures. Versioned, immutable release tag
+#              — not a rolling "latest".
 #   font     — the only font the tapes ask for; installed to
 #              ~/.local/share/fonts. No Google Fonts, no Nerd Fonts, no
 #              Liberation — the extra fontconfig candidates are what made the
@@ -23,7 +24,7 @@
 # The tapes drive `harbor --demo` only. No fzf, no vim, no neovim, no shell
 # plugin is executed anywhere in the demo path, so there is nothing else to pin.
 #
-# Recording constants (the deterministic envelope — see tools/demo_repro.py):
+# Recording constants (the deterministic envelope — see tools/gates/demo-repro/):
 #   GIF_FPS/GIF_FRAMES   every committed GIF is normalised to exactly
 #                        GIF_FRAMES frames at GIF_FPS ⇒ identical frame count and
 #                        identical duration on every run, machine independent.

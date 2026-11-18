@@ -7,8 +7,9 @@
 # CLI equivalent:        ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli \
 #                          --demo --scene hero --tui cellforge --chunk-delay 0
 # CI regenerates all tapes: .github/workflows/demo.yml (pinned toolchain in
-# demo/toolchain.lock; every GIF is frame-normalised by tools/demo_repro.py, so
-# the frame count and duration are identical on every run).
+# demo/toolchain.lock; every GIF is frame-normalised by the compiled gate in
+# tools/gates/demo-repro/, so the frame count and duration are identical on
+# every run).
 #
 # Determinism: run-scene.sh unsets every *_API_KEY, pins TZ/LANG/LC_ALL/PS1 and
 # HARBOR_MASCOT=off. The cell-diff renderer owns the alternate screen, so there is
