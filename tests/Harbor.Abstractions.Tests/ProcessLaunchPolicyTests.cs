@@ -28,9 +28,9 @@ public class ProcessLaunchPolicyTests
         IReadOnlyList<string> keys = ProcessLaunchPolicy.ApplyEnvironment(
             psi, ["PATH", CanaryKey, CanaryKey, " ", "HARBOR_ABSENT_CANARY"]);
 
-        await Assert.That(HasKey(keys, "PATH")).IsTrue();
-        await Assert.That(HasKey(keys, CanaryKey)).IsTrue();
-        await Assert.That(HasKey(keys, "HARBOR_ABSENT_CANARY")).IsFalse();
+        await Assert.That(keys.Contains("PATH")).IsTrue();
+        await Assert.That(keys.Contains(CanaryKey)).IsTrue();
+        await Assert.That(keys.Contains("HARBOR_ABSENT_CANARY")).IsFalse();
         await Assert.That(keys.Count).IsEqualTo(2);
         await Assert.That(keys[0]).IsEqualTo(CanaryKey);
         await Assert.That(keys[1]).IsEqualTo("PATH");
@@ -60,8 +60,8 @@ public class ProcessLaunchPolicyTests
 
         IReadOnlyList<string> keys = ProcessLaunchPolicy.InheritedEnvironmentKeys();
 
-        await Assert.That(HasKey(keys, CanaryKey)).IsTrue();
-        await Assert.That(HasKey(keys, "PATH")).IsTrue();
+        await Assert.That(keys.Contains(CanaryKey)).IsTrue();
+        await Assert.That(keys.Contains("PATH")).IsTrue();
     }
 
     [Test]
@@ -74,15 +74,5 @@ public class ProcessLaunchPolicyTests
 
         await Assert.That(keys.Count).IsEqualTo(0);
         await Assert.That(psi.Environment.Count).IsEqualTo(0);
-    }
-
-    private static bool HasKey(IReadOnlyList<string> keys, string name)
-    {
-        for (int i = 0; i < keys.Count; i++)
-        {
-            if (keys[i] == name)
-                return true;
-        }
-        return false;
     }
 }
