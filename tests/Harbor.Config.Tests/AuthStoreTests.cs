@@ -40,6 +40,7 @@ public class AuthStoreTests
     private string? _ambientAnthropicApiKey;
     private string? _ambientUnknownProviderApiKey;
     private string? _ambientListTestProviderApiKey;
+    private string? _ambientKiloApiKey;
 
     [Before(Test)]
     public void SaveAmbientProviderKeys()
@@ -47,6 +48,7 @@ public class AuthStoreTests
         _ambientAnthropicApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         _ambientUnknownProviderApiKey = Environment.GetEnvironmentVariable("UNKNOWNPROVIDER_API_KEY");
         _ambientListTestProviderApiKey = Environment.GetEnvironmentVariable("LISTTESTPROVIDER_API_KEY");
+        _ambientKiloApiKey = Environment.GetEnvironmentVariable("KILO_API_KEY");
     }
 
     [After(Test)]
@@ -55,6 +57,7 @@ public class AuthStoreTests
         Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", _ambientAnthropicApiKey);
         Environment.SetEnvironmentVariable("UNKNOWNPROVIDER_API_KEY", _ambientUnknownProviderApiKey);
         Environment.SetEnvironmentVariable("LISTTESTPROVIDER_API_KEY", _ambientListTestProviderApiKey);
+        Environment.SetEnvironmentVariable("KILO_API_KEY", _ambientKiloApiKey);
     }
 
     private static string NewTempConfigPath() =>
@@ -262,6 +265,31 @@ public class AuthStoreTests
         finally
         {
             Environment.SetEnvironmentVariable(envName, previousEnv);
+            if (File.Exists(path)) File.Delete(path);
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Test]
+    public async Task ListApiKeysAsync_ResolvesPresetEnvVarToPresetId()
+    {
+        (var auth, _, string path) = CreateAuthStore();
+        // "kilocode" declares KILO_API_KEY. Reverse-parsing that name used to
+        // invent a phantom provider "kilo" and never mark "kilocode" (#2560).
+        Environment.SetEnvironmentVariable("KILO_API_KEY", "kilo-from-env");
+        try
+        {
+            var result = await auth.ListApiKeysAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.ContainsKey("kilocode")).IsTrue();
+            await Assert.That(result.Value["kilocode"]).IsTrue();
+            await Assert.That(result.Value.ContainsKey("kilo")).IsFalse();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KILO_API_KEY", _ambientKiloApiKey);
             if (File.Exists(path)) File.Delete(path);
             string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
