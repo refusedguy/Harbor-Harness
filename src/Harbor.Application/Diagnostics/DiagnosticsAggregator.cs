@@ -82,7 +82,7 @@ public sealed class DiagnosticsAggregator : IDisposable
     // pairing with the publish inside the lock). Same discipline as
     // FileTrustPolicy._entries / RendererPipeline._current / UiStore._state.
     private volatile IReadOnlyList<DiagnosticIssue> _snapshot = [];
-    private bool _disposed;
+    private volatile bool _disposed;
 
     /// <summary>
     ///     Create an aggregator and start observing. Either dependency may be
@@ -173,6 +173,11 @@ public sealed class DiagnosticsAggregator : IDisposable
 
     private ValueTask OnToolExecutionEnd(ToolExecutionEndEvent @event, CancellationToken _)
     {
+        if (_disposed)
+        {
+            return ValueTask.CompletedTask;
+        }
+
         string output = @event.Result.Output;
         if (string.IsNullOrWhiteSpace(output))
         {
@@ -201,6 +206,11 @@ public sealed class DiagnosticsAggregator : IDisposable
 
     private ValueTask OnAgentError(AgentErrorEvent @event, CancellationToken _)
     {
+        if (_disposed)
+        {
+            return ValueTask.CompletedTask;
+        }
+
         string message = @event.Message;
         if (string.IsNullOrWhiteSpace(message))
         {
@@ -320,6 +330,15 @@ public sealed class DiagnosticsAggregator : IDisposable
 
     private void Publish()
     {
+        // #2588: a callback that started before Dispose() can still reach here
+        // afterwards (the LSP refresh is detached). The volatile read pairs with
+        // the write in Dispose() so a torn-down aggregator never publishes a new
+        // snapshot and resurrects diagnostics the host already dropped.
+        if (_disposed)
+        {
+            return;
+        }
+
         DiagnosticsSnapshotEventArgs args;
         lock (_sync)
         {
