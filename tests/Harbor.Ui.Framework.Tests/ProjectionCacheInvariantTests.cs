@@ -48,7 +48,7 @@ public class ProjectionCacheInvariantTests
         await Assert.That(screen.Transcript).IsNotNull();
         await Assert.That(screen.StatusBar).IsNotNull();
         await Assert.That(screen.Input).IsNotNull();
-        await Assert.That(screen.StateRevision).IsNotEqualTo(string.Empty);
+        await Assert.That(screen.StateRevision.ToString()).IsNotEqualTo(string.Empty);
     }
 
     /// <summary>

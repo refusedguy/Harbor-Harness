@@ -141,7 +141,29 @@ public class DefaultUiProjectorTests
         var state = new UiState();
         var screen = _projector.Project(state);
 
-        await Assert.That(screen.StateRevision).IsNotEmpty();
+        await Assert.That(screen.StateRevision.ToString()).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Project_StateRevision_TracksStreamingTextAndThinkLengths()
+    {
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                Active = new ActiveMessage("abcd", "xy"),
+                PendingStreamText = ChunkedBuffer.Empty.Append("pq"),
+                PendingStreamThink = ChunkedBuffer.Empty.Append("z")
+            }
+        };
+
+        var screen = _projector.Project(state);
+
+        await Assert.That(screen.StateRevision.LinesLength).IsEqualTo(0);
+        await Assert.That(screen.StateRevision.IsStreaming).IsTrue();
+        await Assert.That(screen.StateRevision.TextLength).IsEqualTo(6);
+        await Assert.That(screen.StateRevision.ThinkLength).IsEqualTo(3);
     }
 
     [Test]

@@ -115,4 +115,4 @@ public sealed record UiScreenModel(
     UiStatusBarModel StatusBar,
     UiInputModel Input,
     FocusMode Focus,
-    string StateRevision);
+    UiRevisionFingerprint StateRevision);

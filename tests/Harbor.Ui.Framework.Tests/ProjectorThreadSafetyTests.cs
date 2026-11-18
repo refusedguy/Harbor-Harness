@@ -105,9 +105,9 @@ public class ProjectorThreadSafetyTests
             throw new InvalidOperationException("Project returned a screen with an unpopulated Input.");
         }
 
-        if (string.IsNullOrEmpty(screen.StateRevision))
+        if (screen.StateRevision == default)
         {
-            throw new InvalidOperationException("Project returned a screen with an empty StateRevision.");
+            throw new InvalidOperationException("Project returned a screen with an unpopulated StateRevision.");
         }
     }
 

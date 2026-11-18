@@ -612,14 +612,20 @@ public sealed class DefaultUiProjector : IUiProjector
         return default;
     }
 
-    private static string ComputeRevision(UiState state)
+    private static UiRevisionFingerprint ComputeRevision(UiState state)
     {
         // Store revision first (stale-drop ordering), then the visible text
-        // lengths INCLUDING unflushed pending deltas (#94) so the revision
-        // string moves as soon as newly arrived text becomes visible.
+        // lengths INCLUDING unflushed pending deltas (#94) so the fingerprint
+        // moves as soon as newly arrived text becomes visible.
+        // A value tuple avoids the per-token string allocation (#2634).
         int textLen = state.Chat.Active.TextBuffer.Length + state.Chat.PendingStreamText.Length;
         int thinkLen = state.Chat.Active.ThinkBuffer.Length + state.Chat.PendingStreamThink.Length;
-        return $"{state.Revision}:{state.Chat.Lines.Length}:{state.Chat.IsStreaming}:{textLen}:{thinkLen}";
+        return new UiRevisionFingerprint(
+            state.Revision,
+            state.Chat.Lines.Length,
+            state.Chat.IsStreaming,
+            textLen,
+            thinkLen);
     }
 
     /// <summary>
