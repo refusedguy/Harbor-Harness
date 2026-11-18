@@ -58,9 +58,12 @@ namespace Harbor.Ui.Framework.Projection;
 ///         whose fields are still at their defaults. The cache object is written
 ///         once, in the single object initialiser at the end of
 ///         <see cref="Project" />, and is never mutated afterwards, so a shared
-///         instance cannot hand out a torn model. This is the same
-///         release/acquire pair <c>UiStore._state</c> documents for exactly the
-///         same reason, and it is what makes the desktop host's
+///         instance cannot hand out a torn model. The first-occurrence map is
+///         persistent (<see cref="ImmutableDictionary{TKey,TValue}" />): an
+///         append derives a NEW map by structural sharing and publishes it with
+///         the next cache, leaving every earlier cache unchanged. This is the
+///         same release/acquire pair <c>UiStore._state</c> documents for exactly
+///         the same reason, and it is what makes the desktop host's
 ///         <c>AddSingleton&lt;DefaultUiProjector&gt;</c> honest.
 ///     </para>
 ///     <para>
@@ -217,14 +220,16 @@ public sealed class DefaultUiProjector : IUiProjector
     /// <summary>Projected history rows plus whether the cached ones were reused.</summary>
     /// <remarks>
     ///     <see cref="FirstIndex" /> carries the first-occurrence map produced
-    ///     for this projection so the next one can extend it incrementally
-    ///     instead of rebuilding it (issue #1535).
+    ///     for this projection so the next one can derive a new map from it by
+    ///     structural sharing instead of rebuilding it (issue #1535). It is
+    ///     immutable, so publishing it in a second cache cannot mutate the
+    ///     first one.
     /// </remarks>
     private readonly record struct HistoryModels(
         ImmutableArray<UiRenderedLine> Rendered,
         ImmutableArray<UiBlock> Blocks,
         bool Unchanged,
-        Dictionary<ChatLine, int>? FirstIndex);
+        ImmutableDictionary<ChatLine, int>? FirstIndex);
 
     /// <summary>Projected streaming tail plus whether the cached one was reused.</summary>
     private readonly record struct TailModels(ImmutableArray<UiRenderedLine> Rendered, ImmutableArray<UiBlock> Blocks, bool Unchanged);
@@ -298,10 +303,10 @@ public sealed class DefaultUiProjector : IUiProjector
 
         // Pure append (the MessageEnd fold): the map cached from the previous
         // projection already covers every line of the unchanged prefix, so it
-        // only needs the appended lines TryAdd'd in (issue #1535). A full map
-        // stays for a changed prefix: entries left over from beyond the
-        // common prefix would return stale first-occurrence indices once the
-        // history is rewritten underneath them.
+        // only needs the appended lines added on a NEW map (issue #1535). A
+        // full map stays for a changed prefix: entries left over from beyond
+        // the common prefix would return stale first-occurrence indices once
+        // the history is rewritten underneath them.
         bool pureAppend = cache is not null
             && commonPrefix == cache.Lines.Length
             && cache.FirstIndex is not null;
@@ -313,10 +318,6 @@ public sealed class DefaultUiProjector : IUiProjector
             renderedBuilder.AddRange(cache!.BaseRendered.AsSpan().Slice(0, commonPrefix));
             blockBuilder.AddRange(cache.BaseBlocks.AsSpan().Slice(0, commonPrefix));
         }
-
-        var firstOccurrence = pureAppend
-            ? cache!.FirstIndex!
-            : new Dictionary<ChatLine, int>(state.Chat.Lines.Length);
 
         void Emit(int i, int firstIndex)
         {
@@ -337,39 +338,31 @@ public sealed class DefaultUiProjector : IUiProjector
                 Phase: MessageRenderPhase.Complete));
         }
 
+        // Copy-on-append: Add returns a new map sharing the old map's nodes, so
+        // the map published in an earlier cache stays untouched. A full
+        // Dictionary copy per append would stay correct but pays O(history)
+        // allocations every fold, which the #1535 per-change budget rejects.
+        // A persistent map keeps extension proportional to the appended lines.
+        ImmutableDictionary<ChatLine, int> firstOccurrence;
         if (pureAppend)
         {
-            // The map is published in the next cache, so it outlives this call
-            // and concurrent Project callers may arrive with the same cached
-            // instance. The extension is therefore serialized, and every
-            // lookup into the shared map happens inside the same lock; the
-            // rebuild and linesSame paths never touch its contents.
-            // TODO(principles)[THREAD-SAFETY]: extending FirstIndex mutates a
-            // map already published inside an earlier ProjectionCache, so this
-            // lock stands in for the copy-on-append or concurrent-map
-            // refactoring the shape would really want; see the mutation note
-            // on the ProjectionCache type.
-            lock (firstOccurrence)
+            firstOccurrence = cache!.FirstIndex!;
+            for (int i = commonPrefix; i < state.Chat.Lines.Length; i++)
             {
-                if (state.Chat.Lines.Length > firstOccurrence.Count)
-                {
-                    firstOccurrence.EnsureCapacity(state.Chat.Lines.Length);
-                }
+                ChatLine line = state.Chat.Lines[i];
 
-                for (int i = commonPrefix; i < state.Chat.Lines.Length; i++)
+                // A missing key IS the first-occurrence answer: nothing in the
+                // prefix or in the appended suffix so far maps this line. A
+                // hit returns the stored index, which is what the full
+                // rebuild's `firstIndex[line]` lookup returns.
+                if (firstOccurrence.TryGetValue(line, out int first))
                 {
-                    // A successful TryAdd IS the first-occurrence answer —
-                    // nothing earlier maps this line. When it fails, the
-                    // stored index is the first one, which is what the full
-                    // rebuild's `firstIndex[line]` lookup returns.
-                    if (firstOccurrence.TryAdd(state.Chat.Lines[i], i))
-                    {
-                        Emit(i, i);
-                    }
-                    else
-                    {
-                        Emit(i, firstOccurrence[state.Chat.Lines[i]]);
-                    }
+                    Emit(i, first);
+                }
+                else
+                {
+                    firstOccurrence = firstOccurrence.Add(line, i);
+                    Emit(i, i);
                 }
             }
         }
@@ -377,11 +370,19 @@ public sealed class DefaultUiProjector : IUiProjector
         {
             // First-occurrence map preserves the historical
             // `Lines.IndexOf(line)` BlockId semantics (first equal line wins)
-            // at O(n) total instead of O(n²).
+            // at O(n) total instead of O(n²). The builder is used once here and
+            // never published, so its mutation stays local to this call.
+            var builder = ImmutableDictionary.CreateBuilder<ChatLine, int>();
             for (int i = 0; i < state.Chat.Lines.Length; i++)
             {
-                firstOccurrence.TryAdd(state.Chat.Lines[i], i);
+                ChatLine line = state.Chat.Lines[i];
+                if (!builder.ContainsKey(line))
+                {
+                    builder.Add(line, i);
+                }
             }
+
+            firstOccurrence = builder.ToImmutable();
 
             for (int i = commonPrefix; i < state.Chat.Lines.Length; i++)
             {
@@ -474,16 +475,13 @@ public sealed class DefaultUiProjector : IUiProjector
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         The one deliberate exception to "read-only thereafter" is
-    ///         <see cref="FirstIndex" />, which <see cref="ProjectHistory" />
-    ///         extends in place on a pure append (issue #1535) rather than
-    ///         rebuilding — an O(lines) rehash per fold, every fold, was the
-    ///         cost of the old full-map rebuild. The extension mutates a map
-    ///         other threads may be reading out of an earlier cache, so it is
-    ///         serialized by locking the map, and every lookup into the shared
-    ///         map happens inside that lock. The <see cref="FirstIndex" />
-    ///         contents always cover the cached <see cref="Lines" /> exactly,
-    ///         which is what makes an extension without a rebuild sufficient.
+    ///         <see cref="FirstIndex" /> is read-only too. <see cref="ProjectHistory" />
+    ///         derives a new persistent map on a pure append (issue #1535) by
+    ///         structural sharing, so no earlier cache is mutated and no lock is
+    ///         needed. A full-map rebuild still happens on a changed prefix,
+    ///         where entries beyond that prefix would answer stale
+    ///         first-occurrence indices. Each published map covers the cached
+    ///         <see cref="Lines" /> exactly.
     ///     </para>
     ///     <para>
     ///         The six members marked <see langword="required" /> are <b>never</b> absent —
@@ -507,9 +505,9 @@ public sealed class DefaultUiProjector : IUiProjector
     ///         is the one remaining assumption. #605 closed it: the field holding this cache
     ///         is <c>volatile</c>, so a second thread that can see the reference is
     ///         guaranteed to see every member below assigned, even though the desktop host
-    ///         registers the projector as a singleton. "Read-only thereafter" is what makes
-    ///         the release/acquire pair sufficient — a lock would be needed only if this
-    ///         object were ever mutated after publication.
+    ///         registers the projector as a singleton. Nothing in this object is mutated
+    ///         after publication, including <see cref="FirstIndex" />, so the release/acquire
+    ///         pair is sufficient without a lock.
     ///     </para>
     /// </remarks>
     private sealed class ProjectionCache
@@ -525,9 +523,10 @@ public sealed class DefaultUiProjector : IUiProjector
 
         // First-occurrence map over `Lines` (issue #1535): for every line, the
         // index of its first equal occurrence — the BlockId semantics. Covers
-        // `Lines` exactly by construction and is extended in place on a pure
-        // append, rebuilt whenever the common prefix changed.
-        public Dictionary<ChatLine, int>? FirstIndex;
+        // `Lines` exactly by construction. A pure append derives a new map by
+        // structural sharing; a changed prefix rebuilds it. Never mutated once
+        // published, so volatile publication is enough for concurrent readers.
+        public ImmutableDictionary<ChatLine, int>? FirstIndex;
 
         // Streaming tail: keyed by IsStreaming + normalized buffer references.
         public bool IsStreaming;
