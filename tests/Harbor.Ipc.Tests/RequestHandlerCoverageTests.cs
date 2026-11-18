@@ -35,11 +35,11 @@ public class RequestHandlerCoverageTests
     /// </summary>
     /// <remarks>
     ///     It carries no MessagePack <c>[Union(n, typeof(T))]</c> tag and lives
-    ///     in this assembly, so <see cref="HarborRequestTypes.All" /> — which
-    ///     scans <c>typeof(HarborRequest).Assembly</c> — cannot see it, and no
-    ///     handler can be registered for it. That is the honest way to reach
-    ///     the dispatch-time branch: a client speaking a protocol the server
-    ///     does not have.
+    ///     in this assembly, not in <c>Harbor.Ipc.Abstractions</c>, so the
+    ///     explicit <see cref="HarborRequestTypes.All" /> census does not name
+    ///     it and no handler can be registered for it. That is the honest way to
+    ///     reach the dispatch-time branch: a client speaking a protocol the
+    ///     server does not have.
     /// </remarks>
     private sealed record UntaggedProbeRequest : HarborRequest;
 
@@ -117,7 +117,7 @@ public class RequestHandlerCoverageTests
     }
 
     /// <summary>
-    ///     Non-vacuity of the census: it reads the real union, not an empty or
+    ///     Non-vacuity of the census: it names the real union, not an empty or
     ///     stale set. An empty census would make the constructor's check pass
     ///     for free, which is the same failure mode as a source rule grading
     ///     against a non-existent assembly.
@@ -126,8 +126,8 @@ public class RequestHandlerCoverageTests
     public async Task RequestTypeCensus_IsLive()
     {
         await Assert.That(HarborRequestTypes.All.Count).IsGreaterThan(0).Because(
-            "typeof(HarborRequest).Assembly must be loadable and must contain the union's members; "
-            + "an empty census makes every registry look complete");
+            "the explicit census must name the union's members; an empty census makes every "
+            + "registry look complete");
 
         List<string> names = [.. HarborRequestTypes.All.Select(t => t.Name)];
 
@@ -138,14 +138,38 @@ public class RequestHandlerCoverageTests
                  })
         {
             await Assert.That(names).Contains(expected).Because(
-                "the census is derived from the type system, so a member it does not name does not "
-                + "exist as far as every boundary check is concerned");
+                "every boundary check reads this list, so a member it does not name does not exist "
+                + "as far as those checks are concerned");
         }
 
         List<bool> memberIsAbstract = [.. HarborRequestTypes.All.Select(t => t.IsAbstract)];
         await Assert.That(memberIsAbstract).Contains(false).Because(
-            "the census enumerates concrete subtypes; an abstract member would mean the filter "
-            + "regressed and a base type was counted as its own answer");
+            "the census enumerates concrete subtypes; an abstract member would mean a base type "
+            + "was counted as its own answer");
+    }
+
+    /// <summary>
+    ///     The reflection half that product code gave up for NativeAOT.
+    ///     <see cref="HarborRequestTypes.All" /> is an explicit list so no
+    ///     <c>Assembly.GetTypes()</c> call reaches the trimmer; this test derives
+    ///     the real concrete subtype set from the union's assembly and requires
+    ///     the two to match exactly. Adding a <see cref="HarborRequest" /> type
+    ///     without declaring it in the census turns this test red instead of
+    ///     shipping a request no handler can answer.
+    /// </summary>
+    [Test]
+    public async Task RequestTypeCensus_MatchesTheDeclaredUnion()
+    {
+        Type[] declared = typeof(HarborRequest).Assembly
+            .GetTypes()
+            .Where(t => !t.IsAbstract && !t.IsInterface && typeof(HarborRequest).IsAssignableFrom(t))
+            .OrderBy(t => t.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        await Assert.That(declared).IsEquivalentTo(HarborRequestTypes.All.ToArray()).Because(
+            "the product census is explicit (no runtime metadata discovery under NativeAOT), so "
+            + "this reflection-based equality check in the test assembly is what keeps it total: "
+            + "add a union member and it must be declared in HarborRequestTypes.All too");
     }
 
     // ── Dispatch: the wire boundary ────────────────────────────────────────
