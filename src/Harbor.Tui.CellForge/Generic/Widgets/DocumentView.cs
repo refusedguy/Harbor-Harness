@@ -5,6 +5,7 @@
 
 using System.Buffers;
 using System.Text;
+using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 
 namespace Harbor.Tui.CellForge.Generic.Widgets;
@@ -24,6 +25,7 @@ public sealed class DocumentView
     private string? _source;
     private DocumentFormat _format = DocumentFormat.Markdown;
     private int _width = 80;
+    private BracketPairResult _bracket = BracketPairResult.None;
 
     /// <summary>The current lines (already wrapped to <see cref="Width"/>).</summary>
     public IReadOnlyList<DocumentLine> Lines => _lines;
@@ -57,6 +59,7 @@ public sealed class DocumentView
         }
 
         _viewport.ScrollToTop();
+        _bracket = BracketPairResult.None;
         Relayout();
     }
 
@@ -66,7 +69,49 @@ public sealed class DocumentView
         _lines = lines ?? [];
         _source = null;
         _viewport.ScrollToTop();
+        _bracket = BracketPairResult.None;
         _viewport.SetTotal(_lines.Count);
+    }
+
+    /// <summary>
+    /// Computes and stores the bracket pair under a document position for the
+    /// next <see cref="Paint"/>. The host drives this; it stays internal so the
+    /// viewer keeps its public surface unchanged (issue #2494). A position
+    /// that is out of range or not on a bracket clears the highlight.
+    /// </summary>
+    internal void SetBracketCursor(int row, int col)
+    {
+        if (row < 0 || row >= _lines.Count || col < 0)
+        {
+            _bracket = BracketPairResult.None;
+            return;
+        }
+
+        var text = new string[_lines.Count];
+        for (int i = 0; i < _lines.Count; i++)
+        {
+            text[i] = LineText(_lines[i]);
+        }
+
+        _bracket = BracketPair.Find(text, row, col);
+    }
+
+    private static string LineText(DocumentLine line)
+    {
+        var spans = line.Spans;
+        int length = 0;
+        for (int i = 0; i < spans.Count; i++)
+        {
+            length += spans[i].Text.Length;
+        }
+
+        var sb = new StringBuilder(length);
+        for (int i = 0; i < spans.Count; i++)
+        {
+            sb.Append(spans[i].Text);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>
@@ -84,6 +129,7 @@ public sealed class DocumentView
         }
 
         _width = w;
+        _bracket = BracketPairResult.None;
         if (_source is not null)
         {
             Relayout(); // SetTotal clamps the offset into the new row count
@@ -117,7 +163,7 @@ public sealed class DocumentView
         int first = (int)Math.Min(_viewport.Offset, Math.Max(0, _lines.Count));
         for (int row = 0; row < rect.Height && first + row < _lines.Count; row++)
         {
-            PaintLine(buffer, rect, rect.Y + row, _lines[first + row]);
+            PaintLine(buffer, rect, rect.Y + row, _lines[first + row], first + row);
         }
     }
 
@@ -129,8 +175,21 @@ public sealed class DocumentView
 
     private static int PageStep(int viewportH) => Math.Max(1, Math.Max(0, viewportH) - 1);
 
-    private static void PaintLine(ScreenBuffer buffer, Rect rect, int y, DocumentLine line)
+    private void PaintLine(ScreenBuffer buffer, Rect rect, int y, DocumentLine line, int lineIndex)
     {
+        int openCell = -1;
+        int closeCell = -1;
+        CellStyle highlight = default;
+        if (_bracket.Open.HasValue || _bracket.Close.HasValue)
+        {
+            openCell = CellOffsetOf(line, lineIndex, _bracket.Open);
+            closeCell = CellOffsetOf(line, lineIndex, _bracket.Close);
+            if (openCell >= 0 || closeCell >= 0)
+            {
+                highlight = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
+            }
+        }
+
         int cursor = rect.X;
         int end = rect.X + rect.Width;
         var spans = line.Spans;
@@ -153,7 +212,9 @@ public sealed class DocumentView
                     continue;
                 }
 
-                if (cursor + w > end || !buffer.SetRune(cursor, y, rune, span.Style))
+                int cell = cursor - rect.X;
+                var style = cell == openCell || cell == closeCell ? highlight : span.Style;
+                if (cursor + w > end || !buffer.SetRune(cursor, y, rune, style))
                 {
                     return;
                 }
@@ -162,5 +223,22 @@ public sealed class DocumentView
                 rest = rest[consumed..];
             }
         }
+    }
+
+    /// <summary>
+    /// Display-cell offset of a (row, col) bracket inside its line, or -1 when
+    /// the position belongs to another line. Wide runes before the bracket are
+    /// counted so the highlight lands on the painted cell, not the char index.
+    /// </summary>
+    private static int CellOffsetOf(DocumentLine line, int lineIndex, (int Row, int Col)? pos)
+    {
+        if (pos is null || pos.Value.Row != lineIndex)
+        {
+            return -1;
+        }
+
+        string text = LineText(line);
+        int col = Math.Min(pos.Value.Col, text.Length);
+        return UnicodeWidth.Width(text.AsSpan(0, col));
     }
 }
