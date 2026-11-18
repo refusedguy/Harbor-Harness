@@ -7,6 +7,10 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
 {
     protected readonly List<CommandResultViewModel> AllCommands = new();
 
+    // #2682 Z02: invocation counts for the current session. Keyed by kind +
+    // label so a slash command's description changing does not reset its rank.
+    private readonly Dictionary<string, int> _invocations = new(StringComparer.Ordinal);
+
     [ObservableProperty]
     private string _query = string.Empty;
 
@@ -40,9 +44,15 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
                 ? AllCommands
                 : AllCommands
                     .Where(c => c.Label.ToLowerInvariant().Contains(q) || c.Hint.ToLowerInvariant().Contains(q))
-                    .OrderByDescending(c => FuzzyScore(c.Label.ToLowerInvariant(), q))
                     .ToList();
-            foreach (var m in matches)
+            // #2682 Z02: commands the user has already run lead their match
+            // group; the fuzzy score breaks ties. OrderByDescending is stable,
+            // so never-invoked commands keep their registration order.
+            var ranked = matches
+                .OrderByDescending(c => InvocationCount(c))
+                .ThenByDescending(c => string.IsNullOrEmpty(q) ? 0 : FuzzyScore(c.Label.ToLowerInvariant(), q))
+                .ToList();
+            foreach (var m in ranked)
             {
                 Results.Add(m);
             }
@@ -83,11 +93,35 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
         try
         {
             cmd.Action.Invoke();
+            NoteInvocation(cmd);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Command '{Label}' threw", cmd.Label);
         }
+    }
+
+    /// <summary>
+    ///     #2682 Z02: stable identity of a result row for usage counting.
+    /// </summary>
+    private static string RankKey(CommandResultViewModel command) =>
+        string.Concat(command.Kind, ":", command.Label);
+
+    /// <summary>
+    ///     #2682 Z02: how often this row was invoked in the current session.
+    /// </summary>
+    private int InvocationCount(CommandResultViewModel command) =>
+        _invocations.TryGetValue(RankKey(command), out var count) ? count : 0;
+
+    /// <summary>
+    ///     #2682 Z02: record a successful invocation. A command whose action
+    ///     threw is deliberately not counted, so a broken row cannot promote
+    ///     itself to the top of the palette.
+    /// </summary>
+    private void NoteInvocation(CommandResultViewModel command)
+    {
+        string key = RankKey(command);
+        _invocations[key] = InvocationCount(command) + 1;
     }
 
     public void MoveUp()
