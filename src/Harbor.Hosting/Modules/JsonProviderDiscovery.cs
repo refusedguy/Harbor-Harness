@@ -138,6 +138,7 @@ public static void RegisterJsonProviders(
             httpClientFactory.CreateClient("providers"),
             cacheDir,
             loggerFactory.CreateLogger<DynamicModelCatalog>());
+        var logger = loggerFactory.CreateLogger(typeof(JsonProviderDiscovery).FullName ?? "JsonProviderDiscovery");
 
         // Discover providers from EVERY candidate directory (user config first,
         // then bundled). Tracked-registered ids guard against duplicates.
@@ -157,7 +158,7 @@ public static void RegisterJsonProviders(
                 var loaded = ProviderConfig.LoadFromJson(content);
                 if (loaded.IsFailure)
                 {
-                    Console.Error.WriteLine($"Failed to load embedded provider '{name}': {loaded.Error}");
+                    JsonProviderDiscoveryLog.EmbeddedProviderConfigInvalid(logger, name, loaded.Error);
                     continue;
                 }
 
@@ -186,7 +187,7 @@ public static void RegisterJsonProviders(
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Failed to load embedded provider '{name}': {ex.Message}");
+                JsonProviderDiscoveryLog.EmbeddedProviderLoadFailed(logger, ex, name);
             }
         }
     }
@@ -197,10 +198,17 @@ public static void RegisterJsonProviders(
         DynamicModelCatalog modelCatalog, ILoggerFactory loggerFactory,
         HashSet<string> seenIds)
     {
+        var logger = loggerFactory.CreateLogger(typeof(JsonProviderDiscovery).FullName ?? "JsonProviderDiscovery");
         try
         {
             var config = ProviderConfig.LoadFromFile(file);
-            if (config.IsFailure) return; // §4.6-ok: skip-and-log discovery (ранний выход перечисления).
+            if (config.IsFailure)
+            {
+                // §4.6-ok: skip-and-log discovery. A broken config is not a
+                // crash, but the reason it vanished must reach the log.
+                JsonProviderDiscoveryLog.SkippingProviderConfig(logger, file, config.Error);
+                return;
+            }
             var loaded = config.Value;
             if (loaded.Id is "anthropic" or "openai" or "ollama") return;
             if (!seenIds.Add(loaded.Id)) return;
@@ -219,7 +227,7 @@ public static void RegisterJsonProviders(
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Failed to register provider: {ex.Message}");
+            JsonProviderDiscoveryLog.LoadProviderConfigFailed(logger, ex, file);
         }
     }
 }
@@ -244,4 +252,10 @@ internal static partial class JsonProviderDiscoveryLog
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to load provider config '{File}'")]
     public static partial void LoadProviderConfigFailed(ILogger logger, Exception ex, string file);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Skipping embedded provider '{Name}': {Error}")]
+    public static partial void EmbeddedProviderConfigInvalid(ILogger logger, string name, string error);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Failed to load embedded provider '{Name}'")]
+    public static partial void EmbeddedProviderLoadFailed(ILogger logger, Exception ex, string name);
 }

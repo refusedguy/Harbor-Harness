@@ -1,5 +1,6 @@
 using Serilog;
 using Serilog.Core;
+using Serilog.Debugging;
 using Serilog.Events;
 namespace Harbor.Logging;
 /// <summary>
@@ -141,13 +142,18 @@ public static class LoggerSetup
             foreach (var f in files)
             {
                 try { f.Delete(); }
-                catch
-                { /* best-effort cleanup, ignore errors */
+                catch (Exception ex)
+                {
+                    // Best-effort cleanup still leaves a retained file. Route
+                    // it to Serilog's own diagnostic channel instead of
+                    // dropping the cause. No public API change, no new sink.
+                    SelfLog.WriteLine("Failed to delete old log file {Path}: {Error}", f.FullName, ex.Message);
                 }
             }
         }
-        catch
-        { /* best-effort cleanup, ignore errors */
+        catch (Exception ex)
+        {
+            SelfLog.WriteLine("Failed to sweep log directory {Dir}: {Error}", logDir, ex.Message);
         }
     }
 }
@@ -175,8 +181,11 @@ internal sealed class DiagnosticsSink : ILogEventSink
             string message = logEvent.RenderMessage();
             _callback(logEvent.Level, source, message);
         }
-        catch
-        { /* best-effort cleanup, ignore errors */
+        catch (Exception ex)
+        {
+            // The callback is the sink here, so it cannot report its own
+            // failure through itself. SelfLog is the side channel.
+            SelfLog.WriteLine("Diagnostics panel callback failed: {Error}", ex.Message);
         }
     }
 }

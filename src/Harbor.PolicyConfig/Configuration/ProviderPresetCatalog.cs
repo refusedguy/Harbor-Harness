@@ -94,14 +94,23 @@ public static class ProviderPresetCatalog
     /// </summary>
     /// <param name="configs">The JSON text of every candidate config, most-preferred first.</param>
     /// <returns>The projected presets; the first occurrence of an id wins, ordered by <c>priority</c> then id.</returns>
-    public static IReadOnlyList<ProviderPresets.Preset> FromJson(IEnumerable<string> configs)
+    public static IReadOnlyList<ProviderPresets.Preset> FromJson(IEnumerable<string> configs) =>
+        FromJson(configs, null);
+
+    /// <summary>
+    ///     The logged overload used by <see cref="Load" />. The index is the
+    ///     config's position in precedence order, which is the only identity a
+    ///     raw JSON string has at this point.
+    /// </summary>
+    private static IReadOnlyList<ProviderPresets.Preset> FromJson(IEnumerable<string> configs, ILogger? logger)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var projected = new List<Projected>();
 
+        int index = 0;
         foreach (string json in configs)
         {
-            Maybe<Projected> entry = Parse(json);
+            Maybe<Projected> entry = Parse(json, logger, index++);
             if (entry.HasNoValue || !seen.Add(entry.Value.Preset.Id)) continue;
             projected.Add(entry.Value);
         }
@@ -128,7 +137,7 @@ public static class ProviderPresetCatalog
     {
         try
         {
-            return FromJson(EnumerateBundled(logger));
+            return FromJson(EnumerateBundled(logger), logger);
         }
         catch (Exception ex)
         {
@@ -218,7 +227,7 @@ public static class ProviderPresetCatalog
     ///     <see cref="Utf8JsonReader" />-backed <see cref="JsonDocument.Parse" />.
     ///     </para>
     /// </remarks>
-    private static Maybe<Projected> Parse(string json)
+    private static Maybe<Projected> Parse(string json, ILogger? logger, int index)
     {
         try
         {
@@ -248,8 +257,13 @@ public static class ProviderPresetCatalog
 
             return Maybe.From(new Projected(preset, GetInt(root, "priority") ?? DefaultPriority));
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // A malformed user config used to vanish from the picker with no
+            // diagnostic at all. The loader has a logger; the pure public
+            // FromJson surface keeps passing null and stays silent.
+            if (logger is not null)
+                ProviderPresetCatalogLog.MalformedPresetConfig(logger, ex, index, ex.Message);
             return Maybe<Projected>.None;
         }
     }
@@ -280,5 +294,8 @@ internal static partial class ProviderPresetCatalogLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Skipping provider preset config '{Path}': {Error}")]
     public static partial void SkippingPresetConfig(ILogger logger, Exception ex, string path, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Skipping provider preset #{Index}: malformed JSON ({Error})")]
+    public static partial void MalformedPresetConfig(ILogger logger, Exception ex, int index, string error);
 
 }
