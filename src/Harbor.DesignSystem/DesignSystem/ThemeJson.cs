@@ -158,7 +158,7 @@ public static class ThemeJson
         {
             using var doc = JsonDocument.Parse(json, DocumentOptions);
             warnings = LintUnknownKeys(doc.RootElement);
-            dto = JsonSerializer.Deserialize(json, ThemeJsonContext.Default.ThemeDto);
+            dto = doc.Deserialize(ThemeJsonContext.Default.ThemeDto);
         }
         catch (Exception ex)
         {
