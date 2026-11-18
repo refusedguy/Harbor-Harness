@@ -62,39 +62,39 @@ internal static class SessionExportFormattedRunner
         try
         {
             var loaded = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
-            if (!loaded.IsSuccess)
+            if (loaded.IsSuccess)
             {
-                await error.WriteLineAsync($"Export failed: {loaded.Error}").ConfigureAwait(false);
-                return 1;
-            }
+                var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+                if (messages.IsSuccess)
+                {
+                    string target = Path.GetFullPath(path);
+                    string directory = Path.GetDirectoryName(target) ?? Directory.GetCurrentDirectory();
+                    temp = Path.Combine(directory, $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
 
-            var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-            if (!messages.IsSuccess)
-            {
+                    Directory.CreateDirectory(directory);
+
+                    if (format == SessionExportFormat.Json)
+                    {
+                        await WriteJsonAsync(temp, loaded.Value, messages.Value, ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await WriteMarkdownAsync(temp, loaded.Value, messages.Value, ct).ConfigureAwait(false);
+                    }
+
+                    File.Move(temp, target, overwrite: true);
+                    string label = format == SessionExportFormat.Markdown ? "markdown" : "json";
+                    await output.WriteLineAsync($"Exported session {sessionId} → {path} ({label})")
+                        .ConfigureAwait(false);
+                    return 0;
+                }
+
                 await error.WriteLineAsync($"Export failed: {messages.Error}").ConfigureAwait(false);
                 return 1;
             }
 
-            string target = Path.GetFullPath(path);
-            string directory = Path.GetDirectoryName(target) ?? Directory.GetCurrentDirectory();
-            temp = Path.Combine(directory, $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
-
-            Directory.CreateDirectory(directory);
-
-            if (format == SessionExportFormat.Json)
-            {
-                await WriteJsonAsync(temp, loaded.Value, messages.Value, ct).ConfigureAwait(false);
-            }
-            else
-            {
-                await WriteMarkdownAsync(temp, loaded.Value, messages.Value, ct).ConfigureAwait(false);
-            }
-
-            File.Move(temp, target, overwrite: true);
-            string label = format == SessionExportFormat.Markdown ? "markdown" : "json";
-            await output.WriteLineAsync($"Exported session {sessionId} → {path} ({label})")
-                .ConfigureAwait(false);
-            return 0;
+            await error.WriteLineAsync($"Export failed: {loaded.Error}").ConfigureAwait(false);
+            return 1;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
                                       or ArgumentException)
