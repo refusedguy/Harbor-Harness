@@ -937,6 +937,14 @@ public sealed class CellForgeEngineAtomicityRules
         // unchanged) follows its Rendering peers into the engine verbatim.
         ("Rendering/PromptHistory.cs", "Chat/Rendering/PromptHistory.cs"),
 
+        // #1620 partial slice: LogLine (and its LogLevel enum) is the sole
+        // remaining standalone leaf with zero usings and zero bare-vocabulary
+        // hits — no Ensure alias, no Chat/Rendering type, no cref to a type
+        // outside its own file. Body and namespace are byte-equal to the Chat
+        // leaf it left; LogRing and LogView keep resolving both names through the
+        // unchanged Harbor.Tui.CellForge.Generic.Widgets namespace.
+        ("Generic/Widgets/LogLine.cs", "Generic/Widgets/LogLine.cs"),
+
         // The verbatim set is exhausted: every remaining #1620 leaf binds a
         // chat-owned vocabulary and needs an adaptation. FloatingTerminalSession
         // is the next one: its KeyEvent/KeyCode names were pinned by the Chat
