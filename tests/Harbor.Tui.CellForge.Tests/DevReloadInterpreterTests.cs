@@ -259,7 +259,7 @@ public class DevReloadInterpreterTests
         var parsed = DevLogChannel.ParseLines(lines, 10);
         await Assert.That(parsed.Count).IsEqualTo(1);
         await Assert.That(parsed[0].Message).IsEqualTo(records[0].Message);
-        await Assert.That(parsed[0].At).IsEqualTo(records[0].At);
+        await Assert.That(parsed[0].At.ToUnixTimeMilliseconds()).IsEqualTo(records[0].At.ToUnixTimeMilliseconds());
     }
 
     [Test]
