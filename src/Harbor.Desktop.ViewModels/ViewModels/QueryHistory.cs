@@ -14,7 +14,7 @@ namespace Harbor.Desktop.ViewModels;
 /// </summary>
 public sealed class QueryHistory
 {
-    private readonly List<string> _entries = new(StringComparer.Ordinal);
+    private readonly List<string> _entries = new();
     private string? _typedQuery;
     private List<string>? _matches;
     private int _cursor = -1;
