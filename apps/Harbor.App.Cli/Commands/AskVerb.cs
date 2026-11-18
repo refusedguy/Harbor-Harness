@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Harbor.App.Cli.Hosting;
 using Harbor.App.Cli.Repl;
 using Microsoft.Extensions.Logging;
@@ -9,19 +10,28 @@ namespace Harbor.App.Cli.Commands;
 ///     <c>Program</c> (#176). Behavior is 1:1 with the former
 ///     <c>Program.RunAskAsync</c>.
 /// </summary>
+/// <remarks>
+///     #2675 item 022: <c>--timings</c> writes a phase breakdown (startup,
+///     auth/connect, execution, cleanup) to stderr after the run. Fire-and-forget
+///     work such as skill freshness seeding is listed separately and is not
+///     added to total, so the phases stay comparable across runs.
+/// </remarks>
 internal static class AskVerb
 {
     internal static async Task<int> RunAsync(ILogger logger, string[] args, string? scriptPath = null)
     {
-        if (args.Length == 0)
+        bool timings = CliArgs.ExtractTimingsArg(args, out string[] runArgs);
+        if (runArgs.Length == 0)
         {
             Console.Error.WriteLine("Usage: harbor ask <prompt> [--script <path>]");
             return 1;
         }
-        string prompt = string.Join(' ', CliArgs.StripLogArgs(args));
+        string prompt = string.Join(' ', CliArgs.StripLogArgs(runArgs));
+        long started = Stopwatch.GetTimestamp();
         AskVerbLog.StartingAsk(logger, prompt.Length);
         CliArgs.MarkApproverless(); // #52: one-shot, frame loop не крутится
-        using var host = HostBuilder.Build(args);
+        using var host = HostBuilder.Build(runArgs);
+        long built = Stopwatch.GetTimestamp();
         await CliInfrastructure.StartIpcAsync(host.Services, logger).ConfigureAwait(false);
         // Issue #23 slice 2: one-shot commands get the same best-effort
         // freshness snapshot (the opt-in panel only matters interactively).
@@ -31,9 +41,24 @@ internal static class AskVerb
         {
             AskVerbLog.StartupScriptFailed(logger, scriptResult.Error);
         }
+        long connected = Stopwatch.GetTimestamp();
         var runner = CliInfrastructure.CreateRunner(host.Services);
         int exitCode = await runner.RunAskAsync(prompt).ConfigureAwait(false);
+        long executed = Stopwatch.GetTimestamp();
         await CliInfrastructure.StopIpcAsync(host.Services, logger).ConfigureAwait(false);
+        long stopped = Stopwatch.GetTimestamp();
+
+        if (timings)
+        {
+            Console.Error.Write(TimingsReport.Format(
+            [
+                new TimingsReport.Phase("startup", TimingsReport.Elapsed(started, built)),
+                new TimingsReport.Phase("auth/connect", TimingsReport.Elapsed(built, connected)),
+                new TimingsReport.Phase("execution", TimingsReport.Elapsed(connected, executed)),
+                new TimingsReport.Phase("cleanup", TimingsReport.Elapsed(executed, stopped)),
+            ], "skill freshness seeding (fire-and-forget; overlaps execution)"));
+        }
+
         return exitCode;
     }
 }
