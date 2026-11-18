@@ -10,7 +10,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <!-- #957: Microsoft.Extensions.Logging removed. The plugin only uses
+         ILogger<T> and LogInformation, both from Microsoft.Extensions.Logging.Abstractions
+         (reached through Harbor.Abstractions). -->
   </ItemGroup>
 
 </Project>
