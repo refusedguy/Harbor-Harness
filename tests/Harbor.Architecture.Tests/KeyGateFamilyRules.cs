@@ -353,6 +353,13 @@ public class KeyGateFamilyRules
         // families by state, the same split QuestionFormView documents.
         new("SettingsPanel(navigation)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/SettingsPanel.cs"),
         new("SettingsPanel(editing)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/SettingsPanel.cs"),
+        // AnchoredMenu (#2377): arrows/vim keys navigate, Right/Left open and
+        // close submenus, Enter activates, Alt+mnemonic fires a hotkey slot.
+        // No text buffer, no fuzzy query, and Shift/chords are refused.
+        new("AnchoredMenu", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/AnchoredMenu.cs"),
+        // DropdownButton (#2377): Enter/Space run the primary action, Down
+        // opens the anchored menu; a strict no-modifier command gate.
+        new("DropdownButton", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Generic/Widgets/DropdownButton.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
