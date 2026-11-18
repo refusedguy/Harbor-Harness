@@ -173,8 +173,10 @@ public sealed class PrepaintContext
 /// <summary>
 /// Shared forwarder for ordered containers. Keeping the loop in one place
 /// avoids duplicating the same token stream in every container (the jscpd
-/// gate counts those clones) and keeps the child-id rule identical: position
-/// in an ordered container is part of the element's identity.
+/// gate counts those clones) and keeps the child-id rule identical. Unkeyed
+/// children use their position; a keyed child uses the named step from
+/// <see cref="ElementId.Child(string)"/>, which is the same identity the
+/// <see cref="ElementIdStack.Push(string)"/> path produces (#2436).
 /// </summary>
 internal static class PrepaintForward
 {
@@ -185,6 +187,29 @@ internal static class PrepaintForward
         for (int i = 0; i < children.Count; i++)
         {
             _ = children[i].Prepaint(context, id.Child(i));
+        }
+    }
+
+    /// <summary>
+    /// Forwards with a stable key where one is declared and falls back to the
+    /// index otherwise. A keyed child keeps its record and its
+    /// <see cref="ElementStateStore"/> slot when siblings are reordered,
+    /// because its path stays <c>/parent/key</c> instead of following the
+    /// slot it happened to occupy in the previous frame.
+    /// </summary>
+    internal static void Named(
+        PrepaintContext context,
+        ElementId id,
+        IReadOnlyList<INode> children,
+        IReadOnlyList<string?> keys)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(children);
+        ArgumentNullException.ThrowIfNull(keys);
+        for (int i = 0; i < children.Count; i++)
+        {
+            var key = i < keys.Count ? keys[i] : null;
+            _ = children[i].Prepaint(context, key is null ? id.Child(i) : id.Child(key));
         }
     }
 }
