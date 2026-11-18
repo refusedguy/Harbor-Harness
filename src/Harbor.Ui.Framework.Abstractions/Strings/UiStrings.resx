@@ -96,4 +96,13 @@
   <data name="StarNag_Message" xml:space="preserve">
     <value>Star Harbor on GitHub? s/n</value>
   </data>
+  <!-- Issue #434, one-component extraction slice: SetupChecklistOverlay's modal
+       header and dismiss hint. "Esc" and "/setup" stay literal: a key and a
+       slash command, not translatable prose. -->
+  <data name="SetupGuide_Title" xml:space="preserve">
+    <value>Setup guide</value>
+  </data>
+  <data name="SetupGuide_FooterHint" xml:space="preserve">
+    <value>Esc to close · /setup to reopen</value>
+  </data>
 </root>
