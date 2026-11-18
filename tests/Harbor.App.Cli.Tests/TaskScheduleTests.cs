@@ -1,4 +1,5 @@
 using System.Text;
+using CSharpFunctionalExtensions;
 using Harbor.App.Cli.Commands;
 
 namespace Harbor.App.Cli.Tests;
