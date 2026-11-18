@@ -43,7 +43,7 @@ public class ToolDisablePolicyTests
     [Test]
     public async Task SourcePrefix_KeepsTheOtherFamily()
     {
-        var policy = ToolDisablePolicy.Parse("builtin:fetch,mcp:server_*");
+        var policy = ToolDisablePolicy.Parse("builtin:fetch,mcp:mcp_server_*");
 
         await Assert.That(policy.IsDisabled("fetch", ToolSourceKind.Builtin)).IsTrue();
         await Assert.That(policy.IsDisabled("fetch", ToolSourceKind.Mcp)).IsFalse();
