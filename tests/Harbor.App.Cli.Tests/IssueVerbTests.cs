@@ -154,4 +154,66 @@ public class IssueVerbTests
         await Assert.That(parsed.IsSuccess).IsTrue();
         await Assert.That(parsed.Value.Body.Length).IsEqualTo(IssueProjection.MaxTextChars + 1);
     }
+
+    [Test]
+    public async Task Parse_CreateAndState_UseTheirOwnFlags()
+    {
+        var created = IssueArgs.Parse(["create", "--title", "New issue", "--body", "details", "--repo", "o/r"]);
+        await Assert.That(created.IsSuccess).IsTrue();
+        await Assert.That(created.Value.Action).IsEqualTo("create");
+        await Assert.That(created.Value.Title).IsEqualTo("New issue");
+        await Assert.That(created.Value.Body).IsEqualTo("details");
+
+        var closed = IssueArgs.Parse(["state", "42", "--state", "closed", "--repo", "o/r"]);
+        await Assert.That(closed.IsSuccess).IsTrue();
+        await Assert.That(closed.Value.Number).IsEqualTo(42);
+        await Assert.That(closed.Value.State).IsEqualTo("closed");
+    }
+
+    [Test]
+    public async Task Parse_CreateAndState_RejectBadShapes()
+    {
+        await Assert.That(IssueArgs.Parse(["create"]).IsFailure).IsTrue();
+        await Assert.That(IssueArgs.Parse(["create", "--title", ""]).IsFailure).IsTrue();
+        await Assert.That(IssueArgs.Parse(["create", "--title", "t", "--body", "a", "--body-file", "b"]).IsFailure).IsTrue();
+        await Assert.That(IssueArgs.Parse(["state", "0", "--state", "closed"]).IsFailure).IsTrue();
+        await Assert.That(IssueArgs.Parse(["state", "1"]).IsFailure).IsTrue();
+        await Assert.That(IssueArgs.Parse(["state", "1", "--state", "all"]).IsFailure).IsTrue();
+        await Assert.That(IssueArgs.Parse(["read", "1", "--title", "t"]).IsFailure).IsTrue();
+    }
+
+    [Test]
+    public async Task GhCommand_CreateAndState_UseTheRightSubcommands()
+    {
+        var create = IssueArgs.Parse(["create", "--title", "A B", "--body-file", "body.txt", "--repo", "o/r"]);
+        await Assert.That(IssueGhCommand.Build(create.Value)).IsEquivalentTo(new[]
+        {
+            "issue", "create", "--title", "A B", "--body-file", "body.txt", "--repo", "o/r",
+        });
+
+        var state = IssueArgs.Parse(["state", "42", "--state", "closed"]);
+        await Assert.That(IssueGhCommand.Build(state.Value)).IsEquivalentTo(new[]
+        {
+            "issue", "edit", "42", "--state", "closed",
+        });
+    }
+
+    [Test]
+    public async Task ParseCreated_ReadsUrlAndNumberFromGhStdout()
+    {
+        var parsed = IssueProjection.ParseCreated("https://github.com/o/r/issues/2686\n");
+
+        await Assert.That(parsed.IsSuccess).IsTrue();
+        await Assert.That(parsed.Value.Number).IsEqualTo(2686);
+        await Assert.That(parsed.Value.Url).IsEqualTo("https://github.com/o/r/issues/2686");
+        await Assert.That(IssueProjection.FormatCreated(parsed.Value)).Contains("Created #2686");
+    }
+
+    [Test]
+    public async Task ParseCreated_FailsClosedOnMissingUrlOrNumber()
+    {
+        await Assert.That(IssueProjection.ParseCreated("").IsFailure).IsTrue();
+        await Assert.That(IssueProjection.ParseCreated("created\n").IsFailure).IsTrue();
+        await Assert.That(IssueProjection.ParseCreated("https://github.com/o/r/issues/not-a-number").IsFailure).IsTrue();
+    }
 }

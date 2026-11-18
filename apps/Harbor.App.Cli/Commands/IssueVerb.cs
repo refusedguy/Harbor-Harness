@@ -5,22 +5,24 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Commands;
 
-/// <summary>CAF handler for the <c>harbor issue</c> verb (#2674 H8).</summary>
+/// <summary>CAF handler for the <c>harbor issue</c> verb (#2674 H8, #2686 J05).</summary>
 internal static class CafIssueCommands
 {
-    /// <summary>List, read and comment on GitHub issues through the gh CLI.</summary>
+    /// <summary>List, read, comment, create and state GitHub issues through the gh CLI.</summary>
     /// <param name="limit">Maximum number of issues for 'list' (1..100).</param>
     /// <param name="state">State filter for 'list': open, closed or all.</param>
     /// <param name="repo">Optional owner/repo override.</param>
-    /// <param name="body">Inline comment body for 'comment'.</param>
-    /// <param name="bodyFile">File holding the comment body for 'comment'.</param>
-    /// <param name="args">Subcommand tail: list, read or comment.</param>
+    /// <param name="body">Inline comment body for 'comment' or 'create'.</param>
+    /// <param name="bodyFile">File holding the body for 'comment' or 'create'.</param>
+    /// <param name="title">Issue title for 'create'.</param>
+    /// <param name="args">Subcommand tail: list, read, comment, create or state.</param>
     public static Task<int> Issue(
         string? limit = null,
         string? state = null,
         string? repo = null,
         string? body = null,
         string? bodyFile = null,
+        string? title = null,
         [Argument] params string[] args)
     {
         // Flags are typed for CAF (a dash-led token is never positional); the
@@ -31,13 +33,15 @@ internal static class CafIssueCommands
         if (repo is not null) { tail.Add("--repo"); tail.Add(repo); }
         if (body is not null) { tail.Add("--body"); tail.Add(body); }
         if (bodyFile is not null) { tail.Add("--body-file"); tail.Add(bodyFile); }
+        if (title is not null) { tail.Add("--title"); tail.Add(title); }
         return IssueVerb.RunAsync(NullLogger.Instance, [.. tail], CancellationToken.None);
     }
 }
 
 /// <summary>
-///     <c>harbor issue list|read|comment</c>, the GitHub issue toolkit a
-///     terminal agent needs, built on the same <c>gh</c> seam as <c>pr guide</c>.
+///     <c>harbor issue list|read|comment|create|state</c>, the GitHub issue
+///     toolkit a terminal agent needs, built on the same <c>gh</c> seam as
+///     <c>pr guide</c>.
 ///     Parsing and projection are pure; only the <c>gh</c> call touches IO.
 /// </summary>
 internal static class IssueVerb
@@ -63,6 +67,27 @@ internal static class IssueVerb
             IssueVerbLog.GhFailed(logger, request.Action, json.Error);
             Console.Error.WriteLine($"issue {request.Action}: {json.Error}");
             return 1;
+        }
+
+        if (request.Action == "create")
+        {
+            Result<IssueProjection.IssueCreated> created = IssueProjection.ParseCreated(json.Value);
+            if (created.IsFailure)
+            {
+                Console.Error.WriteLine($"issue create: {created.Error}");
+                return 1;
+            }
+
+            IssueVerbLog.Created(logger, created.Value.Number);
+            Console.Out.Write(IssueProjection.FormatCreated(created.Value));
+            return 0;
+        }
+
+        if (request.Action == "state")
+        {
+            IssueVerbLog.StateChanged(logger, request.Number, request.State!);
+            Console.Out.Write(IssueProjection.FormatState(request.Number, request.State!));
+            return 0;
         }
 
         if (request.Action == "list")
@@ -105,4 +130,12 @@ internal static partial class IssueVerbLog
     /// <summary>A comment was posted.</summary>
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Commented on issue #{Number}")]
     public static partial void Commented(ILogger logger, int number);
+
+    /// <summary>An issue was created.</summary>
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Created issue #{Number}")]
+    public static partial void Created(ILogger logger, int number);
+
+    /// <summary>An issue's state changed.</summary>
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Set issue #{Number} to {State}")]
+    public static partial void StateChanged(ILogger logger, int number, string state);
 }
