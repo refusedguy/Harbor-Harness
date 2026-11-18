@@ -622,7 +622,9 @@ public sealed class CompactionService(
             // Transient budget exhausted (fatal kinds never throw — they return
             // Failure from the attempt itself): same failure shape as the
             // single-attempt path, so the caller still falls back to truncation
-            // instead of crashing.
+            // instead of crashing. The exhaustion itself used to be silent; the
+            // retry warning alone never said the budget ran out.
+            CompactionServiceLog.SummaryRetryExhausted(logger, lex);
             return Result.Failure<string>($"LLM error during compaction: {lex.Message}");
         }
     }
@@ -1086,5 +1088,8 @@ internal static partial class CompactionServiceLog
 
     [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "Background compaction summary for session {SessionId} failed; the next compaction will summarize synchronously")]
     public static partial void PrecomputeFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Transient summarization retry budget exhausted; falling back to truncation")]
+    public static partial void SummaryRetryExhausted(ILogger logger, Exception ex);
 
 }

@@ -159,7 +159,7 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
                     cts.Dispose();
                 // #1099: async read — IsCompleted guards the wait,
                 // not a blocking take.
-                done.Add(new BackgroundTaskCompletion(id, meta.AgentName, await ObserveAsync(task).ConfigureAwait(false)));
+                done.Add(new BackgroundTaskCompletion(id, meta.AgentName, await ObserveAsync(task, id, _logger).ConfigureAwait(false)));
             }
         }
 
@@ -200,8 +200,13 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
     }
 
     // Observe without throwing: faulted/cancelled runs surface as error
-    // completions. Awaited, never a blocking .Result take (#1099).
-    private static async Task<Result<SubAgentRunResult>> ObserveAsync(Task<Result<SubAgentRunResult>> task)
+    // completions. Awaited, never a blocking .Result take (#1099). The logger
+    // is passed in so the two failure branches below are visible even when the
+    // caller only inspects the returned Result.
+    private static async Task<Result<SubAgentRunResult>> ObserveAsync(
+        Task<Result<SubAgentRunResult>> task,
+        string id,
+        ILogger logger)
     {
         try
         {
@@ -209,10 +214,12 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         }
         catch (OperationCanceledException)
         {
+            BackgroundTaskRegistryLog.BackgroundRunCancelled(logger, id);
             return Result.Failure<SubAgentRunResult>("Background run was cancelled.");
         }
         catch (Exception ex)
         {
+            BackgroundTaskRegistryLog.BackgroundRunCrashed(logger, ex, id);
             return Result.Failure<SubAgentRunResult>($"Background run crashed: {ex.GetBaseException().Message}");
         }
     }
@@ -232,5 +239,11 @@ internal static partial class BackgroundTaskRegistryLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Background tasks cancelled: session={Session} count={Count}")]
     public static partial void BackgroundTasksCancelled(ILogger logger, string session, int count);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Background run {Id} was cancelled before it produced a result")]
+    public static partial void BackgroundRunCancelled(ILogger logger, string id);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Background run {Id} crashed while being observed")]
+    public static partial void BackgroundRunCrashed(ILogger logger, Exception ex, string id);
 
 }

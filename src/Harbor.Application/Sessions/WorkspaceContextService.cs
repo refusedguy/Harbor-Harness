@@ -115,7 +115,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     ///     bytes of a file can ever reach the prompt, so the hash is bounded by
     ///     the same budget even for an oversized file on disk.
     /// </summary>
-    private static long ComputeVersion(string workingDirectory)
+    private long ComputeVersion(string workingDirectory)
     {
         using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         Span<byte> scratch = stackalloc byte[sizeof(long)];
@@ -148,7 +148,14 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
                     AppendLong(hash, new DirectoryInfo(globalSkillsDir).LastWriteTimeUtc.Ticks, scratch);
             }
         }
-        catch { /* best-effort version */ }
+        catch (Exception ex)
+        {
+            // Best-effort version: a partial fingerprint can match a stale
+            // snapshot and serve an outdated prompt. Log the cause instead of
+            // failing silently.
+            if (_logger is not null)
+                WorkspaceContextServiceLog.VersionFingerprintFailed(_logger, ex);
+        }
 
         return BitConverter.ToInt64(hash.GetHashAndReset(), 0);
     }
@@ -225,9 +232,11 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
 
                 files.Add(new ContextFile(name, Decode(bytes)));
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 // Unreadable context file — skip it; the prompt builds without it.
+                if (_logger is not null)
+                    WorkspaceContextServiceLog.ContextFileSkipped(_logger, ex, name);
             }
         }
 
@@ -318,7 +327,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     private static int CompareSkillsByName(SkillDescriptor left, SkillDescriptor right) =>
         string.CompareOrdinal(left.Name, right.Name);
 
-    private static void CollectSkills(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
+    private void CollectSkills(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
     {
         if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
         {
@@ -330,12 +339,16 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         {
             skillFiles = Directory.GetFiles(directory, "*.md", SearchOption.TopDirectoryOnly);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            if (_logger is not null)
+                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
             return;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            if (_logger is not null)
+                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
             return;
         }
 
@@ -362,7 +375,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     ///     flat <c>&lt;name&gt;.md</c> wins ties within one root (documented
     ///     precedence); project-vs-global shadowing is unchanged.
     /// </summary>
-    private static void CollectSkillDirectories(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
+    private void CollectSkillDirectories(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
     {
         if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
         {
@@ -374,12 +387,16 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
         {
             subdirs = Directory.GetDirectories(directory);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            if (_logger is not null)
+                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
             return;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            if (_logger is not null)
+                WorkspaceContextServiceLog.SkillRootUnreadable(_logger, ex, directory);
             return;
         }
 
@@ -404,7 +421,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     }
 
     /// <summary>Front-matter <c>name:</c> from the first 20 lines, else null.</summary>
-    private static string? ExtractName(string filePath)
+    private string? ExtractName(string filePath)
     {
         try
         {
@@ -437,9 +454,11 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
                 }
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
             // Fall through to null below (no front-matter name).
+            if (_logger is not null)
+                WorkspaceContextServiceLog.SkillFrontMatterUnreadable(_logger, ex, filePath);
         }
 
         return null;
@@ -450,7 +469,7 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
     ///     <c>description:</c> when present, else the first non-empty line
     ///     stripped of Markdown heading/list markers, capped to keep prompts lean.
     /// </summary>
-    private static string ExtractDescription(string filePath)
+    private string ExtractDescription(string filePath)
     {
         try
         {
@@ -496,9 +515,11 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
                 }
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
             // Fall through to the generic descriptor below.
+            if (_logger is not null)
+                WorkspaceContextServiceLog.SkillFrontMatterUnreadable(_logger, ex, filePath);
         }
 
         return "No description provided.";
@@ -506,4 +527,25 @@ public sealed class WorkspaceContextService : IWorkspaceContextSource
 
     private static string Cap(string description) =>
         description.Length <= MaxDescriptionLength ? description : description[..MaxDescriptionLength];
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="WorkspaceContextService" />.
+///     Each line closes an existence-tolerant fallback that used to swallow the
+///     reason: a partial version fingerprint, a skipped context file, an
+///     unreadable skill root, or a skill whose front-matter could not be read.
+/// </summary>
+internal static partial class WorkspaceContextServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Workspace context version fingerprint failed; the snapshot version is derived from partial input")]
+    public static partial void VersionFingerprintFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Unreadable project context file '{File}' skipped while building the prompt")]
+    public static partial void ContextFileSkipped(ILogger logger, Exception ex, string file);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Cannot enumerate skills in {Directory}; no skills contributed from this root")]
+    public static partial void SkillRootUnreadable(ILogger logger, Exception ex, string directory);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Cannot read front-matter from skill file {File}; falling back to the directory name and generic description")]
+    public static partial void SkillFrontMatterUnreadable(ILogger logger, Exception ex, string file);
 }

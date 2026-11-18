@@ -187,14 +187,18 @@ public sealed class SkillRegistry : ISkillRegistry
             {
                 skills = provider.GetSkills(workingDirectory);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 // A provider whose source is unreadable contributes nothing;
-                // the other providers still answer.
+                // the other providers still answer. The loss is logged.
+                if (_logger is not null)
+                    SkillRegistryLog.ProviderLoadFailed(_logger, ex, provider.Name);
                 continue;
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                if (_logger is not null)
+                    SkillRegistryLog.ProviderLoadFailed(_logger, ex, provider.Name);
                 continue;
             }
 
@@ -289,4 +293,13 @@ public sealed class SkillRegistry : ISkillRegistry
             providerName,
             winnerProvider);
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="SkillRegistry" />.
+/// </summary>
+internal static partial class SkillRegistryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Skill provider '{Provider}' failed to load skills; its catalog contributes nothing this turn")]
+    public static partial void ProviderLoadFailed(ILogger logger, Exception ex, string provider);
 }
