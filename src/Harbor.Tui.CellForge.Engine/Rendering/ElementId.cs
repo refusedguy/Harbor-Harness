@@ -35,7 +35,7 @@ public readonly struct ElementId : IEquatable<ElementId>
     private readonly int _hash;
     private readonly int _depth;
 
-    private ElementId(ElementPathSegment? tail, int hash, int depth)
+    internal ElementId(ElementPathSegment? tail, int hash, int depth)
     {
         _tail = tail;
         _hash = hash;
@@ -59,10 +59,7 @@ public readonly struct ElementId : IEquatable<ElementId>
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
         var tail = new ElementPathSegment(_tail, key, 0);
-        return new ElementId(
-            tail,
-            HashCode.Combine(_hash, StringComparer.Ordinal.GetHashCode(key)),
-            _depth + 1);
+        return new ElementId(tail, ExtendHash(_hash, key), _depth + 1);
     }
 
     /// <summary>Appends an indexed step (a position in an ordered container).</summary>
@@ -70,8 +67,17 @@ public readonly struct ElementId : IEquatable<ElementId>
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         var tail = new ElementPathSegment(_tail, null, index);
-        return new ElementId(tail, HashCode.Combine(_hash, index), _depth + 1);
+        return new ElementId(tail, ExtendHash(_hash, index), _depth + 1);
     }
+
+    // #2436: one folding rule for both routes to an id. ElementIdStack feeds a
+    // cached parent hash into these, so a push hashes one step instead of the
+    // whole ancestor path and still produces an id equal to Child's.
+    internal static int ExtendHash(int prefix, string key) =>
+        HashCode.Combine(prefix, StringComparer.Ordinal.GetHashCode(key));
+
+    internal static int ExtendHash(int prefix, int index) =>
+        HashCode.Combine(prefix, index);
 
     /// <inheritdoc />
     public bool Equals(ElementId other)
