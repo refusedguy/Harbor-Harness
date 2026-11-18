@@ -269,6 +269,63 @@ public class AuthStoreTests
     }
 
     [Test]
+    public async Task ListApiKeysAsync_CustomPresetEnvVarUsesPresetId()
+    {
+        (var auth, _, string path) = CreateAuthStore();
+        // kilocode declares KILO_API_KEY, which the old reverse transform turned
+        // into a phantom "kilo" provider. Preset data, not the string, owns the id.
+        string? previousKilo = Environment.GetEnvironmentVariable("KILO_API_KEY");
+        string? previousKilocode = Environment.GetEnvironmentVariable("KILOCODE_API_KEY");
+        Environment.SetEnvironmentVariable("KILO_API_KEY", "from-preset-env");
+        Environment.SetEnvironmentVariable("KILOCODE_API_KEY", null);
+        try
+        {
+            var result = await auth.ListApiKeysAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.ContainsKey("kilocode")).IsTrue();
+            await Assert.That(result.Value["kilocode"]).IsTrue();
+            await Assert.That(result.Value.ContainsKey("kilo")).IsFalse();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KILO_API_KEY", previousKilo);
+            Environment.SetEnvironmentVariable("KILOCODE_API_KEY", previousKilocode);
+            if (File.Exists(path)) File.Delete(path);
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Test]
+    public async Task ListApiKeysAsync_ConventionalPresetEnvVarUsesPresetId()
+    {
+        (var auth, _, string path) = CreateAuthStore();
+        // The conventional name of a preset with a custom authEnvVar must still
+        // resolve to that preset, not to a derived provider id.
+        string? previousKilo = Environment.GetEnvironmentVariable("KILO_API_KEY");
+        string? previousKilocode = Environment.GetEnvironmentVariable("KILOCODE_API_KEY");
+        Environment.SetEnvironmentVariable("KILO_API_KEY", null);
+        Environment.SetEnvironmentVariable("KILOCODE_API_KEY", "from-conventional-env");
+        try
+        {
+            var result = await auth.ListApiKeysAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.ContainsKey("kilocode")).IsTrue();
+            await Assert.That(result.Value["kilocode"]).IsTrue();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KILO_API_KEY", previousKilo);
+            Environment.SetEnvironmentVariable("KILOCODE_API_KEY", previousKilocode);
+            if (File.Exists(path)) File.Delete(path);
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Test]
     public async Task SetApiKeyAsync_OverwritesPreviousValue()
     {
         (var auth, _, string path) = CreateAuthStore();

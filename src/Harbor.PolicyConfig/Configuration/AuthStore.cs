@@ -64,7 +64,7 @@ public sealed class AuthStore
 
     private Result<string> FromConventionalEnv(string providerId)
     {
-        string name = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+        string name = ConventionalEnvVarName(providerId);
         string? value = Environment.GetEnvironmentVariable(name);
         if (string.IsNullOrEmpty(value))
             return Result.Failure<string>($"{name} not set");
@@ -73,10 +73,18 @@ public sealed class AuthStore
         return Result.Success(value);
     }
 
+    /// <summary>
+    ///     The single source of truth for the <c>&lt;PROVIDER&gt;_API_KEY</c> rule, shared
+    ///     by lookup, help text and the env-var scan below. Keeping one definition stops
+    ///     those three paths from drifting apart.
+    /// </summary>
+    private static string ConventionalEnvVarName(string providerId) =>
+        providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+
     /// <summary>Build the aggregated help message naming every env var that would work.</summary>
     private string MissingKeyHelp(string providerId)
     {
-        string conventional = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+        string conventional = ConventionalEnvVarName(providerId);
         var envVars = new List<string> { conventional };
         string? presetName = ProviderPresets.Find(providerId)?.EnvVarName;
         if (presetName is not null && presetName != conventional)
@@ -136,20 +144,44 @@ public sealed class AuthStore
                 static kv => !string.IsNullOrEmpty(kv.Value),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Also check env vars
+            // Also check env vars. Presets are the authority for the id an env var
+            // belongs to: a preset may declare a custom name (kilocode → KILO_API_KEY)
+            // that no string transform can invert. See ResolveProviderIdFromEnvVar.
             foreach (var env in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>())
             {
-                string? key = env.Key?.ToString();
-                if (key is null) continue;
-                if (key.EndsWith("_API_KEY", StringComparison.OrdinalIgnoreCase))
-                {
-                    string pid = key[..^"_API_KEY".Length].ToLowerInvariant().Replace('_', '-');
-                    if (!result.ContainsKey(pid)) result[pid] = env.Value is string s && !string.IsNullOrEmpty(s);
-                }
+                string? name = env.Key?.ToString();
+                if (name is null) continue;
+                string? pid = ResolveProviderIdFromEnvVar(name);
+                if (pid is null) continue;
+                if (!result.ContainsKey(pid)) result[pid] = env.Value is string s && !string.IsNullOrEmpty(s);
             }
 
             return Result.Success<IReadOnlyDictionary<string, bool>>(result);
         });
+    }
+
+    /// <summary>
+    ///     Map an <c>*_API_KEY</c> env var name to the provider id it belongs to, or
+    ///     <see langword="null" /> when the name is not an API-key variable. Presets win:
+    ///     both a preset's declared <see cref="ProviderPresets.Preset.EnvVarName" /> and
+    ///     its conventional name resolve to <see cref="ProviderPresets.Preset.Id" />, so
+    ///     <c>KILO_API_KEY</c> reports <c>kilocode</c> rather than a phantom <c>kilo</c>.
+    ///     Names with no preset fall back to inverting the conventional rule, keeping
+    ///     custom providers that expose <c>FOO_API_KEY</c> visible in <c>auth list</c>.
+    /// </summary>
+    private static string? ResolveProviderIdFromEnvVar(string name)
+    {
+        if (!name.EndsWith("_API_KEY", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        foreach (ProviderPresets.Preset preset in ProviderPresets.All)
+        {
+            if (name.Equals(preset.EnvVarName, StringComparison.OrdinalIgnoreCase) ||
+                name.Equals(ConventionalEnvVarName(preset.Id), StringComparison.OrdinalIgnoreCase))
+                return preset.Id;
+        }
+
+        return name[..^"_API_KEY".Length].ToLowerInvariant().Replace('_', '-');
     }
 }
 
