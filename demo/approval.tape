@@ -8,7 +8,8 @@
 # CLI equivalent:        ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli \
 #                          --demo --scene approval --tui cellforge --chunk-delay 0
 # CI regenerates all tapes: .github/workflows/demo.yml (pinned toolchain in
-# demo/toolchain.lock; frame-normalised by tools/demo_repro.py).
+# demo/toolchain.lock; frame-normalised by the compiled gate in
+# tools/gates/demo-repro/).
 #
 # The gate card itself is the scripted demo gate (apps/Harbor.App.Cli/Demo/
 # DemoRuntime.cs): the asker resolves the request with the demo allow policy, and

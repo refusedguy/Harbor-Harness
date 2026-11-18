@@ -8,7 +8,8 @@
 # CLI equivalent:        HARBOR_TUI=plain ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli \
 #                          --demo --scene hero --tui plain --chunk-delay 0
 # CI regenerates all tapes: .github/workflows/demo.yml (pinned toolchain in
-# demo/toolchain.lock; frame-normalised by tools/demo_repro.py).
+# demo/toolchain.lock; frame-normalised by the compiled gate in
+# tools/gates/demo-repro/).
 #
 # The scene is the same as hero.tape, so the two GIFs differ only in renderer —
 # that is the point of the tape. run-scene.sh sets HARBOR_TUI itself.
