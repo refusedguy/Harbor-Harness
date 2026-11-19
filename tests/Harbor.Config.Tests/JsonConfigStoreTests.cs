@@ -402,4 +402,54 @@ public class JsonConfigStoreTests
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
+
+    // #3393: ConfigPathGuard must be reached from the product path, not just
+    // from its own classifier tests. An override that walks up with ".."
+    // is refused before the store reads or writes any file.
+    [Test]
+    public async Task LoadAsync_EscapingPath_IsRejectedBeforeReading()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"harbor-config-escape-{Guid.NewGuid():N}");
+        string allowedDir = Path.Combine(root, "allowed");
+        string escapedDir = Path.Combine(root, "escaped");
+        string escapingPath = Path.Combine(allowedDir, "..", "escaped", "config.json");
+        try
+        {
+            Directory.CreateDirectory(escapedDir);
+            File.WriteAllText(Path.Combine(escapedDir, "config.json"), """{"provider":"should-not-be-read"}""");
+
+            var store = new JsonConfigStore(escapingPath, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("leaves its directory");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
+    public async Task SaveAsync_EscapingPath_IsRejectedBeforeWriting()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"harbor-config-escape-{Guid.NewGuid():N}");
+        string allowedDir = Path.Combine(root, "allowed");
+        string escapingPath = Path.Combine(allowedDir, "..", "escaped", "config.json");
+        string resolvedPath = Path.GetFullPath(escapingPath);
+        try
+        {
+            var store = new JsonConfigStore(escapingPath, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.SaveAsync(new HarborConfig { Provider = "anthropic" });
+
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("leaves its directory");
+            await Assert.That(File.Exists(resolvedPath)).IsFalse();
+            await Assert.That(Directory.Exists(Path.GetDirectoryName(resolvedPath))).IsFalse();
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
 }
