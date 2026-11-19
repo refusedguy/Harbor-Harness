@@ -1660,3 +1660,30 @@ AOT-профиль не меняются. Issue остаётся OPEN; комм�
 
 - Полный текст, таблица по четырём частям и условия пересмотра:
   [ADR-067](ADR-067-tool-search-deferred-tools-verdict.md).
+
+## ADR-068: issue #2666 (PR watch / минимальный IForgeClient) — нового slice нет
+
+Issue #2666 выведен из `product-feature-gaps.md` J01-J03. Он просит builtin
+`watch_pull_request(n)` с polling gh и `SessionSteerEvent` при failed check,
+конфликте или комментарии, первый адаптер GitHub через gh, связи PR ↔ сессия
+в метаданных и hermetic-тест с mock gh. Проверка `origin/dev` (`bb507484`),
+комментариев issue, `gh pr list --search 2666`, `git log --all --grep=2666` и
+`docs/adr/DECISIONS.md` показала, что три из четырёх частей влиты по #2686
+J01-J03: `IForgeClient` с `GitHubForgeClient` (#2919, merge `22dd6e9a0`),
+wake-политика `PullRequestWatchProjection` с лимитами и чистыми тестами
+(#2925, merge `ff39057e`) и связи PR ↔ сессия с обратным поиском (#2935,
+merge `b537183d`). approval-gated `session_steer` тоже есть в дереве.
+
+Decided: код не писать. Влитые J01-J03 не перевыводятся. Builtin
+`watch_pull_request` не открывается заодно с CLI-verb `harbor pr watch`: ему
+нужны владелец жизненного цикла, реестр долгоживущих watch, отмена по
+завершении сессии и контракт на `SessionSteerEvent`. Триггер по комментарию
+меняет сигнатуру dedupe влитой проекции и требует своего владельца.
+Acceptance «агент просыпается и чинит check» нечем проверить без E2E-поверхности
+с mock gh внутри agent loop. Гейты, пороги, golden и AOT-профиль не меняются.
+Issue остаётся OPEN; комментарий содержит только хеш коммита ADR. Пересмотр по
+новому факту: владелец называет контракт для долгоживущего watch, потребителя
+`SessionSteerEvent` и измеримую цель.
+
+- Полный текст, таблица по четырём частям и условия пересмотра:
+  [ADR-068](ADR-068-pr-watch-iforge-client-verdict.md).
