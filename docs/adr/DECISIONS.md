@@ -2055,3 +2055,27 @@ guard не вводится (был бы вакуумным). Issue остаёт
 
 - Полный текст, таблица по четырём идеям и условия пересмотра:
   [ADR-084](ADR-084-dx-docs-gaps-four-ideas-post-verdict.md).
+
+## ADR-085: отчёт kilocode-features part 2/2 (#2680) после вердикта — влиты шесть slice
+
+Issue #2680 — self-contained отчёт на 180 item (F001-F180). ADR-049 зафиксировал
+вердикт на базе `8db8393f`, ADR-077 добавил F170 и F115 на базе `abc83115`.
+Проверка `origin/dev` (`6b68000a`), `gh pr list` и issue-комментариев показала
+шесть slice после ADR-077: F125 (`TerminalActivityClassifier`, PR #3009, merge
+`6691dd96`), F124 (`TerminalTitleWriter`, PR #3016, merge `5081d232`), F132
+(`SystemThemeProbe`, PR #3019, merge `dee8ae13`), F141
+(`ConventionalCommitMessage`, PR #3021, merge `1a98ac61`), F130
+(`CostAlertThreshold`, PR #3025, merge `49b2774c`) и F177
+(`CommandTimeoutResolver`, PR #3024, merge `6b68000a`). Все merge commit
+подтверждены как предки базы. Открытые PR #3027 (F152) и #3030 (F108) в таблицу
+не входят: они не влиты.
+
+Decided: вердикты ADR-049 и ADR-077 сохраняются, одного общего slice по #2680
+нет. Шесть влитых item не перевыводятся, остальные не объединяются в meta-PR.
+Гейты, пороги, golden, self-test и AOT-профиль не меняются; новый guard не
+вводится (был бы вакуумным). Issue остаётся OPEN; комментарий содержит только
+хеш коммита ADR. Номер 085 — следующий свободный после закреплённого PR #3029
+(ADR-084).
+
+- Полный текст, таблица по шести item и условия пересмотра:
+  [ADR-085](ADR-085-kilocode-part2-six-slices-post-verdict.md).
