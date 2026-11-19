@@ -696,6 +696,11 @@ public sealed class CellForgeWidgetAxisRules
             // way a component file table names it, and a closure sentence in a
             // generated table would be noise.
             "docs/SEAM_GRAPH.md",
+            // Names ITuiPlugin in its process-boundary table and calls it a
+            // "closed seam everywhere", but omits the canonical closure token
+            // on the naming line, so it describes the decision rather than
+            // teaching plugin authors the contract.
+            "docs/HOWTO_PACKAGE_PLUGIN.md",
             // REMOVED in #794: `samples/plugins/Harbor.Plugin.TodoWrite/README.md`.
             // It used to sit here as a "one-line sample blurb that also names
             // the seam", and that blurb was a fabrication — commit 487a68a0
