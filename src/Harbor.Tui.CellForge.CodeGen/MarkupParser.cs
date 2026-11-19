@@ -92,12 +92,12 @@ public static class MarkupParser
             // the graph. The generator never reads the disk itself.
             if (TryDirective(content, ImportKeyword, out var importPath))
             {
-                var tokens = Tokenize(importPath, lineNumber, indent + 1, diagnostics);
-                if (tokens.Count == 1
-                    && tokens[0].Kind == SpecValueKind.String
-                    && tokens[0].Text.Length > 0)
+                var importTokens = Tokenize(importPath, lineNumber, indent + 1, diagnostics);
+                if (importTokens.Count == 1
+                    && importTokens[0].Kind == SpecValueKind.String
+                    && importTokens[0].Text.Length > 0)
                 {
-                    imports.Add(new SpecImport(tokens[0].Text, lineNumber, indent + 1));
+                    imports.Add(new SpecImport(importTokens[0].Text, lineNumber, indent + 1));
                 }
                 else
                 {

@@ -46,11 +46,13 @@ public sealed class DevReloadInterpreter
     private DevReloadInterpreter(
         MutationBatchApplier applier,
         MarkupParseResult current,
+        SpecArena currentArena,
         string signature,
         string checksum)
     {
         _applier = applier;
         _current = current;
+        _currentArena = currentArena;
         _signature = signature;
         _checksum = checksum;
     }
@@ -74,9 +76,9 @@ public sealed class DevReloadInterpreter
         interpreter = new DevReloadInterpreter(
             applier,
             parsed,
+            parsed.Arena,
             ComputeTemplateSignature(parsed.Arena),
             MarkupChecksum.Compute(markup ?? string.Empty));
-        interpreter._currentArena = parsed.Arena;
         error = string.Empty;
         return true;
     }
@@ -111,9 +113,9 @@ public sealed class DevReloadInterpreter
         interpreter = new DevReloadInterpreter(
             applier,
             new MarkupParseResult(arena, []),
+            arena,
             ComputeTemplateSignature(arena),
             MarkupModuleResolver.GraphChecksum(sources));
-        interpreter._currentArena = arena;
         error = string.Empty;
         return true;
     }

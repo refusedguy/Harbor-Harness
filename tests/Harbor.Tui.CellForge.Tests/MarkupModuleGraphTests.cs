@@ -269,6 +269,8 @@ public class MarkupModuleGraphTests
 
     private sealed class TestOptionsProvider : AnalyzerConfigOptionsProvider
     {
+        private const string TargetPathOption = "build_metadata.AdditionalFiles.TargetPath";
+
         private readonly Dictionary<AdditionalText, AnalyzerConfigOptions> _perFile = [];
 
         public override AnalyzerConfigOptions GlobalOptions { get; } =
@@ -276,11 +278,9 @@ public class MarkupModuleGraphTests
 
         internal TestOptionsProvider With(AdditionalText file, string targetPath)
         {
-            _perFile[file] = new TestOptions(new Dictionary<string, string>
-            {
-                ["build_metadata.AdditionalFiles.TargetPath"] =
-                    Convert.ToBase64String(Encoding.UTF8.GetBytes(targetPath)),
-            });
+            string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(targetPath));
+            var options = new Dictionary<string, string> { [TargetPathOption] = encoded };
+            _perFile.Add(file, new TestOptions(options));
             return this;
         }
 
@@ -297,10 +297,13 @@ public class MarkupModuleGraphTests
 
             public override bool TryGetValue(string key, out string? value)
             {
-                if (_values.TryGetValue(key, out var found))
+                foreach (var entry in _values)
                 {
-                    value = found;
-                    return true;
+                    if (string.Equals(entry.Key, key, StringComparison.Ordinal))
+                    {
+                        value = entry.Value;
+                        return true;
+                    }
                 }
 
                 value = null;
