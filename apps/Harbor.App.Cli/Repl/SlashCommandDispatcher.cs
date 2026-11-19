@@ -12,6 +12,7 @@ using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Skills;
 using Harbor.Terminal.Abstractions;
+using Harbor.Desktop.Abstractions.Commands;
 using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;

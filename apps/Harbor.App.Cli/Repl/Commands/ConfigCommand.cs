@@ -3,7 +3,7 @@ using Harbor.Abstractions.Extensions;
 using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
-using Harbor.Ui.Framework.Commands;
+using Harbor.Desktop.Abstractions.Commands;
 
 namespace Harbor.App.Cli.Repl.Commands;
 

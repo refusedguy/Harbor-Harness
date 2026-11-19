@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Desktop.Abstractions.Commands;
 using Harbor.Ui.Framework.Commands;
 using Microsoft.Extensions.Logging;
 

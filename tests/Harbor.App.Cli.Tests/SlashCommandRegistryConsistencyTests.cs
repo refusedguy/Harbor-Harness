@@ -7,6 +7,7 @@ using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Harbor.TestKit;
+using Harbor.Desktop.Abstractions.Commands;
 using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;

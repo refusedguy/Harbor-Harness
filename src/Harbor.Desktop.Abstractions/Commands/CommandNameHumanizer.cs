@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Harbor.Ui.Framework.Commands;
+namespace Harbor.Desktop.Abstractions.Commands;
 
 /// <summary>
 ///     Turns a technical command identifier into a readable name.
