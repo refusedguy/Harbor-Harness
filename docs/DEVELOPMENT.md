@@ -172,6 +172,28 @@ out.
 Relative links break silently: a doc that renames or moves is still valid
 markdown, it just sends the reader to a 404.
 
+### Local docs preview
+
+The gates above are static checks. They never render the site, so a layout or
+front-matter mistake reaches CI. To inspect the rendered docs locally, run the
+same two stages as the
+[`docs-site.yml`](../.github/workflows/docs-site.yml) workflow and serve the
+result:
+
+```bash
+dotnet tool install -g docfx       # once, if DocFX is not installed yet
+docfx metadata docfx.json          # generates api/*.yml (gitignored)
+docfx build docfx.json             # writes _site/
+docfx serve _site                  # http://localhost:8080
+```
+
+Open `http://localhost:8080` in a browser. `docfx serve` watches the output
+directory, so after an edit rerun `docfx build docfx.json` and reload the page.
+Do not skip `docfx metadata`: a bare `docfx build` does not run the metadata
+stage, and the generated API pages will be missing. This full build is a
+separate CI lane, not part of the ~30 s static markdown gate lane described
+below.
+
 ### It IS in CI now — `.github/workflows/docs.yml`
 
 `ci.yml` lists `**.md` and `docs/**` in `paths-ignore`, so a docs-only PR never
