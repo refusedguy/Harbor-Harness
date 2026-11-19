@@ -21,6 +21,12 @@ internal static class MarkupDiagnostics
     /// <summary>The id reported for a syntax error in a markup file.</summary>
     internal const string SyntaxErrorId = "HZ0001";
 
+    /// <summary>The id reported for a cycle in the module import graph.</summary>
+    internal const string CyclicImportId = "HZ0002";
+
+    /// <summary>The id reported for an import that does not resolve to a module.</summary>
+    internal const string MissingImportId = "HZ0003";
+
     private const string Category = "CellForge.Markup";
 
     private static readonly DiagnosticDescriptor SyntaxRule = new(
@@ -32,6 +38,24 @@ internal static class MarkupDiagnostics
         isEnabledByDefault: true,
         description: "The .harbor-ui parser rejected this line; no generated source was emitted.");
 
+    private static readonly DiagnosticDescriptor CyclicRule = new(
+        id: CyclicImportId,
+        title: "Cyclic CellForge markup import",
+        messageFormat: "{0}:{1}: {2}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The .harbor-ui import graph contains a cycle; no source was emitted for the cycle.");
+
+    private static readonly DiagnosticDescriptor MissingRule = new(
+        id: MissingImportId,
+        title: "Unresolved CellForge markup import",
+        messageFormat: "{0}:{1}: {2}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The .harbor-ui import does not name a file in this compilation.");
+
     /// <summary>Turns one parser diagnostic into a compiler error.</summary>
     /// <param name="path">Project-relative path used as the location's file name.</param>
     /// <param name="text">The markup source, used to resolve the character offset.</param>
@@ -39,6 +63,19 @@ internal static class MarkupDiagnostics
     internal static Diagnostic SyntaxError(string path, string text, MarkupDiagnostic diagnostic) =>
         Diagnostic.Create(
             SyntaxRule,
+            CreateLocation(path, text, diagnostic.Line, diagnostic.Column),
+            diagnostic.Line,
+            diagnostic.Column,
+            diagnostic.Message);
+
+    /// <summary>Turns one graph finding into a compiler error at its import line.</summary>
+    /// <param name="id">The HZ code for this finding.</param>
+    /// <param name="path">Project-relative path used as the location's file name.</param>
+    /// <param name="text">The importing file's source, used for the offset.</param>
+    /// <param name="diagnostic">Position and message of the finding.</param>
+    internal static Diagnostic GraphError(string id, string path, string text, MarkupDiagnostic diagnostic) =>
+        Diagnostic.Create(
+            id == CyclicImportId ? CyclicRule : MissingRule,
             CreateLocation(path, text, diagnostic.Line, diagnostic.Column),
             diagnostic.Line,
             diagnostic.Column,

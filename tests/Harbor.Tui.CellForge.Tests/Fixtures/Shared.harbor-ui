@@ -1,0 +1,4 @@
+# #3083: a shared component imported by Screen.harbor-ui. It is emitted as
+# its own generated builder, never merged into the importing screen.
+panel "shared-header":
+    text "Shared header"

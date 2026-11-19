@@ -29,6 +29,7 @@ public static class MarkupParser
 {
     private const string NewOperation = "new";
     private const string StateDirective = "state:";
+    private const string ImportKeyword = "import";
 
     /// <summary>Parses markup text into a <see cref="SpecArena"/>.</summary>
     /// <param name="text">Whole file contents.</param>
@@ -41,6 +42,7 @@ public static class MarkupParser
         var arena = new SpecArena();
         var diagnostics = new List<MarkupDiagnostic>();
         var levels = new List<Level>();
+        var imports = new List<SpecImport>();
         string? stateType = null;
         var stateTypeLine = 0;
         var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
@@ -79,6 +81,27 @@ public static class MarkupParser
                 {
                     stateType = typeName;
                     stateTypeLine = lineNumber;
+                }
+
+                continue;
+            }
+
+            // #3083. An import names another .harbor-ui file by a path relative
+            // to this file. It is a directive, not a widget node: the module
+            // resolver turns the raw path into a stable module name and builds
+            // the graph. The generator never reads the disk itself.
+            if (TryDirective(content, ImportKeyword, out var importPath))
+            {
+                var importTokens = Tokenize(importPath, lineNumber, indent + 1, diagnostics);
+                if (importTokens.Count == 1
+                    && importTokens[0].Kind == SpecValueKind.String
+                    && importTokens[0].Text.Length > 0)
+                {
+                    imports.Add(new SpecImport(importTokens[0].Text, lineNumber, indent + 1));
+                }
+                else
+                {
+                    Add(diagnostics, lineNumber, indent + 1, "An import needs one quoted path.");
                 }
 
                 continue;
@@ -156,7 +179,30 @@ public static class MarkupParser
             levels.Add(new Level(indent, node));
         }
 
-        return new MarkupParseResult(arena, diagnostics, stateType, stateTypeLine);
+        return new MarkupParseResult(arena, diagnostics, stateType, stateTypeLine, imports);
+    }
+
+    /// <summary>
+    ///     Recognizes a keyword directive followed by either a colon or
+    ///     whitespace, for example <c>state:</c> and <c>import "x"</c>.
+    /// </summary>
+    private static bool TryDirective(string content, string keyword, out string rest)
+    {
+        rest = string.Empty;
+        if (!content.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var index = keyword.Length;
+        if (index == content.Length)
+            return false;
+
+        if (content[index] == ':')
+            index++;
+        else if (!char.IsWhiteSpace(content[index]))
+            return false;
+
+        rest = content[index..].Trim();
+        return true;
     }
 
     private static SpecValue[] ArgumentsFrom(List<SpecValue> tokens, int first) =>

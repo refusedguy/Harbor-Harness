@@ -39,17 +39,20 @@ public sealed class DevReloadInterpreter
     private DevLogChannel? _log;
     private MutationBatchApplier _applier;
     private MarkupParseResult _current;
+    private SpecArena _currentArena;
     private string _signature;
     private string _checksum;
 
     private DevReloadInterpreter(
         MutationBatchApplier applier,
         MarkupParseResult current,
+        SpecArena currentArena,
         string signature,
         string checksum)
     {
         _applier = applier;
         _current = current;
+        _currentArena = currentArena;
         _signature = signature;
         _checksum = checksum;
     }
@@ -73,8 +76,46 @@ public sealed class DevReloadInterpreter
         interpreter = new DevReloadInterpreter(
             applier,
             parsed,
+            parsed.Arena,
             ComputeTemplateSignature(parsed.Arena),
             MarkupChecksum.Compute(markup ?? string.Empty));
+        error = string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    ///     DEV-ONLY graph entry point. Resolves the importing file together
+    ///     with every file it imports, expands the resolved tree and builds
+    ///     the initial live tree from all of them.
+    /// </summary>
+    /// <param name="texts">Path-to-text map for all markup files visible to the watcher.</param>
+    /// <param name="rootPath">Path of the screen file that owns the tree.</param>
+    /// <param name="interpreter">The interpreter owning the live tree.</param>
+    /// <param name="error">Graph or syntax error, empty on success.</param>
+    public static bool TryCreateFromGraph(
+        IReadOnlyDictionary<string, string> texts,
+        string rootPath,
+        out DevReloadInterpreter? interpreter,
+        out string error)
+    {
+        var sources = ToSources(texts);
+        var graph = MarkupModuleResolver.Resolve(sources);
+        if (graph.Findings.Count != 0)
+        {
+            interpreter = null;
+            error = Describe(graph);
+            return false;
+        }
+
+        var arena = MarkupModuleExpander.Expand(graph, rootPath);
+        var applier = new MutationBatchApplier();
+        Build(applier, arena);
+        interpreter = new DevReloadInterpreter(
+            applier,
+            new MarkupParseResult(arena, []),
+            arena,
+            ComputeTemplateSignature(arena),
+            MarkupModuleResolver.GraphChecksum(sources));
         error = string.Empty;
         return true;
     }
@@ -144,6 +185,51 @@ public sealed class DevReloadInterpreter
         return result;
     }
 
+    /// <summary>
+    ///     Re-resolves the module graph and moves the live tree to the new
+    ///     expanded arena. Changing any imported file therefore produces the
+    ///     same patch/rebuild decision as editing the screen itself. A broken
+    ///     graph rejects the step and leaves the live tree untouched.
+    /// </summary>
+    public ReloadResult ReloadFromGraph(
+        IReadOnlyDictionary<string, string> texts,
+        string rootPath)
+    {
+        var result = ReloadFromGraphCore(texts, rootPath);
+        string checksum = result.SourceChecksum.Length <= 8
+            ? result.SourceChecksum
+            : result.SourceChecksum[..8];
+        _log?.Write("interpreter",
+            $"{result.Outcome} rev={result.Revision} root={result.LiveRootId} checksum={checksum}: {result.Reason}");
+        return result;
+    }
+
+    private ReloadResult ReloadFromGraphCore(
+        IReadOnlyDictionary<string, string> texts,
+        string rootPath)
+    {
+        var sources = ToSources(texts);
+        var graph = MarkupModuleResolver.Resolve(sources);
+        if (graph.Findings.Count != 0)
+            return RejectedGraph("graph rejected: " + Describe(graph));
+
+        var fresh = MarkupModuleExpander.Expand(graph, rootPath);
+        var signature = ComputeTemplateSignature(fresh);
+        var checksum = MarkupModuleResolver.GraphChecksum(sources);
+        var wrapper = new MarkupParseResult(fresh, []);
+        return ApplyFresh(wrapper, signature, checksum, LogicChanged(_current, wrapper));
+    }
+
+    private ReloadResult RejectedGraph(string reason) =>
+        new(
+            ReloadOutcome.Rejected,
+            _applier.Revision,
+            _applier.RootId,
+            [],
+            _signature,
+            _checksum,
+            reason);
+
     private ReloadResult ReloadCore(string markup)
     {
         var normalized = StripComments(markup ?? string.Empty);
@@ -160,8 +246,20 @@ public sealed class DevReloadInterpreter
 
         var signature = ComputeTemplateSignature(fresh.Arena);
         var checksum = MarkupChecksum.Compute(markup ?? string.Empty);
-        bool logicChanged = LogicChanged(_current, fresh);
+        return ApplyFresh(fresh, signature, checksum, LogicChanged(_current, fresh));
+    }
 
+    /// <summary>
+    ///     The one patch/rebuild decision, shared by the single-file and the
+    ///     graph paths. Both hand it a freshly parsed (or expanded) arena; only
+    ///     the source of that arena differs.
+    /// </summary>
+    private ReloadResult ApplyFresh(
+        MarkupParseResult fresh,
+        string signature,
+        string checksum,
+        bool logicChanged)
+    {
         if (signature == _signature)
         {
             // A comment-only or whitespace-only edit normalizes to the same text.
@@ -172,13 +270,14 @@ public sealed class DevReloadInterpreter
                 return Rebuild(fresh, signature, checksum, ReloadOutcome.RestartRequired,
                     "logic changed; tree rebuilt and host restart requested");
 
-            var patch = ComputePatch(_current.Arena, fresh.Arena);
+            var patch = ComputePatch(_currentArena, fresh.Arena);
             var applied = _applier.Apply(patch);
             if (applied.IsFailure)
                 return Rebuild(fresh, signature, checksum, ReloadOutcome.Rebuilt,
                     "patch rejected by the applier; rebuilt: " + applied.Error);
 
             _current = fresh;
+            _currentArena = fresh.Arena;
             _signature = signature;
             _checksum = checksum;
 
@@ -318,6 +417,7 @@ public sealed class DevReloadInterpreter
         _applier = applier;
         _sessions.Clear(); // a new template cannot inherit host state by position
         _current = fresh;
+        _currentArena = fresh.Arena;
         _signature = signature;
         _checksum = checksum;
         return Snapshot(outcome, signature, checksum, reason);
@@ -433,6 +533,18 @@ public sealed class DevReloadInterpreter
         || name.Equals("event", StringComparison.OrdinalIgnoreCase)
         || name.Equals("state", StringComparison.OrdinalIgnoreCase);
 
+    private static IReadOnlyList<MarkupModuleSource> ToSources(IReadOnlyDictionary<string, string> texts)
+    {
+        var sources = new List<MarkupModuleSource>(texts.Count);
+        foreach (var (path, text) in texts)
+            sources.Add(new MarkupModuleSource(path, text));
+        return sources;
+    }
+
     private static string Describe(MarkupParseResult parsed) =>
         string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Line}:{d.Column} {d.Message}"));
+
+    private static string Describe(ModuleGraphResult graph) =>
+        string.Join("; ", graph.Findings.Select(f =>
+            $"{f.Path}:{f.Diagnostic.Line}:{f.Diagnostic.Column} {f.Diagnostic.Message}"));
 }

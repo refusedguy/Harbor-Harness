@@ -1,0 +1,7 @@
+# #3083: the two-file fixture. The import names the shared module and the
+# .use operation instantiates it at this point in the screen's tree.
+import "Fixtures/Shared.harbor-ui"
+
+panel "screen":
+    .use "Fixtures/Shared.harbor-ui"
+    text "Screen body"

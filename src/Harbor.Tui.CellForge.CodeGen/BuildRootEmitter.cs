@@ -116,15 +116,27 @@ internal static class BuildRootEmitter
     }
 
     /// <summary>
-    ///     Phase 2 for one markup file: the other partial half, carrying the
-    ///     <c>BuildRoot</c> method with local sequence numbers.
+    ///     Phase 2 for one module: the <c>BuildRoot</c> half with dense local
+    ///     sequence numbers plus an offset <c>BuildModule</c> half. Every
+    ///     module gets both, so an importing screen can call the imported
+    ///     builder directly without merging two files into one root.
     /// </summary>
-    internal static string EmitBuildRoot(string identifier, SpecArena arena)
+    internal static string EmitBuildRootWithModules(
+        string identifier,
+        string modulePath,
+        SpecArena arena,
+        ResolvedModule module,
+        ModuleGraphResult graph)
     {
         var body = new List<string>();
         var sequence = 0;
         foreach (var root in arena.Roots)
-            EmitNode(root, body, ref sequence);
+            EmitNode(root, body, ref sequence, false, modulePath, module, graph);
+
+        var moduleBody = new List<string>();
+        var moduleSequence = 0;
+        foreach (var root in arena.Roots)
+            EmitNode(root, moduleBody, ref moduleSequence, true, modulePath, module, graph);
 
         var lines = new List<string>
         {
@@ -132,6 +144,8 @@ internal static class BuildRootEmitter
             "// #2428 phase 2: BuildRoot over the phase-1 declarations.",
             "// Sequence numbers are local, dense and assigned in pre-order;",
             "// cell-diff uses them as keys.",
+            "// #3083: an imported module is called through its own builder,",
+            "// never merged into another module's source.",
             $"namespace {Namespace};",
             "",
             $"internal partial class {identifier}",
@@ -153,35 +167,77 @@ internal static class BuildRootEmitter
         };
         lines.AddRange(body);
         lines.Add("    }");
-
-        // #2518: layout nodes (Row/Column/Overlay) add a second builder to the
-        // same partial class, so no extra source has to reach the compilation.
+        lines.Add("");
+        lines.Add("    /// <summary>Builds this module's subtree at a caller-supplied sequence offset.</summary>");
+        lines.Add("    internal static void BuildModule(ICellForgeRoot root, int baseSequence)");
+        lines.Add("    {");
+        lines.AddRange(moduleBody);
+        lines.Add("    }");
         lines.AddRange(SpecLayoutEmitter.EmitMethod(arena));
         lines.Add("}");
         return Lines(lines.ToArray());
     }
 
-    private static void EmitNode(SpecNode node, List<string> body, ref int sequence)
+    /// <summary>
+    ///     Emits one node. With <paramref name="offset"/> the sequence argument
+    ///     is relative to <c>baseSequence</c>, which is how an importing screen
+    ///     calls this module's builder without colliding on cell-diff keys.
+    ///     The single case and the graph case share this one traversal.
+    /// </summary>
+    private static void EmitNode(
+        SpecNode node,
+        List<string> body,
+        ref int sequence,
+        bool offset,
+        string? modulePath,
+        ResolvedModule? module,
+        ModuleGraphResult? graph)
     {
         var begin = sequence++;
-        body.Add($"        root.Begin({Number(begin)}); // {node.Kind}, line {Number(node.SourceLine)}");
+        body.Add($"        root.Begin({Sequence(begin, offset)}); // {node.Kind}, line {Number(node.SourceLine)}");
 
         // #2438: a declared .id reaches the automation protocol as testId
         // through this call, so the locator lives in BuildRoot itself.
         if (node.Id is not null)
-            body.Add($"        root.TestId({Number(begin)}, {Literal(node.Id)}); // testId, line {Number(node.SourceLine)}");
+            body.Add($"        root.TestId({Sequence(begin, offset)}, {Literal(node.Id)}); // testId, line {Number(node.SourceLine)}");
 
         if (node.Kind == SpecKind.Text)
         {
             var text = FirstArgument(node);
-            body.Add($"        root.Text({Number(sequence++)}, {Literal(text)}); // {node.Kind}, line {Number(node.SourceLine)}");
+            body.Add($"        root.Text({Sequence(sequence++, offset)}, {Literal(text)}); // {node.Kind}, line {Number(node.SourceLine)}");
+        }
+
+        // #3083: `.use "path"` instantiates an imported module. The imported
+        // builder is a separate generated class; its sequence range is
+        // reserved here so cell-diff keys stay unique across the whole screen.
+        if (modulePath is not null && module is not null && graph is not null)
+        {
+            foreach (var operation in node.Operations)
+            {
+                if (!string.Equals(operation.Name, "use", StringComparison.OrdinalIgnoreCase)
+                    || operation.Arguments.Count == 0)
+                    continue;
+
+                var raw = operation.Arguments[0].Text;
+                var target = MarkupModuleResolver.ResolveUse(modulePath, raw, module, graph.Identifiers);
+                if (target is null)
+                    continue;
+
+                var targetIdentifier = graph.Identifiers[target];
+                body.Add($"        {targetIdentifier}.BuildModule(root, {Sequence(sequence, offset)}); // use {Literal(raw)}, line {Number(operation.SourceLine)}");
+                if (graph.SequenceCounts.TryGetValue(target, out var imported))
+                    sequence += imported;
+            }
         }
 
         foreach (var child in node.Children)
-            EmitNode(child, body, ref sequence);
+            EmitNode(child, body, ref sequence, offset, modulePath, module, graph);
 
         body.Add($"        root.End(); // {node.Kind}, line {Number(node.SourceLine)}");
     }
+
+    private static string Sequence(int value, bool offset) =>
+        offset ? "baseSequence + " + Number(value) : Number(value);
 
     /// <summary>Counts the numbers a traversal will hand out: one per Begin and one per Text.</summary>
     private static int CountSequences(SpecArena arena)
@@ -237,6 +293,3 @@ internal static class BuildRootEmitter
 
 /// <summary>Phase-1 output for one file. All fields are value-comparable.</summary>
 internal sealed record DeclarationInput(string TargetPath, string Text, string Identifier);
-
-/// <summary>Phase-2 output for one file. All fields are value-comparable.</summary>
-internal sealed record BuildRootOutput(string Identifier, string Source, bool IsValid);

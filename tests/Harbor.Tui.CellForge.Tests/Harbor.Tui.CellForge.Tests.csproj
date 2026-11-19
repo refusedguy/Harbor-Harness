@@ -60,6 +60,17 @@
     <AdditionalFiles Include="Fixtures\Sample.harbor-ui">
       <TargetPath>Fixtures/Sample.harbor-ui</TargetPath>
     </AdditionalFiles>
+    <!--
+      #3083: the two-file fixture goes through the real build-time generator.
+      Screen imports Shared, so the generated screen builder calls the shared
+      module's own builder instead of inlining its nodes.
+    -->
+    <AdditionalFiles Include="Fixtures\Shared.harbor-ui">
+      <TargetPath>Fixtures/Shared.harbor-ui</TargetPath>
+    </AdditionalFiles>
+    <AdditionalFiles Include="Fixtures\Screen.harbor-ui">
+      <TargetPath>Fixtures/Screen.harbor-ui</TargetPath>
+    </AdditionalFiles>
   </ItemGroup>
 
   <ItemGroup>
