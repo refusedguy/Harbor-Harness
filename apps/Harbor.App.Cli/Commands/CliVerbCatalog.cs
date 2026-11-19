@@ -22,6 +22,7 @@ internal static class CliVerbCatalog
         "ask",
         "run",
         "demo",
+        "catalog",
         "setup",
         "auth",
         "config",
