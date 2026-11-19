@@ -72,6 +72,7 @@ internal static class CafPilotVerbs
         app.Add("setup", CafSetupCommands.Setup);
         app.Add("tui", CafTuiCommands.Tui);
         app.Add("demo", CafDemoCommands.Demo);
+        app.Add("catalog", CafCatalogCommands.Catalog); // #3087 S6: BCL-only catalog reference screen
         app.Add("logs", CafLogsCommands.Logs);
         app.Add("ask", CafAskCommands.Ask);
         app.Add("events", CafEventsCommands.Events);
