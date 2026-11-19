@@ -35,6 +35,16 @@ public sealed partial class BashTool : ITool
     private readonly IProcessProxy _processes;
     private readonly ILogger<BashTool> _logger;
 
+    // #3387: the receipt writer for completed commands. A delegate, not
+    // ICommandReceiptStore, because this assembly is Infrastructure and may
+    // not reference Harbor.AgentRuntime, which owns that contract. The
+    // composition root binds it to the ICommandReceiptStore singleton. A
+    // get/set property (not a readonly field) is deliberate: AutoCtor's
+    // generated ctor takes only eligible readonly fields and init-only
+    // properties, so every existing two-argument constructor call stays valid
+    // and the tool's observable output is unchanged when no store is wired.
+    public Func<string, string, string, DateTimeOffset, CancellationToken, Task>? ReceiptWriter { get; set; }
+
     // #3401: the shell-visible name an agent uses in place of a guessed
     // main/master. Resolved from the repository's refs before the command runs.
     private const string GitBaseVariable = "HARBOR_GIT_BASE";
@@ -174,11 +184,13 @@ public sealed partial class BashTool : ITool
                 if (timedOut)
                 {
                     BashToolLog.CommandTimedOut(_logger, ex, timeout);
+                    await RecordReceiptAsync().ConfigureAwait(false);
                     return ToolResult.Error(
                         $"Command timed out after {timeout}s and was killed.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
                 }
 
                 BashToolLog.CommandCancelled(_logger, ex);
+                await RecordReceiptAsync().ConfigureAwait(false);
                 return ToolResult.Error(
                     $"Command was cancelled.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
             }
@@ -226,7 +238,37 @@ public sealed partial class BashTool : ITool
         var result = isError
             ? ToolResult.Error(output.ToString(), new { exitCode = process.ExitCode })
             : ToolResult.Success(output.ToString(), new { exitCode = process.ExitCode });
+        // #3387: the process has exited and the output has been read, so this
+        // is the point where a receipt can be recorded. A failed exit code is
+        // still a completed command, so it gets a receipt too.
+        await RecordReceiptAsync().ConfigureAwait(false);
         return result;
+
+        // #3387: a receipt is a side-car observation, not part of the tool's
+        // answer. It never changes the result (or a golden frame): a store
+        // that refuses the write is logged and swallowed. Cancellation is
+        // deliberately not forwarded — a killed command still gets its one
+        // receipt, and a replay must still see it as a duplicate.
+        async Task RecordReceiptAsync()
+        {
+            if (ReceiptWriter is null) return;
+            try
+            {
+                await ReceiptWriter(
+                    NonBlank(context.CallId, command),
+                    NonBlank(context.SessionId, "bash"),
+                    NonBlank(context.MessageId, context.CallId ?? command),
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                BashToolLog.ReceiptWriteFailed(_logger, ex);
+            }
+        }
+
+        static string NonBlank(string? value, string fallback) =>
+            string.IsNullOrWhiteSpace(value) ? fallback : value!;
 
         // #53 audit: named locals (not inline lambdas) so they can be
         // detached in the finally above. The async output callbacks can still
@@ -357,4 +399,7 @@ internal static partial class BashToolLog
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Command completed: exit={ExitCode}")]
     public static partial void CommandCompleted(ILogger logger, int exitCode);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Could not record the command receipt for a completed bash command")]
+    public static partial void ReceiptWriteFailed(ILogger logger, Exception ex);
 }

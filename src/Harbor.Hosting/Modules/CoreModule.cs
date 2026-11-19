@@ -47,6 +47,10 @@ internal static class CoreModule
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
                     .CreateLogger<Harbor.Application.Providers.ProviderHealthCheck>()));
         services.AddSingleton<ITokenTracker, TokenTracker>();
+        // #3387: command receipts are a process-wide fact (one receipt per
+        // command id), so the same instance the eager tool composition writes
+        // through is the one every consumer resolves by interface.
+        services.AddSingleton<ICommandReceiptStore>(ctx.CommandReceiptStore);
         services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         // #1523: the workspace snapshot cache is instance state behind this
         // interface; the static facade (TurnRunner's pre-DI path) forwards to

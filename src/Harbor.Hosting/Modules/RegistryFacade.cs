@@ -147,7 +147,17 @@ internal static class RegistryFacade
         services.AddSingleton<Harbor.Abstractions.Interaction.IUserQuestionService>(
             sp => sp.GetRequiredService<Harbor.Application.Interaction.UserQuestionService>());
 
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, providerRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, spillStore, pluginInventory);
+        // #3387: BashTool lives in Harbor.Tools.Builtin, which may reference
+        // Domain only and cannot name ICommandReceiptStore (it lives in
+        // Harbor.AgentRuntime). The delegate is the layering-safe seam: it is
+        // bound to the singleton CoreModule registered, so the receipt a
+        // completed command writes is the one every ICommandReceiptStore
+        // consumer reads. BCL types only, no new contract to keep in sync.
+        Func<string, string, string, DateTimeOffset, CancellationToken, Task> commandReceiptWriter =
+            (commandId, runId, nodeId, stamp, ct) =>
+                ctx.CommandReceiptStore.TryRecordAsync(commandId, runId, nodeId, stamp, ct);
+
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, providerRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, spillStore, pluginInventory, commandReceiptWriter);
         // The single attach point of both forwarders: the container resolves
         // ISubAgentRunner only after ISessionStore exists, so the attach runs
         // exactly once and inside the facade — HostBuilder's warmup

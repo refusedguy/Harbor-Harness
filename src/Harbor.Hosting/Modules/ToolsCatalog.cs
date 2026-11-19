@@ -196,7 +196,8 @@ internal static class ToolsCatalog
         ISessionStore? sessionStore = null,
         ISkillRegistry? skillRegistry = null,
         IToolOutputSpillStore? spillStore = null,
-        IInstalledPluginInventory? pluginInventory = null)
+        IInstalledPluginInventory? pluginInventory = null,
+        Func<string, string, string, DateTimeOffset, CancellationToken, Task>? commandReceiptWriter = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
@@ -218,9 +219,18 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>(), lspService));
         // #1590: BashTool доходит до OS-процессов только через Proxy-шов — здесь
         // production SystemProcessProxy; тесты подменяют его сценарием.
-        tb.AddTool(lf => new OutputLimitToolDecorator(
-            new BashTool(new SystemProcessProxy(), lf.CreateLogger<BashTool>()),
-            lf.CreateLogger<OutputLimitToolDecorator>()));
+        tb.AddTool(lf =>
+        {
+            var bash = new BashTool(new SystemProcessProxy(), lf.CreateLogger<BashTool>())
+            {
+                // #3387: bound in RegistryFacade to the ICommandReceiptStore
+                // singleton CoreModule registered. Null only for a host that
+                // composes the catalog without a store; the tool keeps its
+                // output and null-writer behaviour unchanged.
+                ReceiptWriter = commandReceiptWriter
+            };
+            return new OutputLimitToolDecorator(bash, lf.CreateLogger<OutputLimitToolDecorator>());
+        });
         tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
         tb.AddTool(lf => new OutputLimitToolDecorator(
             new GrepTool(lf.CreateLogger<GrepTool>()),

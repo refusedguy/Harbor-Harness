@@ -33,6 +33,9 @@
          references — declared here for the same reason as the rows above: the
          test names the type, so the type is a real edge. -->
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <!-- #3387: CommandReceiptWiringTests drives the real BashTool through the
+         receipt writer the composition root installs, so it names that type. -->
+    <ProjectReference Include="../../src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
     <!--
       #1889: the helpers this project uses (the scopes, the logging doubles)
       live in the `Harbor.TestKit.Support` sibling, and #1834 reached them
