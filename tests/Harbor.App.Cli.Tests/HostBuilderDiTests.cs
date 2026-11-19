@@ -121,6 +121,10 @@ public class HostBuilderDiTests
     [Test]
     public async Task Build_Registers_MessageConverter() => await Assert.That(Services.GetService<MessageConverter>()).IsNotNull();
 
+    // #3407: the CLI `sessions merge-back` verb resolves this from the container.
+    [Test]
+    public async Task Build_Registers_SessionMergeBackService() => await Assert.That(Services.GetService<SessionMergeBackService>()).IsNotNull();
+
     [Test]
     public async Task Build_Registers_IAgentLoop() => await Assert.That(Services.GetService<IAgentLoop>()).IsNotNull();
 
