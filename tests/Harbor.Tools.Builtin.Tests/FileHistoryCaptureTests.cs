@@ -5,8 +5,8 @@
 // composition root by FileHistoryToolDecorator, which captures the current
 // file bytes as a rewind pre-image before the tool writes. These tests drive
 // that real path: an edit inside the working directory stores a blob under
-// `<workspace>/.rewind/<sessionId>/objects`, and a path outside the working
-// directory is refused before the inner tool touches the disk.
+// `<workspace>/.rewind/<sessionId>/objects`, while a path outside the working
+// directory has no pre-image and is left to the tool's own permission gate.
 
 using Harbor.Abstractions.Models;
 using Harbor.Hosting;
@@ -62,24 +62,26 @@ public class FileHistoryCaptureTests
     }
 
     [Test]
-    public async Task Write_PathOutsideWorkspace_IsRejectedWithoutWritingToDisk()
+    public async Task Write_PathOutsideWorkspace_HasNoPreImage_AndStillReachesTheTool()
     {
         string root = NewTempRoot();
         string outside = NewTempRoot();
         try
         {
-            string escapeTarget = Path.Combine(outside, "escape.txt");
+            string target = Path.Combine(outside, "elsewhere.txt");
             var tool = new FileHistoryToolDecorator(
                 new WriteTool(NullLogger<WriteTool>.Instance),
                 NullLogger<FileHistoryToolDecorator>.Instance);
-            var args = TestArgs.FromPayload(new ToolPathContentArgs(escapeTarget, "pwned"));
+            var args = TestArgs.FromPayload(new ToolPathContentArgs(target, "written"));
             var context = TestToolContext.Create(sessionId: "session-2", workingDirectory: root);
 
             ToolResult result = await tool.ExecuteAsync(args, context);
 
-            await Assert.That(result.IsError).IsTrue();
-            await Assert.That(result.Output).Contains("Pre-image capture refused");
-            await Assert.That(File.Exists(escapeTarget)).IsFalse();
+            // The tracker rejects a path outside the workspace, so no blob is
+            // stored. Capture is best-effort: it does not pre-empt the tool's
+            // own permission gate, and the write is handled as usual.
+            await Assert.That(result.IsError).IsFalse();
+            await Assert.That(await File.ReadAllTextAsync(target)).IsEqualTo("written");
             await Assert.That(Directory.Exists(Path.Combine(root, ".rewind", "session-2", "objects"))).IsFalse();
         }
         finally
