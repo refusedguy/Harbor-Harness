@@ -43,12 +43,14 @@
 //   the common store's #913 store-owned path, and unchanged),
 // - this store's SG4 log wording.
 
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using CSharpFunctionalExtensions;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Tools.Builtin;
 namespace Harbor.Hosting.Configuration;
 /// <summary>
 ///     JSON-backed <see cref="IAppConfigStore{T}" />. Reads and writes the
@@ -100,6 +102,18 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     ///     a field in a different method.)
     /// </summary>
     private readonly JsonTypeInfo<T> _jsonTypeInfo;
+
+    // #3113: config.json is JSONC — // comments, /* */ comments and a trailing
+    // comma are all legal in the user's file. JsoncConfigParser is the single
+    // source of those rules: its Options are mirrored into the reader options
+    // below so the store and the parser cannot drift on syntax. The generated
+    // JsonTypeInfo's own options are fixed at generation time, so JSONC is
+    // normalised away before it reaches that contract.
+    private static readonly JsonDocumentOptions JsoncReadOptions = new()
+    {
+        CommentHandling = JsoncConfigParser.Options.CommentHandling,
+        AllowTrailingCommas = JsoncConfigParser.Options.AllowTrailingCommas
+    };
 
     /// <summary>
     ///     Construct a JSON-backed store.
@@ -171,7 +185,28 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             SavePath = config => config.ConfigFilePath,
             // #414: no reflection branch. The JsonTypeInfo overload is the only call, so the
             // contract comes from generated metadata or not at all — see the constructor.
-            Deserialize = json => JsonSerializer.Deserialize(json, _jsonTypeInfo),
+            // #3113: the file is JSONC. Read it with the rules from
+            // JsoncConfigParser.Options, require an object root (same contract as
+            // JsoncConfigParser.Parse), then write the parsed DOM through
+            // Utf8JsonWriter. That emits STRICT JSON — GetRawText()/GetRawValue()
+            // would carry the skipped comments back in — so the generated contract
+            // never has to tolerate JSONC itself. All three types are AOT-safe.
+            Deserialize = json =>
+            {
+                using JsonDocument document = JsonDocument.Parse(json, JsoncReadOptions);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    throw new JsonException("Configuration root must be a JSON object.");
+                }
+
+                var buffer = new ArrayBufferWriter<byte>();
+                using (var writer = new Utf8JsonWriter(buffer))
+                {
+                    document.RootElement.WriteTo(writer);
+                }
+
+                return JsonSerializer.Deserialize(buffer.WrittenSpan, _jsonTypeInfo);
+            },
             AfterLoad = config => config,
             // #414: as in LoadAsync, the only (de)serialization call is the
             // JsonTypeInfo one.
