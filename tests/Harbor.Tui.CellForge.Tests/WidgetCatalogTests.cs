@@ -76,7 +76,7 @@ public sealed class WidgetCatalogTests
     public async Task Golden_List_MarksTheSelectedRow()
     {
         string frame = Frame(12, 4, ListSpec.Create(["one", "two", "three"], 1));
-        await Assert.That(frame).IsEqualTo("> one\n  two\n  three\n");
+        await Assert.That(frame).IsEqualTo("  one\n> two\n  three\n");
     }
 
     [Test]
