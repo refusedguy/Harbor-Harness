@@ -16,9 +16,9 @@ public class WakeupScheduleTests
         var schedule = WakeupScheduleParser.Parse("30");
 
         await Assert.That(schedule).IsNotNull();
-        await Assert.That(schedule!.IsRelative).IsTrue();
-        await Assert.That(schedule.Delay).IsEqualTo(TimeSpan.FromSeconds(30));
-        await Assert.That(schedule.At).IsNull();
+        await Assert.That(schedule!.Value.IsRelative).IsTrue();
+        await Assert.That(schedule!.Value.Delay).IsEqualTo(TimeSpan.FromSeconds(30));
+        await Assert.That(schedule!.Value.At).IsNull();
     }
 
     [Test]
@@ -32,8 +32,8 @@ public class WakeupScheduleTests
         var schedule = WakeupScheduleParser.Parse(input);
 
         await Assert.That(schedule).IsNotNull();
-        await Assert.That(schedule!.IsRelative).IsTrue();
-        await Assert.That(schedule.Delay).IsEqualTo(TimeSpan.FromSeconds(seconds));
+        await Assert.That(schedule!.Value.IsRelative).IsTrue();
+        await Assert.That(schedule!.Value.Delay).IsEqualTo(TimeSpan.FromSeconds(seconds));
     }
 
     [Test]
@@ -45,7 +45,7 @@ public class WakeupScheduleTests
         var schedule = WakeupScheduleParser.Parse(input);
 
         await Assert.That(schedule).IsNotNull();
-        await Assert.That(schedule!.IsRelative).IsTrue();
+        await Assert.That(schedule!.Value.IsRelative).IsTrue();
     }
 
     [Test]
@@ -54,9 +54,9 @@ public class WakeupScheduleTests
         var schedule = WakeupScheduleParser.Parse("2026-11-20T10:30:00Z");
 
         await Assert.That(schedule).IsNotNull();
-        await Assert.That(schedule!.IsAbsolute).IsTrue();
-        await Assert.That(schedule.Delay).IsEqualTo(TimeSpan.Zero);
-        await Assert.That(schedule.At).IsNotNull();
+        await Assert.That(schedule!.Value.IsAbsolute).IsTrue();
+        await Assert.That(schedule!.Value.Delay).IsEqualTo(TimeSpan.Zero);
+        await Assert.That(schedule!.Value.At).IsNotNull();
     }
 
     [Test]
@@ -65,7 +65,7 @@ public class WakeupScheduleTests
         var schedule = WakeupScheduleParser.Parse("2026-11-20T10:30:00+03:00");
 
         await Assert.That(schedule).IsNotNull();
-        await Assert.That(schedule!.IsAbsolute).IsTrue();
+        await Assert.That(schedule!.Value.IsAbsolute).IsTrue();
     }
 
     [Test]
@@ -128,7 +128,7 @@ public class WakeupScheduleTests
         var schedule = WakeupScheduleParser.Parse($"{WakeupScheduleParser.MaxDelaySeconds}s");
 
         await Assert.That(schedule).IsNotNull();
-        await Assert.That(schedule!.Delay).IsEqualTo(TimeSpan.FromSeconds(WakeupScheduleParser.MaxDelaySeconds));
+        await Assert.That(schedule!.Value.Delay).IsEqualTo(TimeSpan.FromSeconds(WakeupScheduleParser.MaxDelaySeconds));
     }
 
     [Test]
