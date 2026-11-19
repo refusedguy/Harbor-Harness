@@ -62,6 +62,15 @@ internal sealed class SlashCommandDispatcher
     /// </summary>
     private readonly Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? _skillUpdate;
 
+    /// <summary>
+    ///     #3109: the session's cost-alert threshold. The slash handler parses
+    ///     into it; the REPL frame loop reads it when a stats event arrives.
+    ///     Shared with the CellForge palette command through the composition root.
+    /// </summary>
+    private readonly CostAlertMonitor _costAlerts = new();
+
+    internal CostAlertMonitor CostAlerts => _costAlerts;
+
     /// <summary>All registered slash commands (canonical + aliases → single registration).</summary>
     private sealed record SlashCommandRegistration(
         SlashCommandDefinition Definition,
@@ -428,6 +437,15 @@ internal sealed class SlashCommandDispatcher
                     ctx.AgentRegistry,
                     ctx.ConfigStore, ctx.Writer, ctx.Agent, ctx.Session)
                 .ExecuteAsync(args, MakeCtx(ctx));
+        });
+
+        // #3109: the threshold is dispatcher-owned (not per-call state), so
+        // the handler closes over it instead of adding it to CommandContext.
+        // CostAlertMonitor.Apply is the one Parse call site for both slash entry points.
+        Register(dict, "cost-alert", (ctx, args) =>
+        {
+            ctx.Writer(_costAlerts.Apply(args.Count > 0 ? args[0] : null));
+            return Task.FromResult(Result.Success());
         });
     }
 

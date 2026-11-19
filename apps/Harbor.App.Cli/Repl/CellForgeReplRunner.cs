@@ -191,8 +191,11 @@ internal sealed class CellForgeReplRunner(
     /// <summary>Images staged by <c>/attach</c> for the next user turn (#386).</summary>
     internal readonly ImageAttachmentStash _attachments = new();
 
-    internal readonly ReplCommandCatalog _catalog =
-        ReplCommandCatalog.CreateDefault(new ImageAttachmentReader(core.ProviderRegistry, core.Logger));
+    internal readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault(
+        new ImageAttachmentReader(core.ProviderRegistry, core.Logger),
+        // #3109: one threshold store for the palette command, the legacy
+        // dispatcher and the stats observer in ReplLifecycle.
+        core.LegacySlash.Dispatcher.CostAlerts);
 
     // ── Extracted collaborators (SRP: the runner owns the shared state and
     // the IReplHost surface; sessions/titles/prompts/input/commands/lifecycle

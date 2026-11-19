@@ -298,6 +298,14 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 host._replStore.Dispatch(new ChatAppMsg.Agent(agentEvt));
                 await host.Bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
 
+                // #3109: the core's cumulative spend is the only price source.
+                // A threshold set by /cost-alert turns the next snapshot into
+                // one visible warning line, never a new cost computation here.
+                if (agentEvt is SessionStatsEvent stats)
+                {
+                    NotifyCostAlert(host._catalog.CostAlerts, stats, host.Bridge.AppendSystemLine);
+                }
+
                 // Issue #2219: zero-width terminal reports. OSC 7501 says
                 // whether the agent is working or done; OSC 9;4 gives an
                 // indeterminate busy bar for the duration of a tool call.
@@ -516,6 +524,21 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// </summary>
     internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating, bool windowFocused = true) =>
         windowFocused && (mode is StatusBarMode.Running or StatusBarMode.Compacting || mascotAnimating);
+
+    /// <summary>
+    ///     #3109: compares a fresh stats snapshot with the threshold set by
+    ///     <c>/cost-alert</c> and writes the warning into the chat timeline.
+    ///     The monitor owns the once-per-crossing rule. Internal for the
+    ///     behavior test (InternalsVisibleTo).
+    /// </summary>
+    internal static void NotifyCostAlert(CostAlertMonitor monitor, SessionStatsEvent stats, Action<string> writeLine)
+    {
+        string? warning = monitor.Observe(stats.Metadata.Cost);
+        if (warning is not null)
+        {
+            writeLine(warning);
+        }
+    }
 
     /// <summary>
     ///     #3102: projects a run boundary onto the window title. The frame
