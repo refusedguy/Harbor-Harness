@@ -12,6 +12,24 @@
 
 ---
 
+## Recipe index
+
+Пять полных плагинов лежат в [5 complete plugin examples](#5-complete-plugin-examples).
+Выбери рецепт до чтения разбора. Время указано как грубая оценка на подготовленной
+машине (прочтение и первый запуск), а не как измеренный бенчмарк.
+
+| Рецепт | Время | Интерфейсы | Результат |
+|---|---|---|---|
+| [HelloTool](#example-1-hellotool--minimal) | ~2 мин | `IToolPlugin`, `ITool` | Один tool, возвращающий приветствие; минимальный компилируемый плагин |
+| [FsharpTool](#example-2-fsharptool--runs-fsi) | ~5 мин | `IToolPlugin`, `ITool`, `Process` | Запускает `fsi` на коде пользователя и возвращает stdout |
+| [WebhookTool](#example-3-webhooktool--fires-http-webhook-on-events) | ~8 мин | `IPlugin`, `PluginContext.EventBus`, `HttpClient` | Отправляет POST со сводками `MessageEndEvent` на webhook URL |
+| [AutoLintTool](#example-4-autolinttool--runs-linter-after-edit) | ~8 мин | `IPlugin`, `PluginContext.EventBus`, `Process` | Запускает `dotnet format` после tool `edit` |
+| [LspDiagnosticsPanel](#example-5-lspdiagnosticspanel--tui-panel-showing-lsp-diagnostics) | ~10 мин | `ITuiPanelPlugin`, `IPanelProvider`, `IPanelRegistry` | Панель TUI со списком LSP-диагностики |
+
+Первые два рецепта описывают tools, которые вызываются из промпта. Два следующих
+подписываются на события и работают в фоне. Последний рендерит панель и
+единственный требует UI-поверхности.
+
 ## Quickstart
 
 Создай файл `~/.harbor/plugins/hello.cs`:
