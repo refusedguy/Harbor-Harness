@@ -47,23 +47,6 @@
       "promptTemplate": "anthropic"
     },
     {
-      "id": "claude-3-5-haiku-20241022",
-      "providerId": "anthropic",
-      "displayName": "Claude 3.5 Haiku",
-      "contextWindow": 200000,
-      "maxOutputTokens": 8192,
-      "supportsReasoning": false,
-      "supportsVision": true,
-      "supportsToolUse": true,
-      "pricing": {
-        "inputPerMillion": 0.8,
-        "outputPerMillion": 4.0,
-        "cacheReadPerMillion": 0.08,
-        "cacheWritePerMillion": 1.0
-      },
-      "promptTemplate": "anthropic"
-    },
-    {
       "id": "claude-3-5-sonnet-20241022",
       "providerId": "anthropic",
       "displayName": "Claude 3.5 Sonnet",
@@ -77,6 +60,23 @@
         "outputPerMillion": 15.0,
         "cacheReadPerMillion": 0.3,
         "cacheWritePerMillion": 3.75
+      },
+      "promptTemplate": "anthropic"
+    },
+    {
+      "id": "claude-3-5-haiku-20241022",
+      "providerId": "anthropic",
+      "displayName": "Claude 3.5 Haiku",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "supportsReasoning": false,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": {
+        "inputPerMillion": 0.8,
+        "outputPerMillion": 4.0,
+        "cacheReadPerMillion": 0.08,
+        "cacheWritePerMillion": 1.0
       },
       "promptTemplate": "anthropic"
     }

@@ -6,7 +6,9 @@ using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Harbor.Registries.Providers;
 #if HARBOR_WITH_ALL_PROVIDERS
+using Harbor.Abstractions.Models;
 using Harbor.Providers.Anthropic;
+using Harbor.Providers.Internal;
 using Harbor.Providers.OpenAI;
 #endif
 
@@ -78,7 +80,11 @@ internal static class ProviderFactories
             JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, loggerFactory: ctx.LoggerFactory, cacheDir, authStore);
 
 #if HARBOR_WITH_ALL_PROVIDERS
-            pb.AddProvider(new AnthropicProviderFactory(httpFactory, authStore));
+            // #3801: the native client's catalogue is the model list from
+            // providers/anthropic.json, loaded once here and handed to every
+            // client the factory mints. No C# copy of that list remains.
+            pb.AddProvider(new AnthropicProviderFactory(
+                httpFactory, authStore, LoadNativeModelCatalog("anthropic", ctx.LoggerFactory)));
             pb.AddProvider(new OpenAiProviderFactory(httpFactory, authStore));
 #endif
         }
@@ -87,6 +93,29 @@ internal static class ProviderFactories
         ProviderFactoriesLog.ProvidersRegistered(ctx.Logger, registry.GetRegisteredProviderIds().Count);
         return registry;
     }
+
+#if HARBOR_WITH_ALL_PROVIDERS
+    /// <summary>
+    ///     Build the catalogue a native provider answers <c>GetModelsAsync</c>
+    ///     with, from the same <c>providers/&lt;id&gt;.json</c> JSON discovery
+    ///     reads (#3801). A config that cannot be loaded is logged and yields an
+    ///     empty catalogue: a broken JSON must not stop the provider from
+    ///     registering, but it must also never be papered over with a hardcoded
+    ///     C# model list.
+    /// </summary>
+    private static ConfiguredModelCatalog LoadNativeModelCatalog(string id, ILoggerFactory loggerFactory)
+    {
+        var config = JsonProviderDiscovery.LoadProviderConfig(id);
+        if (config.IsFailure)
+        {
+            ProviderFactoriesLog.NativeCatalogUnavailable(
+                loggerFactory.CreateLogger(typeof(ProviderFactories)), id, config.Error);
+            return new ConfiguredModelCatalog(Array.Empty<ModelInfo>());
+        }
+
+        return new ConfiguredModelCatalog(config.Value.Models ?? Array.Empty<ModelInfo>());
+    }
+#endif
 }
 
 /// <summary>
@@ -172,9 +201,9 @@ internal abstract class ParameterizedProviderFactory<TClient, TConfig> : IProvid
 
 internal sealed class AnthropicProviderFactory : ParameterizedProviderFactory<AnthropicLlmClient, AnthropicConfig>
 {
-    public AnthropicProviderFactory(IHttpClientFactory httpFactory, AuthStore authStore)
+    public AnthropicProviderFactory(IHttpClientFactory httpFactory, AuthStore authStore, ConfiguredModelCatalog modelCatalog)
         : base("anthropic", httpFactory, authStore,
-            static (http, config, auth, logger) => new AnthropicLlmClient(http, config, auth, logger))
+            (http, config, auth, logger) => new AnthropicLlmClient(http, config, auth, modelCatalog, logger))
     {
     }
 }
@@ -197,4 +226,7 @@ internal static partial class ProviderFactoriesLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Registered providers: {Count}")]
     public static partial void ProvidersRegistered(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Native provider '{Provider}' model catalog unavailable: {Error}")]
+    public static partial void NativeCatalogUnavailable(ILogger logger, string provider, string error);
 }

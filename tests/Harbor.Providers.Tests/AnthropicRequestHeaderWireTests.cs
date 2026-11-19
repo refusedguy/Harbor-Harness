@@ -3,6 +3,7 @@ using System.Net.Http;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
+using Harbor.Providers.Internal;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -70,6 +71,7 @@ public class AnthropicRequestHeaderWireTests
             new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
             new AnthropicConfig { BaseUrl = Url, ApiVersion = Version, BetaFeatures = Beta },
             new TestAuthResolver(ApiKey),
+            new ConfiguredModelCatalog(Array.Empty<ModelInfo>()),
             NullLogger<AnthropicLlmClient>.Instance);
 
         using HttpRequestMessage msg = client.BuildRequest(Request(), ApiKey);

@@ -15,6 +15,9 @@
     <Compile Include="..\Harbor.Providers.Shared\ProviderAuth.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\SsePump.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\Utf8JsonReaderExtensions.cs" LinkBase="Shared" />
+    <!-- #3801: the config-backed model catalogue seam, linked rather than
+         referenced from Harbor.Providers.OpenAiCompatible (§ARCH-003). -->
+    <Compile Include="..\Harbor.Providers.Shared\ConfiguredModelCatalog.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>

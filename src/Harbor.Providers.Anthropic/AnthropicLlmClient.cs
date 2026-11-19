@@ -29,15 +29,18 @@ public sealed class AnthropicLlmClient : ProviderLlmClientBase, ILlmClient
     // string manipulation and conditional logic on the hot path.
     private readonly string _baseUrl;
     private readonly AnthropicConfig _config;
+    private readonly IModelCatalog _modelCatalog;
 
     public AnthropicLlmClient(
         HttpClient http,
         AnthropicConfig config,
         IAuthResolver auth,
+        IModelCatalog modelCatalog,
         ILogger<AnthropicLlmClient> logger)
         : base(http, auth, logger, ProviderId.Create("anthropic"))
     {
         _config = config;
+        _modelCatalog = modelCatalog;
         _baseUrl = string.IsNullOrEmpty(config.BaseUrl) ? DefaultBaseUrl : config.BaseUrl.TrimEnd('/');
     }
 
@@ -80,12 +83,11 @@ public sealed class AnthropicLlmClient : ProviderLlmClientBase, ILlmClient
         // the ErrorEvent alone is invisible in traces.
         AnthropicLlmClientLog.StreamTaskFailed(Logger, ex, ex.Message);
 
-    public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-    {
-        // Anthropic doesn't have a /models endpoint — return hardcoded catalog
-        var models = AnthropicModels.All;
-        return Task.FromResult(Result.Success(models));
-    }
+    // #3801: Anthropic has no /models endpoint. The model list is the one
+    // already loaded from providers/anthropic.json by the registration path,
+    // so there is no C# copy left here to drift out of sync with that file.
+    public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+        _modelCatalog.GetModelsAsync(cancellationToken);
 }
 
 /// <summary>
@@ -109,66 +111,4 @@ public sealed class AnthropicConfig
     public string? BaseUrl { get; set; }
     public string? ApiVersion { get; set; }
     public string? BetaFeatures { get; set; }
-}
-
-/// <summary>
-///     Hardcoded catalog of Anthropic models (no /models endpoint).
-/// </summary>
-public static class AnthropicModels
-{
-    public static readonly ModelInfo ClaudeOpus4 = new(
-        "claude-opus-4-20250514",
-        "anthropic",
-        "Claude Opus 4",
-        200_000,
-        32_000,
-        true,
-        true,
-        true,
-        new Pricing(15m, 75m, 1.5m, 18.75m),
-        "anthropic");
-
-    public static readonly ModelInfo ClaudeSonnet4 = new(
-        "claude-sonnet-4-20250514",
-        "anthropic",
-        "Claude Sonnet 4",
-        200_000,
-        16_000,
-        true,
-        true,
-        true,
-        new Pricing(3m, 15m, 0.3m, 3.75m),
-        "anthropic");
-
-    public static readonly ModelInfo ClaudeSonnet35 = new(
-        "claude-3-5-sonnet-20241022",
-        "anthropic",
-        "Claude 3.5 Sonnet",
-        200_000,
-        8192,
-        false,
-        true,
-        true,
-        new Pricing(3m, 15m, 0.3m, 3.75m),
-        "anthropic");
-
-    public static readonly ModelInfo ClaudeHaiku35 = new(
-        "claude-3-5-haiku-20241022",
-        "anthropic",
-        "Claude 3.5 Haiku",
-        200_000,
-        8192,
-        false,
-        true,
-        true,
-        new Pricing(0.8m, 4m, 0.08m, 1m),
-        "anthropic");
-
-    public static readonly IReadOnlyList<ModelInfo> All = new[]
-    {
-        ClaudeOpus4,
-        ClaudeSonnet4,
-        ClaudeSonnet35,
-        ClaudeHaiku35
-    };
 }
