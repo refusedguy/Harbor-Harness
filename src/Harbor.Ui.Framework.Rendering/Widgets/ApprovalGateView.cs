@@ -31,12 +31,34 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
     private const string HintLine = "[y] approve   [n] deny   [a] always allow";
     private const int LeftPad = 2;
 
+    // #3432: opaque action ids, owned here. The KeyContext never names a
+    // decision. It only maps a gesture to one of these strings.
+    private const string ActionApprove = "approve";
+    private const string ActionDeny = "deny";
+    private const string ActionAlways = "always";
+
     private readonly string _detailText;
     private List<string> _wrapped = [];
     private int _wrappedWidth = -1;
     private (int Start, int End)[]? _hintSpans;
 
     private bool _focused;
+
+    // #3432: the gate's five gestures live in one declarative context. Uppercase
+    // runes keep the y/n/a bindings case-insensitive (the old switch upper-cased
+    // the pressed rune before deciding). Render-thread owned, like the primitive.
+    private readonly KeyContext _approvalContext = BuildApprovalContext();
+
+    private static KeyContext BuildApprovalContext()
+    {
+        var ctx = new KeyContext("approval");
+        ctx.Bind(KeyGesture.ForChar('Y'), ActionApprove);
+        ctx.Bind(KeyGesture.ForChar('N'), ActionDeny);
+        ctx.Bind(KeyGesture.ForChar('A'), ActionAlways);
+        ctx.Bind(KeyGesture.ForKey(KeyCode.Enter), ActionApprove);
+        ctx.Bind(KeyGesture.ForKey(KeyCode.Escape), ActionDeny);
+        return ctx;
+    }
 
     // Instance-unique id source: tool names collide when two prompts for the
     // same tool queue up (hotfix — router ids must not overwrite each other).
@@ -241,53 +263,40 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
     /// <summary>
     /// Route one key event. Handles press/repeat only, no modifiers, and only
-    /// while pending: y/Enter approve, n/Escape deny, a always-allow. Returns
-    /// true when the key was consumed (the caller suppresses composer routing).
+    /// while pending: y/Enter approve, n/Escape deny, a always-allow. The
+    /// gesture-to-decision map lives in the gate's <c>approval</c> KeyContext;
+    /// this method only matches, translates the opaque action id and records the
+    /// one-shot decision. Returns true when the key was consumed (the caller
+    /// suppresses composer routing).
     /// </summary>
     public bool HandleKey(in KeyEvent key)
     {
-        if (!IsPending || (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat))
+        if (!IsPending || (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat)
+            || !key.Modifiers.IsUnmodified())
         {
             return false;
         }
 
-        if (!key.Modifiers.IsUnmodified())
+        // Bindings are case-exact; normalize the printable rune so the five
+        // gestures keep the old case-insensitive y/n/a behavior.
+        KeyEvent matchKey = key.Key == KeyCode.Char
+            ? KeyEvent.Char(Rune.ToUpperInvariant(key.Character))
+            : key;
+
+        if (!_approvalContext.TryMatch(matchKey, out var hit) || hit.IsNoAction)
         {
             return false;
         }
 
-        switch (key.Key)
+        ApprovalChoice choice = hit.ActionId switch
         {
-            case KeyCode.Enter:
-                Decide(ApprovalChoice.Approve);
-                return true;
-
-            case KeyCode.Escape:
-                Decide(ApprovalChoice.Deny);
-                return true;
-
-            case KeyCode.Char:
-                break;
-
-            default:
-                return false;
-        }
-
-        ApprovalChoice? byChar = Rune.ToUpperInvariant(key.Character).Value switch
-        {
-            'Y' => ApprovalChoice.Approve,
-            'N' => ApprovalChoice.Deny,
-            'A' => ApprovalChoice.AlwaysAllow,
-            _ => null,
+            ActionApprove => ApprovalChoice.Approve,
+            ActionDeny => ApprovalChoice.Deny,
+            ActionAlways => ApprovalChoice.AlwaysAllow,
+            _ => ApprovalChoice.None,
         };
 
-        if (byChar is not { } choice)
-        {
-            return false;
-        }
-
-        Decide(choice);
-        return true;
+        return choice != ApprovalChoice.None && TryDecide(choice);
     }
 
     /// <summary>
