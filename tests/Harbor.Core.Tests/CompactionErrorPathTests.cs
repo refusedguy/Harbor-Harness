@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
+using TestSessionContext = Harbor.TestKit.TestSessionContext; // TUnit.Core has a same-named type
 
 namespace Harbor.Core.Tests;
 
