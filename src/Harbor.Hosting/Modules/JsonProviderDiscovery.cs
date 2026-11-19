@@ -1,4 +1,5 @@
 using System.Reflection;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
 using Harbor.Providers.OpenAiCompatible;
@@ -14,9 +15,9 @@ namespace Harbor.Hosting;
 /// </summary>
 internal static class JsonProviderDiscovery
 {
-    private static IEnumerable<(string Name, string Content)> LoadEmbeddedProviders()
+    private static IEnumerable<(string Name, string Content)> LoadEmbeddedProviders(Assembly? assembly = null)
     {
-        var assembly = typeof(JsonProviderDiscovery).Assembly;
+        assembly ??= typeof(JsonProviderDiscovery).Assembly;
         foreach (string name in assembly.GetManifestResourceNames()
                      .Where(n => n.Contains("providers.") && n.EndsWith(".json")))
         {
@@ -38,6 +39,36 @@ internal static class JsonProviderDiscovery
     /// </summary>
     public static IEnumerable<string> FindProvidersDirectories() =>
         ProviderPresetCatalog.FindProvidersDirectories();
+
+    /// <summary>
+    ///     Load one provider config from the same sources this discovery walks:
+    ///     user config first, then directories next to/above the app, then the
+    ///     configs embedded in the entry assembly (a published single-file app
+    ///     has no loose <c>providers/</c> directory). Native clients use this to
+    ///     get the model list their own JSON declares instead of a second C#
+    ///     copy that has to be synced by hand (#3801).
+    /// </summary>
+    public static Result<ProviderConfig> LoadProviderConfig(string id)
+    {
+        foreach (string dir in FindProvidersDirectories())
+        {
+            string candidate = Path.Combine(dir, id + ".json");
+            if (!File.Exists(candidate)) continue;
+
+            var loaded = ProviderConfig.LoadFromFile(candidate);
+            if (loaded.IsSuccess && string.Equals(loaded.Value.Id, id, StringComparison.Ordinal))
+                return loaded;
+        }
+
+        foreach ((string _, string content) in LoadEmbeddedProviders(Assembly.GetEntryAssembly()))
+        {
+            var loaded = ProviderConfig.LoadFromJson(content);
+            if (loaded.IsSuccess && string.Equals(loaded.Value.Id, id, StringComparison.Ordinal))
+                return loaded;
+        }
+
+        return Result.Failure<ProviderConfig>($"Provider config '{id}' was not found.");
+    }
 
     /// <summary>
     ///     Desktop flavor: OpenAI-compatible providers only (apiType filter),

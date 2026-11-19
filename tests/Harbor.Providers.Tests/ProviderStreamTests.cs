@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
+using Harbor.Providers.Internal;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.Ollama;
 using Harbor.TestKit;
@@ -337,6 +339,7 @@ public class ProviderStreamTests
             new HttpClient(handler),
             new AnthropicConfig(),
             new TestAuthResolver(),
+            new ConfiguredModelCatalog(Array.Empty<ModelInfo>()),
             NullLogger<AnthropicLlmClient>.Instance);
 
         var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(

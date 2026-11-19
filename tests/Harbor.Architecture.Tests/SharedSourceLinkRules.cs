@@ -210,9 +210,9 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(35)
+        await Assert.That(links.Length).IsEqualTo(36)
             .Because(
-                "35 `<Compile Include>` link items: the original 25 plus three for #3762's "
+                "36 `<Compile Include>` link items: the original 25 plus three for #3762's "
                 + "ProviderToolCallEmitter.cs (the one Start/Delta policy for the three "
                 + "tool-call-emitting providers), two for #3773's ProviderHttp.cs and "
                 + "ProviderAuth.cs into Anthropic, one for #3767's ProviderLlmClientBase.cs into "
@@ -241,7 +241,8 @@ public sealed class SharedSourceLinkRules
                 + "parts the two backends used to hand-maintain separately — Memory is not a "
                 + "consumer (it links SessionStoreErrors alone and does not compile its own "
                 + "message-codec read path). Two more are #3773's: ProviderHttp.cs and ProviderAuth.cs into Anthropic, the minimal wire-envelope and raw-header primitives that replaced the hand-assembled HttpRequestMessage and TryAddWithoutValidation calls in AnthropicRequestBuilder. "
-                + "One more is #3767's: ProviderLlmClientBase.cs into Ollama, the last skeleton client to inherit the template method.");
+                + "One more is #3767's: ProviderLlmClientBase.cs into Ollama, the last skeleton client to inherit the template method. "
+                + "One more is #3801's: ConfiguredModelCatalog.cs into Anthropic, the config-backed model-catalogue seam linked rather than referenced from Harbor.Providers.OpenAiCompatible (§ARCH-003 forbids the ProjectReference).");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 

@@ -1,7 +1,9 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
+using Harbor.Providers.Internal;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.TestKit;
@@ -54,6 +56,7 @@ public class LlmClientAuthFailureTests
             new HttpClient(handler),
             new AnthropicConfig { BaseUrl = "http://stub" },
             new FailingAuthResolver(),
+            new ConfiguredModelCatalog(Array.Empty<ModelInfo>()),
             NullLogger<AnthropicLlmClient>.Instance);
 
         var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
