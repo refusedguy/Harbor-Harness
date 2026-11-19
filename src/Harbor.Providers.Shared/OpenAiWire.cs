@@ -182,7 +182,7 @@ internal static class OpenAiWire
                     // string: the old path allocated one per property per
                     // chunk, and a chunk is what every token of every answer
                     // arrives as (see Utf8JsonReaderExtensions.PropertyName).
-                    string prop = ChunkPropertyName(ref reader);
+                    string prop = Utf8JsonReaderExtensions.PropertyName(ref reader, MatchChunkProperty(reader.ValueSpan));
                     if (!reader.Read())
                         throw new JsonException("Truncated chunk: property without value.");
                     HandleValue(ref reader, depth, prop,
@@ -236,25 +236,6 @@ internal static class OpenAiWire
         }
 
         return events;
-    }
-
-    /// <summary>
-    ///     The name of the property the reader is on, as one of the literals
-    ///     this parser dispatches on — or <see cref="string.Empty" /> for a
-    ///     name it does not know.
-    /// </summary>
-    /// <remarks>
-    ///     The table is matched against the RAW bytes of the name, so the
-    ///     dispatch allocates nothing: the old path built a
-    ///     <see cref="string" /> per property per chunk, and a chunk is what
-    ///     every token of every answer arrives as. The literals themselves are
-    ///     interned, so the comparisons below are the same comparisons the old
-    ///     path made — against the same text.
-    /// </remarks>
-    private static string ChunkPropertyName(ref Utf8JsonReader reader)
-    {
-        string? known = MatchChunkProperty(reader.ValueSpan);
-        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
     }
 
     /// <summary>
