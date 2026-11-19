@@ -39,6 +39,7 @@ public static class ConfigNormalizer
                 ApplyLimits(config, raw);
                 ApplyPlugins(config, raw);
                 ApplyPermissions(config, raw);
+                ApplyExperimental(config, raw);
                 return config;
             });
     }
@@ -168,5 +169,11 @@ public static class ConfigNormalizer
     {
         if (raw.Permissions is null) return;
         config.Permissions = raw.Permissions;
+    }
+
+    private static void ApplyExperimental(HarborConfig config, RawConfigDto raw)
+    {
+        if (raw.Experimental is null) return;
+        config.Experimental = new Dictionary<string, string>(raw.Experimental);
     }
 }
