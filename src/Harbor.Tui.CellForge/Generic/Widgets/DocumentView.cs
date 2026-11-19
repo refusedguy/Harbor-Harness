@@ -5,6 +5,7 @@
 
 using System.Buffers;
 using System.Text;
+using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -26,9 +27,22 @@ public sealed class DocumentView
     private DocumentFormat _format = DocumentFormat.Markdown;
     private int _width = 80;
     private BracketPairResult _bracket = BracketPairResult.None;
+    private int _cursorRow;
+    private int _cursorCol;
+    private bool _cursorEnabled;
 
     /// <summary>The current lines (already wrapped to <see cref="Width"/>).</summary>
     public IReadOnlyList<DocumentLine> Lines => _lines;
+
+    /// <summary>True after the first cursor navigation. The caret is opt-in so
+    /// a document used as a passive pager paints byte-identically to before.</summary>
+    public bool CursorVisible => _cursorEnabled;
+
+    /// <summary>Cursor row in wrapped-document coordinates.</summary>
+    public int CursorRow => _cursorRow;
+
+    /// <summary>Cursor column (character index inside the row).</summary>
+    public int CursorColumn => _cursorCol;
 
     /// <summary>Width used for wrap and token adaptation.</summary>
     public int Width => _width;
@@ -59,7 +73,7 @@ public sealed class DocumentView
         }
 
         _viewport.ScrollToTop();
-        _bracket = BracketPairResult.None;
+        HideCursor();
         Relayout();
     }
 
@@ -69,7 +83,7 @@ public sealed class DocumentView
         _lines = lines ?? [];
         _source = null;
         _viewport.ScrollToTop();
-        _bracket = BracketPairResult.None;
+        HideCursor();
         _viewport.SetTotal(_lines.Count);
     }
 
@@ -94,6 +108,143 @@ public sealed class DocumentView
         }
 
         _bracket = BracketPair.Find(text, row, col);
+    }
+
+    /// <summary>
+    /// Places the cursor at a document position and recomputes the bracket
+    /// highlight through the same path the host's keys use (issue #2536).
+    /// Out-of-range positions are clamped; an empty document hides the caret.
+    /// </summary>
+    public void SetCursor(int row, int col)
+    {
+        if (_lines.Count == 0)
+        {
+            HideCursor();
+            return;
+        }
+
+        _cursorEnabled = true;
+        _cursorRow = Math.Clamp(row, 0, _lines.Count - 1);
+        _cursorCol = Math.Clamp(col, 0, LineLength(_lines[_cursorRow]));
+        RefreshBracketCursor();
+        KeepCursorVisible();
+    }
+
+    /// <summary>Hides the caret and clears the bracket highlight it owned.</summary>
+    public void HideCursor()
+    {
+        _cursorEnabled = false;
+        _bracket = BracketPairResult.None;
+    }
+
+    /// <summary>
+    /// Moves the caret for a navigation key. Up/Down/Left/Right move by one,
+    /// Home/End jump to the start/end of the current row; other keys are left
+    /// to the host. The first navigation key activates the caret at the origin.
+    /// </summary>
+    public bool ApplyKey(KeyCode key)
+    {
+        if (!_cursorEnabled)
+        {
+            SetCursor(0, 0);
+        }
+
+        switch (key)
+        {
+            case KeyCode.Up:
+                MoveCursor(-1, 0);
+                return true;
+            case KeyCode.Down:
+                MoveCursor(1, 0);
+                return true;
+            case KeyCode.Left:
+                MoveCursor(0, -1);
+                return true;
+            case KeyCode.Right:
+                MoveCursor(0, 1);
+                return true;
+            case KeyCode.Home:
+                SetCursor(_cursorRow, 0);
+                return true;
+            case KeyCode.End:
+                SetCursor(_cursorRow, LineLength(_lines[_cursorRow]));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void MoveCursor(int rowDelta, int colDelta)
+    {
+        if (!_cursorEnabled || _lines.Count == 0)
+        {
+            return;
+        }
+
+        int row = Math.Clamp(_cursorRow + rowDelta, 0, _lines.Count - 1);
+        int col = Math.Clamp(_cursorCol + colDelta, 0, LineLength(_lines[row]));
+        if (row == _cursorRow && col == _cursorCol)
+        {
+            return;
+        }
+
+        _cursorRow = row;
+        _cursorCol = col;
+        RefreshBracketCursor();
+        KeepCursorVisible();
+    }
+
+    private void RefreshBracketCursor()
+    {
+        if (_cursorEnabled)
+        {
+            SetBracketCursor(_cursorRow, _cursorCol);
+        }
+    }
+
+    private void KeepCursorVisible()
+    {
+        long top = _viewport.Offset;
+        int height = _viewport.ViewportH;
+        if (_cursorRow < top)
+        {
+            _ = _viewport.SetOffset(_cursorRow);
+        }
+        else if (_cursorRow >= top + height)
+        {
+            _ = _viewport.SetOffset(_cursorRow - height + 1);
+        }
+    }
+
+    private void RevalidateCursor()
+    {
+        if (!_cursorEnabled)
+        {
+            return;
+        }
+
+        if (_lines.Count == 0)
+        {
+            HideCursor();
+            return;
+        }
+
+        _cursorRow = Math.Clamp(_cursorRow, 0, _lines.Count - 1);
+        _cursorCol = Math.Clamp(_cursorCol, 0, LineLength(_lines[_cursorRow]));
+        RefreshBracketCursor();
+        KeepCursorVisible();
+    }
+
+    private static int LineLength(DocumentLine line)
+    {
+        int length = 0;
+        var spans = line.Spans;
+        for (int i = 0; i < spans.Count; i++)
+        {
+            length += spans[i].Text.Length;
+        }
+
+        return length;
     }
 
     private static string LineText(DocumentLine line)
@@ -123,17 +274,17 @@ public sealed class DocumentView
     {
         int w = Math.Max(1, width);
         _viewport.Resize(viewportH);
-        if (w == _width)
+        if (w != _width)
         {
-            return;
+            _width = w;
+            _bracket = BracketPairResult.None;
+            if (_source is not null)
+            {
+                Relayout(); // SetTotal clamps the offset into the new row count
+            }
         }
 
-        _width = w;
-        _bracket = BracketPairResult.None;
-        if (_source is not null)
-        {
-            Relayout(); // SetTotal clamps the offset into the new row count
-        }
+        RevalidateCursor();
     }
 
     /// <summary>Moves the window by a signed number of rows, clamped.</summary>
@@ -180,6 +331,9 @@ public sealed class DocumentView
         int openCell = -1;
         int closeCell = -1;
         CellStyle highlight = default;
+        int cursorCell = _cursorEnabled
+            ? CellOffsetOf(line, lineIndex, (_cursorRow, _cursorCol))
+            : -1;
         if (_bracket.Open.HasValue || _bracket.Close.HasValue)
         {
             openCell = CellOffsetOf(line, lineIndex, _bracket.Open);
@@ -214,6 +368,11 @@ public sealed class DocumentView
 
                 int cell = cursor - rect.X;
                 var style = cell == openCell || cell == closeCell ? highlight : span.Style;
+                if (cell == cursorCell)
+                {
+                    style = new CellStyle(style.Fg, style.Bg, style.Attrs | StyleAttr.Underline);
+                }
+
                 if (cursor + w > end || !buffer.SetRune(cursor, y, rune, style))
                 {
                     return;

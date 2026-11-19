@@ -1,5 +1,6 @@
 using System.Linq;
 using Harbor.Tui.CellForge.Generic.Widgets;
+using Harbor.Tui.CellForge.Input;
 using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -39,6 +40,8 @@ public class DocumentViewTests
 
     private static bool IsBracketHighlight(Cell c) =>
         c.Style.Fg == ChatPalette.Accent && (c.Style.Attrs & StyleAttr.Bold) != 0;
+
+    private static bool IsCaret(Cell c) => (c.Style.Attrs & StyleAttr.Underline) != 0;
 
     [Test]
     public async Task Gold_Markdown_Document_Paints_Heading_And_Inline_Bold()
@@ -268,5 +271,106 @@ public class DocumentViewTests
         await Assert.That(IsBracketHighlight(back.Get(2, 0))).IsTrue();
         await Assert.That(IsBracketHighlight(back.Get(4, 0))).IsTrue();
         await Assert.That(IsBracketHighlight(back.Get(3, 0))).IsFalse();
+    }
+
+    // Issue #2536: the cursor is driven through public navigation, and the
+    // bracket highlight follows it without a direct SetBracketCursor call.
+
+    [Test]
+    public async Task Cursor_Keys_Move_The_Caret_And_Follow_The_Bracket_Pair()
+    {
+        var view = new DocumentView();
+        view.SetLines([
+            new DocumentLine([new DocumentSpan("(abc)", CellStyle.Plain)]),
+            new DocumentLine([new DocumentSpan("[x]", CellStyle.Plain)]),
+        ]);
+        view.Configure(8, 2);
+
+        await Assert.That(view.CursorVisible).IsFalse();
+        await Assert.That(view.ApplyKey(KeyCode.Right)).IsTrue();
+        await Assert.That(view.CursorRow).IsEqualTo(0);
+        await Assert.That(view.CursorColumn).IsEqualTo(1);
+
+        await Assert.That(view.ApplyKey(KeyCode.Left)).IsTrue();
+        await Assert.That(view.CursorColumn).IsEqualTo(0);
+
+        var back = TestRender.Buffer(8, 2);
+        view.Paint(back, new Rect(0, 0, 8, 2));
+        await Assert.That(IsBracketHighlight(back.Get(0, 0))).IsTrue();
+        await Assert.That(IsBracketHighlight(back.Get(4, 0))).IsTrue();
+        await Assert.That(IsCaret(back.Get(0, 0))).IsTrue();
+
+        await Assert.That(view.ApplyKey(KeyCode.Down)).IsTrue();
+        await Assert.That(view.CursorRow).IsEqualTo(1);
+        view.Paint(back, new Rect(0, 0, 8, 2));
+        await Assert.That(IsBracketHighlight(back.Get(0, 0))).IsFalse();
+        await Assert.That(IsBracketHighlight(back.Get(4, 0))).IsFalse();
+        await Assert.That(IsBracketHighlight(back.Get(0, 1))).IsTrue();
+        await Assert.That(IsBracketHighlight(back.Get(2, 1))).IsTrue();
+        await Assert.That(IsCaret(back.Get(0, 1))).IsTrue();
+    }
+
+    [Test]
+    public async Task Cursor_Is_Opt_In_And_Hide_Clears_The_Caret()
+    {
+        var view = new DocumentView();
+        view.SetLines([new DocumentLine([new DocumentSpan("(abc)", CellStyle.Plain)])]);
+        view.Configure(8, 1);
+        var back = TestRender.Buffer(8, 1);
+
+        view.Paint(back, new Rect(0, 0, 8, 1));
+        await Assert.That(AnyCell(back, IsCaret)).IsFalse();
+
+        view.SetCursor(0, 1);
+        view.Paint(back, new Rect(0, 0, 8, 1));
+        await Assert.That(IsCaret(back.Get(1, 0))).IsTrue();
+        await Assert.That(IsCaret(back.Get(0, 0))).IsFalse();
+
+        view.HideCursor();
+        view.Paint(back, new Rect(0, 0, 8, 1));
+        await Assert.That(AnyCell(back, IsCaret)).IsFalse();
+        await Assert.That(view.CursorVisible).IsFalse();
+    }
+
+    [Test]
+    public async Task Cursor_Clamps_To_The_Document_And_Keeps_Itself_Visible()
+    {
+        var view = new DocumentView();
+        view.SetLines(Enumerable.Range(0, 20)
+            .Select(i => new DocumentLine([new DocumentSpan("L" + i, CellStyle.Plain)]))
+            .ToArray());
+        view.Configure(6, 3);
+
+        view.SetCursor(25, 99);
+        await Assert.That(view.CursorRow).IsEqualTo(19);
+        await Assert.That(view.CursorColumn).IsEqualTo(3);
+        await Assert.That(view.ScrollY).IsEqualTo(17L);
+
+        await Assert.That(view.ApplyKey(KeyCode.Home)).IsTrue();
+        await Assert.That(view.CursorColumn).IsEqualTo(0);
+        await Assert.That(view.ApplyKey(KeyCode.End)).IsTrue();
+        await Assert.That(view.CursorColumn).IsEqualTo(3);
+        await Assert.That(view.ApplyKey(KeyCode.Down)).IsTrue();
+        await Assert.That(view.CursorRow).IsEqualTo(19);
+        await Assert.That(view.ScrollY).IsEqualTo(17L);
+        await Assert.That(view.ApplyKey(KeyCode.Escape)).IsFalse();
+    }
+
+    [Test]
+    public async Task Setting_A_New_Document_Hides_The_Cursor()
+    {
+        var view = new DocumentView();
+        view.SetLines([new DocumentLine([new DocumentSpan("(abc)", CellStyle.Plain)])]);
+        view.Configure(8, 1);
+        view.SetCursor(0, 0);
+
+        var back = TestRender.Buffer(8, 1);
+        view.Paint(back, new Rect(0, 0, 8, 1));
+        await Assert.That(IsBracketHighlight(back.Get(0, 0))).IsTrue();
+
+        view.SetDocument("(x)", DocumentFormat.Plain, 8);
+        await Assert.That(view.CursorVisible).IsFalse();
+        view.Paint(back, new Rect(0, 0, 8, 1));
+        await Assert.That(IsBracketHighlight(back.Get(0, 0))).IsFalse();
     }
 }
