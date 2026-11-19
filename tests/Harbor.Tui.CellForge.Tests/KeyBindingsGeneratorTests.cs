@@ -5,6 +5,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Harbor.Tui.CellForge.Input;
+// #3432: the shared-layer key-context port also declares KeyGesture. This test
+// uses the engine type; keep the name explicit rather than relying on a global
+// using to break the tie.
+using KeyGesture = Harbor.Tui.CellForge.Input.KeyGesture;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
