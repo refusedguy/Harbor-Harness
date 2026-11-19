@@ -55,6 +55,24 @@ public sealed class DevReloadPipeline
         _debounce = debounce ?? DevReloadTiming.Debounce;
     }
 
+    /// <summary>
+    ///     Creates a <see cref="DevFileWatcher"/> that drives this pipeline
+    ///     from edits to <paramref name="filePath"/>. The watcher publishes the
+    ///     initial tree and, from then on, a fresh tree whenever the file
+    ///     changes and the quiet window closes. Callers only dispose the
+    ///     watcher to stop; no manual <see cref="Poll"/> calls are needed.
+    /// </summary>
+    /// <param name="filePath">The watched <c>.harbor-ui</c> or <c>.cs</c> file.</param>
+    /// <param name="timeProvider">Clock for ticks and stamps; defaults to the system clock.</param>
+    /// <param name="pollInterval">Scan cadence; defaults to <see cref="DevReloadTiming.PollInterval"/>.</param>
+    /// <param name="onCommit">Optional observer for each initialization or reload decision.</param>
+    public DevFileWatcher WatchFile(
+        string filePath,
+        TimeProvider? timeProvider = null,
+        TimeSpan? pollInterval = null,
+        Action<ReloadCommitResult>? onCommit = null) =>
+        new(filePath, this, timeProvider, pollInterval, onCommit);
+
     /// <summary>The currently published tree, or null before initialization.</summary>
     public ReloadSnapshot? Current => Volatile.Read(ref _current);
 
