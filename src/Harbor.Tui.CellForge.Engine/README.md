@@ -97,6 +97,12 @@ one assembled frame leaves the process through one `WriteAsync` call (with a
 `StdoutBackend` is the production implementation; tests capture frames in
 memory.
 
+For layout, `Layout.Split` (#3088) is the public BCL-only primitive that
+carves a `Rect` into one panel per `SizeConstraint` along a `SplitDir`, with
+fixed and proportional shares and a minimum panel size. It is a thin facade
+over the existing `SizeConstraint` dictionary; `FlexLayout`/`FlexTrack` remain
+the four-phase solver for intrinsic sizing.
+
 `AnsiWriter` builds those frames. `BufferSwapChain`/`BufferPair` own the
 double-buffer pool (`Rent`/`Publish`/`TryTake`/`Return`), and
 `FrameDiff`/`FrameDiffMode`/`FrameDiffEnumerator` compute the changed cells
