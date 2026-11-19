@@ -41,7 +41,7 @@ public readonly record struct SettingsSectionDefinition(
 public static class SettingsSections
 {
     /// <summary>All sections, in the order they appear in SettingsView.</summary>
-    public static IReadOnlyList<SettingsSectionDefinition> All { get; } = Array.AsReadOnly(
+    public static IReadOnlyList<SettingsSectionDefinition> All { get; } = Array.AsReadOnly<SettingsSectionDefinition>(
     [
         new("theme", "Theme", "Theme, palette and appearance settings.",
             SettingsSearch.ThemeAliases, "ThemeBody"),
