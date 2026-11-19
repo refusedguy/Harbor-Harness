@@ -1096,14 +1096,30 @@ harbor> /plugins
   myplugin  v1.0.0
 ```
 
-### Future: `harbor plugin install` (v0.5+)
+### CLI: `harbor plugin list|install|uninstall`
+
+The installer copies a local `.cs` source file into a plugin root; it does not
+fetch a URL or a NuGet package, and it does not compile anything. Fetch and
+review the source yourself, then restart Harbor after installing so the loader
+picks up the new file.
 
 ```bash
-$ harbor plugin install https://gist.github.com/user/myplugin.cs
-$ harbor plugin install nuget:Harbor.Plugin.MyPlugin    # DLL plugin
-$ harbor plugin list
-$ harbor plugin uninstall myplugin
+# Fetch the source yourself and read it before installing.
+$ curl -fsSL https://gist.githubusercontent.com/user/myplugin.cs/raw -o myplugin.cs
+
+$ harbor plugin install ./myplugin.cs              # global: ~/.harbor/plugins/
+$ harbor plugin install ./myplugin.cs --project    # project-local: .harbor/plugins/
+$ harbor plugin install ./myplugin.cs --force      # overwrite an installed file
+$ harbor plugin list                               # global and project files
+$ harbor plugin uninstall myplugin                 # file name, with or without .cs
 ```
+
+`harbor plugin inventory` prints the live composition published by the plugin
+host, and `harbor plugin config [name]` prints the settings a plugin declares.
+Both need a build with the plugin host. Install and uninstall are file
+operations confined to the two plugin roots, but a CS plugin still runs in
+process with full trust after the next restart. Review the source before you
+install it.
 
 ---
 
