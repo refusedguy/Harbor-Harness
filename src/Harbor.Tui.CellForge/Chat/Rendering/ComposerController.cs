@@ -2,6 +2,7 @@ using System.Text;
 using Harbor.Abstractions.Speech;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Ui.Framework.Rendering.Input;
+using Engine = Harbor.Tui.CellForge.Input;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -193,8 +194,11 @@ public sealed class ComposerController
     /// <summary>Refusal reason from the last <see cref="ToggleDictationAsync"/> start attempt; null on success.</summary>
     public string? DictationRejection { get; private set; }
 
-    /// <summary>Key-family dispatch table (#197): a new key family adds a handler, never an edit here.</summary>
-    private readonly IKeyHandler[] _handlers;
+    /// <summary>Gesture→opaque-action-id table for composer key families (#3621).</summary>
+    private readonly Engine.KeyContext _composerKeyContext = BuildKeyContext();
+
+    /// <summary>The composer's key context (gesture→action id). Exposed for tests and host wiring.</summary>
+    public Engine.KeyContext ComposerKeyContext => _composerKeyContext;
 
     /// <summary>Composer with the offline (no-audio) dictation placeholder.</summary>
     public ComposerController() : this(new OfflineSpeechToText())
@@ -205,14 +209,6 @@ public sealed class ComposerController
     public ComposerController(ISpeechToText speechToText)
     {
         _speechToText = speechToText ?? throw new ArgumentNullException(nameof(speechToText));
-        _handlers =
-        [
-            new DictationHandler(),
-            new EnterHandler(this),
-            new CharHandler(this),
-            new HistoryHandler(this),
-            new EditHandler(this),
-        ];
     }
 
     /// <summary>Whether a history-recall walk is in flight (Up without the final Down yet).</summary>
@@ -226,76 +222,143 @@ public sealed class ComposerController
     public void PushSubmitted(string entry) => History.Push(entry);
 
     /// <summary>Routes one decoded key event. Pure state machine over the buffer.</summary>
-    public ComposerAction HandleKey(in KeyEvent key)
+    public ComposerAction HandleKey(in KeyEvent key) => HandleKeyCore(ToEngineKey(key));
+
+    /// <summary>Routes one decoded engine key event (same behavior as the UI-framework overload).</summary>
+    public ComposerAction HandleKey(in Engine.KeyEvent key) => HandleKeyCore(key);
+
+    private ComposerAction HandleKeyCore(in Engine.KeyEvent key)
     {
-        if (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat)
+        if (key.EventType != Engine.KeyEventType.Press && key.EventType != Engine.KeyEventType.Repeat)
         {
             return ComposerAction.Ignored;
         }
 
-        foreach (var handler in _handlers)
+        // Ctrl+D is a command chord, not text: exact Ctrl, press-only so a held key
+        // cannot toggle twice. The host performs the async toggle; the state machine
+        // only names the gesture. Kept in the controller (not KeyContext) because it
+        // is press-only and returns a host action distinct from buffer edits.
+        if (key.EventType == Engine.KeyEventType.Press
+            && key.Key == Engine.KeyCode.Char
+            && (key.Character.Value == 'd' || key.Character.Value == 'D')
+            && key.Modifiers == Engine.KeyModifiers.Ctrl)
         {
-            if (handler.Matches(key))
-            {
-                return handler.Handle(key);
-            }
+            return ComposerAction.DictationToggle;
+        }
+
+        // Enter split is handled by EnterPolicy (#359 kitty-disambiguate) and stays here.
+        if (key.Key == Engine.KeyCode.Enter)
+        {
+            return HandleEnter((KeyModifiers)(byte)key.Modifiers);
+        }
+
+        // Plain text insertion: AcceptsTypedChar split stays in the controller (not KeyContext).
+        if (key.Key == Engine.KeyCode.Char && key.Modifiers.AcceptsTypedChar())
+        {
+            _ = Buffer.Insert(key.Character);
+            return ComposerAction.Edited;
+        }
+
+        // Gesture→opaque action id for char-chords, edit-chords and history keys (#3621).
+        if (_composerKeyContext.TryMatch(key, out var hit))
+        {
+            return DispatchComposerAction(hit.ActionId);
         }
 
         return ComposerAction.Ignored;
     }
 
-    /// <summary>Strategy contract for one key family (#197).</summary>
-    private interface IKeyHandler
+    private static Engine.KeyEvent ToEngineKey(in KeyEvent key) =>
+        new((Engine.KeyCode)(byte)key.Key, key.Character, (Engine.KeyModifiers)(byte)key.Modifiers,
+            (Engine.KeyEventType)(byte)key.EventType, key.IsKittyEncoded, key.Codepoint);
+
+    private ComposerAction DispatchComposerAction(string? actionId) => actionId switch
     {
-        bool Matches(in KeyEvent key);
-        ComposerAction Handle(in KeyEvent key);
+        // Char chords
+        "char.ctrl-c" => Buffer.IsEmpty ? ComposerAction.Aborted : ClearAll(),
+        "char.ctrl-u" => Edit(() => Buffer.DeleteToLineStart()),
+        "char.ctrl-w" => Edit(() => Buffer.DeleteWordBackward()),
+        "char.ctrl-a" => Edit(() => Buffer.MoveToLineStart()),
+        "char.ctrl-e" => Edit(() => Buffer.MoveToLineEnd()),
+        "char.ctrl-z" => UndoOrRedo(Buffer.Undo),
+        "char.ctrl-shift-z" => UndoOrRedo(Buffer.Redo),
+        "char.ctrl-k" => Edit(() => Buffer.DeleteToLineEnd()),
+        "char.ctrl-y" => Yank(),
+        "char.meta-b" => Edit(() => Buffer.MoveWordLeft()),
+        "char.meta-f" => Edit(() => Buffer.MoveWordRight()),
+        "char.meta-d" => Edit(() => Buffer.DeleteWordForward()),
+        "char.meta-s" => Edit(() => MarkdownEditOps.ToggleWrap(Buffer, "**")),
+        "char.meta-i" => Edit(() => MarkdownEditOps.ToggleWrap(Buffer, "*")),
+        "char.meta-c" => Edit(() => MarkdownEditOps.ToggleWrap(Buffer, "`")),
+        "char.meta-h" => Edit(() => MarkdownEditOps.ToggleHeading(Buffer)),
+        "char.meta-l" => Edit(() => MarkdownEditOps.ToggleListItem(Buffer)),
+
+        // Edit chords
+        "edit.word-left" => Edit(() => Buffer.MoveWordLeft()),
+        "edit.word-right" => Edit(() => Buffer.MoveWordRight()),
+        "edit.backspace" => Edit(() => Buffer.Backspace()),
+        "edit.delete" => Edit(() => Buffer.DeleteForward()),
+        "edit.left" => Edit(() => Buffer.MoveLeft()),
+        "edit.right" => Edit(() => Buffer.MoveRight()),
+        "edit.home" => Edit(() => Buffer.MoveToLineStart()),
+        "edit.end" => Edit(() => Buffer.MoveToLineEnd()),
+
+        // History
+        "history.up" => HandleHistoryUp(),
+        "history.down" => HandleHistoryDown(),
+
+        _ => ComposerAction.Ignored,
+    };
+
+    private ComposerAction Edit(Func<EditOutcome> op)
+    {
+        _ = op();
+        return ComposerAction.Edited;
     }
 
-    /// <summary>
-    /// Ctrl+D is a command chord, not text: exact Ctrl, press-only so a held key
-    /// cannot toggle twice. The host performs the async toggle; the state machine
-    /// only names the gesture (the same split it uses for Submit/Abort).
-    /// </summary>
-    private sealed class DictationHandler : IKeyHandler
-    {
-        public bool Matches(in KeyEvent key) =>
-            key.EventType == KeyEventType.Press
-            && key.Key == KeyCode.Char
-            && (key.Character.Value == 'd' || key.Character.Value == 'D')
-            && key.Modifiers == KeyModifiers.Ctrl;
+    private ComposerAction UndoOrRedo(Func<EditOutcome> op) =>
+        op().Kind == EditOutcomeKind.Unchanged ? ComposerAction.Ignored : ComposerAction.Edited;
 
-        public ComposerAction Handle(in KeyEvent key) => ComposerAction.DictationToggle;
+    private ComposerAction Yank()
+    {
+        if (Buffer.LastKill is not { Length: > 0 } kill)
+        {
+            return ComposerAction.Ignored;
+        }
+
+        _ = Buffer.InsertText(kill);
+        return ComposerAction.Edited;
     }
 
-    private sealed class EnterHandler(ComposerController owner) : IKeyHandler
+    private ComposerAction HandleHistoryUp()
     {
-        public bool Matches(in KeyEvent key) => key.Key == KeyCode.Enter;
-        public ComposerAction Handle(in KeyEvent key) => owner.HandleEnter(key.Modifiers);
+        // CF-B-005: history recall is a store transition — the store applies
+        // the same walk on its own InputMsg.Update. The in-flight draft is
+        // saved on this first Up; PromptHistory owns the walk.
+        // First logical line + available history ⇒ recall instead of caret movement.
+        if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && TryRecall(HistoryStep.Previous, Buffer.SnapshotText(), out var previous))
+        {
+            Recall(previous);
+            return ComposerAction.Edited;
+        }
+
+        _ = Buffer.MoveUp();
+        return ComposerAction.Edited;
     }
 
-    private sealed class CharHandler(ComposerController owner) : IKeyHandler
+    private ComposerAction HandleHistoryDown()
     {
-        public bool Matches(in KeyEvent key) => key.Key == KeyCode.Char;
-        public ComposerAction Handle(in KeyEvent key) => owner.HandleCharKey(key);
-    }
+        // CF-B-005: the final step restores the saved draft exactly once
+        // (readline), then the walk ends and Down is plain caret movement again.
+        if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && TryRecall(HistoryStep.Next, Buffer.SnapshotText(), out var next))
+        {
+            Recall(next);
+            return ComposerAction.Edited;
+        }
 
-    private sealed class HistoryHandler(ComposerController owner) : IKeyHandler
-    {
-        public bool Matches(in KeyEvent key) => key.Key is KeyCode.Up or KeyCode.Down;
-        public ComposerAction Handle(in KeyEvent key) => owner.HandleHistoryKey(key);
+        _ = Buffer.MoveDown();
+        return ComposerAction.Edited;
     }
-
-    private sealed class EditHandler(ComposerController owner) : IKeyHandler
-    {
-        public bool Matches(in KeyEvent key) => key.Key is KeyCode.Left or KeyCode.Right
-            or KeyCode.Backspace or KeyCode.Delete or KeyCode.Home or KeyCode.End;
-        public ComposerAction Handle(in KeyEvent key) => owner.HandleEditKey(key);
-    }
-
-    /// <summary>One key binding: predicate + effect. Tables below preserve the original order exactly.</summary>
-    private readonly record struct KeyBinding(
-        Func<KeyEvent, bool> Matches,
-        Func<ComposerController, KeyEvent, ComposerAction> Run);
 
     /// <summary>
     ///     Enter split, executed from the shared decision (#359, #33/T2):
@@ -334,178 +397,6 @@ public sealed class ComposerController
     {
         History.PushSubmitted(Buffer.SnapshotText());
         return ComposerAction.Submitted;
-    }
-
-    /// <summary>Character keys: plain insertion, Ctrl chords, Alt/Meta word + markdown chords.</summary>
-    private ComposerAction HandleCharKey(KeyEvent key)
-    {
-        var mods = key.Modifiers;
-
-        // Plain text never arrives with Alt set: legacy terminals encode
-        // M-x as ESC-prefix (Meta), kitty/CSI-u set the Alt bit. Routing
-        // those to insertion made readline chords unreachable.
-        if (mods.AcceptsTypedChar())
-        {
-            _ = Buffer.Insert(key.Character);
-            return ComposerAction.Edited;
-        }
-
-        foreach (var binding in CharBindings)
-        {
-            if (binding.Matches(key))
-            {
-                return binding.Run(this, key);
-            }
-        }
-
-        return ComposerAction.Ignored;
-    }
-
-    /// <summary>
-    ///     Character-chord table (#197): plain insertion, Ctrl chords, Alt/Meta
-    ///     word + markdown chords. Row order matches the original if-chain exactly.
-    /// </summary>
-    private static readonly KeyBinding[] CharBindings =
-    [
-        new(static k => k.Character == new Rune('c') && (k.Modifiers & KeyModifiers.Ctrl) != 0,
-            static (c, key) => c.Buffer.IsEmpty ? ComposerAction.Aborted : c.ClearAll()),
-        new(static k => k.Character == new Rune('u') && (k.Modifiers & KeyModifiers.Ctrl) != 0,
-            static (c, key) => { _ = c.Buffer.DeleteToLineStart(); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('w') && (k.Modifiers & KeyModifiers.Ctrl) != 0,
-            static (c, key) => { _ = c.Buffer.DeleteWordBackward(); return ComposerAction.Edited; }),
-        // Readline kill/yank-lite family: Ctrl+A/E line jumps, Ctrl+K
-        // kill-to-line-end, Alt+B/D/F word-wise move/delete.
-        new(static k => k.Character == new Rune('a') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, key) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('e') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, key) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; }),
-        // No history ⇒ ignored, matching the Ctrl+Y dead-yank contract.
-        new(static k => k.Character == new Rune('z') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, key) => c.Buffer.Undo().Kind == EditOutcomeKind.Unchanged
-                ? ComposerAction.Ignored
-                : ComposerAction.Edited),
-        // Kitty CSI-u reports the shifted codepoint; legacy terminals
-        // cannot express C-S-z distinctly and stay on undo-only.
-        new(static k => k.Character == new Rune('Z') && k.Modifiers == (KeyModifiers.Ctrl | KeyModifiers.Shift),
-            static (c, key) => c.Buffer.Redo().Kind == EditOutcomeKind.Unchanged
-                ? ComposerAction.Ignored
-                : ComposerAction.Edited),
-        new(static k => k.Character == new Rune('k') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, key) => { _ = c.Buffer.DeleteToLineEnd(); return ComposerAction.Edited; }),
-        // Readline yank: Ctrl+Y pastes the last kill recorded on the
-        // buffer (Ctrl+U/W/K, Alt+D) at the caret; nothing killed ⇒ ignored.
-        new(static k => k.Character == new Rune('y') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, key) =>
-            {
-                if (c.Buffer.LastKill is not { Length: > 0 } kill)
-                {
-                    return ComposerAction.Ignored;
-                }
-
-                _ = c.Buffer.InsertText(kill);
-                return ComposerAction.Edited;
-            }),
-        new(static k => k.Character == new Rune('b') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('f') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('d') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = c.Buffer.DeleteWordForward(); return ComposerAction.Edited; }),
-        // Markdown composer chords: M-s bold, M-i italic, M-c inline code —
-        // they toggle around the word at the caret via MarkdownEditOps.
-        new(static k => k.Character == new Rune('s') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "**"); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('i') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "*"); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('c') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "`"); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('h') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = MarkdownEditOps.ToggleHeading(c.Buffer); return ComposerAction.Edited; }),
-        new(static k => k.Character == new Rune('l') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, key) => { _ = MarkdownEditOps.ToggleListItem(c.Buffer); return ComposerAction.Edited; }),
-    ];
-
-    /// <summary>Caret movement + deletion keys (word jumps, Backspace/Delete, Home/End).</summary>
-    private ComposerAction HandleEditKey(KeyEvent key)
-    {
-        foreach (var binding in EditBindings)
-        {
-            if (binding.Matches(key))
-            {
-                return binding.Run(this, key);
-            }
-        }
-
-        return ComposerAction.Ignored;
-    }
-
-    /// <summary>Edit-key table (#197). Row order matches the original if-chain exactly.</summary>
-    private static readonly KeyBinding[] EditBindings =
-    [
-        new(static k => k.Key == KeyCode.Left && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (k.Modifiers & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0,
-            static (c, key) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Right && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (k.Modifiers & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0,
-            static (c, key) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Backspace && k.Modifiers.AcceptsTypedChar(),
-            static (c, key) => { _ = c.Buffer.Backspace(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Delete && k.Modifiers.IsUnmodified(),
-            static (c, key) => { _ = c.Buffer.DeleteForward(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Left && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0,
-            static (c, key) => { _ = c.Buffer.MoveLeft(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Right && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0,
-            static (c, key) => { _ = c.Buffer.MoveRight(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Home && k.Modifiers.IsUnmodified(),
-            static (c, key) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.End && k.Modifiers.IsUnmodified(),
-            static (c, key) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; }),
-    ];
-
-    /// <summary>Up/Down: history recall at the buffer edges, caret movement otherwise.</summary>
-    private ComposerAction HandleHistoryKey(KeyEvent key)
-    {
-        var mods = key.Modifiers;
-
-        // Deliberately NOT KeyModifierGate.AcceptsTypedChar: history recall
-        // refuses Shift as well, because Shift+Up has no meaning here — it is not
-        // a case anyone can type into a history. That is the OTHER half of the
-        // rule (the "unmodified command" family) rather than the typing half, and
-        // collapsing the two would make Shift+Up walk the draft.
-        if (mods != KeyModifiers.None)
-        {
-            return ComposerAction.Ignored;
-        }
-
-        if (key.Key == KeyCode.Up)
-        {
-            // CF-B-005: history recall is a store transition — the store applies
-            // the same walk on its own InputMsg.Update. The in-flight draft is
-            // saved on this first Up; PromptHistory owns the walk.
-            // First logical line + available history ⇒ recall instead of caret movement.
-            if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && TryRecall(HistoryStep.Previous, Buffer.SnapshotText(), out var previous))
-            {
-                Recall(previous);
-                return ComposerAction.Edited;
-            }
-
-            _ = Buffer.MoveUp();
-            return ComposerAction.Edited;
-        }
-
-        if (key.Key == KeyCode.Down)
-        {
-            // CF-B-005: the final step restores the saved draft exactly once
-            // (readline), then the walk ends and Down is plain caret movement again.
-            if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && TryRecall(HistoryStep.Next, Buffer.SnapshotText(), out var next))
-            {
-                Recall(next);
-                return ComposerAction.Edited;
-            }
-
-            _ = Buffer.MoveDown();
-            return ComposerAction.Edited;
-        }
-
-        return ComposerAction.Ignored;
     }
 
     private ComposerAction ClearAll()
@@ -554,6 +445,102 @@ public sealed class ComposerController
                 return false;
         }
     }
+
+    /// <summary>Builds the composer gesture→action-id context (#3621).</summary>
+    private static Engine.KeyContext BuildKeyContext()
+    {
+        var ctx = new Engine.KeyContext("composer");
+
+        // ── Char chords (12 logical families) ────────────────────────────
+        // Ctrl+C: abort on empty buffer, else clear-all. Matches any mods that include Ctrl.
+        BindCharWhen(ctx, 'c', "char.ctrl-c", m => (m & Engine.KeyModifiers.Ctrl) != 0);
+        BindCharWhen(ctx, 'u', "char.ctrl-u", m => (m & Engine.KeyModifiers.Ctrl) != 0);
+        BindCharWhen(ctx, 'w', "char.ctrl-w", m => (m & Engine.KeyModifiers.Ctrl) != 0);
+        BindChar(ctx, 'a', Engine.KeyModifiers.Ctrl, "char.ctrl-a");
+        BindChar(ctx, 'e', Engine.KeyModifiers.Ctrl, "char.ctrl-e");
+        BindChar(ctx, 'z', Engine.KeyModifiers.Ctrl, "char.ctrl-z");
+        // Kitty CSI-u reports the shifted codepoint; legacy terminals cannot express C-S-z distinctly.
+        BindChar(ctx, 'Z', Engine.KeyModifiers.Ctrl | Engine.KeyModifiers.Shift, "char.ctrl-shift-z");
+        BindChar(ctx, 'k', Engine.KeyModifiers.Ctrl, "char.ctrl-k");
+        BindChar(ctx, 'y', Engine.KeyModifiers.Ctrl, "char.ctrl-y");
+
+        // Alt/Meta word + markdown chords (Ctrl must be absent, Alt/Meta present).
+        BindCharWhen(ctx, 'b', "char.meta-b", MetaChord);
+        BindCharWhen(ctx, 'f', "char.meta-f", MetaChord);
+        BindCharWhen(ctx, 'd', "char.meta-d", MetaChord);
+        BindCharWhen(ctx, 's', "char.meta-s", MetaChord);
+        BindCharWhen(ctx, 'i', "char.meta-i", MetaChord);
+        BindCharWhen(ctx, 'c', "char.meta-c", MetaChord);
+        BindCharWhen(ctx, 'h', "char.meta-h", MetaChord);
+        BindCharWhen(ctx, 'l', "char.meta-l", MetaChord);
+
+        // ── Edit chords (8 logical families) ─────────────────────────────
+        // Word-jump arrows: Ctrl/Meta set, Shift/Alt not set.
+        BindKeyWhen(ctx, Engine.KeyCode.Left, "edit.word-left", WordJumpMods);
+        BindKeyWhen(ctx, Engine.KeyCode.Right, "edit.word-right", WordJumpMods);
+
+        // Backspace: AcceptsTypedChar (no Ctrl/Alt/Meta; Shift allowed).
+        BindKeyWhen(ctx, Engine.KeyCode.Backspace, "edit.backspace", AcceptsTypedCharMods);
+
+        // Delete/Home/End: unmodified only.
+        BindKey(ctx, Engine.KeyCode.Delete, Engine.KeyModifiers.None, "edit.delete");
+        BindKey(ctx, Engine.KeyCode.Home, Engine.KeyModifiers.None, "edit.home");
+        BindKey(ctx, Engine.KeyCode.End, Engine.KeyModifiers.None, "edit.end");
+
+        // Plain arrows: no Ctrl/Meta (Shift/Alt allowed) — move by char.
+        BindKeyWhen(ctx, Engine.KeyCode.Left, "edit.left", NoCtrlMetaMods);
+        BindKeyWhen(ctx, Engine.KeyCode.Right, "edit.right", NoCtrlMetaMods);
+
+        // ── History (Up/Down, unmodified) ────────────────────────────────
+        BindKey(ctx, Engine.KeyCode.Up, Engine.KeyModifiers.None, "history.up");
+        BindKey(ctx, Engine.KeyCode.Down, Engine.KeyModifiers.None, "history.down");
+
+        return ctx;
+    }
+
+    private static void BindChar(Engine.KeyContext ctx, char c, Engine.KeyModifiers mods, string actionId) =>
+        ctx.Bind(Engine.KeyGesture.ForChar(c, mods), actionId);
+
+    private static void BindKey(Engine.KeyContext ctx, Engine.KeyCode key, Engine.KeyModifiers mods, string actionId) =>
+        ctx.Bind(Engine.KeyGesture.ForKey(key, mods), actionId);
+
+    private static void BindCharWhen(Engine.KeyContext ctx, char c, string actionId, Func<Engine.KeyModifiers, bool> predicate)
+    {
+        for (int i = 0; i < 16; i++)
+        {
+            var mods = (Engine.KeyModifiers)i;
+            if (predicate(mods))
+            {
+                ctx.Bind(Engine.KeyGesture.ForChar(c, mods), actionId);
+            }
+        }
+    }
+
+    private static void BindKeyWhen(Engine.KeyContext ctx, Engine.KeyCode key, string actionId, Func<Engine.KeyModifiers, bool> predicate)
+    {
+        for (int i = 0; i < 16; i++)
+        {
+            var mods = (Engine.KeyModifiers)i;
+            if (predicate(mods))
+            {
+                ctx.Bind(Engine.KeyGesture.ForKey(key, mods), actionId);
+            }
+        }
+    }
+
+    private static bool MetaChord(Engine.KeyModifiers m) =>
+        (m & (Engine.KeyModifiers.Meta | Engine.KeyModifiers.Alt)) != 0
+        && (m & Engine.KeyModifiers.Ctrl) == 0;
+
+    private static bool WordJumpMods(Engine.KeyModifiers m) =>
+        (m & (Engine.KeyModifiers.Ctrl | Engine.KeyModifiers.Meta)) != 0
+        && (m & (Engine.KeyModifiers.Shift | Engine.KeyModifiers.Alt)) == 0;
+
+    private static bool AcceptsTypedCharMods(Engine.KeyModifiers m) =>
+        (m & (Engine.KeyModifiers.Ctrl | Engine.KeyModifiers.Alt | Engine.KeyModifiers.Meta)) == 0;
+
+    private static bool NoCtrlMetaMods(Engine.KeyModifiers m) =>
+        (m & (Engine.KeyModifiers.Ctrl | Engine.KeyModifiers.Meta)) == 0;
 
     // ── Dictation session (#2541) ───────────────────────────────────────────
 
