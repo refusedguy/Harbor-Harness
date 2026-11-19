@@ -41,7 +41,8 @@ internal static class DemoRuntime
                 sp.GetRequiredService<IAgentRegistry>(),
                 sp.GetRequiredService<ILogger<PermissionService>>(),
                 (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, PersistDecision: false)),
-                workspaceRoot: Directory.GetCurrentDirectory()));
+                workspaceRoot: Directory.GetCurrentDirectory(),
+                overlay: sp.GetRequiredService<SessionPermissionOverlay>()));
         }
 
         return services
@@ -50,7 +51,8 @@ internal static class DemoRuntime
                 sp.GetRequiredService<IAgentRegistry>(),
                 sp.GetRequiredService<ILogger<PermissionService>>(),
                 (request, ct) => sp.GetRequiredService<DemoApprovalGate>().AskAsync(request, ct),
-                workspaceRoot: Directory.GetCurrentDirectory()));
+                workspaceRoot: Directory.GetCurrentDirectory(),
+                overlay: sp.GetRequiredService<SessionPermissionOverlay>()));
     }
 
     /// <summary>True when the demo is playing the fullscreen cell-diff backend.</summary>

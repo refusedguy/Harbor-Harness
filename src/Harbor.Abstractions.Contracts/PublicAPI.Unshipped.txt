@@ -435,6 +435,7 @@ Harbor.Abstractions.Permissions.PermissionMode.Auto = 2 -> Harbor.Abstractions.P
 Harbor.Abstractions.Permissions.PermissionMode.FullAccess = 3 -> Harbor.Abstractions.Permissions.PermissionMode
 Harbor.Abstractions.Permissions.SessionPermissionOverlay
 Harbor.Abstractions.Permissions.SessionPermissionOverlay.AllowForSession(string! permission, string! pattern) -> void
+Harbor.Abstractions.Permissions.SessionPermissionOverlay.ApplyTo(Harbor.Abstractions.Permissions.PermissionAction baseline, string! permission, string! argPath) -> Harbor.Abstractions.Permissions.PermissionAction
 Harbor.Abstractions.Permissions.SessionPermissionOverlay.DenyForSession(string! permission, string! pattern) -> void
 Harbor.Abstractions.Permissions.SessionPermissionOverlay.EndSession() -> void
 Harbor.Abstractions.Permissions.SessionPermissionOverlay.Evaluate(Harbor.Abstractions.Permissions.PermissionRuleset! baseRuleset, string! permission, string! argPath) -> Harbor.Abstractions.Permissions.PermissionAction
