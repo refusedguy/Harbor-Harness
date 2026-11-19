@@ -5,7 +5,8 @@ this page's search. A variable part (a tool name, provider id, model id, or
 path) is written as `<name>` in a heading. If the failure is a symptom rather
 than a quoted message, use the [troubleshooting index](./TROUBLESHOOTING.md).
 For support channels and the data to attach to a report, use
-[getting help](./SUPPORT.md).
+[getting help](./SUPPORT.md). For questions about why Harbor is built a
+certain way, use the [design FAQ](./DESIGN_FAQ.md).
 
 ## `API key not found. Set $NAME or pass --provider-api-key.`
 
