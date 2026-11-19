@@ -33,6 +33,7 @@ using UiKeyDto = Harbor.Ui.Framework.Rendering.Input.UiKeyDto;
 using UiKeyKind = Harbor.Ui.Framework.Rendering.Input.UiKeyKind;
 using UiKeyMods = Harbor.Ui.Framework.Rendering.Input.UiKeyMods;
 using EngineCells = Harbor.Tui.CellForge.Rendering;
+using EngineInput = Harbor.Tui.CellForge.Input;
 
 namespace Harbor.App.Cli.Repl;
 
@@ -342,7 +343,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // handler, which still swallows the key. KeyContext owns no callbacks
         // and no action vocabulary — ChatKeyMap keeps the composer names and
         // LeaderKeyRouter keeps the chords.
-        KeyContext? modalCtx = _keyContexts.Active(new ReplModalState(
+        EngineInput.KeyContext? modalCtx = _keyContexts.Active(new ReplModalState(
             host.FloatingTerminal.IsAttached,
             host.Sheet.IsOpen,
             host.Screen.Markup.Visible,

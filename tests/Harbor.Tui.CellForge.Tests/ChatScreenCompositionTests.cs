@@ -1,0 +1,74 @@
+// #3371 — ChatScreen.Build must give PanelNodeAdapter a real product caller.
+// The golden below drives the composition root that Build assembles through
+// NodeFrame and pins that a panel owned by the real screen lands in the engine
+// frame. The adapter is not a test-only leaf: Build is the only constructor of
+// this root, and the frame is rendered from the panels it adapted.
+
+using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
+
+namespace Harbor.Tui.CellForge.Tests;
+
+[NotInParallel("pty")]
+public class ChatScreenCompositionTests
+{
+    private const int Cols = 80;
+    private const int Rows = 12;
+
+    [Test]
+    public async Task Build_CompositionRoot_PaintsAdaptedPanelIntoGoldenFrame()
+    {
+        var composer = new ComposerController();
+        var status = new StatusViewModel { Model = "kilocode/hy3" };
+
+        ChatScreen screen = ChatScreen.Build(composer, status, includeSidebar: false);
+        screen.Composer.Placeholder = "COMPOSED-PANEL";
+
+        FlexSplitNode? compositionRoot = screen.CompositionRoot;
+        await Assert.That(compositionRoot).IsNotNull();
+        FlexSplitNode root = compositionRoot!;
+        await Assert.That(root.Count).IsEqualTo(3);
+
+        var context = new PrepaintContext();
+        var buffer = new EngineCells.ScreenBuffer(Cols, Rows);
+        NodeFrame.Render(
+            root,
+            context,
+            buffer,
+            new EngineCells.Constraints(Cols, Rows),
+            new EngineCells.Rect(0, 0, Cols, Rows));
+
+        string first = Art(buffer);
+        await Assert.That(first).Contains("COMPOSED-PANEL").Because(
+            "the composer panel from ChatScreen.Build must appear in the engine frame");
+
+        // Same panels, same keys, same frame: the id-keyed adapters keep their
+        // prepaint records instead of rebinding by position.
+        var replay = new EngineCells.ScreenBuffer(Cols, Rows);
+        NodeFrame.Render(
+            root,
+            context,
+            replay,
+            new EngineCells.Constraints(Cols, Rows),
+            new EngineCells.Rect(0, 0, Cols, Rows));
+
+        await Assert.That(Art(replay)).IsEqualTo(first);
+    }
+
+    private static string Art(EngineCells.ScreenBuffer frame)
+    {
+        var sb = new System.Text.StringBuilder(frame.Cols * frame.Rows * 2);
+        for (int row = 0; row < frame.Rows; row++)
+        {
+            for (int col = 0; col < frame.Cols; col++)
+            {
+                _ = sb.Append((char)frame.At(col, row).Rune);
+            }
+
+            _ = sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+}
