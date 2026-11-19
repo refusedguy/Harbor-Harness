@@ -1,8 +1,10 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Tools.Builtin;
 
 namespace Harbor.App.Cli.Commands;
 
@@ -58,6 +60,16 @@ internal static class SessionExportFormattedRunner
         SessionExportFormat format,
         CancellationToken ct = default)
     {
+        // #3399: evaluate the kill switch before ANY I/O. A refused export
+        // must not read the store, create a temp file, or touch the target.
+        Result eligible = SessionExportEligibility.EnsureAllowed(
+            Environment.GetEnvironmentVariable(SessionExportEligibility.EnvironmentVariableName));
+        if (eligible.IsFailure)
+        {
+            await error.WriteLineAsync($"Export failed: {eligible.Error}").ConfigureAwait(false);
+            return 1;
+        }
+
         string temp = string.Empty;
         try
         {

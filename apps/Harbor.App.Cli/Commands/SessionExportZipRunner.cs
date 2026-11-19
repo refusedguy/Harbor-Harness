@@ -1,5 +1,7 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
+using Harbor.Tools.Builtin;
 
 namespace Harbor.App.Cli.Commands;
 
@@ -43,6 +45,16 @@ internal static class SessionExportZipRunner
         string path,
         CancellationToken ct = default)
     {
+        // #3399: evaluate the kill switch before ANY I/O. A refused export
+        // must not create a temp file, read the store, or touch the target.
+        Result eligible = SessionExportEligibility.EnsureAllowed(
+            Environment.GetEnvironmentVariable(SessionExportEligibility.EnvironmentVariableName));
+        if (eligible.IsFailure)
+        {
+            await error.WriteLineAsync($"Export failed: {eligible.Error}").ConfigureAwait(false);
+            return 1;
+        }
+
         // The temp file's name is only known once the target's directory is,
         // and the directory is only known once the path is resolved — so the
         // resolution happens inside the try, and the scratch file's name is

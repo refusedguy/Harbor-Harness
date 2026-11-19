@@ -4,6 +4,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Hosting;
 using Harbor.Storage.Jsonl;
+using Harbor.Tools.Builtin;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -184,12 +185,21 @@ internal static class SessionsVerb
 
         string sessionId = args[0];
         string path = args.Length > 1 ? args[1] : $"harbor-session-{sessionId}.jsonl";
+        string? rawSwitch = Environment.GetEnvironmentVariable(SessionExportEligibility.EnvironmentVariableName);
         using var host = HostBuilder.Build();
         var porter = host.Services.GetRequiredService<ISessionPorter>();
-        await using var output = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+        var store = host.Services.GetRequiredService<ISessionStore>();
 
-        var exported = await porter.ExportAsync(host.Services.GetRequiredService<ISessionStore>(), sessionId, output)
-            .ConfigureAwait(false);
+        // #3399: the kill switch is evaluated BEFORE the destination file is
+        // opened or the store is read. A refused export never creates or
+        // truncates the target file, and the refusal reason rides the Result.
+        var exported = await SessionExportEligibility.Guard(
+            async () =>
+            {
+                await using var output = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+                return await porter.ExportAsync(store, sessionId, output).ConfigureAwait(false);
+            },
+            rawSwitch).ConfigureAwait(false);
         if (exported.IsFailure)
         {
             SessionsVerbLog.ExportFailed(logger, exported.Error);
