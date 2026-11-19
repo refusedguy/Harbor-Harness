@@ -42,7 +42,7 @@ public sealed class OptionsFormHost
         new FieldDescriptor(
             "display-name",
             "Display name",
-            validators: new IFieldValidator[]
+            validators: new FieldValidator[]
             {
                 FieldValidators.Required("A name is needed."),
                 FieldValidators.MinLength(2),
@@ -51,7 +51,7 @@ public sealed class OptionsFormHost
             "depth",
             "Depth",
             maxLength: 3,
-            validators: new IFieldValidator[] { FieldValidators.MaxLength(3) }),
+            validators: new FieldValidator[] { FieldValidators.MaxLength(3) }),
     };
 }
 
@@ -95,7 +95,7 @@ public sealed class QueryFormHost
             "term",
             "Term",
             placeholder: "letters and digits",
-            validators: new IFieldValidator[]
+            validators: new FieldValidator[]
             {
                 FieldValidators.Required("A term is needed."),
                 FieldValidators.Matches("^[a-z0-9]+$"),
@@ -106,6 +106,6 @@ public sealed class QueryFormHost
             kind: FieldKind.Masked,
             mask: new Rune('*'),
             maxLength: 24,
-            validators: new IFieldValidator[] { FieldValidators.MatchesField("term") }),
+            validators: new FieldValidator[] { FieldValidators.MatchesField("term") }),
     };
 }

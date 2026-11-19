@@ -91,12 +91,12 @@ public class DeclarativeFormPrimitivesTests
     {
         var form = new DeclarativeForm(new[]
         {
-            new FieldDescriptor("term", "Term", validators: new IFieldValidator[]
+            new FieldDescriptor("term", "Term", validators: new FieldValidator[]
             {
                 FieldValidators.Required(),
                 FieldValidators.Matches("^[a-z]+$"),
             }),
-            new FieldDescriptor("repeat", "Repeat", FieldKind.Masked, new Rune('*'), validators: new IFieldValidator[]
+            new FieldDescriptor("repeat", "Repeat", FieldKind.Masked, new Rune('*'), validators: new FieldValidator[]
             {
                 FieldValidators.MatchesField("term"),
             }),

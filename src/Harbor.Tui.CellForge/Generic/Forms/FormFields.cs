@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Tui.CellForge.Generic.Forms;
@@ -33,15 +34,15 @@ public readonly record struct FieldValidationContext(
 ///     A domain-free validation rule. Implementations return an error message
 ///     or <see langword="null"/> when the value is acceptable.
 /// </summary>
-public interface IFieldValidator
+public abstract class FieldValidator
 {
     /// <summary>Stable rule name, useful for diagnostics.</summary>
-    string Name { get; }
+    public abstract string Name { get; }
 
     /// <summary>Evaluates the rule against one field snapshot.</summary>
     /// <param name="context">Value and sibling values.</param>
     /// <returns>An error message, or <see langword="null"/> when valid.</returns>
-    string? Validate(in FieldValidationContext context);
+    public abstract string? Validate(in FieldValidationContext context);
 }
 
 /// <summary>
@@ -70,7 +71,7 @@ public sealed record FieldDescriptor
         Rune? mask = null,
         int maxLength = 0,
         string placeholder = "",
-        IReadOnlyList<IFieldValidator>? validators = null)
+        IReadOnlyList<FieldValidator>? validators = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         Id = id;
@@ -79,7 +80,7 @@ public sealed record FieldDescriptor
         Mask = mask;
         MaxLength = Math.Max(0, maxLength);
         Placeholder = placeholder ?? string.Empty;
-        Validators = validators ?? Array.Empty<IFieldValidator>();
+        Validators = validators ?? Array.Empty<FieldValidator>();
     }
 
     /// <summary>Stable id used for values, errors and cross-field rules.</summary>
@@ -101,7 +102,7 @@ public sealed record FieldDescriptor
     public string Placeholder { get; }
 
     /// <summary>Ordered rules; empty means no constraints.</summary>
-    public IReadOnlyList<IFieldValidator> Validators { get; }
+    public IReadOnlyList<FieldValidator> Validators { get; }
 }
 
 /// <summary>
@@ -113,57 +114,57 @@ public static class FieldValidators
     /// <summary>Rejects an empty or whitespace-only value.</summary>
     /// <param name="message">Error text.</param>
     /// <returns>A required-value rule.</returns>
-    public static IFieldValidator Required(string message = "Value is required.") =>
+    public static FieldValidator Required(string message = "Value is required.") =>
         new RequiredRule(message);
 
     /// <summary>Rejects values shorter than <paramref name="minimum"/> runes.</summary>
     /// <param name="minimum">Inclusive lower bound.</param>
     /// <param name="message">Optional error text.</param>
     /// <returns>A minimum-length rule.</returns>
-    public static IFieldValidator MinLength(int minimum, string? message = null) =>
+    public static FieldValidator MinLength(int minimum, string? message = null) =>
         new LengthRule(minimum, int.MaxValue, message ?? $"Use at least {minimum} characters.");
 
     /// <summary>Rejects values longer than <paramref name="maximum"/> runes.</summary>
     /// <param name="maximum">Inclusive upper bound.</param>
     /// <param name="message">Optional error text.</param>
     /// <returns>A maximum-length rule.</returns>
-    public static IFieldValidator MaxLength(int maximum, string? message = null) =>
+    public static FieldValidator MaxLength(int maximum, string? message = null) =>
         new LengthRule(0, maximum, message ?? $"Use at most {maximum} characters.");
 
     /// <summary>Rejects values that do not match a BCL regular expression.</summary>
     /// <param name="pattern">Pattern passed to <see cref="Regex"/>.</param>
     /// <param name="message">Optional error text.</param>
     /// <returns>A pattern rule.</returns>
-    public static IFieldValidator Matches(string pattern, string? message = null) =>
+    public static FieldValidator Matches(string pattern, string? message = null) =>
         new PatternRule(pattern, message ?? "Value has an invalid format.");
 
     /// <summary>Rejects a value that differs from another row's value.</summary>
     /// <param name="otherFieldId">Id of the row to compare with.</param>
     /// <param name="message">Optional error text.</param>
     /// <returns>A cross-field equality rule.</returns>
-    public static IFieldValidator MatchesField(string otherFieldId, string? message = null) =>
+    public static FieldValidator MatchesField(string otherFieldId, string? message = null) =>
         new EqualityRule(otherFieldId, message ?? "Values must match.");
 
-    private sealed class RequiredRule(string message) : IFieldValidator
+    private sealed class RequiredRule(string message) : FieldValidator
     {
-        public string Name => "required";
+        public override string Name => "required";
 
-        public string? Validate(in FieldValidationContext context) =>
+        public override string? Validate(in FieldValidationContext context) =>
             string.IsNullOrWhiteSpace(context.Value) ? message : null;
     }
 
-    private sealed class LengthRule(int minimum, int maximum, string message) : IFieldValidator
+    private sealed class LengthRule(int minimum, int maximum, string message) : FieldValidator
     {
-        public string Name => minimum > 0 ? "minLength" : "maxLength";
+        public override string Name => minimum > 0 ? "minLength" : "maxLength";
 
-        public string? Validate(in FieldValidationContext context)
+        public override string? Validate(in FieldValidationContext context)
         {
             int length = context.Value.Length;
             return length < minimum || length > maximum ? message : null;
         }
     }
 
-    private sealed class PatternRule : IFieldValidator
+    private sealed class PatternRule : FieldValidator
     {
         private readonly Regex _regex;
         private readonly string _message;
@@ -175,17 +176,17 @@ public static class FieldValidators
             _message = message;
         }
 
-        public string Name => "pattern";
+        public override string Name => "pattern";
 
-        public string? Validate(in FieldValidationContext context) =>
+        public override string? Validate(in FieldValidationContext context) =>
             _regex.IsMatch(context.Value) ? null : _message;
     }
 
-    private sealed class EqualityRule(string otherFieldId, string message) : IFieldValidator
+    private sealed class EqualityRule(string otherFieldId, string message) : FieldValidator
     {
-        public string Name => "matchesField";
+        public override string Name => "matchesField";
 
-        public string? Validate(in FieldValidationContext context) =>
+        public override string? Validate(in FieldValidationContext context) =>
             context.Values.TryGetValue(otherFieldId, out string? other)
             && string.Equals(context.Value, other, StringComparison.Ordinal)
                 ? null
