@@ -141,14 +141,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         UiStore? store = null,
         ISessionManager? sessions = null,
         PanelServices? panelServices = null)
-        : this(logger, null!, statusVm, chatVm, inputVm, store, sessions, panelServices)
+        : this(logger, null!, statusVm, chatVm, inputVm, store, sessions, panelServices, environmentLookup: null)
     {
     }
 
     /// <summary>Golden-frame test seam. The backend must be an
     /// <see cref="ISyncTerminalBackend"/> — the context flushes synchronously
-    /// (issue #468). A null backend selects the stdout default. This overload
-    /// owns the single initialization block.</summary>
+    /// (issue #468). A null backend selects the stdout default. Delegates to the
+    /// internal core constructor that owns the single initialization block.</summary>
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
         ISyncTerminalBackend backend,
@@ -158,6 +158,28 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         UiStore? store = null,
         ISessionManager? sessions = null,
         PanelServices? panelServices = null)
+        : this(logger, backend, statusVm, chatVm, inputVm, store, sessions, panelServices, environmentLookup: null)
+    {
+    }
+
+    /// <summary>
+    /// Single initialization block. This is where the startup system-theme
+    /// probe runs (#3106): <see cref="SystemThemeProbe.Detect"/> resolves the
+    /// environment once and the resulting <see cref="SystemThemeProfile"/> is
+    /// handed to <see cref="CellForgePalette.Select"/>. The lookup seam stays
+    /// internal so tests can drive TERM/COLORTERM/NO_COLOR without mutating
+    /// process-wide environment variables.
+    /// </summary>
+    internal CellForgeTuiRenderer(
+        ILogger<CellForgeTuiRenderer> logger,
+        ISyncTerminalBackend backend,
+        StatusBarViewModel? statusVm,
+        ChatHistoryViewModel? chatVm,
+        InputViewModel? inputVm,
+        UiStore? store,
+        ISessionManager? sessions,
+        PanelServices? panelServices,
+        Func<string, string?>? environmentLookup)
         : base(logger)
     {
         // Issue #77: the DI-shared store is injected by the composition root
@@ -186,6 +208,12 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         Context = backend is null
             ? new CellForgeRenderContext(Logger)
             : new CellForgeRenderContext(backend, Logger);
+        // #3106: detect once at renderer startup, then let palette selection
+        // consume the profile. NO_COLOR/HARBOR_THEME_SYSTEM collapse to the
+        // 16-colour palette through SystemThemeProfile.EffectiveDepth.
+        SystemThemeProfile theme = SystemThemeProbe.Detect(environmentLookup);
+        ThemeProfile = theme;
+        Palette = CellForgePalette.Select(theme);
     }
 
     /// <summary>
@@ -214,6 +242,12 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     // input VM registration into the shared registry rides with it verbatim.
 
     public override ITuiRenderContext Context { get; }
+
+    /// <summary>System theme resolved by the startup probe (#3106).</summary>
+    internal SystemThemeProfile ThemeProfile { get; }
+
+    /// <summary>Palette selected from <see cref="ThemeProfile"/> at startup (#3106).</summary>
+    internal CellForgePalette Palette { get; }
 
     // CF-F-001: intentionally no ShouldRenderPlacement override — the base filter
     // already paints the ChatHistory/Input placements, and both builtin views write
@@ -461,6 +495,29 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         Context.Clear();
         return Task.FromResult(Result.Success());
     }
+}
+
+/// <summary>
+/// Palette width a CellForge renderer paints with (issue #3106). Resolved once
+/// at renderer startup from the <see cref="SystemThemeProfile"/> returned by
+/// <see cref="SystemThemeProbe.Detect"/>. A colours-disabled profile collapses
+/// to the 16-colour ANSI palette through
+/// <see cref="SystemThemeProfile.EffectiveDepth"/>.
+/// </summary>
+/// <param name="ColorCount">Colours available in the selected palette.</param>
+internal readonly record struct CellForgePalette(int ColorCount)
+{
+    internal const int Colors16 = 16;
+    internal const int Colors256 = 256;
+    internal const int TrueColorCount = 1 << 24;
+
+    /// <summary>Maps a detected system theme onto the renderer's palette width.</summary>
+    internal static CellForgePalette Select(SystemThemeProfile profile) => new(profile.EffectiveDepth switch
+    {
+        TerminalColorDepth.TrueColor => TrueColorCount,
+        TerminalColorDepth.Colors256 => Colors256,
+        _ => Colors16,
+    });
 }
 
 /// <summary>
