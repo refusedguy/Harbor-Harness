@@ -16,7 +16,8 @@ namespace Harbor.Tools.Builtin;
     {
         "Prefer dedicated tools (read, edit, glob, grep) for file operations",
         "Use `bash` for compilation, testing, git, and other shell tasks",
-        "Specify `timeout` for long-running commands (default: 30s)"
+        "Specify `timeout` for long-running commands (default: 30s)",
+        "Use $HARBOR_GIT_BASE instead of hard-coding main/master as a git diff/log base"
     })]
 [AutoConstruct]
 [ToolSchema]
@@ -33,6 +34,10 @@ public sealed partial class BashTool : ITool
     // (proxy, logger) in field order.
     private readonly IProcessProxy _processes;
     private readonly ILogger<BashTool> _logger;
+
+    // #3401: the shell-visible name an agent uses in place of a guessed
+    // main/master. Resolved from the repository's refs before the command runs.
+    private const string GitBaseVariable = "HARBOR_GIT_BASE";
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
@@ -70,12 +75,27 @@ public sealed partial class BashTool : ITool
         if (cwd is null && !Directory.Exists(baseDir))
             return ToolResult.Error($"Working directory does not exist: '{baseDir}'.");
 
+        // #3401: resolve the base branch from the repository refs when the
+        // command asks for it. The command text is NOT rewritten, so the
+        // permission gate still sees exactly the string the caller approved;
+        // only the child's environment gains the detected value.
+        var effectiveEnv = env;
+        if (command.Contains(GitBaseVariable, StringComparison.Ordinal))
+        {
+            Result<string> detected = await ResolveGitBaseAsync(cwd ?? baseDir, cancellationToken)
+                .ConfigureAwait(false);
+            if (detected.IsFailure)
+                return ToolResult.Error(detected.Error);
+            effectiveEnv ??= new Dictionary<string, string>(StringComparer.Ordinal);
+            effectiveEnv[GitBaseVariable] = detected.Value;
+        }
+
         var spec = new ProcessSpec
         {
             FileName = GetShell(),
             Arguments = OperatingSystem.IsWindows() ? ["/c", command] : ["-c", command],
             WorkingDirectory = cwd ?? baseDir,
-            Environment = env
+            Environment = effectiveEnv
         };
 
         // §PERF-006 (RESOLVED): stdout/stderr are accumulated in two StringBuilders
@@ -242,6 +262,71 @@ public sealed partial class BashTool : ITool
                 return;
             }
             stderr.Builder.Append(e.Line).Append('\n');
+        }
+    }
+
+    /// <summary>
+    ///     #3401: queries the repository refs through the same process seam as
+    ///     the command itself and picks the base branch with
+    ///     <see cref="GitBaseDetector" />. <c>trunk</c> joins the detector's
+    ///     default candidates after them, so a trunk-only repo is recognised
+    ///     without demoting main/master/develop.
+    /// </summary>
+    private async Task<Result<string>> ResolveGitBaseAsync(string repoDir, CancellationToken cancellationToken)
+    {
+        var spec = new ProcessSpec
+        {
+            FileName = "git",
+            Arguments = ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"],
+            WorkingDirectory = repoDir
+        };
+
+        Result<IProcessHandle> started = _processes.Start(spec);
+        if (!started.IsSuccess) return started.ConvertFailure<string>();
+        using var process = started.Value;
+
+        var refs = new List<string>();
+        var eof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        process.StdoutLine += OnRefLine;
+
+        try
+        {
+            // Subscribe before BeginReading: the proxy buffers lines until the
+            // readers start, and a late subscriber could miss the first ref.
+            process.BeginReading();
+            using var queryCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            queryCts.CancelAfter(TimeSpan.FromSeconds(10));
+            await process.WaitForExitAsync(queryCts.Token).ConfigureAwait(false);
+            await eof.Task.WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return Result.Failure<string>("Git base detection was cancelled or timed out.");
+        }
+        catch (TimeoutException)
+        {
+            return Result.Failure<string>("Git base detection timed out waiting for the ref query output.");
+        }
+        finally
+        {
+            process.StdoutLine -= OnRefLine;
+            process.CancelReading();
+        }
+
+        if (process.ExitCode != 0)
+            return Result.Failure<string>(
+                $"Git base detection failed: 'git for-each-ref' exited with {process.ExitCode}.");
+
+        string? baseBranch = GitBaseDetector.Detect(
+            refs, GitBaseDetector.DefaultCandidates.Concat(new[] { "trunk" }));
+        return baseBranch is null
+            ? Result.Failure<string>("Git base detection failed: no default base branch found in repository refs.")
+            : Result.Success(baseBranch);
+
+        void OnRefLine(object? _, ProcessLineEventArgs e)
+        {
+            if (e.Line is null) eof.TrySetResult();
+            else refs.Add(e.Line.Trim());
         }
     }
 
