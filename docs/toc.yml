@@ -46,6 +46,8 @@
   href: CI_UI_TESTS.md
 - name: Claude Code Ui Ux Analysis
   href: CLAUDE_CODE_UI_UX_ANALYSIS.md
+- name: Client Parity
+  href: CLIENT_PARITY.md
 - name: Codegen Boilerplate
   href: CODEGEN_BOILERPLATE.md
 - name: Code Principles Audit
