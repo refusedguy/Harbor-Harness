@@ -1,6 +1,6 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -23,7 +23,7 @@ namespace Harbor.Providers.Ollama;
 ///     - No API key required
 ///     - keep_alive parameter for model persistence
 /// </summary>
-public sealed class OllamaLlmClient : ILlmClient
+public sealed class OllamaLlmClient : ProviderLlmClientBase, ILlmClient
 {
     private const string DefaultBaseUrl = "http://localhost:11434";
 
@@ -38,11 +38,13 @@ public sealed class OllamaLlmClient : ILlmClient
     // Pre-computed base URL — avoids per-request string manipulation.
     private readonly string _baseUrl;
     private readonly OllamaConfig _config;
-
     private readonly HttpClient _http;
     private readonly ILogger<OllamaLlmClient> _logger;
 
+    // Keyless by design: the local daemon needs no API key. The base therefore
+    // gets no IAuthResolver and skips auth resolution (keyless constructor).
     public OllamaLlmClient(HttpClient http, OllamaConfig config, ILogger<OllamaLlmClient> logger)
+        : base(http, logger, ProviderId.Create("ollama"))
     {
         _http = http;
         _config = config;
@@ -50,82 +52,58 @@ public sealed class OllamaLlmClient : ILlmClient
         _baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
     }
 
-    public ProviderId ProviderId { get; } = ProviderId.Create("ollama");
+    // --- Template Method variation points (#1499, extended #3767) ------------
 
-    public async IAsyncEnumerable<LlmEvent> StreamAsync(
-        LlmRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
+    internal override Channel<LlmEvent> CreateChannel() =>
+        Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
         });
 
-        var writer = channel.Writer;
+    // Ollama speaks NDJSON: the whole line is the payload, EOF ends the stream.
+    protected override bool RawLineMode => true;
 
-        _ = Task.Run(async () =>
+    protected override string ApiErrorLabel => "Ollama";
+
+    // Native clients historically scheduled the pump with the caller token.
+    protected override bool SchedulePumpWithToken => true;
+
+    internal override HttpRequestMessage BuildRequest(LlmRequest request, string apiKey) => BuildRequest(request);
+
+    internal override Task WriteEventsAsync(
+        string data,
+        ChannelWriter<LlmEvent> writer,
+        ChunkStreamState chunkState,
+        LlmRequest request,
+        Activity? activity,
+        CancellationToken ct) =>
+        WriteNdjsonEventsAsync(data, writer, chunkState, ct);
+
+    // #3767: the local-daemon hint keeps the old send-failure message intact.
+    protected override Func<Exception, CancellationToken, ErrorEvent>? SendFailureHook(Activity? activity, CancellationToken ct) =>
+        (ex, token) => ex is HttpRequestException hre
+            ? new ErrorEvent(
+                $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
+                $"Is `ollama serve` running? Error: {hre.Message}",
+                Kind: ProviderErrorKind.Network)
+            : ProviderErrors.HttpSendFailure(ex, token);
+
+    internal override void OnStreamComplete(ChunkStreamState chunkState, Activity? activity)
+    {
+        // #203: stream-health summary (only when noteworthy).
+        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
         {
-            try
-            {
-                var httpRequest = BuildRequest(request);
-
-                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter.
-                var chunkState = new ChunkStreamState();
-
-                // Shared pump (ROP-A ПР.1) in raw-line (NDJSON) mode: Ollama has
-                // no "data:" prefix and no [DONE] sentinel — every line is a
-                // JSON chunk, EOF is the end of stream.
-                await SsePump.RunAsync(
-                    writer, _http, httpRequest,
-                    async (line, token) =>
-                    {
-                        await WriteNdjsonEventsAsync(line, writer, chunkState, token).ConfigureAwait(false);
-                        return true;
-                    },
-                    "Ollama", _logger, cancellationToken,
-                    mapSendFailure: (ex, token) => ex is HttpRequestException hre
-                        ? new ErrorEvent(
-                            $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
-                            $"Is `ollama serve` running? Error: {hre.Message}",
-                            Kind: ProviderErrorKind.Network)
-                        : ProviderErrors.HttpSendFailure(ex, token),
-                    onComplete: () =>
-                    {
-                        // #203: stream-health summary (only when noteworthy).
-                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
-                        {
-                            OllamaLlmClientLog.StreamCompleted(
-                                _logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls);
-                        }
-                    }).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                // Expected on cancel
-            }
-            catch (Exception ex)
-            {
-                // #203 E5: fire-and-forget pump task must log inside the
-                // lambda — the ErrorEvent alone is invisible in traces.
-                OllamaLlmClientLog.StreamTaskFailed(_logger, ex, ex.Message);
-                await writer.WriteAsync(new ErrorEvent(
-                    $"Stream failed: {ex.Message}", ex.ToString(),
-                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                writer.TryComplete();
-            }
-        }, cancellationToken);
-
-        await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-        {
-            yield return evt;
+            OllamaLlmClientLog.StreamCompleted(_logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls);
         }
     }
 
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+    protected override void OnFailed(Exception ex, Activity? activity) =>
+        // #203 E5: fire-and-forget pump task must log inside the hook —
+        // the ErrorEvent alone is invisible in traces.
+        OllamaLlmClientLog.StreamTaskFailed(_logger, ex, ex.Message);
+
+    public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
         // ROP-A ПР.9: network and parsing are separate failure modes with
         // separate hints — "is the daemon up?" vs "response was not JSON".
         Result.Try(

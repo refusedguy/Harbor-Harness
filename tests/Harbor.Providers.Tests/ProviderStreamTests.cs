@@ -55,6 +55,19 @@ public class ProviderStreamTests
             FakeModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
+    private static OllamaLlmClient CreateOllamaClient(string ndjson) =>
+        new(
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(ndjson, Encoding.UTF8, "application/x-ndjson")
+            })),
+            new OllamaConfig(),
+            NullLogger<OllamaLlmClient>.Instance);
+
+    private static Task<List<LlmEvent>> StreamOllamaAsync(string ndjson) =>
+        StreamCollector.CollectAsync(CreateOllamaClient(ndjson).StreamAsync(new LlmRequest(
+            "llama3", [LlmUserMessage.Text("hello")], "", [])));
+
     [Test]
     public async Task OpenAIChat_DeltaChunksWithoutIds_KeepStableToolCallId()
     {
@@ -109,28 +122,32 @@ public class ProviderStreamTests
     [Test]
     public async Task Ollama_NoFinishSentinel_EmitsSingleFinishAtEof()
     {
-        HttpResponseMessage responder(HttpRequestMessage _)
-        {
-            string ndjson =
-                """{"message":{"content":"hi"},"done":false}""" + "\n" +
-                """{"message":{"content":"!"},"done":false}""" + "\n" +
-                """{"done":true,"prompt_eval_count":5,"eval_count":9}""" + "\n";
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(ndjson, Encoding.UTF8, "application/x-ndjson")
-            };
-        }
-
-        var client = new OllamaLlmClient(
-            new HttpClient(new StubHttpMessageHandler(responder)),
-            new OllamaConfig(),
-            NullLogger<OllamaLlmClient>.Instance);
-
-        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
-            "llama3", [LlmUserMessage.Text("hello")], "", [])));
+        var events = await StreamOllamaAsync(
+            """{"message":{"content":"hi"},"done":false}""" + "\n" +
+            """{"message":{"content":"!"},"done":false}""" + "\n" +
+            """{"done":true,"prompt_eval_count":5,"eval_count":9}""" + "\n");
 
         await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
         await Assert.That(events.Count(e => e is StepFinishEvent)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Ollama_NdjsonChunks_StreamTextDeltasInOrderThenFinish()
+    {
+        // #3767: the inherited Template-Method StreamAsync drives the raw-line
+        // (NDJSON) pump. Every line is one chunk, EOF is the end of stream.
+        var events = await StreamOllamaAsync(
+            """{"message":{"content":"hel"},"done":false}""" + "\n" +
+            """{"message":{"content":"lo"},"done":false}""" + "\n" +
+            """{"done":true,"prompt_eval_count":5,"eval_count":9}""" + "\n");
+
+        string text = string.Concat(events.OfType<TextDeltaEvent>().Select(t => t.Delta));
+        await Assert.That(text).IsEqualTo("hello");
+        var finish = events.OfType<StepFinishEvent>().Single();
+        await Assert.That(finish.Usage!.InputTokens).IsEqualTo(5);
+        await Assert.That(finish.Usage!.OutputTokens).IsEqualTo(9);
+        await Assert.That(events.Count(e => e is ErrorEvent)).IsEqualTo(0);
+        await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
     }
 
     [Test]
@@ -373,28 +390,46 @@ public class ProviderStreamTests
     }
 
     [Test]
+    public async Task Responses_FunctionArgsDelta_FallbackRulesPreserved()
+    {
+        // The shared ChunkStreamState.ResolveToolCallId keeps the Responses
+        // fallback rules: remembered call id wins; a delta with no wire
+        // output_index is "0"; a delta at an index with no preceding added
+        // event falls back to the bare index (not tc{index}).
+        var handler = new StubHttpMessageHandler(_ => Sse(
+            """{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_9","name":"bash"}}""",
+            """{"type":"response.function_call_arguments.delta","output_index":0,"delta":"A"}""",
+            """{"type":"response.function_call_arguments.delta","delta":"B"}""",
+            """{"type":"response.function_call_arguments.delta","output_index":7,"delta":"C"}""",
+            "[DONE]"));
+
+        var client = new OpenAILlmClient(
+            new HttpClient(handler),
+            new OpenAIConfig { ForceResponsesApi = true },
+            new TestAuthResolver(),
+            NullLogger<OpenAILlmClient>.Instance);
+
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
+            "o4-mini", [LlmUserMessage.Text("hello")], "", [])));
+
+        var deltas = events.OfType<ToolCallDeltaEvent>().ToList();
+        await Assert.That(deltas.Count).IsEqualTo(3);
+        // Remembered wire call id from output_item.added.
+        await Assert.That(deltas[0].Id).IsEqualTo("call_9");
+        // Missing wire output_index -> "0".
+        await Assert.That(deltas[1].Id).IsEqualTo("0");
+        // Index seen, but no added event remembered it -> bare index.
+        await Assert.That(deltas[2].Id).IsEqualTo("7");
+    }
+
+    [Test]
     public async Task Ollama_ToolCallWithoutId_FallsBackToPositionalId()
     {
         // #203 B8, NDJSON flavour: no wire id → positional tc{index},
         // counted on the stream state (warned once per stream in logs).
-        HttpResponseMessage responder(HttpRequestMessage _)
-        {
-            string ndjson =
-                """{"message":{"tool_calls":[{"function":{"name":"ls","arguments":"{}"}}]},"done":false}""" + "\n" +
-                """{"done":true,"prompt_eval_count":5,"eval_count":9}""" + "\n";
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(ndjson, Encoding.UTF8, "application/x-ndjson")
-            };
-        }
-
-        var client = new OllamaLlmClient(
-            new HttpClient(new StubHttpMessageHandler(responder)),
-            new OllamaConfig(),
-            NullLogger<OllamaLlmClient>.Instance);
-
-        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
-            "llama3", [LlmUserMessage.Text("hello")], "", [])));
+        var events = await StreamOllamaAsync(
+            """{"message":{"tool_calls":[{"function":{"name":"ls","arguments":"{}"}}]},"done":false}""" + "\n" +
+            """{"done":true,"prompt_eval_count":5,"eval_count":9}""" + "\n");
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
         await Assert.That(starts.Count).IsEqualTo(1);

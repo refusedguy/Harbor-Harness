@@ -1,11 +1,13 @@
-using Harbor.Tools.Builtin;
+using CSharpFunctionalExtensions;
+using Harbor.Application.Configuration;
 
-namespace Harbor.Tools.Builtin.Tests;
+namespace Harbor.Config.Tests;
 
 /// <summary>
-///     #2680 F172. <see cref="ExperimentalFlagPolicy" /> is a pure leaf: these
-///     tests pin the canonical HARBOR_EXPERIMENTAL_* name and the opt-in value
-///     resolution without reading or setting any process environment variable.
+///     #2680 F172 / #3397. <see cref="ExperimentalFlagPolicy" /> is a pure
+///     policy: these tests pin the canonical HARBOR_EXPERIMENTAL_* name and the
+///     opt-in value resolution without reading or setting any process
+///     environment variable.
 /// </summary>
 public class ExperimentalFlagPolicyTests
 {
@@ -88,5 +90,33 @@ public class ExperimentalFlagPolicyTests
 
         await Assert.That(validOff && !off).IsTrue();
         await Assert.That(validNonsense).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluateReturnsTheDecisionForAWellFormedFlag()
+    {
+        Result<ExperimentalFlagDecision> result = ExperimentalFlagPolicy.Evaluate("AGENT_MANAGER", "yes");
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(ExperimentalFlagDecision.Enabled);
+    }
+
+    [Test]
+    public async Task EvaluateRejectsAMalformedFlagName()
+    {
+        Result<ExperimentalFlagDecision> result = ExperimentalFlagPolicy.Evaluate("bad-name", "1");
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("bad-name");
+    }
+
+    [Test]
+    public async Task EvaluateRejectsAnUnrecognisedValue()
+    {
+        Result<ExperimentalFlagDecision> result = ExperimentalFlagPolicy.Evaluate("AGENT_MANAGER", "perhaps");
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("AGENT_MANAGER");
+        await Assert.That(result.Error).Contains("perhaps");
     }
 }

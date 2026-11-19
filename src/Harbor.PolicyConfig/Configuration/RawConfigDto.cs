@@ -84,6 +84,16 @@ public sealed class RawConfigDto
     [JsonPropertyName("plugins")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, JsonElement>? Plugins { get; set; }
+
+    /// <summary>
+    ///     Experimental feature switches (#3397), keyed by flag name with their
+    ///     raw values. A flag is evaluated by
+    ///     <see cref="ExperimentalFlagPolicy.Evaluate" /> before the feature is
+    ///     enabled; an absent section means no experimental flag is set.
+    /// </summary>
+    [JsonPropertyName("experimental")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? Experimental { get; set; }
 }
 
 /// <summary>

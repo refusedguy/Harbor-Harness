@@ -89,6 +89,15 @@ public sealed class HarborConfig
     /// </remarks>
     public Dictionary<string, JsonElement> Plugins { get; set; } = new();
 
+    /// <summary>
+    ///     Experimental feature flags, keyed by flag name (<c>AGENT_MANAGER</c>,
+    ///     etc.) with the raw switch value the user configured (#3397). A flag
+    ///     is enabled only when <see cref="ExperimentalFlagPolicy.Evaluate" />
+    ///     resolves it to <see cref="ExperimentalFlagDecision.Enabled" />;
+    ///     an unrecognised value fails closed.
+    /// </summary>
+    public Dictionary<string, string> Experimental { get; set; } = new();
+
     /// <summary>Effective provider ID.</summary>
     [JsonIgnore]
     public string Provider
@@ -298,6 +307,31 @@ public sealed class HarborConfig
                 .ToString();
 
     /// <summary>
+    ///     Resolve an experimental flag through the policy gate (#3397), before
+    ///     any feature reads it. A flag that was not configured, or that has a
+    ///     blank value, is
+    ///     <see cref="ExperimentalFlagDecision.Disabled" />; a malformed name or
+    ///     value is reported as a failure by
+    ///     <see cref="ExperimentalFlagPolicy.Evaluate" />.
+    /// </summary>
+    /// <param name="flag">The flag name, e.g. <c>AGENT_MANAGER</c>.</param>
+    public Result<ExperimentalFlagDecision> EvaluateExperimentalFlag(string flag)
+    {
+        _ = Experimental.TryGetValue(flag, out string? raw);
+        return ExperimentalFlagPolicy.Evaluate(flag, raw);
+    }
+
+    /// <summary>
+    ///     Whether an experimental feature may be enabled. Fails closed: only an
+    ///     explicitly enabled, well-formed flag returns <see langword="true" />.
+    /// </summary>
+    /// <param name="flag">The flag name, e.g. <c>AGENT_MANAGER</c>.</param>
+    public bool IsExperimentalEnabled(string flag) =>
+        EvaluateExperimentalFlag(flag)
+            .GetValueOrDefault(ExperimentalFlagDecision.Disabled)
+            is ExperimentalFlagDecision.Enabled;
+
+    /// <summary>
     ///     Returns a default <see cref="HarborConfig" /> (kilocode provider,
     ///     tencent/hy3:free model, code agent, ansi TUI, jsonl storage).
     /// </summary>
@@ -352,6 +386,9 @@ public sealed class HarborConfig
         // setting, and dropping it would be the host losing data it never
         // owned.
         Plugins = Plugins.Count == 0 ? null : Plugins,
+        // #3397: keep the experimental switches empty by default so a config
+        // that never touched them serialises byte-for-byte as before.
+        Experimental = Experimental.Count == 0 ? null : new Dictionary<string, string>(Experimental),
     };
 
     /// <summary>
@@ -391,6 +428,16 @@ public sealed class HarborConfig
         foreach (var entry in Plugins)
         {
             sections.Add(ValidatePluginId(entry.Key));
+        }
+
+        // #3397: an experimental flag is gated through Evaluate BEFORE a
+        // feature can enable it. Every configured flag is evaluated here, so a
+        // malformed name or a typo in the value fails config validation instead
+        // of silently leaving an unfinished feature half-enabled.
+        foreach (string flag in Experimental.Keys)
+        {
+            _ = Experimental.TryGetValue(flag, out string? raw);
+            sections.Add(ExperimentalFlagPolicy.Evaluate(flag, raw).Map(static _ => true));
         }
 
         return Result.Combine(sections).Map(() => this);

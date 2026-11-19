@@ -3,7 +3,13 @@
 // flag-name validation and value resolution but never reads the process
 // environment, so it stays testable, AOT-safe and golden-neutral. Callers pass
 // in the raw value they obtained from configuration or the environment.
-namespace Harbor.Tools.Builtin;
+//
+// #3397: the policy moved here from Harbor.Tools.Builtin so HarborConfig — the
+// component that decides whether an experimental feature is on — can call it
+// without an Application -> Infrastructure project reference (the layer matrix
+// forbids that edge). Evaluate is the gate: the config resolves every flag
+// through it BEFORE a feature is enabled, and an invalid flag fails closed.
+namespace Harbor.Application.Configuration;
 
 /// <summary>
 ///     Result of resolving an experimental-flag switch value.
@@ -126,6 +132,33 @@ public static class ExperimentalFlagPolicy
         ExperimentalFlagDecision decision = Classify(raw);
         enabled = decision is ExperimentalFlagDecision.Enabled;
         return decision is not ExperimentalFlagDecision.Invalid;
+    }
+
+    /// <summary>
+    ///     Evaluate a configured experimental flag before a feature is enabled
+    ///     (#3397). This is the gate <see cref="HarborConfig" /> calls: a
+    ///     malformed name or an unrecognised value is a failure, so a typo
+    ///     cannot silently turn on an unfinished feature. A blank or absent
+    ///     value is a valid <see cref="ExperimentalFlagDecision.Disabled" />.
+    /// </summary>
+    /// <param name="flag">The flag name, e.g. <c>AGENT_MANAGER</c>.</param>
+    /// <param name="raw">The raw switch value from configuration, or null when unset.</param>
+    /// <returns>The decision, or a failure describing why the flag cannot be evaluated.</returns>
+    public static Result<ExperimentalFlagDecision> Evaluate(string? flag, string? raw)
+    {
+        if (!IsValidFlagName(flag))
+        {
+            return Result.Failure<ExperimentalFlagDecision>(
+                $"experimental.{flag}: flag name must be an uppercase identifier "
+                + "(letters, digits and underscores, starting with a letter)");
+        }
+
+        ExperimentalFlagDecision decision = Classify(raw);
+        return decision is ExperimentalFlagDecision.Invalid
+            ? Result.Failure<ExperimentalFlagDecision>(
+                $"experimental.{flag}: unrecognised value '{raw}'; "
+                + "expected 1/true/yes/on or 0/false/no/off")
+            : Result.Success(decision);
     }
 
     private static bool Matches(string value, string first, string second, string third, string fourth) =>

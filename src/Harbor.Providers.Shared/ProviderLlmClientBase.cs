@@ -23,12 +23,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Harbor.Providers.Internal;
 
-// Public because the three public clients derive from it (CS0060). The clients
+// Public because the four public clients derive from it (CS0060). The clients
 // declare ILlmClient themselves; this base deliberately does not, so each
 // provider stays a direct seam implementer in the generated seam graph.
 public abstract class ProviderLlmClientBase
 {
-    private readonly IAuthResolver _auth;
+    // Null only for keyless clients (Ollama talks to a local daemon that needs
+    // no API key). Every keyed client passes a resolver and keeps the exact
+    // auth-failure shape below.
+    private readonly IAuthResolver? _auth;
     private readonly HttpClient _http;
     private readonly ILogger _logger;
 
@@ -36,6 +39,15 @@ public abstract class ProviderLlmClientBase
     {
         _http = http;
         _auth = auth;
+        _logger = logger;
+        ProviderId = providerId;
+    }
+
+    /// <summary>Constructor for keyless clients — no auth resolution is attempted (#3767).</summary>
+    protected ProviderLlmClientBase(HttpClient http, ILogger logger, ProviderId providerId)
+    {
+        _http = http;
+        _auth = null;
         _logger = logger;
         ProviderId = providerId;
     }
@@ -73,30 +85,54 @@ public abstract class ProviderLlmClientBase
             var activity = StartStreamActivity(request);
             try
             {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
-                if (apiKeyResult.IsFailure)
+                string apiKey = string.Empty;
+                if (_auth is not null)
                 {
-                    await writer.WriteAsync(
-                        new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth),
-                        cancellationToken).ConfigureAwait(false);
-                    return;
+                    var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
+                    if (apiKeyResult.IsFailure)
+                    {
+                        await writer.WriteAsync(
+                            new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth),
+                            cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+
+                    apiKey = apiKeyResult.Value;
                 }
 
-                var httpRequest = BuildRequest(request, apiKeyResult.Value);
+                var httpRequest = BuildRequest(request, apiKey);
 
                 // §OOP-001 (RESOLVED): per-StreamAsync-call parsing state — the
                 // tool-call id map and malformed-chunk counters live per call,
                 // never on this singleton client.
                 var chunkState = new ChunkStreamState();
 
-                await SsePump.RunSseAsync(
-                    writer, _http, httpRequest,
-                    (data, token) => WriteEventsAsync(data, writer, chunkState, request, activity, token),
-                    ApiErrorLabel, _logger, cancellationToken,
-                    onResponse: ResponseHook(activity),
-                    mapSendFailure: SendFailureHook(activity, cancellationToken),
-                    onTransportError: TransportErrorHook(activity),
-                    onComplete: () => OnStreamComplete(chunkState, activity)).ConfigureAwait(false);
+                if (RawLineMode)
+                {
+                    // #3767: Ollama's NDJSON has no `data:` prefix and no
+                    // [DONE] sentinel — every line is a payload and EOF ends
+                    // the stream. One adapter delegate per stream (not per
+                    // line) keeps the zero per-line allocation guarantee.
+                    await SsePump.RunAsync(
+                        writer, _http, httpRequest,
+                        (line, token) => WriteRawLineAsync(line, writer, chunkState, request, activity, token),
+                        ApiErrorLabel, _logger, cancellationToken,
+                        onResponse: ResponseHook(activity),
+                        mapSendFailure: SendFailureHook(activity, cancellationToken),
+                        onTransportError: TransportErrorHook(activity),
+                        onComplete: () => OnStreamComplete(chunkState, activity)).ConfigureAwait(false);
+                }
+                else
+                {
+                    await SsePump.RunSseAsync(
+                        writer, _http, httpRequest,
+                        (data, token) => WriteEventsAsync(data, writer, chunkState, request, activity, token),
+                        ApiErrorLabel, _logger, cancellationToken,
+                        onResponse: ResponseHook(activity),
+                        mapSendFailure: SendFailureHook(activity, cancellationToken),
+                        onTransportError: TransportErrorHook(activity),
+                        onComplete: () => OnStreamComplete(chunkState, activity)).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -153,6 +189,26 @@ public abstract class ProviderLlmClientBase
 
     /// <summary>Provider label used in non-success HTTP error messages.</summary>
     protected abstract string ApiErrorLabel { get; }
+
+    /// <summary>
+    ///     Selects the raw-line pump (<see cref="SsePump.RunAsync" />) for
+    ///     NDJSON dialects whose whole line is the payload and whose stream
+    ///     ends at EOF. SSE clients leave this false.
+    /// </summary>
+    protected virtual bool RawLineMode => false;
+
+    /// <summary>Adapts the raw-line handler to the shared event writer contract.</summary>
+    private async Task<bool> WriteRawLineAsync(
+        string line,
+        ChannelWriter<LlmEvent> writer,
+        ChunkStreamState chunkState,
+        LlmRequest request,
+        Activity? activity,
+        CancellationToken ct)
+    {
+        await WriteEventsAsync(line, writer, chunkState, request, activity, ct).ConfigureAwait(false);
+        return true; // NDJSON has no sentinel; EOF is the graceful end.
+    }
 
     // --- optional hooks: defaults reproduce the non-traced clients exactly ---
 

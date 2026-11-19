@@ -157,4 +157,84 @@ public class VimComposerModeTests
         _ = vim.HandleKey(Char('$'), composer);
         await Assert.That(composer.Buffer.Cursor).IsEqualTo(7);
     }
+
+    [Test]
+    public async Task KeyContext_EscEntersNormal_AndDisabledIsPurePassThrough()
+    {
+        // Disabled: no chords are matched, not even Escape.
+        (var vim, var composer) = New(enabled: false);
+        _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
+        await Assert.That(vim.NormalMode).IsFalse();
+        _ = vim.HandleKey(Char('h'), composer);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("h");
+
+        // Enabled: Escape enters NORMAL, and an unbound letter still types through.
+        (vim, composer) = New(enabled: true);
+        _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
+        await Assert.That(vim.NormalMode).IsTrue();
+        _ = vim.HandleKey(Char('X'), composer);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("X");
+    }
+
+    [Test]
+    public async Task KeyContext_NormalChords_DriveEveryBoundPrimitive()
+    {
+        // #3437: every normal chord resolves through the composer.vim KeyContext.
+        // Walk each action family (motion, line jump, delete, history, insert-exit)
+        // and assert the observable buffer/story result.
+        (var vim, var composer) = New(enabled: true);
+        _ = composer.Buffer.InsertText("one two");
+        _ = composer.Buffer.MoveToLineStart(); // caret 0
+        _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
+        await Assert.That(vim.NormalMode).IsTrue();
+
+        // motions: w/b/h/l move the caret, text untouched
+        _ = vim.HandleKey(Char('w'), composer); // 0 -> 3 (past "one")
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(3);
+        _ = vim.HandleKey(Char('w'), composer); // 3 -> 7 (past "two")
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(7);
+        _ = vim.HandleKey(Char('b'), composer); // 7 -> 4 (start of "two")
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(4);
+        _ = vim.HandleKey(Char('h'), composer); // 4 -> 3
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(3);
+        _ = vim.HandleKey(Char('l'), composer); // 3 -> 4
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(4);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one two");
+
+        // line jumps: 0 / $
+        _ = vim.HandleKey(Char('0'), composer); // -> 0 (start of current line)
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(0);
+        _ = vim.HandleKey(Char('$'), composer); // -> 7
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(7);
+
+        // delete: x removes the rune under the caret
+        _ = vim.HandleKey(Char('h'), composer); // 7 -> 6 (on 'o' of "two")
+        _ = vim.HandleKey(Char('x'), composer);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one tw");
+
+        // insert-exit chords: i / a / A / I all leave NORMAL
+        _ = vim.HandleKey(Char('i'), composer);
+        await Assert.That(vim.NormalMode).IsFalse();
+        _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
+        _ = vim.HandleKey(Char('a'), composer);
+        await Assert.That(vim.NormalMode).IsFalse();
+        _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
+        _ = vim.HandleKey(Char('A'), composer);
+        await Assert.That(vim.NormalMode).IsFalse();
+        _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
+        _ = vim.HandleKey(Char('I'), composer);
+        await Assert.That(vim.NormalMode).IsFalse();
+
+        // history: j/k delegate to the composer's own Up/Down path
+        (vim, composer) = New(enabled: true);
+        composer.History.Push("older draft");
+        composer.History.Push("newest draft");
+        _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
+        _ = vim.HandleKey(Char('k'), composer); // recall previous
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("newest draft");
+        _ = vim.HandleKey(Char('k'), composer);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("older draft");
+        _ = vim.HandleKey(Char('j'), composer);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("newest draft");
+    }
 }

@@ -210,16 +210,17 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(33)
+        await Assert.That(links.Length).IsEqualTo(34)
             .Because(
-                "33 `<Compile Include>` link items: the original 25 plus three for #3762's "
+                "34 `<Compile Include>` link items: the original 25 plus three for #3762's "
                 + "ProviderToolCallEmitter.cs (the one Start/Delta policy for the three "
                 + "tool-call-emitting providers), two for #3773's ProviderHttp.cs and "
-                + "ProviderAuth.cs into Anthropic, and three for #3786's ProviderPayloadWriter.cs "
-                + "(the tools[]/role+content shapes shared by Ollama, OpenAI and "
-                + "OpenAiCompatible). The count stays exact so a dropped link still fails here. "
-                + "The original 25 were: the #1499 ProviderLlmClientBase.cs into the "
-                + "three native providers (Anthropic, OpenAI, OpenAiCompatible), SsePump and "
+                + "ProviderAuth.cs into Anthropic, one for #3767's ProviderLlmClientBase.cs into "
+                + "Ollama, and three for #3786's ProviderPayloadWriter.cs (the tools[]/role+content "
+                + "shapes shared by Ollama, OpenAI and OpenAiCompatible). The count stays exact so "
+                + "a dropped link still fails here. The original 25 were: the #1499 "
+                + "ProviderLlmClientBase.cs into the "
+                + "four native providers (Anthropic, Ollama, OpenAI, OpenAiCompatible), SsePump and "
                 + "Utf8JsonReaderExtensions into four "
                 + "providers, OpenAiWire, OpenAiImageContent and ProviderArguments into OpenAI + "
                 + "OpenAiCompatible, and four files out of Harbor.Storage.Shared into the Jsonl and "
@@ -238,7 +239,8 @@ public sealed class SharedSourceLinkRules
                 + "Jsonl and Sqlite stores, the one domain ↔ persist-form projection for content "
                 + "parts the two backends used to hand-maintain separately — Memory is not a "
                 + "consumer (it links SessionStoreErrors alone and does not compile its own "
-                + "message-codec read path). Two more are #3773's: ProviderHttp.cs and ProviderAuth.cs into Anthropic, the minimal wire-envelope and raw-header primitives that replaced the hand-assembled HttpRequestMessage and TryAddWithoutValidation calls in AnthropicRequestBuilder.");
+                + "message-codec read path). Two more are #3773's: ProviderHttp.cs and ProviderAuth.cs into Anthropic, the minimal wire-envelope and raw-header primitives that replaced the hand-assembled HttpRequestMessage and TryAddWithoutValidation calls in AnthropicRequestBuilder. "
+                + "One more is #3767's: ProviderLlmClientBase.cs into Ollama, the last skeleton client to inherit the template method.");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 

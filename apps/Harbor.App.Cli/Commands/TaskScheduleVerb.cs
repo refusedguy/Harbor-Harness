@@ -11,17 +11,21 @@ namespace Harbor.App.Cli.Commands;
 /// <summary>CAF handler for the <c>harbor task</c> verb (#2674 G11).</summary>
 internal static class CafTaskCommands
 {
-    /// <summary>Schedule, list, remove and probe cron-driven tasks.</summary>
+    /// <summary>Schedule, list, remove, probe cron-driven tasks and fire a webhook delivery.</summary>
     /// <param name="cron">Five-field cron expression for 'schedule'.</param>
     /// <param name="prompt">Prompt to fire for 'schedule'.</param>
-    /// <param name="name">Stable task name for 'schedule'.</param>
+    /// <param name="name">Stable task name for 'schedule'/'fire'.</param>
     /// <param name="webhook">Optional https webhook target for 'schedule'.</param>
-    /// <param name="args">Subcommand tail: schedule, list, remove or next.</param>
+    /// <param name="payload">Raw webhook body for 'fire'.</param>
+    /// <param name="signature">Signature header for 'fire'.</param>
+    /// <param name="args">Subcommand tail: schedule, list, remove, next or fire.</param>
     public static Task<int> TaskVerb(
         string? cron = null,
         string? prompt = null,
         string? name = null,
         string? webhook = null,
+        string? payload = null,
+        string? signature = null,
         [Argument] params string[] args)
     {
         // CAF binds dash-led tokens to the typed parameters above. Re-appending
@@ -31,6 +35,8 @@ internal static class CafTaskCommands
         if (prompt is not null) { tail.Add("--prompt"); tail.Add(prompt); }
         if (name is not null) { tail.Add("--name"); tail.Add(name); }
         if (webhook is not null) { tail.Add("--webhook"); tail.Add(webhook); }
+        if (payload is not null) { tail.Add("--payload"); tail.Add(payload); }
+        if (signature is not null) { tail.Add("--signature"); tail.Add(signature); }
         return Task.FromResult(TaskScheduleVerb.Run([.. tail]));
     }
 }
@@ -41,7 +47,9 @@ internal sealed record TaskRequest(
     string Name,
     string Cron,
     string Prompt,
-    string? Webhook);
+    string? Webhook,
+    string? Payload = null,
+    string? Signature = null);
 
 /// <summary>
 ///     Pure argument parsing for <c>harbor task</c>. No clock, no file and no
@@ -56,7 +64,8 @@ internal static class TaskArgs
         "usage: harbor task schedule --cron '<minute hour day month weekday>' --prompt TEXT [--name NAME] [--webhook URL]\n" +
         "       harbor task list\n" +
         "       harbor task remove <name>\n" +
-        "       harbor task next <name>";
+        "       harbor task next <name>\n" +
+        "       harbor task fire <name> --payload TEXT --signature HEADER";
 
     internal static Result<TaskRequest> Parse(string[] args)
     {
@@ -64,7 +73,7 @@ internal static class TaskArgs
             return Result.Failure<TaskRequest>(Usage);
 
         string action = args[0];
-        if (action is not ("schedule" or "list" or "remove" or "next"))
+        if (action is not ("schedule" or "list" or "remove" or "next" or "fire"))
             return Result.Failure<TaskRequest>($"task: unknown subcommand '{args[0]}'. {Usage}");
 
         var flags = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -74,7 +83,7 @@ internal static class TaskArgs
             string token = args[i];
             if (token.StartsWith("--", StringComparison.Ordinal))
             {
-                if (token is not ("--cron" or "--prompt" or "--name" or "--webhook"))
+                if (token is not ("--cron" or "--prompt" or "--name" or "--webhook" or "--payload" or "--signature"))
                     return Result.Failure<TaskRequest>($"task: unknown flag '{token}'. {Usage}");
                 if (flags.ContainsKey(token))
                     return Result.Failure<TaskRequest>($"task: duplicate flag '{token}'.");
@@ -90,10 +99,14 @@ internal static class TaskArgs
 
         bool isSchedule = action == "schedule";
         bool isList = action == "list";
+        bool isFire = action == "fire";
         foreach (string flag in flags.Keys)
         {
-            if (!isSchedule)
-                return Result.Failure<TaskRequest>($"task {action}: flag '{flag}' is only valid for 'schedule'.");
+            bool allowed = isSchedule
+                ? flag is "--cron" or "--prompt" or "--name" or "--webhook"
+                : isFire && (flag is "--name" or "--payload" or "--signature");
+            if (!allowed)
+                return Result.Failure<TaskRequest>($"task {action}: flag '{flag}' is not valid for '{action}'.");
         }
 
         int expectedPositional = isSchedule || isList ? 0 : 1;
@@ -144,6 +157,22 @@ internal static class TaskArgs
             return Result.Success(new TaskRequest(action, name, cron, prompt, webhook));
         }
 
+        if (isFire)
+        {
+            string? payload = flags.GetValueOrDefault("--payload");
+            if (string.IsNullOrEmpty(payload))
+                return Result.Failure<TaskRequest>("task fire: --payload is required.");
+            string? signature = flags.GetValueOrDefault("--signature");
+            if (string.IsNullOrEmpty(signature))
+                return Result.Failure<TaskRequest>("task fire: --signature is required.");
+            string fireName = positional[0];
+            Result fireNameValidation = ValidateName(fireName);
+            if (fireNameValidation.IsFailure)
+                return fireNameValidation.ConvertFailure<TaskRequest>();
+            return Result.Success(new TaskRequest(
+                action, fireName, string.Empty, string.Empty, null, payload, signature));
+        }
+
         string targetName = positional[0];
         Result targetValidation = ValidateName(targetName);
         if (targetValidation.IsFailure)
@@ -186,132 +215,6 @@ internal static class TaskArgs
         }
         return Result.Success();
     }
-}
-
-/// <summary>
-///     A five-field cron expression (minute hour day-of-month month weekday)
-///     with '*', single values, lists, ranges and steps. Pure: no clock is read
-///     inside <see cref="Parse" />, and <see cref="NextAfter" /> is given its
-///     reference time explicitly.
-/// </summary>
-internal sealed class CronExpression
-{
-    private readonly bool[] _minutes = new bool[60];
-    private readonly bool[] _hours = new bool[24];
-    private readonly bool[] _days = new bool[31];
-    private readonly bool[] _months = new bool[12];
-    private readonly bool[] _weekdays = new bool[7];
-
-    private CronExpression()
-    {
-    }
-
-    internal static Result<CronExpression> Parse(string expression)
-    {
-        if (string.IsNullOrWhiteSpace(expression))
-            return Result.Failure<CronExpression>("cron: empty expression.");
-
-        string[] fields = expression.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (fields.Length != 5)
-            return Result.Failure<CronExpression>("cron: expected 5 fields (minute hour day month weekday).");
-
-        var cron = new CronExpression();
-        Result r = Fill(fields[0], 0, 59, cron._minutes, "minute", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[1], 0, 23, cron._hours, "hour", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[2], 1, 31, cron._days, "day", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[3], 1, 12, cron._months, "month", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[4], 0, 7, cron._weekdays, "weekday", true);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        return Result.Success(cron);
-    }
-
-    /// <summary>First matching minute strictly after <paramref name="from"/>, or null within four years.</summary>
-    internal DateTimeOffset? NextAfter(DateTimeOffset from)
-    {
-        var candidate = new DateTimeOffset(from.Year, from.Month, from.Day, from.Hour, from.Minute, 0, from.Offset)
-            .AddMinutes(1);
-        DateTimeOffset limit = candidate.AddYears(4);
-        while (candidate <= limit)
-        {
-            if (_months[candidate.Month - 1]
-                && _days[candidate.Day - 1]
-                && _weekdays[(int)candidate.DayOfWeek]
-                && _hours[candidate.Hour]
-                && _minutes[candidate.Minute])
-            {
-                return candidate;
-            }
-            candidate = candidate.AddMinutes(1);
-        }
-        return null;
-    }
-
-    private static Result Fill(string text, int min, int max, bool[] target, string fieldName, bool normalizeSeven)
-    {
-        foreach (string part in text.Split(','))
-        {
-            if (part.Length == 0)
-                return Result.Failure($"cron {fieldName}: empty list element.");
-
-            // Split with a count of two so a step is the only trailing piece.
-            // A counted split also keeps the cron grammar off the model-reference
-            // cut inventory (issue #678).
-            string[] halves = part.Split(new[] { '/' }, 2, StringSplitOptions.None);
-            string body = halves[0];
-            int step = 1;
-            if (halves.Length == 2)
-            {
-                if (!int.TryParse(halves[1], NumberStyles.None, CultureInfo.InvariantCulture, out step)
-                    || step < 1)
-                {
-                    return Result.Failure($"cron {fieldName}: invalid step '{halves[1]}'.");
-                }
-            }
-            if (body.Length == 0)
-                return Result.Failure($"cron {fieldName}: empty range.");
-
-            Result<(int Start, int End)> range = ParseRange(body, min, max, fieldName);
-            Result<bool> applied = range.Bind(r =>
-            {
-                if (r.Start < min || r.End > max || r.Start > r.End)
-                    return Result.Failure<bool>($"cron {fieldName}: value outside {min}..{max}.");
-
-                for (int value = r.Start; value <= r.End; value += step)
-                {
-                    int normalized = normalizeSeven && value == 7 ? 0 : value;
-                    target[normalized - min] = true;
-                }
-                return Result.Success(true);
-            });
-            if (applied.IsFailure)
-                return applied.ConvertFailure();
-        }
-        return Result.Success();
-    }
-
-    private static Result<(int Start, int End)> ParseRange(string body, int min, int max, string fieldName)
-    {
-        if (body == "*")
-            return Result.Success((Start: min, End: max));
-
-        int dash = body.IndexOf('-');
-        if (dash >= 0)
-        {
-            Result<int> a = ParseValue(body[..dash], fieldName);
-            Result<int> b = ParseValue(body[(dash + 1)..], fieldName);
-            return a.Bind(start => b.Map(end => (Start: start, End: end)));
-        }
-        return ParseValue(body, fieldName).Map(v => (Start: v, End: v));
-    }
-
-    private static Result<int> ParseValue(string text, string fieldName) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int value)
-            ? Result.Success(value)
-            : Result.Failure<int>($"cron {fieldName}: '{text}' is not a number.");
 }
 
 /// <summary>One persisted scheduled task.</summary>
@@ -468,11 +371,12 @@ internal static class WebhookSignature
 internal static class TaskScheduleVerb
 {
     /// <summary>
-    ///     Resolves a schedule argument to its next fire instant (#3114). A
-    ///     relative delay ("30s", "2h") or an absolute ISO 8601 timestamp is
+    ///     Resolves a schedule argument to its next fire instant (#3114, #3395).
+    ///     A relative delay ("30s", "2h") or an absolute ISO 8601 timestamp is
     ///     handled by <see cref="WakeupScheduleParser" /> through
-    ///     <see cref="WakeupSchedule.ComputeAt" />; anything else stays a cron
-    ///     expression and uses <see cref="CronExpression.NextAfter" />.
+    ///     <see cref="WakeupSchedule.ComputeAt" />; anything else is a cron
+    ///     expression parsed by <see cref="CronScheduleParser.Parse" /> and
+    ///     advanced with <see cref="CronSchedule.NextOccurrence" />.
     ///     Internal for the schedule behavior test (InternalsVisibleTo).
     /// </summary>
     internal static Result<DateTimeOffset?> ResolveNextFire(string schedule, DateTimeOffset now)
@@ -481,10 +385,42 @@ internal static class TaskScheduleVerb
         if (wakeup is not null)
             return Result.Success<DateTimeOffset?>(wakeup.Value.ComputeAt(now));
 
-        return CronExpression.Parse(schedule).Map(cron => cron.NextAfter(now));
+        CronSchedule? cron = CronScheduleParser.Parse(schedule);
+        if (cron is null)
+            return Result.Failure<DateTimeOffset?>($"cron: '{schedule}' is not a valid five-field expression.");
+        return Result.Success<DateTimeOffset?>(cron.NextOccurrence(now));
     }
 
-    internal static int Run(string[] args)
+    /// <summary>
+    ///     Check an inbound webhook proof before a task is launched (#3380).
+    ///     The shared secret is a deployment setting, not part of the delivery,
+    ///     so an unset secret fails closed: no delivery can be authenticated
+    ///     without one. The constant-time comparison lives in
+    ///     <see cref="WebhookSignature.Verify" />; this gate only decides whether
+    ///     the proof is usable and turns a mismatch into a diagnosable failure.
+    /// </summary>
+    internal static Result VerifyWebhookDelivery(string? secret, byte[] payload, string? header)
+    {
+        if (string.IsNullOrEmpty(secret))
+            return Result.Failure("task fire: webhook secret is not configured.");
+        if (string.IsNullOrEmpty(header))
+            return Result.Failure("task fire: webhook signature header is missing.");
+        return WebhookSignature.Verify(secret, payload, header)
+            ? Result.Success()
+            : Result.Failure("task fire: invalid webhook signature.");
+    }
+
+    internal static int Run(string[] args) => Run(
+        args,
+        TaskStore.DefaultPath,
+        Environment.GetEnvironmentVariable("HARBOR_WEBHOOK_SECRET"));
+
+    /// <summary>
+    ///     Dispatch overload with an explicit store path and webhook secret.
+    ///     The behavior test uses it to drive a real delivery through a temp
+    ///     store without touching the user's tasks.json or the process env.
+    /// </summary>
+    internal static int Run(string[] args, string path, string? webhookSecret)
     {
         Result<TaskRequest> parsed = TaskArgs.Parse(args);
         if (parsed.IsFailure)
@@ -494,7 +430,6 @@ internal static class TaskScheduleVerb
         }
 
         TaskRequest request = parsed.Value;
-        string path = TaskStore.DefaultPath;
         Result<IReadOnlyList<ScheduledTask>> loaded = TaskStore.Load(path);
         if (loaded.IsFailure)
         {
@@ -552,6 +487,23 @@ internal static class TaskScheduleVerb
         {
             Console.Error.WriteLine($"task '{request.Name}' not found.");
             return 1;
+        }
+
+        if (request.Action == "fire")
+        {
+            // #3380: an inbound webhook never launches its task until the HMAC
+            // proof over the exact body has been checked. Verify against the
+            // raw delivery bytes, before any dispatch side effect.
+            byte[] payload = Encoding.UTF8.GetBytes(request.Payload!);
+            Result proof = VerifyWebhookDelivery(webhookSecret, payload, request.Signature);
+            if (proof.IsFailure)
+            {
+                Console.Error.WriteLine(proof.Error);
+                return 1;
+            }
+
+            Console.Out.WriteLine($"Fired '{request.Name}': {tasks[index].Prompt}");
+            return 0;
         }
 
         if (request.Action == "remove")
