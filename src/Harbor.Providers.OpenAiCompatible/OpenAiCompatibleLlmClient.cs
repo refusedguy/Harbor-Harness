@@ -159,23 +159,7 @@ public sealed class OpenAiCompatibleLlmClient : ProviderLlmClientBase, ILlmClien
             writer.WriteNumber("top_p", request.TopP.Value);
         }
 
-        if (request.Tools.Count > 0)
-        {
-            writer.WriteStartArray("tools");
-            foreach (var t in request.Tools)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("type", "function");
-                writer.WriteStartObject("function");
-                writer.WriteString("name", t.Name);
-                writer.WriteString("description", t.Description);
-                writer.WritePropertyName("parameters");
-                t.InputSchema.WriteTo(writer);
-                writer.WriteEndObject();
-                writer.WriteEndObject();
-            }
-            writer.WriteEndArray();
-        }
+        ProviderPayloadWriter.WriteTools(writer, request.Tools);
 
         if (request.ToolChoice is not null)
         {
@@ -255,10 +239,7 @@ public sealed class OpenAiCompatibleLlmClient : ProviderLlmClientBase, ILlmClien
 
         if (!string.IsNullOrEmpty(request.SystemPrompt))
         {
-            writer.WriteStartObject();
-            writer.WriteString("role", "system");
-            writer.WriteString("content", request.SystemPrompt);
-            writer.WriteEndObject();
+            ProviderPayloadWriter.WriteRoleAndText(writer, "system", request.SystemPrompt);
         }
 
         foreach (var msg in request.Messages)
@@ -341,10 +322,7 @@ public sealed class OpenAiCompatibleLlmClient : ProviderLlmClientBase, ILlmClien
                 break;
 
             default:
-                writer.WriteStartObject();
-                writer.WriteString("role", "user");
-                writer.WriteString("content", "");
-                writer.WriteEndObject();
+                ProviderPayloadWriter.WriteRoleAndText(writer, "user", "");
                 break;
         }
     }
