@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Tools.Builtin;
 
 namespace Harbor.Tools.Builtin.Tests;
@@ -88,5 +89,73 @@ public class SessionExportEligibilityTests
     public async Task EnvironmentVariableNameIsStable()
     {
         await Assert.That(SessionExportEligibility.EnvironmentVariableName).IsEqualTo("HARBOR_EXPORT_ENABLED");
+    }
+
+    // #3399 behavior: the eligibility policy is now the gate in front of the
+    // real session-export path. These tests drive the same Result-returning
+    // guard the CLI export verbs call, and assert that an ineligible export is
+    // refused WITHOUT ever invoking the operation that reads/writes the file.
+
+    [Test]
+    public async Task EnsureAllowed_ReturnsSuccessWhenEnabled()
+    {
+        Result result = SessionExportEligibility.EnsureAllowed("yes");
+        await Assert.That(result.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task EnsureAllowed_ReturnsFailureWithReasonWhenDisabled()
+    {
+        Result result = SessionExportEligibility.EnsureAllowed("off");
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains(SessionExportEligibility.EnvironmentVariableName);
+        await Assert.That(result.Error).Contains("disabled");
+        await Assert.That(result.Error).Contains("off");
+    }
+
+    [Test]
+    public async Task EnsureAllowed_ReturnsFailureWithReasonWhenInvalid()
+    {
+        Result result = SessionExportEligibility.EnsureAllowed("maybe");
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains(SessionExportEligibility.EnvironmentVariableName);
+        await Assert.That(result.Error).Contains("unrecognised value");
+        await Assert.That(result.Error).Contains("maybe");
+    }
+
+    [Test]
+    [Arguments("0", "disabled")]
+    [Arguments("not-a-switch", "unrecognised value")]
+    public async Task IneligibleSession_IsNotExported(string raw, string expectedReason)
+    {
+        bool exportInvoked = false;
+        Result result = await SessionExportEligibility.Guard(
+            () =>
+            {
+                exportInvoked = true;
+                return Task.FromResult(Result.Success());
+            },
+            raw);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(exportInvoked).IsFalse();
+        await Assert.That(result.Error).Contains(expectedReason);
+    }
+
+    [Test]
+    public async Task EnabledSession_IsExported()
+    {
+        bool exportInvoked = false;
+        Result result = await SessionExportEligibility.Guard(
+            () =>
+            {
+                exportInvoked = true;
+                return Task.FromResult(Result.Failure("export exploded"));
+            },
+            null);
+
+        await Assert.That(exportInvoked).IsTrue();
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).IsEqualTo("export exploded");
     }
 }
