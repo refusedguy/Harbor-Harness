@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text;
 using CSharpFunctionalExtensions;
+using Harbor.Telemetry;
 using Harbor.Tools.Builtin;
 
 namespace Harbor.App.Cli.Commands;
@@ -37,6 +39,35 @@ internal static class GhProcessRunner
         TimeSpan timeout,
         CancellationToken cancellationToken,
         bool allowEmptyStdout = false)
+    {
+        // #2674 G1: one command instrument per process launch, with git split
+        // out so forge traffic can be compared with other child processes.
+        // Timing wraps the whole call, including the bounded output drain, so
+        // the histogram measures what callers actually wait for.
+        var watch = Stopwatch.StartNew();
+        Result<string> result = await RunCoreAsync(
+            program, arguments, timeout, cancellationToken, allowEmptyStdout).ConfigureAwait(false);
+        watch.Stop();
+
+        var metrics = new OrchestrationMetrics(MeterMetrics.Instance);
+        if (string.Equals(program, "git", StringComparison.Ordinal))
+        {
+            metrics.GitCommand(program, watch.Elapsed, result.IsSuccess);
+        }
+        else
+        {
+            metrics.Command(program, watch.Elapsed, result.IsSuccess);
+        }
+
+        return result;
+    }
+
+    private static async Task<Result<string>> RunCoreAsync(
+        string program,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        CancellationToken cancellationToken,
+        bool allowEmptyStdout)
     {
         var processes = new SystemProcessProxy();
         var spec = new ProcessSpec

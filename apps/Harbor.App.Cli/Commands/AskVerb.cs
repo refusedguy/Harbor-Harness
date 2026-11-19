@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Harbor.App.Cli.Hosting;
 using Harbor.App.Cli.Repl;
+using Harbor.Telemetry;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Commands;
@@ -58,6 +59,11 @@ internal static class AskVerb
                 new TimingsReport.Phase("cleanup", TimingsReport.Elapsed(executed, stopped)),
             ], "skill freshness seeding (fire-and-forget; overlaps execution)"));
         }
+
+        // #2674 G1: every one-shot agent run reaches the canonical meter,
+        // tagged with the verb that started it and its process exit status.
+        new OrchestrationMetrics(MeterMetrics.Instance)
+            .Run("ask", Stopwatch.GetElapsedTime(started), exitCode == 0);
 
         return exitCode;
     }
