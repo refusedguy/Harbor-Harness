@@ -104,6 +104,8 @@
   href: GUARD_VACUITY.md
 - name: Guard Value Measurement
   href: GUARD_VALUE_MEASUREMENT.md
+- name: Howto Package Plugin
+  href: HOWTO_PACKAGE_PLUGIN.md
 - name: I18N String Inventory
   href: I18N_STRING_INVENTORY.md
 - name: Ide Integration Patterns
