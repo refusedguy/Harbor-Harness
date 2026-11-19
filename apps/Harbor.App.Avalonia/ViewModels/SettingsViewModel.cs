@@ -61,7 +61,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///         returns to the last-saved state without saving.
 ///     </para>
 /// </remarks>
-public sealed partial class SettingsViewModel : ObservableObject
+public sealed partial class SettingsViewModel : ObservableObject, ISettingsSearchContext
 {
     private readonly IAppConfigStore<AvaloniaConfig> _appStore;
     private readonly IAuthResolver _authResolver;
