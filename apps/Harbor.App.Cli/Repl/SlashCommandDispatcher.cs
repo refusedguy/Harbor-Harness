@@ -367,7 +367,7 @@ internal sealed class SlashCommandDispatcher
             // in the same line instead of being indistinguishable from a builtin.
             ctx.Writer("Commands: " + string.Join(
                 " ",
-                SlashCommandCatalog.All.Select(d => $"{d.Invocation}[{d.SourceLabel}]")));
+                SlashCommandCatalog.All.Select(d => $"{d.Invocation}[{CommandNameHumanizer.Humanize(d.SourceLabel)}]")));
             return Task.FromResult(Result.Success());
         });
 

@@ -3,6 +3,7 @@
 // readable name without changing the raw value the filter searches.
 
 using Harbor.Desktop.ViewModels;
+using Harbor.Ui.Framework.Commands;
 using TUnit.Assertions;
 using TUnit.Core;
 

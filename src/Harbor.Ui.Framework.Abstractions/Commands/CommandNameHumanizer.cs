@@ -1,15 +1,15 @@
 using System.Text;
 
-namespace Harbor.Desktop.ViewModels;
+namespace Harbor.Ui.Framework.Commands;
 
 /// <summary>
-///     #2682 Z09: turns a technical command identifier into a readable name.
+///     Turns a technical command identifier into a readable name.
 ///     <para>
-///         The palette's built-in rows carry keys such as <c>CodeEditorView</c>
-///         and slash commands are declared as <c>/model</c>. Neither reads well
-///         in a result row, and a plugin-supplied command may be worse still
-///         (<c>editor::GoToDefinition</c>). This helper is pure and UI-free so
-///         the mapping can be pinned without standing up a view.
+///         Palettes and help surfaces show raw keys such as <c>MaxSteps</c>,
+///         <c>CodeEditorView</c>, <c>/model</c> or <c>editor::GoToDefinition</c>
+///         as row titles or labels. Splitting separators and case transitions
+///         yields a name a human can read, while the raw id stays on the item for
+///         dispatch and search. Pure and UI-free so any host can use it.
 ///     </para>
 /// </summary>
 public static class CommandNameHumanizer

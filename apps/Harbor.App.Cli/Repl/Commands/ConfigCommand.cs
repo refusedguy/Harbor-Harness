@@ -3,6 +3,7 @@ using Harbor.Abstractions.Extensions;
 using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Commands;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -85,16 +86,16 @@ internal sealed class ConfigCommand : IReplCommand
     {
         var keyItems = new List<CommandItem>
         {
-            new("model", "Model", "LLM model id", string.Empty, "Keys"),
-            new("provider", "Provider", "LLM provider id", string.Empty, "Keys"),
-            new("agent", "Agent", "Agent name", string.Empty, "Keys"),
-            new("tui", "Tui", "TUI renderer", string.Empty, "Keys"),
-            new("storage", "Storage", "Storage backend", string.Empty, "Keys"),
+            new("model", CommandNameHumanizer.Humanize("Model"), "LLM model id", string.Empty, "Keys"),
+            new("provider", CommandNameHumanizer.Humanize("Provider"), "LLM provider id", string.Empty, "Keys"),
+            new("agent", CommandNameHumanizer.Humanize("Agent"), "Agent name", string.Empty, "Keys"),
+            new("tui", CommandNameHumanizer.Humanize("Tui"), "TUI renderer", string.Empty, "Keys"),
+            new("storage", CommandNameHumanizer.Humanize("Storage"), "Storage backend", string.Empty, "Keys"),
             // #1118: the key is the step BUDGET of a run — the number of LLM
             // turns the run may take — so the description says that, not
             // "per turn", which read as a per-message limit.
-            new("maxsteps", "MaxSteps", "Step budget per agent run", string.Empty, "Keys"),
-            new("costlimit", "CostLimit", "Cost limit per session", string.Empty, "Keys")
+            new("maxsteps", CommandNameHumanizer.Humanize("MaxSteps"), "Step budget per agent run", string.Empty, "Keys"),
+            new("costlimit", CommandNameHumanizer.Humanize("CostLimit"), "Cost limit per session", string.Empty, "Keys")
         };
 
         host.Palette.PushFrame(new PaletteFrame(

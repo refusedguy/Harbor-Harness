@@ -183,7 +183,7 @@ public class SlashCommandRegistryConsistencyTests
         string help = string.Join(" ", written);
         foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
         {
-            await Assert.That(help).Contains($"{def.Invocation}[{def.SourceLabel}]");
+            await Assert.That(help).Contains($"{def.Invocation}[{CommandNameHumanizer.Humanize(def.SourceLabel)}]");
         }
     }
 
