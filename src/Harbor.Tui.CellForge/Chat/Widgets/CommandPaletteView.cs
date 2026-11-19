@@ -65,11 +65,11 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     private const string PageAction = "page";
     private const string TypeAction = "type";
 
-    private static readonly KeyContext PaletteContext = CreatePaletteContext();
+    private static readonly EngineInput.KeyContext PaletteContext = CreatePaletteContext();
 
-    private static KeyContext CreatePaletteContext()
+    private static EngineInput.KeyContext CreatePaletteContext()
     {
-        var context = new KeyContext("palette");
+        var context = new EngineInput.KeyContext("palette");
         context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Escape), "back");
         context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Enter), "commit");
         context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Up), "move-up");
