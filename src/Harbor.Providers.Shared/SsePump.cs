@@ -325,9 +325,7 @@ internal static class SsePump
             {
                 await writer.WriteAsync(
                     mapSendFailure?.Invoke(ex, ct)
-                    ?? new ErrorEvent(
-                        $"HTTP request failed: {ex.Message}", ex.ToString(),
-                        ProviderErrors.FromException(ex, ct)), ct).ConfigureAwait(false);
+                    ?? ProviderErrors.HttpSendFailure(ex, ct), ct).ConfigureAwait(false);
                 return;
             }
 

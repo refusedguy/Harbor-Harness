@@ -63,6 +63,7 @@ Harbor.Abstractions.Events.ErrorEvent.RetryAfter.get -> System.TimeSpan?
 Harbor.Abstractions.Events.ErrorEvent.RetryAfter.init -> void
 Harbor.Abstractions.Events.ProviderErrorKind.ContextOverflow = 8 -> Harbor.Abstractions.Events.ProviderErrorKind
 static Harbor.Abstractions.Events.ProviderErrors.ClassifyResponse(System.Net.HttpStatusCode status, string? errorBody) -> Harbor.Abstractions.Events.ProviderErrorKind
+static Harbor.Abstractions.Events.ProviderErrors.HttpSendFailure(System.Exception! ex, System.Threading.CancellationToken ct) -> Harbor.Abstractions.Events.ErrorEvent!
 static Harbor.Abstractions.Events.ProviderErrors.IsContextOverflow(Harbor.Abstractions.Events.ProviderErrorKind kind) -> bool
 static Harbor.Abstractions.Events.ProviderErrors.IsContextOverflowBody(string? body) -> bool
 Harbor.Abstractions.Sessions.SessionCompactionEvent

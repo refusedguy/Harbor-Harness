@@ -66,9 +66,7 @@ public sealed class OpenAiCompatibleLlmClient : ProviderLlmClientBase, ILlmClien
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddException(ex);
-            return new ErrorEvent(
-                $"HTTP request failed: {ex.Message}", ex.ToString(),
-                ProviderErrors.FromException(ex, ct));
+            return ProviderErrors.HttpSendFailure(ex, ct);
         };
 
     protected override Action<Exception>? TransportErrorHook(Activity? activity) =>

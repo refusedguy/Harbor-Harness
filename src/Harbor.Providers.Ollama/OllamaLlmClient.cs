@@ -89,9 +89,7 @@ public sealed class OllamaLlmClient : ILlmClient
                             $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
                             $"Is `ollama serve` running? Error: {hre.Message}",
                             Kind: ProviderErrorKind.Network)
-                        : new ErrorEvent(
-                            $"HTTP request failed: {ex.Message}", ex.ToString(),
-                            ProviderErrors.FromException(ex, token)),
+                        : ProviderErrors.HttpSendFailure(ex, token),
                     onComplete: () =>
                     {
                         // #203: stream-health summary (only when noteworthy).
