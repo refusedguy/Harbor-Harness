@@ -17,7 +17,13 @@ namespace Harbor.App.Cli.Tests;
 ///     verb body. These tests pin both the byte-for-byte output and the call
 ///     into the projector.
 /// </summary>
-public class ProviderListProjectionTests
+/// <remarks>
+///     The bare <c>NotInParallel</c> is load-bearing: the console capture in
+///     <see cref="CafVerbTestBase" /> swaps process-wide streams, so a
+///     concurrent test would steal the projected lines.
+/// </remarks>
+[NotInParallel]
+public class ProviderListProjectionTests : CafVerbTestBase
 {
     [Test]
     public async Task Descriptor_ReturnsSameLinesAsLegacyLoop()
@@ -70,26 +76,6 @@ public class ProviderListProjectionTests
         await Assert.That(spy.Calls).IsEqualTo(1);
         await Assert.That(spy.State).IsTypeOf<ProviderListState>();
         await Assert.That(output).IsEqualTo("from-projector" + Environment.NewLine);
-    }
-
-    private static async Task<(int Exit, string Out, string Err)> CaptureAsync(Func<Task<int>> run)
-    {
-        var originalOut = Console.Out;
-        var originalErr = Console.Error;
-        try
-        {
-            var swOut = new StringWriter();
-            var swErr = new StringWriter();
-            Console.SetOut(swOut);
-            Console.SetError(swErr);
-            int exit = await run().ConfigureAwait(false);
-            return (exit, swOut.ToString(), swErr.ToString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalErr);
-        }
     }
 
     private sealed class StubProviderRegistry(string[] ids, string[] available) : IProviderRegistry
