@@ -309,6 +309,56 @@ public class CompactionServiceTests
             .Because("one compaction must leave headroom below the compaction threshold");
     }
 
+    /// <summary>
+    ///     #3418: the preserved tail is bounded by <see cref="TailTokenBudget" />,
+    ///     not only by the configured keep-recent budget. With a configured
+    ///     budget far above the policy share, only the product call to
+    ///     <c>TailTokenBudget.FromUsableTokens</c> can keep the tail this small.
+    /// </summary>
+    [Test]
+    public async Task CompactAsync_KeptTail_RespectsTailTokenBudget()
+    {
+        const int window = 200_000;
+        var tracker = new TokenTracker();
+        var model = new ModelInfo(
+            "test-model",
+            "test",
+            "Test Model",
+            window,
+            1_024,
+            false,
+            false,
+            true,
+            Pricing.Unknown,
+            "openai");
+
+        int usableTokens = window - tracker.EffectiveReserveTokens(model);
+        int policyBudget = TailTokenBudget.FromUsableTokens(usableTokens);
+        await Assert.That(policyBudget).IsEqualTo(TailTokenBudget.MaxTokens);
+
+        // 100_000 is deliberately larger than the policy share: without the
+        // clamp the whole history (~120k tokens) would sit in the tail.
+        var svc = CreateService(new SummaryLlmClient("summary"), tracker,
+            keepRecentTokens: 100_000, tailTurns: 0);
+
+        var messages = new List<AgentMessage>();
+        for (int i = 0; i < 120; i++)
+        {
+            messages.Add(MessageFixtures.User(new string('x', 4_000) + $"-{i}"));
+        }
+
+        var result = await svc.CompactAsync("session-tail-budget", messages, model);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+
+        int kept = messages.Count - result.Value.PrunedMessageCount;
+        await Assert.That(kept).IsGreaterThan(0);
+        await Assert.That(kept).IsLessThan(messages.Count);
+        int keptTokens = tracker.EstimateTokens(messages.GetRange(result.Value.PrunedMessageCount, kept));
+        await Assert.That(keptTokens).IsLessThanOrEqualTo(policyBudget)
+            .Because("the preserved tail must stay within TailTokenBudget's usable-context share");
+    }
+
     [Test]
     public async Task CompactAsync_SummaryMessage_ContainsSummaryText()
     {

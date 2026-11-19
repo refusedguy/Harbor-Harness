@@ -823,7 +823,8 @@ public sealed class CompactionService(
     }
 
     /// <summary>
-    ///     The tail budget, capped by the model's usable context (#1755).
+    ///     The tail budget, capped by the model's usable context (#1755) and
+    ///     by the usable-context share policy in <see cref="TailTokenBudget" /> (#3418).
     /// </summary>
     /// <remarks>
     ///     The configured <see cref="KeepRecentTokens" /> is a fixed number,
@@ -847,7 +848,15 @@ public sealed class CompactionService(
             return keepRecentTokens;
         }
 
-        return Math.Min(keepRecentTokens, budget);
+        // #3418: bound the preserved tail by the policy derived from the
+        // model's usable context (#2680 F054). A generous configured budget
+        // (the 20k default) must not grow the tail past the 2k..8k share the
+        // policy reserves, or the summary it displaces starves for context.
+        // `budget` is window − reserve − output, so usable adds the output
+        // slice the model holds back for its own reply.
+        int usableTokens = budget + model.MaxOutputTokens;
+        int policyBudget = TailTokenBudget.FromUsableTokens(usableTokens);
+        return Math.Min(Math.Min(keepRecentTokens, budget), policyBudget);
     }
 
     /// <summary>
