@@ -1,5 +1,4 @@
 {
-  "$schema": "../schema/provider.schema.json",
   "id": "anthropic",
   "displayName": "Anthropic (Claude)",
   "description": "Claude models — Opus, Sonnet, Haiku. Native provider.",
