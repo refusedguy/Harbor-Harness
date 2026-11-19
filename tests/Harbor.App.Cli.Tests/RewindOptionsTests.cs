@@ -3,8 +3,8 @@ using Harbor.App.Cli.Commands;
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
-///     #2659 CLI surface: the <c>--files</c> flag of <c>harbor sessions rewind</c>
-///     is parsed as a pure helper. These tests pin the interface only — the
+///     #2659 CLI surface: the rewind mode flags of <c>harbor sessions rewind</c>
+///     are parsed as a pure helper. These tests pin the interface only; the
 ///     restore engine and write-tool wiring live in their own slices.
 /// </summary>
 public class RewindOptionsTests
@@ -20,6 +20,8 @@ public class RewindOptionsTests
         var options = result.Value;
         await Assert.That(options.Mode).IsEqualTo(RewindMode.Messages);
         await Assert.That(options.IsFiles).IsFalse();
+        await Assert.That(options.IsMessages).IsTrue();
+        await Assert.That(options.IsBoth).IsFalse();
         await Assert.That(options.SessionId).IsEqualTo("s1");
         await Assert.That(options.CheckpointId).IsEqualTo("cp1");
         await Assert.That(options.ShowHelp).IsFalse();
@@ -79,15 +81,62 @@ public class RewindOptionsTests
     }
 
     [Test]
-    public async Task Parse_ReservedModes_AreRejected()
+    public async Task Parse_MessagesFlag_SelectsMessagesMode()
     {
-        var messages = RewindOptions.Parse(["--messages", "s1", "cp1"]);
-        var both = RewindOptions.Parse(["--both", "s1", "cp1"]);
+        var result = RewindOptions.Parse(["--messages", "s1", "cp1"]);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        if (result.IsFailure)
+            return;
+        var options = result.Value;
+        await Assert.That(options.Mode).IsEqualTo(RewindMode.Messages);
+        await Assert.That(options.IsMessages).IsTrue();
+        await Assert.That(options.IsFiles).IsFalse();
+        await Assert.That(options.IsBoth).IsFalse();
+        await Assert.That(options.SessionId).IsEqualTo("s1");
+        await Assert.That(options.CheckpointId).IsEqualTo("cp1");
+    }
+
+    [Test]
+    public async Task Parse_BothFlag_SelectsBothMode()
+    {
+        var result = RewindOptions.Parse(["--both", "s1", "cp1"]);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        if (result.IsFailure)
+            return;
+        var options = result.Value;
+        await Assert.That(options.Mode).IsEqualTo(RewindMode.Both);
+        await Assert.That(options.IsBoth).IsTrue();
+        await Assert.That(options.IsFiles).IsFalse();
+        await Assert.That(options.IsMessages).IsFalse();
+    }
+
+    [Test]
+    public async Task Parse_ConflictingModeFlags_AreRejected()
+    {
+        var filesAndMessages = RewindOptions.Parse(["--files", "--messages", "s1", "cp1"]);
+        var filesAndBoth = RewindOptions.Parse(["--both", "s1", "--files", "cp1"]);
+        var messagesAndBoth = RewindOptions.Parse(["--messages", "--both", "s1", "cp1"]);
+
+        await Assert.That(filesAndMessages.IsFailure).IsTrue();
+        await Assert.That(filesAndMessages.Error).Contains("Conflicting");
+        await Assert.That(filesAndBoth.IsFailure).IsTrue();
+        await Assert.That(filesAndBoth.Error).Contains("Conflicting");
+        await Assert.That(messagesAndBoth.IsFailure).IsTrue();
+        await Assert.That(messagesAndBoth.Error).Contains("Conflicting");
+    }
+
+    [Test]
+    public async Task Parse_DuplicateMessagesAndBothFlags_AreRejected()
+    {
+        var messages = RewindOptions.Parse(["--messages", "s1", "--messages", "cp1"]);
+        var both = RewindOptions.Parse(["--both", "--both", "s1", "cp1"]);
 
         await Assert.That(messages.IsFailure).IsTrue();
-        await Assert.That(messages.Error).Contains("U08");
+        await Assert.That(messages.Error).Contains("Duplicate --messages");
         await Assert.That(both.IsFailure).IsTrue();
-        await Assert.That(both.Error).Contains("U08");
+        await Assert.That(both.Error).Contains("Duplicate --both");
     }
 
     [Test]
@@ -142,15 +191,16 @@ public class RewindOptionsTests
     }
 
     [Test]
-    public async Task PrintUsage_DocumentsFilesAndReservedModes()
+    public async Task PrintUsage_DocumentsAllModes()
     {
         using var writer = new StringWriter();
         RewindOptions.PrintUsage(writer);
         string usage = writer.ToString();
 
         await Assert.That(usage).Contains("--files");
+        await Assert.That(usage).Contains("--messages");
+        await Assert.That(usage).Contains("--both");
         await Assert.That(usage).Contains("<session-id>");
         await Assert.That(usage).Contains("<checkpoint-id>");
-        await Assert.That(usage).Contains("reserved");
     }
 }
