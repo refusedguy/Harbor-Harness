@@ -5,10 +5,7 @@
 // this root, and the frame is rendered from the panels it adapted.
 
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -34,13 +31,13 @@ public class ChatScreenCompositionTests
         await Assert.That(root.Count).IsEqualTo(3);
 
         var context = new PrepaintContext();
-        var buffer = new ScreenBuffer(Cols, Rows);
+        var buffer = new EngineCells.ScreenBuffer(Cols, Rows);
         NodeFrame.Render(
             root,
             context,
             buffer,
-            new Constraints(Cols, Rows),
-            new Rect(0, 0, Cols, Rows));
+            new EngineCells.Constraints(Cols, Rows),
+            new EngineCells.Rect(0, 0, Cols, Rows));
 
         string first = Art(buffer);
         await Assert.That(first).Contains("COMPOSED-PANEL").Because(
@@ -48,18 +45,18 @@ public class ChatScreenCompositionTests
 
         // Same panels, same keys, same frame: the id-keyed adapters keep their
         // prepaint records instead of rebinding by position.
-        var replay = new ScreenBuffer(Cols, Rows);
+        var replay = new EngineCells.ScreenBuffer(Cols, Rows);
         NodeFrame.Render(
             root,
             context,
             replay,
-            new Constraints(Cols, Rows),
-            new Rect(0, 0, Cols, Rows));
+            new EngineCells.Constraints(Cols, Rows),
+            new EngineCells.Rect(0, 0, Cols, Rows));
 
         await Assert.That(Art(replay)).IsEqualTo(first);
     }
 
-    private static string Art(ScreenBuffer buffer)
+    private static string Art(EngineCells.ScreenBuffer buffer)
     {
         var text = new System.Text.StringBuilder();
         for (int y = 0; y < buffer.Rows; y++)

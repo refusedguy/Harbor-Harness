@@ -647,8 +647,7 @@ public sealed record ChatScreen(
         bool includeSidebar = true,
         MascotMode? mascotMode = null,
         bool includeTabStrip = true,
-        TimeProvider? timeProvider = null,
-        IReadOnlyList<Panel>? pluginPanels = null)
+        TimeProvider? timeProvider = null)
     {
         var tree = new LayoutTree();
         // Pin the auto-show policy (SideBarLayout.AutoShowMinWidth = 120):
