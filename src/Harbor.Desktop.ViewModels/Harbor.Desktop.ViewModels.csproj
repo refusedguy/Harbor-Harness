@@ -81,6 +81,8 @@
          diff by index and re-sniffing the format by string literal.
          Presentation to Presentation, which conforms. -->
     <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
+    <!-- #3632: the humanized command/key display helper lives in the shared UI-framework abstractions so CLI and desktop hosts use one leaf. -->
+    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

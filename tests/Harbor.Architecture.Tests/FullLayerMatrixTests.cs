@@ -472,16 +472,14 @@ public class FullLayerMatrixTests
         [
             "Harbor.Abstractions",
             "Harbor.Desktop.Abstractions",
+            "Harbor.Ui.Framework.Abstractions",
             "Harbor.Ui.Framework.ViewModels",
             "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
             "Harbor.Ui.Framework.Sessions",
-            // #680: "Harbor.Ui.Framework.Abstractions" was permitted here because
-            // ChatViewModelBase aliased ToolCallState (which lives there) for the
-            // one line of its hand-rolled tool-line parser that recovered a status
-            // by sniffing a "✗" prefix. With the parser gone the alias went with
-            // it, and Matrix_AllowedEntries_AreLive reported the row as stale —
-            // which is the guard working: a permitted edge nobody takes is a lie
-            // about the assembly's dependencies.
+            // #3632: CommandResultViewModel and palette consumers humanize command
+            // names via the shared CommandNameHumanizer in Ui.Framework.Abstractions,
+            // so the display helper is one UI-free leaf used by desktop and CLI
+            // hosts. (#680 removed this edge when it went unused; it is live again.)
             //
             // #679: the desktop DiffViewModel/DiffViewModelBase read the core
             // diff algorithm and the diff-format parsers
