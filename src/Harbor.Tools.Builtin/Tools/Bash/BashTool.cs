@@ -46,7 +46,7 @@ public sealed partial class BashTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        string command = args.GetProperty("command").GetString()!;
+        string command = JsonArgs.GetString(args, "command")!;
         string? cwd = JsonArgs.GetString(args, "cwd");
         int timeout = JsonArgs.GetInt(args, "timeout") ?? 30;
         var env = args.TryGetProperty("env", out var e) && e.ValueKind == JsonValueKind.Object
