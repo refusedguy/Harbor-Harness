@@ -56,19 +56,19 @@ public class ChatScreenCompositionTests
         await Assert.That(Art(replay)).IsEqualTo(first);
     }
 
-    private static string Art(EngineCells.ScreenBuffer buffer)
+    private static string Art(EngineCells.ScreenBuffer frame)
     {
-        var text = new System.Text.StringBuilder();
-        for (int y = 0; y < buffer.Rows; y++)
+        var sb = new System.Text.StringBuilder(frame.Cols * frame.Rows * 2);
+        for (int row = 0; row < frame.Rows; row++)
         {
-            for (int x = 0; x < buffer.Cols; x++)
+            for (int col = 0; col < frame.Cols; col++)
             {
-                text.Append((char)buffer.Get(x, y).Rune);
+                _ = sb.Append((char)frame.At(col, row).Rune);
             }
 
-            text.Append('\n');
+            _ = sb.AppendLine();
         }
 
-        return text.ToString();
+        return sb.ToString();
     }
 }
