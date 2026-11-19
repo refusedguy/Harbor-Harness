@@ -130,6 +130,29 @@ public sealed class ActivityProjection
     public RunId? ActiveRunId => _graph.ActiveRunId;
 
     /// <summary>
+    ///     One-line status text for the most recent run, derived from the
+    ///     projected activity graph (#3383). The Run node is the stable line per
+    ///     run: its <see cref="ActivityEntry.Describe"/> follows the run from
+    ///     "running" to "done"/"failed" without per-tool id churn. Returns null
+    ///     before the first <c>AgentStartEvent</c>, so a status bar can keep its
+    ///     legacy text until there is activity to show.
+    /// </summary>
+    public string? DescribeStatus()
+    {
+        // _entries is already chronological; the last Run is the newest one.
+        // Reading it directly avoids the snapshot allocation of Entries on the
+        // render path.
+        ActivityEntry? status = null;
+        foreach (ActivityEntry entry in _entries)
+        {
+            if (entry.Kind == ExecutionNodeKind.Run)
+                status = entry;
+        }
+
+        return status?.Describe();
+    }
+
+    /// <summary>
     ///     Apply one published event. The graph is advanced first, then the
     ///     flat feed is rebuilt from its run-scoped snapshot.
     /// </summary>
