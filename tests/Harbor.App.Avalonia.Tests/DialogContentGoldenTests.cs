@@ -31,7 +31,11 @@ public class DialogContentGoldenTests
 
             TextBlock message = form.GetLogicalDescendants().OfType<TextBlock>().Single();
             TextBox input = form.GetLogicalDescendants().OfType<TextBox>().Single();
-            Button[] buttons = form.GetLogicalDescendants().OfType<Button>().ToArray();
+            // The alert hides Cancel with IsVisible but keeps it in the logical
+            // tree, so the golden pins the PAINTED buttons only.
+            Button[] buttons = form.GetLogicalDescendants().OfType<Button>()
+                .Where(b => b.IsVisible)
+                .ToArray();
 
             string labels = string.Join(" | ", buttons.Select(b =>
                 b.Content?.ToString() + (b.Classes.Contains("hds-primary") ? "*" : string.Empty)));
