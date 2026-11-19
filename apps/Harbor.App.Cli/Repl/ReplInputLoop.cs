@@ -348,7 +348,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             host.Images.Visible,
             host.Onboarding.Active,
             host._palette.Visible,
-            host.Setup.Visible));
+            host.Screen.SetupChecklist.Visible));
         if (modalCtx is not null && modalCtx.TryMatch(ToEngineKey(key), out var modalHit))
         {
             switch (modalHit.ActionId)
