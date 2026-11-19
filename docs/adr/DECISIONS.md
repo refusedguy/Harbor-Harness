@@ -2097,3 +2097,28 @@ Issue остаётся OPEN; комментарий содержит тольк�
 
 - Полный текст и условия пересмотра:
   [ADR-086](ADR-086-avalonia-product-gaps-g24-post-verdict.md).
+
+## ADR-087: отчёт kilocode-features part 2/2 (#2680) после вердикта — влиты восемь slice
+
+Issue #2680 — self-contained отчёт на 180 item (F001-F180). ADR-049 зафиксировал
+вердикт на базе `8db8393f`, ADR-077 добавил F170 и F115, ADR-085 на базе
+`6b68000a` учёл шесть slice и оставил PR #3027 (F152) и #3030 (F108) открытыми.
+Проверка `origin/dev` (`d05e14f2`) и issue-комментариев показала восемь slice
+после ADR-085: F108 (`WakeupSchedule`, PR #3030, merge `65e56a8e`), F152
+(`SkillPathValidator`, PR #3027, merge `dc0b015b`), F174 (`AgentTitleGlyph`,
+PR #3033, merge `23b4d0ff`), F167 (`JsoncConfigParser`, PR #3034, merge
+`4bc5f55e`), F121 (`SessionPromptHistory`, PR #3035, merge `f7bfe9ec`), F178
+(`ModelCatalogSearch`, PR #3037, merge `0cafd5a8`), F114 (`SessionTitlePolicy`,
+PR #3042, merge `425d5c06`) и F109 (`CronSchedule`, PR #3038, merge `290d0064`).
+Все slice и merge commit подтверждены как предки базы. Открытый PR #3039 (F149)
+в таблицу не входит: он не влит.
+
+Decided: вердикты ADR-049, ADR-077 и ADR-085 сохраняются, одного общего slice
+по #2680 нет. Восемь влитых item не перевыводятся, остальные не объединяются
+в meta-PR. Гейты, пороги, golden, self-test и AOT-профиль не меняются; новый
+guard не вводится (был бы вакуумным). Issue остаётся OPEN; комментарий содержит
+только хеш коммита ADR. Номер 087 — следующий свободный после 086, закреплённого
+PR #3032 (slice `55d11d5a`).
+
+- Полный текст, таблица по восьми item и условия пересмотра:
+  [ADR-087](ADR-087-kilocode-part2-eight-slices-post-verdict.md).
