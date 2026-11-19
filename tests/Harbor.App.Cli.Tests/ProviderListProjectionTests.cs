@@ -46,6 +46,16 @@ public class ProviderListProjectionTests : CafVerbTestBase
     }
 
     [Test]
+    public async Task Descriptor_EmptyRegistry_PrintsHeaderOnly()
+    {
+        var lines = (IReadOnlyList<string>)ProviderListPanelDescriptor.CreateProjector()
+            .Project(new ProviderListState([]))!;
+
+        await Assert.That(lines.Count).IsEqualTo(1);
+        await Assert.That(lines[0]).IsEqualTo("Providers (0):");
+    }
+
+    [Test]
     public async Task RunListProviders_PrintsProjectedLinesUnchanged()
     {
         var registry = new StubProviderRegistry(["solo"], ["solo"]);
