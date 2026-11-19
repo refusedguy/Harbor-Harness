@@ -87,10 +87,10 @@
 // -----------
 // R1–R3 cross-check the real csproj XML, so they cannot pass by reading nothing.
 // `The_Shared_Folder_Discovery_Is_Not_Empty` and `The_Link_Inventory_Is_Not_Empty`
-// pin the discovered sets to the two folders and twenty link items this issue is
-// about, so a rename, a moved folder or an emptied set fails rather than quietly
-// reducing the rules to nothing. R5 is paired with a negative control: the same
-// walk must NOT return a shared file for a project that does not link it, so R5
+// pin the discovered sets to the two folders and the exact link inventory this
+// guard counts, so a rename, a moved folder or an emptied set fails rather than
+// quietly reducing the rules to nothing. R5 is paired with a negative control:
+// the same walk must NOT return a shared file for a project that does not link it, so R5
 // cannot be satisfied by enumerating every shared file unconditionally.
 
 namespace Harbor.Architecture.Tests;
@@ -210,14 +210,15 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(34)
+        await Assert.That(links.Length).IsEqualTo(35)
             .Because(
-                "34 `<Compile Include>` link items: the original 25 plus three for #3762's "
+                "35 `<Compile Include>` link items: the original 25 plus three for #3762's "
                 + "ProviderToolCallEmitter.cs (the one Start/Delta policy for the three "
                 + "tool-call-emitting providers), two for #3773's ProviderHttp.cs and "
                 + "ProviderAuth.cs into Anthropic, one for #3767's ProviderLlmClientBase.cs into "
-                + "Ollama, and three for #3786's ProviderPayloadWriter.cs (the tools[]/role+content "
-                + "shapes shared by Ollama, OpenAI and OpenAiCompatible). The count stays exact so "
+                + "Ollama, three for #3786's ProviderPayloadWriter.cs (the tools[]/role+content "
+                + "shapes shared by Ollama, OpenAI and OpenAiCompatible), and one for #3748's "
+                + "ProviderChunkDecoder.cs into Anthropic. The count stays exact so "
                 + "a dropped link still fails here. The original 25 were: the #1499 "
                 + "ProviderLlmClientBase.cs into the "
                 + "four native providers (Anthropic, Ollama, OpenAI, OpenAiCompatible), SsePump and "

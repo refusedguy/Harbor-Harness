@@ -1,5 +1,3 @@
-using System.Buffers;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Harbor.Abstractions.Events;
@@ -20,51 +18,21 @@ internal static class AnthropicEventMapper
 {
     /// <summary>
     ///     Parse one SSE data line and write any emitted events directly into the
-    ///     channel. The payload transcodes into a pooled buffer; a malformed
-    ///     line is logged, counted and skipped (#203: the counter is new —
-    ///     the former DOM walk only logged).
+    ///     channel. #3748: the transcode/parse/write/count loop lives in the
+    ///     shared <see cref="ProviderChunkDecoder" />; this consumer only hands
+    ///     over its span parser and its source-generated log method. The event
+    ///     sequence and the MalformedChunks/RemappedToolCalls diagnostics are
+    ///     unchanged.
     /// </summary>
-    public static async Task WriteAnthropicEventsAsync(
+    public static Task WriteAnthropicEventsAsync(
         string data,
         ChannelWriter<LlmEvent> writer,
         ChunkStreamState state,
         ILogger logger,
-        CancellationToken ct)
-    {
-        List<LlmEvent> events;
-        try
-        {
-            int remapsBefore = state.RemappedToolCalls;
-            // #171: single-pass transcode — GetMaxByteCount rent + one
-            // GetBytes (was GetByteCount + GetBytes: two passes per event).
-            byte[] rented = ArrayPool<byte>.Shared.Rent(Encoding.UTF8.GetMaxByteCount(data.Length));
-            int byteCount;
-            try
-            {
-                byteCount = Encoding.UTF8.GetBytes(data, rented);
-                events = MapAnthropicEvents(rented.AsSpan(0, byteCount), state);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(rented);
-            }
-
-            // #203 B8: positional id fallback, counted in the parser —
-            // warn once per stream instead of staying silent.
-            SsePump.WarnOnceOnRemap(state, remapsBefore, logger);
-        }
-        catch (Exception ex)
-        {
-            state.CountMalformed();
-            AnthropicEventMapperLog.FailedToParseEvent(logger, ex, state.MalformedChunks, data);
-            return;
-        }
-
-        foreach (var evt in events)
-        {
-            await writer.WriteAsync(evt, ct).ConfigureAwait(false);
-        }
-    }
+        CancellationToken ct) =>
+        ProviderChunkDecoder.DecodeAsync(
+            data, writer, state, logger, ct,
+            MapAnthropicEvents, AnthropicEventMapperLog.FailedToParseEvent);
 
     /// <summary>
     ///     Map one Anthropic SSE event from UTF-8 JSON. Fields buffer across
