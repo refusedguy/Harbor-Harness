@@ -158,15 +158,26 @@ public sealed class LspClient : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         await _lifetimeCts.CancelAsync().ConfigureAwait(false);
+        CancelPending();
+
+        _lifetimeCts.Dispose();
+        await _transport.DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Cancels every in-flight waiter. Shared by explicit disposal and by
+    ///     the read loop ending on EOF (#3061). The dictionary is concurrent
+    ///     and the enumeration is a moment-in-time snapshot, matching the
+    ///     demux discipline documented on <see cref="_pending"/>.
+    /// </summary>
+    private void CancelPending()
+    {
         foreach (var tcs in _pending.Values)
         {
             _ = tcs.TrySetCanceled();
         }
 
         _pending.Clear();
-
-        _lifetimeCts.Dispose();
-        await _transport.DisposeAsync().ConfigureAwait(false);
     }
 
     // ── Framing ────────────────────────────────────────────────────────────
@@ -244,6 +255,12 @@ public sealed class LspClient : IAsyncDisposable
         }
 
         LspClientLog.ReadLoopExited(_logger);
+
+        // #3061: server exit is observed here, not by DisposeAsync. Cancel the
+        // waiters before telling subscribers, so a Disconnected handler never
+        // finds a request still waiting for an answer no one will send. Both
+        // shutdown paths share this helper and cannot drift.
+        CancelPending();
         RaiseDisconnected();
     }
 

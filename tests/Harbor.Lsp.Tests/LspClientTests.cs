@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Lsp.Tests;
 
@@ -102,6 +103,31 @@ public class LspClientTests
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAsync<TaskCanceledException>(() => server.Client.SendRequestAsync(
             "initialize", null, cts.Token));
+    }
+
+    [Test]
+    [Timeout(30_000)]
+    public async Task ServerExit_EndsReadLoop_CancelsPendingWithoutDispose()
+    {
+        // #3061 item 2: an abrupt server exit is seen by the read loop, not by
+        // Dispose. The pending request must be cancelled by EOF alone. Using
+        // the test's await-using to dispose the client would hide the race by
+        // cancelling the waiter on a completely different path.
+        var fromServer = new MemPipeStream();
+        var toServer = new MemPipeStream();
+        await using var client = new LspClient(fromServer, toServer, NullLogger.Instance);
+
+        TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += (_, _) => disconnected.TrySetResult();
+        client.Start();
+
+        Task pending = client.SendRequestAsync("initialize", null, CancellationToken.None);
+        await Task.Yield(); // let the unanswered frame reach the pipe
+
+        fromServer.End(); // simulate the child closing its stdout
+
+        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<TaskCanceledException>(() => pending.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     [Test]
