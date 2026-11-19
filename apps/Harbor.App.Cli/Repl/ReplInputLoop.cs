@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging;
 // sites qualify through EngineCells.
 using Cell = Harbor.Ui.Framework.Rendering.Cell;
 using Rect = Harbor.Ui.Framework.Rendering.Rect;
+using KeyContext = Harbor.Tui.CellForge.Input.KeyContext;
 using ScreenBuffer = Harbor.Ui.Framework.Rendering.ScreenBuffer;
 using CellStyle = Harbor.Ui.Framework.Rendering.CellStyle;
 using PackedColor = Harbor.Ui.Framework.Rendering.PackedColor;
