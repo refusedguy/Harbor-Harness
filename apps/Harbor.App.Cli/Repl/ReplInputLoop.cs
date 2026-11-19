@@ -606,13 +606,20 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                         return;
                 }
 
-                var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
-                // The one exception to the sink-the-effect rule above: the strip
-                // actions are effect-driven, because the reducer resolves the
-                // target session and the host performs the switch. Dropping the
-                // effect here would make Ctrl+Tab and Ctrl+W look like no-ops.
-                if (effect is TuiEffect.ActivateSession or TuiEffect.RequestOpenSession)
-                    host.Effects.Run(effect);
+                // Ctrl+C with a non-empty composer is readline clear: the composer
+                // owns that edit below and dispatching Abort would fold the
+                // transcript into a spurious abort state. Every other resolved
+                // action still dual-writes to the store as before.
+                if (resolved != ChatAction.Abort || host._composer.Buffer.IsEmpty)
+                {
+                    var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
+                    // The one exception to the sink-the-effect rule above: the strip
+                    // actions are effect-driven, because the reducer resolves the
+                    // target session and the host performs the switch. Dropping the
+                    // effect here would make Ctrl+Tab and Ctrl+W look like no-ops.
+                    if (effect is TuiEffect.ActivateSession or TuiEffect.RequestOpenSession)
+                        host.Effects.Run(effect);
+                }
             }
         }
 
