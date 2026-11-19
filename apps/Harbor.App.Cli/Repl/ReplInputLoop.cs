@@ -69,6 +69,13 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
     private bool _markupSendInFlight;
 
     /// <summary>
+    ///     #3617: the modal barriers as named key contexts. One instance per
+    ///     loop; bindings are set once in the constructor and the contexts are
+    ///     read-only from here on (rebind is a test/diagnostic concern).
+    /// </summary>
+    private readonly ReplModalKeyContexts _keyContexts = new();
+
+    /// <summary>
     ///     #3111: durable, session-scoped prompt store. The composer owns the
     ///     readline walk (draft save/restore), but its rail is in-memory and
     ///     survives a session switch unchanged. This store is the session
@@ -326,6 +333,63 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // the next frame takes the conservative full-scan path.
         host._replStore.DamageAll();
 
+        // #3617: modal barriers are declarative key contexts. The active
+        // context is selected in the SAME order as the barrier chain below
+        // (terminal → sheet → markup → image → onboarding → palette → setup),
+        // so the priority is unchanged. A gesture bound by the host dispatches
+        // its OPAQUE action id here; a miss falls through to the modal's own
+        // handler, which still swallows the key. KeyContext owns no callbacks
+        // and no action vocabulary — ChatKeyMap keeps the composer names and
+        // LeaderKeyRouter keeps the chords.
+        KeyContext? modalCtx = _keyContexts.Active(new ReplModalState(
+            host.FloatingTerminal.IsAttached,
+            host.Sheet.IsOpen,
+            host.Screen.Markup.Visible,
+            host.Images.Visible,
+            host.Onboarding.Active,
+            host._palette.Visible,
+            host.Setup.Visible));
+        if (modalCtx is not null && modalCtx.TryMatch(ToEngineKey(key), out var modalHit))
+        {
+            switch (modalHit.ActionId)
+            {
+                // Press-only send, exactly as IsMarkupSend was: a held chord
+                // must not submit a second billable turn. Repeat is swallowed
+                // by the barrier's return below.
+                case ReplModalKeyContexts.MarkupSend when key.EventType == KeyEventType.Press:
+                    await SendMarkupAsync(ct).ConfigureAwait(false);
+                    break;
+
+                // Save tolerates legacy Repeat, matching IsMarkupSave.
+                case ReplModalKeyContexts.MarkupSave
+                    when key.EventType is KeyEventType.Press or KeyEventType.Repeat:
+                    await SaveMarkupAsync(ct).ConfigureAwait(false);
+                    break;
+
+                // #400 store-continuation unchanged: hide the viewer, open the
+                // store session snapshotting the scroll, sync it immediately so
+                // no key slips through before the next frame.
+                case ReplModalKeyContexts.ImageAnnotate
+                    when (key.EventType is KeyEventType.Press or KeyEventType.Repeat) && host.Images.Source.HasValue:
+                {
+                    var block = host.Images.Source.Value;
+                    host.Images.Hide();
+                    _ = host._replStore.Dispatch(new ChatAppMsg.OpenMarkup(
+                        block.FullPath, block.Name, block.PixelWidth, block.PixelHeight,
+                        host._replStore.State.Ui.ScrollOffset));
+                    host.Screen.SyncMarkup(host._replStore.State.Chat.Markup);
+                    host._replStore.DamageAll();
+                    host._wake.Writer.TryWrite(null);
+                    break;
+                }
+            }
+
+            // Every matched gesture is swallowed: panels (and the agent) beneath
+            // the modal starve, exactly as before. Save/send already wake from
+            // their own effect methods; annotate wakes above.
+            return;
+        }
+
         // Floating terminal pane (issue #1491): while attached it owns input —
         // a full barrier like the image/markup modals. The detach chord is
         // offered through the dedicated LeaderKeyRouter first; everything else
@@ -370,21 +434,12 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // FROM the viewer (which hides underneath) and carries the same
         // barrier contract — consumed gestures dispatch store messages
         // (the session lives in UiState, transitions in the reducer),
-        // everything else is swallowed. Ctrl+S bakes the annotated copy and
-        // Ctrl+Enter sends the saved copy to the agent; both are host
-        // effects, so neither reaches the overlay router: the
-        // reducer stays pure and file I/O lives here.
+        // everything else is swallowed. Its Ctrl+S / Ctrl+Enter host effects
+        // are now markup-context bindings dispatched above (#3617), so the
+        // reducer stays pure and file I/O still lives here.
         if (host.Screen.Markup.Visible)
         {
-            if (IsMarkupSend(key))
-            {
-                await SendMarkupAsync(ct).ConfigureAwait(false);
-            }
-            else if (IsMarkupSave(key))
-            {
-                await SaveMarkupAsync(ct).ConfigureAwait(false);
-            }
-            else if (host.Screen.Markup.HandleKey(key) is { } markupMsg)
+            if (host.Screen.Markup.HandleKey(key) is { } markupMsg)
             {
                 // Close restores the scroll the open snapshotted: the overlay
                 // owns no scroll of its own, so the feed is already where it
@@ -407,24 +462,9 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
 
         if (host.Images.Visible)
         {
-            // Markup open (issue #400): `m` over the zoomed image swaps the
-            // viewer for the markup overlay on the same block. The viewer
-            // hides, the store opens the session (snapshotting the scroll for
-            // restore-on-close), and the snapshot is pushed immediately so no
-            // key slips through before the next frame sync.
-            if (IsMarkupAnnotateKey(key) && host.Images.Source.HasValue)
-            {
-                var block = host.Images.Source.Value;
-                host.Images.Hide();
-                _ = host._replStore.Dispatch(new ChatAppMsg.OpenMarkup(
-                    block.FullPath, block.Name, block.PixelWidth, block.PixelHeight,
-                    host._replStore.State.Ui.ScrollOffset));
-                host.Screen.SyncMarkup(host._replStore.State.Chat.Markup);
-                host._replStore.DamageAll();
-                host._wake.Writer.TryWrite(null);
-                return;
-            }
-
+            // The `m` annotate gesture is an image-context binding dispatched
+            // above (#400 store-continuation unchanged). Every other key still
+            // goes to the viewer, which swallows what it does not consume.
             if (host.Images.HandleKey(key))
             {
                 host._wake.Writer.TryWrite(null);
@@ -665,31 +705,6 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
 
     /// <summary>Fullscreen viewport the markup overlay maps mouse cells through.</summary>
     private Rect FullViewport() => new(0, 0, host.ScreenSession.CurrentCols, host.ScreenSession.CurrentRows);
-
-    /// <summary>Ctrl+S over the markup overlay: bake the annotated copy (a host effect).</summary>
-    private static bool IsMarkupSave(KeyEvent key) =>
-        key.Key == KeyCode.Char
-        && key.EventType is KeyEventType.Press or KeyEventType.Repeat
-        && (key.Modifiers & KeyModifiers.Ctrl) != 0
-        && (key.Character.ToString() == "s" || key.Character.ToString() == "S");
-
-    /// <summary>
-    ///     Ctrl+Enter over the markup overlay: send the saved annotated copy
-    ///     to the agent (a host effect, issue #402). Press-only — Repeat would
-    ///     re-submit a held chord as a second billable turn, and legacy
-    ///     terminals only ever produce Press anyway.
-    /// </summary>
-    private static bool IsMarkupSend(KeyEvent key) =>
-        key.Key == KeyCode.Enter
-        && key.EventType == KeyEventType.Press
-        && (key.Modifiers & KeyModifiers.Ctrl) != 0;
-
-    /// <summary>`m` over the image viewer: swap it for the markup overlay on the same block.</summary>
-    private static bool IsMarkupAnnotateKey(KeyEvent key) =>
-        key.Key == KeyCode.Char
-        && key.EventType is KeyEventType.Press or KeyEventType.Repeat
-        && key.Modifiers.IsUnmodified()
-        && key.Character.ToString() == "m";
 
     /// <summary>
     ///     Bakes the store session onto the source pixels and writes the
