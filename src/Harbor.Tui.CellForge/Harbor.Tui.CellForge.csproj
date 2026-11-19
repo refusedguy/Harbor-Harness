@@ -55,9 +55,6 @@
     -->
     <ProjectReference Include="..\Harbor.Tui.CellForge.CodeGen\Harbor.Tui.CellForge.CodeGen.csproj">
       <OutputItemType>Analyzer</OutputItemType>
-      <!-- PrivateAssets=all stops the Roslyn-bearing generator from flowing
-           into Harbor.App.Cli's NativeAOT closure through this project. -->
-      <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
   </ItemGroup>
 
