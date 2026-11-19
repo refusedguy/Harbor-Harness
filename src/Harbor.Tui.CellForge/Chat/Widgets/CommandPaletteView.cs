@@ -6,6 +6,8 @@ using Harbor.Tui.CellForge.Rendering;
 // input vocabulary, while KeyContext/KeyGesture live in the engine vocabulary.
 // Name the engine namespace so the two never get mixed up at a call site (#3628).
 using EngineInput = Harbor.Tui.CellForge.Input;
+using KeyContext = Harbor.Tui.CellForge.Input.KeyContext;
+using KeyGesture = Harbor.Tui.CellForge.Input.KeyGesture;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 
@@ -65,11 +67,11 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     private const string PageAction = "page";
     private const string TypeAction = "type";
 
-    private static readonly EngineInput.KeyContext PaletteContext = CreatePaletteContext();
+    private static readonly KeyContext PaletteContext = CreatePaletteContext();
 
-    private static EngineInput.KeyContext CreatePaletteContext()
+    private static KeyContext CreatePaletteContext()
     {
-        var context = new EngineInput.KeyContext("palette");
+        var context = new KeyContext("palette");
         context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Escape), "back");
         context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Enter), "commit");
         context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Up), "move-up");
