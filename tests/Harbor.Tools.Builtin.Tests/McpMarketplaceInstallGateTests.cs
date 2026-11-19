@@ -4,7 +4,6 @@
 // source must leave the registry completely untouched.
 
 using System.Text.Json;
-using Harbor.Abstractions.Tools;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -24,8 +23,8 @@ public class McpMarketplaceInstallGateTests
     {
         var registry = ScriptedMcpRegistry.Succeed("installed");
         var tool = NewTool(registry);
-        string json = "{\"server\":\"marketplace\",\"method\":\"marketplace/install\",\"args\":{\"source\":"
-            + JsonSerializer.Serialize(source) + "}}";
+        string json = "{\"server\":\"marketplace\",\"method\":\"marketplace/install\",\"args\":{\"source\":\""
+            + JsonEncodedText.Encode(source).ToString() + "\"}}";
         var args = JsonDocument.Parse(json).RootElement;
 
         var result = await tool.ExecuteAsync(args, TestToolContext.Create());
@@ -82,6 +81,6 @@ public class McpMarketplaceInstallGateTests
         await Assert.That(registry.LastMethod).IsEqualTo("tools/list");
     }
 
-    private static McpToolTool NewTool(IMcpRegistry registry)
+    private static McpToolTool NewTool(ScriptedMcpRegistry registry)
         => new(registry, NullLogger<McpToolTool>.Instance);
 }
