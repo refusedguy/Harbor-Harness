@@ -3,7 +3,7 @@ using Harbor.Tools.Builtin;
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
-///     #2680 F115 — <see cref="BranchNameGenerator" /> is a pure parser over a
+///     #2680 F115. <see cref="BranchNameGenerator" /> is a pure parser over a
 ///     proposed branch name. These tests pin its observable output (case,
 ///     separators, decoration, length cap and rejection cases) without calling
 ///     an LLM, starting a process or touching a repository.

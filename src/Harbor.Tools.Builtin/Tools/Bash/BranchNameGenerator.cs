@@ -1,8 +1,10 @@
-// BranchNameGenerator.cs — #2680 F115: turn a proposed branch name into a
+// BranchNameGenerator.cs: #2680 F115. Turns a proposed branch name into a
 // valid kebab-case git branch slug. The helper is a pure function over a string:
 // it starts no process, calls no LLM, reads no repository and changes no
-// product path. It is the parse half of the branch-name feature — the part that
+// product path. It is the parse half of the branch-name feature, the part that
 // runs on whatever the generator proposes before that name reaches git.
+using System.Text;
+
 namespace Harbor.Tools.Builtin;
 
 /// <summary>
