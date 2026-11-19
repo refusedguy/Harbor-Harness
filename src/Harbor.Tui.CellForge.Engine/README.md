@@ -140,6 +140,20 @@ Exactly one spelling difference is sanctioned: the engine is BCL-only, so the
 `Ensure.NotNull` guard alias is spelled `ArgumentNullException.ThrowIfNull`
 here (the alias's own delegate — behavior-identical by construction).
 
+#### Stateful primitives (#3086)
+
+`IStatefulNode` and `IStatefulNode<TState>` (`Rendering/IStatefulNode.cs`) are
+the public stateful contract: a stable `ElementId` plus a typed value snapshot a
+node captures and restores. `ScrollableViewport` (offset), `TileCamera` (world
+origin) and `NavigableChangeBlocks` (focus side, line cursors, anchors) implement
+it. Their snapshots contain only interaction state; geometry and content are
+supplied by the host each frame.
+
+The contract owns no storage. Snapshots live between frames in the single
+`ElementStateStore` (`Rendering/ElementStateStore.cs`, #2436), which S3 (#3084)
+wires into the product path. A stateful primitive never allocates its own map,
+so adding one does not create a second store.
+
 ## Wiring
 
 The engine has **no `HARBOR_TUI` value and no DI module of its own** — it is

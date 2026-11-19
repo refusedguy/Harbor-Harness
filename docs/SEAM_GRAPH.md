@@ -88,7 +88,7 @@ graph LR
 
 Every interface declared under `src/`, ranked by how much of the product touches it. **Implementations** counts the classes that implement it, directly or through a base class; the in-tree ones come first and the out-of-tree ones (doubles, samples) after a `/`. **Consumers** counts the files that name it, excluding the files that only put it in a base list. **Registered** is the container registration, if the seam is resolved from the DI graph. **Bypasses** counts the places that name the concrete type where the interface was the contract.
 
-The table shows the 40 seams with the most in-tree implementations and consumers, out of 221 interfaces declared under `src/`. The rest are in `--report`.
+The table shows the 40 seams with the most in-tree implementations and consumers, out of 222 interfaces declared under `src/`. The rest are in `--report`.
 
 | Seam | Declared in | Implementations | Consumer files | Registered as | Bypasses |
 |---|---|---|---|---|---|
@@ -211,7 +211,7 @@ Declared in [`src/Harbor.Abstractions/Plugins/IPlugin.cs`](../src/Harbor.Abstrac
 What the graph finds that reading the code does not: interfaces with no implementation, seams nobody resolves from the container, and implementations nobody consumes.
 
 - **18 interface(s) declared under `src/` are named somewhere but have no implementation**: `IEventSubscriber`, `IHarborIdeClient`, `IProviderPlugin`, `IAgentPlugin`, `IPluginHost`, `ISessionOperationEventStore`, `IToolFactory`, `IRetryAfterHint`, `ISessionStorePlugin`, `ITuiBackendPlugin`, `IReversiblePluginLoadHost`, `IInteractiveTuiRenderer`, `IBindingScope`, `IInputHandler`, `ISgrByteSink`, `ICellDiffDecoder`, `IThemeWatcher`, `ITuiPanelPlugin`
-- **132 seam(s) with an implementation have no container registration**: `IAgentRegistryBuilder`, `IBackgroundTaskRegistry`, `ISubAgentRunner`, `IEventBus`, `IEventBusMiddleware`, `IEventBusQueueMetrics`, `IProcessHandle`, `IUserQuestionService`, `ILspService`, `INotificationProcessRunner`, `IPlugin`, `IToolPlugin`, `ILlmClient`, `IProviderFactory`, `IProviderHealthCheck`, `IProviderRegistryBuilder`, `ICompactionEventStore`, `ITokenEstimator`, `ISessionCheckpointStore`, `ISessionFeedbackStore` …
+- **133 seam(s) with an implementation have no container registration**: `IAgentRegistryBuilder`, `IBackgroundTaskRegistry`, `ISubAgentRunner`, `IEventBus`, `IEventBusMiddleware`, `IEventBusQueueMetrics`, `IProcessHandle`, `IUserQuestionService`, `ILspService`, `INotificationProcessRunner`, `IPlugin`, `IToolPlugin`, `ILlmClient`, `IProviderFactory`, `IProviderHealthCheck`, `IProviderRegistryBuilder`, `ICompactionEventStore`, `ITokenEstimator`, `ISessionCheckpointStore`, `ISessionFeedbackStore` …
   That is a census of the `AddSingleton<T>` calls, not a verdict on reachability: a seam can also be resolved through a registry rather than the container. `ILlmClient` is reached through `IProviderRegistry`, not through DI.
 - No door of a declared route answers `Result.Success` without registering anything (the #1758 shape).
 - Every declared route verdict agrees with what the route's door body does.
