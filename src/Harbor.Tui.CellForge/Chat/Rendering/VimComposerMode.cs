@@ -91,7 +91,8 @@ public sealed class VimComposerMode
 
         if (NormalMode && key.Key == KeyCode.Char && key.Modifiers.IsUnmodified())
         {
-            var handled = HandleNormal(key, composer);
+            var chord = EngineInput.KeyEvent.Char(key.Character);
+            var handled = HandleNormal(chord, composer);
             if (handled != ComposerAction.Ignored)
             {
                 return handled;
@@ -107,13 +108,9 @@ public sealed class VimComposerMode
         return action;
     }
 
-    private ComposerAction HandleNormal(KeyEvent key, ComposerController composer)
+    private ComposerAction HandleNormal(EngineInput.KeyEvent key, ComposerController composer)
     {
-        // The composer speaks the shared Rendering KeyEvent; the engine leaf
-        // KeyContext matches its own same-named type. Convert at this boundary.
-        // HandleKey only routes unmodified char keys here.
-        var chord = EngineInput.KeyEvent.Char(key.Character);
-        if (!vimContext.TryMatch(chord, out var hit))
+        if (!vimContext.TryMatch(key, out var hit))
         {
             return ComposerAction.Ignored;
         }
