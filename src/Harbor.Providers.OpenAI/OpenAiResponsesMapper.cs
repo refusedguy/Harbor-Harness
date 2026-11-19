@@ -174,7 +174,7 @@ internal static class OpenAiResponsesMapper
                     // allocated one per property per chunk, and a chunk is
                     // what every token of every answer arrives as (see
                     // Utf8JsonReaderExtensions.PropertyName).
-                    string prop = ChunkPropertyName(ref reader);
+                    string prop = Utf8JsonReaderExtensions.PropertyName(ref reader, MatchChunkProperty(reader.ValueSpan));
                     if (!reader.Read())
                         throw new JsonException("Truncated chunk: property without value.");
                     HandleValue(ref reader, depth, prop, inItem, inResponse, inUsage, inReasoningDetails,
@@ -200,19 +200,6 @@ internal static class OpenAiResponsesMapper
         FunctionCallArgumentsDelta,
         OutputItemAdded,
         Completed,
-    }
-
-    /// <summary>
-    ///     The name of the property the reader is on, as one of the literals
-    ///     this mapper dispatches on — or <see cref="string.Empty" /> for a
-    ///     name it does not know. The table is matched against the RAW bytes
-    ///     of the name, so the dispatch allocates nothing; the literals are
-    ///     interned, so the comparisons are the same ones the old path made.
-    /// </summary>
-    private static string ChunkPropertyName(ref Utf8JsonReader reader)
-    {
-        string? known = MatchChunkProperty(reader.ValueSpan);
-        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
     }
 
     /// <summary>

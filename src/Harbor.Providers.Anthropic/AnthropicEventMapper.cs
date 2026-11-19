@@ -170,7 +170,7 @@ internal static class AnthropicEventMapper
                     // allocated one per property per event, and an event is
                     // what every token of every answer arrives as (see
                     // Utf8JsonReaderExtensions.PropertyName).
-                    string prop = EventPropertyName(ref reader);
+                    string prop = Utf8JsonReaderExtensions.PropertyName(ref reader, MatchEventProperty(reader.ValueSpan));
                     if (!reader.Read())
                         throw new JsonException("Truncated line: property without value.");
                     HandleValue(ref reader, depth, prop, inDelta, inContentBlock, inUsage,
@@ -198,19 +198,6 @@ internal static class AnthropicEventMapper
         ContentBlockDelta,
         MessageDelta,
         MessageStop,
-    }
-
-    /// <summary>
-    ///     The name of the property the reader is on, as one of the literals
-    ///     this mapper dispatches on — or <see cref="string.Empty" /> for a
-    ///     name it does not know. The table is matched against the RAW bytes
-    ///     of the name, so the dispatch allocates nothing; the literals are
-    ///     interned, so the comparisons are the same ones the old path made.
-    /// </summary>
-    private static string EventPropertyName(ref Utf8JsonReader reader)
-    {
-        string? known = MatchEventProperty(reader.ValueSpan);
-        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
     }
 
     /// <summary>
