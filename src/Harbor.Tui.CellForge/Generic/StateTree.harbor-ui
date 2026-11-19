@@ -1,0 +1,8 @@
+# #3084: the product view template. The generated BuildRoot emits stable
+# sequence numbers for these nodes; StateTreeView resolves the two text slots
+# ("focus", "mode") from the current UiState and keeps their element state
+# across reconciliations through ElementStateStore.
+panel "state-tree":
+    .id "state.root"
+    text "focus"
+    text "mode"

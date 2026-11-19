@@ -46,6 +46,27 @@
     <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
       <OutputItemType>Analyzer</OutputItemType>
     </ProjectReference>
+    <!--
+      #3084: the State -> Tree envelope consumes the generator's produced
+      BuildRoot. This is a build-time analyzer only: ReferenceOutputAssembly=false
+      keeps the Roslyn-bearing generator out of the shipped binary and out of
+      the NativeAOT closure. The generated contract, declarations and BuildRoot
+      land in THIS compilation, so StateTreeView calls them without reflection.
+    -->
+    <ProjectReference Include="..\Harbor.Tui.CellForge.CodeGen\Harbor.Tui.CellForge.CodeGen.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The product view template. TargetPath is the project-relative cache key
+      the generator uses to name the emitted HarborUi_* partial class.
+    -->
+    <AdditionalFiles Include="Generic\StateTree.harbor-ui">
+      <TargetPath>Generic/StateTree.harbor-ui</TargetPath>
+    </AdditionalFiles>
   </ItemGroup>
 
   <ItemGroup>

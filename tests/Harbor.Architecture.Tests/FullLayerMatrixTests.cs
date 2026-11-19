@@ -137,7 +137,7 @@ public class FullLayerMatrixTests
     ///     rule asks "is this analyzer reference a known build-time component",
     ///     and the answer for a generator and for an analyzer is the same.
     /// </remarks>
-    internal static readonly string[] SourceGeneratorProjects = ["Harbor.CodeGen", "Harbor.Arch.Analyzers"];
+    internal static readonly string[] SourceGeneratorProjects = ["Harbor.CodeGen", "Harbor.Arch.Analyzers", "Harbor.Tui.CellForge.CodeGen"];
 
     // The single source of truth for "which src assemblies exist AND are under
     // enforcement". LayerDependencyTests.AllExpectedHarborAssembliesAreLoaded
