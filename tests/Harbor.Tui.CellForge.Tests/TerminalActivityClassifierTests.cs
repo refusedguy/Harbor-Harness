@@ -8,111 +8,37 @@ namespace Harbor.Tui.CellForge.Tests;
 public class TerminalActivityClassifierTests
 {
     [Test]
-    public async Task Classify_NoSignals_IsIdle()
-    {
-        var state = TerminalActivityClassifier.Classify(TerminalActivitySignals.None);
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Idle);
-    }
-
-    [Test]
-    public async Task Classify_BusyOnly_IsBusy()
-    {
-        var state = TerminalActivityClassifier.Classify(new TerminalActivitySignals { IsBusy = true });
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Busy);
-    }
-
-    [Test]
-    public async Task Classify_RetryingOnly_IsRetrying()
-    {
-        var state = TerminalActivityClassifier.Classify(new TerminalActivitySignals { IsRetrying = true });
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Retrying);
-    }
-
-    [Test]
-    public async Task Classify_WaitingForUserOnly_IsWaiting()
-    {
-        var state = TerminalActivityClassifier.Classify(new TerminalActivitySignals { IsWaitingForUser = true });
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Waiting);
-    }
-
-    [Test]
-    public async Task Classify_HasErrorOnly_IsError()
-    {
-        var state = TerminalActivityClassifier.Classify(new TerminalActivitySignals { HasError = true });
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Error);
-    }
-
-    [Test]
-    public async Task Classify_FinishedOnly_IsDone()
-    {
-        var state = TerminalActivityClassifier.Classify(new TerminalActivitySignals { IsFinished = true });
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Done);
-    }
-
-    [Test]
-    public async Task Classify_AllSignalsSet_ErrorWins()
+    [Arguments(false, false, false, false, false, TerminalActivityState.Idle)]
+    [Arguments(true, false, false, false, false, TerminalActivityState.Busy)]
+    [Arguments(false, true, false, false, false, TerminalActivityState.Retrying)]
+    [Arguments(false, false, true, false, false, TerminalActivityState.Waiting)]
+    [Arguments(false, false, false, true, false, TerminalActivityState.Error)]
+    [Arguments(false, false, false, false, true, TerminalActivityState.Done)]
+    // Simultaneous signals: the loudest state wins, not the caller's flag order.
+    [Arguments(true, true, true, true, true, TerminalActivityState.Error)]
+    [Arguments(true, true, true, false, false, TerminalActivityState.Waiting)]
+    [Arguments(true, true, false, false, false, TerminalActivityState.Retrying)]
+    [Arguments(true, false, false, false, true, TerminalActivityState.Busy)]
+    public async Task Classify_Signals_ResolvesToExpectedState(
+        bool busy,
+        bool retrying,
+        bool waiting,
+        bool error,
+        bool finished,
+        TerminalActivityState expected)
     {
         var signals = new TerminalActivitySignals
         {
-            IsBusy = true,
-            IsRetrying = true,
-            IsWaitingForUser = true,
-            HasError = true,
-            IsFinished = true,
+            IsBusy = busy,
+            IsRetrying = retrying,
+            IsWaitingForUser = waiting,
+            HasError = error,
+            IsFinished = finished,
         };
 
         var state = TerminalActivityClassifier.Classify(signals);
 
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Error);
-    }
-
-    [Test]
-    public async Task Classify_WaitingWithBusyAndRetrying_WaitingWins()
-    {
-        var signals = new TerminalActivitySignals
-        {
-            IsBusy = true,
-            IsRetrying = true,
-            IsWaitingForUser = true,
-        };
-
-        var state = TerminalActivityClassifier.Classify(signals);
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Waiting);
-    }
-
-    [Test]
-    public async Task Classify_RetryingWithBusy_RetryingWins()
-    {
-        var signals = new TerminalActivitySignals
-        {
-            IsBusy = true,
-            IsRetrying = true,
-        };
-
-        var state = TerminalActivityClassifier.Classify(signals);
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Retrying);
-    }
-
-    [Test]
-    public async Task Classify_BusyWithFinished_BusyWins()
-    {
-        var signals = new TerminalActivitySignals
-        {
-            IsBusy = true,
-            IsFinished = true,
-        };
-
-        var state = TerminalActivityClassifier.Classify(signals);
-
-        await Assert.That(state).IsEqualTo(TerminalActivityState.Busy);
+        await Assert.That(state).IsEqualTo(expected);
     }
 
     [Test]

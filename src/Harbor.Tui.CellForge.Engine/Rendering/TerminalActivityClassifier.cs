@@ -46,7 +46,7 @@ public enum TerminalActivityState : byte
 ///     The signals a caller feeds into <see cref="TerminalActivityClassifier" />.
 ///     Each flag is independent; <see cref="Classify" /> resolves simultaneous
 ///     flags with a fixed precedence rather than trusting the caller to pick
-///     one. A value of <see cref="default" /> means "nothing is happening".
+///     one. A <see langword="default" /> value means "nothing is happening".
 /// </summary>
 public readonly record struct TerminalActivitySignals
 {
