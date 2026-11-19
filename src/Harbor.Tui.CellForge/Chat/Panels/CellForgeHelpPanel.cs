@@ -63,10 +63,25 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
         }
 
         rows.Add(string.Empty);
+        int slashHeading = rows.Count;
         rows.Add("Slash commands");
         foreach (string cmd in ChatCommands.Slash)
         {
             rows.Add($"  {cmd}");
+        }
+
+        // #3109: the slash catalog grows; the fixed action-hint tail must not
+        // fall off a clipped panel. Spend only the command list's slack, never
+        // the hints or the hotkey rows above them, and always leave the first
+        // few commands visible on a short viewport.
+        const int TailRows = 5; // blank, heading, hint, blank, closing line
+        const int MinVisibleCommands = 5;
+        int overflow = rows.Count + TailRows - ctx.Height;
+        if (overflow > 0)
+        {
+            int slashRows = rows.Count - slashHeading - 1;
+            int drop = Math.Min(Math.Min(slashRows, overflow), Math.Max(0, slashRows - MinVisibleCommands));
+            rows.RemoveRange(rows.Count - drop, drop);
         }
 
         // O8 steal (#1177, epic #1155 — the opencode DialogSelect footer-hints
