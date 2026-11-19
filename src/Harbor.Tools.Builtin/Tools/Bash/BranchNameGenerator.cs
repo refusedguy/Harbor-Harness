@@ -113,9 +113,9 @@ public static class BranchNameGenerator
     {
         for (int i = 0; i < Prefixes.Length; i++)
         {
-            string prefix = Prefixes[i];
-            if (line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return line[prefix.Length..].Trim();
+            string label = Prefixes[i];
+            if (line.StartsWith(label, StringComparison.OrdinalIgnoreCase))
+                return line[label.Length..].Trim();
         }
 
         // A generator may write a sentence instead of a bare prefix. Use the
