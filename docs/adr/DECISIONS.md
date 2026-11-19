@@ -1758,3 +1758,26 @@ issue.
 
 - Полный текст, таблица по трём частям и условия пересмотра:
   [ADR-071](ADR-071-execution-graph-command-receipts-verdict.md).
+
+## ADR-072: file-level rewind с pre-image (#2659) — проект решения
+
+Issue #2659 из `product-feature-gaps.md` (U01-U06) просит content-addressed blob
+store вместо git-зависимого отката: pre-image перед первым write в turn, tombstone
+для созданных файлов, `touchedPaths` вместо полного snapshot и трёхуровневый guard
+«оригинал изменился» перед restore. Проверка `origin/dev` (`27c312f7`),
+комментариев issue, `gh pr list --search 2659` и `git log --all --grep=2659`
+показала, что влитого PR и предыдущего ADR-вердикта нет; ни один из U01-U06 в
+дереве не представлен. Чекпойнт-стоуры хранят сообщения, а не содержимое файлов,
+а [ADR-022](ADR-022-session-log-append-only.md) требует append-only журнала.
+
+Decided: зафиксировать проект решения и dependency order будущего slice, код не
+писать. Реализация затрагивает contracts, storage, CLI и DI и не принимается без
+локальной сборки: публичные контракты подпадают под freeze, новый storage-тип
+требует обновления seam graph. Гейты, пороги, golden и AOT-профиль не меняются.
+Issue остаётся OPEN; комментарий содержит только хеш коммита ADR. Пересмотр по
+новому факту: владелец называет потребителя `IFileHistoryTracker`, измеримую цель
+для `Conflict` и владельца реестра `touchedPaths`. Номер 072 выбран, потому что
+071 закрепил за собой PR #2998 (issue #2662), пока этот PR был открыт.
+
+- Полный текст, таблица U01-U06 и dependency order:
+  [ADR-072](ADR-072-file-rewind-preimage-design.md).
