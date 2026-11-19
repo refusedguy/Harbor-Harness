@@ -43,6 +43,7 @@ internal static class CliVerbCatalog
         "events",
         "storage",
         "logs",
+        "import-rules",
         "help",
         "version",
         "completions",
