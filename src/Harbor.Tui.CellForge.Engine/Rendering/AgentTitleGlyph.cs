@@ -42,7 +42,7 @@ public static class AgentTitleGlyph
     public static string For(string? agentName)
     {
         if (string.IsNullOrWhiteSpace(agentName)) return Fallback;
-        return Glyphs.TryGetValue(agentName.Trim(), out string glyph) ? glyph : Fallback;
+        return Glyphs.TryGetValue(agentName.Trim(), out string? glyph) ? glyph! : Fallback;
     }
 
     /// <summary>
