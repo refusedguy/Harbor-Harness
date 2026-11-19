@@ -68,6 +68,8 @@
   href: DDMIN_SHRINK_CONTRACT.md
 - name: Demo Gifs
   href: DEMO_GIFS.md
+- name: Design Faq
+  href: DESIGN_FAQ.md
 - name: Design System
   href: DESIGN_SYSTEM.md
 - name: Design System Api
