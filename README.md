@@ -132,6 +132,21 @@ CLI verbs (see `help`): `ask <prompt> | run | demo | setup | auth | config | pro
 
 See [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md) for the full guide and [docs/BUILD.md](./docs/BUILD.md) for build variants (granular feature flags such as `no-plugins` / `no-all-providers` via the build orchestrator).
 
+### Which renderer and storage should I use?
+
+Two environment variables choose the pieces that shape a session. Leave them unset to accept the build defaults.
+
+| Need | Set | Why |
+|---|---|---|
+| Pipe output to another command, write logs, or run in CI | `HARBOR_TUI=plain` | No ANSI escapes, one event per line, safe for `grep` and log files |
+| Interactive REPL with a virtualized chat timeline and streaming diffs | `HARBOR_TUI=cellforge` | Full-screen cell-diff renderer, opt-in |
+| The richer Spectre-based fullscreen shell | `HARBOR_TUI=spectre-tui` | Only in builds made with `HarborWithSpectreTui=true`. A plain `dotnet build` falls back to `plain` with a warning in the log |
+| Keep sessions as readable files you can grep or archive | `HARBOR_STORAGE=jsonl` | Append-only JSONL, the default |
+| Query sessions through SQL or keep them in one database file | `HARBOR_STORAGE=sqlite` | SQLite store |
+| Ephemeral run where nothing is written to disk | `HARBOR_STORAGE=memory` | Sessions live only in the process |
+
+The full renderer matrix and the build-time caveats are in [docs/ALTERNATIVE_UIS.md](./docs/ALTERNATIVE_UIS.md). The on-disk session format is described in [docs/SESSION_FORMAT.md](./docs/SESSION_FORMAT.md).
+
 ## E2E verified — Kilocode free model
 
 Harbor's documented end-to-end path runs against the Kilocode gateway using the free `tencent/hy3:free` model ($0 cost).
