@@ -21,6 +21,30 @@ public class ReadToolTests
     }
 
     [Test]
+    public async Task ExecuteAsync_MissingOrNonStringPath_IsRejectedWithoutThrowing()
+    {
+        // #3433: the required-path extractor moved from
+        // args.GetProperty("path").GetString()! to JsonArgs.GetString(args,
+        // "path")!. Both malformed shapes must stay a clean failure: the
+        // fail-closed dispatcher rejects them at ValidateArguments, and the
+        // extraction itself must not throw where the old GetProperty access did.
+        var tool = new ReadTool(NullLogger<ReadTool>.Instance);
+        var ctx = TestAgents.CreateToolContext();
+
+        foreach (string json in new[] { "{}", """{"path":123}""" })
+        {
+            var args = JsonDocument.Parse(json).RootElement;
+
+            var validation = tool.ValidateArguments(args);
+            await Assert.That(validation.IsFailure).IsTrue();
+            await Assert.That(validation.Error).IsEqualTo("Missing or empty 'path'.");
+
+            var result = await tool.ExecuteAsync(args, ctx);
+            await Assert.That(result.IsError).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task ExecuteAsync_NonExistentFile_ReturnsError()
     {
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
