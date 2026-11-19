@@ -5,6 +5,7 @@
 // view-model, without an Avalonia event loop.
 
 using Harbor.Desktop.ViewModels;
+using Harbor.Ui.Framework.ViewModels;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
