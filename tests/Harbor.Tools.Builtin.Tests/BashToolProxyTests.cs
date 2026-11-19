@@ -204,6 +204,55 @@ public class BashToolProxyTests
         await Assert.That(proxy.LastSpec).IsNull();
     }
 
+    // ── 8. Required 'command' extraction (#3436) ──────────────────────────
+
+    /// <summary>
+    ///     #3436 moves the required-command extraction from
+    ///     <c>args.GetProperty("command").GetString()!</c> to
+    ///     <c>JsonArgs.GetString(args, "command")!</c>. The fail-closed dispatcher
+    ///     validates before ExecuteAsync, so rejection texts stay byte-identical;
+    ///     a valid command must still reach the shell verbatim, including quotes,
+    ///     backslashes and non-ASCII characters.
+    /// </summary>
+    [Test]
+    public async Task RequiredCommand_ExtractorSwap_ValidationTextsAndPassThroughPreserved()
+    {
+        FakeProcessProxy proxy = new() { Build = _ => new FakeProcessHandle([], [], 0) };
+        BashTool tool = new(proxy, NullLogger<BashTool>.Instance);
+
+        (string Json, string Error)[] rejected =
+        [
+            ("{}", "Missing required argument 'command'."),
+            ("""{"command":123}""", "Missing required argument 'command'."),
+            ("""{"command":"   "}""", "'command' cannot be empty.")
+        ];
+
+        foreach ((string json, string expectedError) in rejected)
+        {
+            var args = JsonDocument.Parse(json).RootElement;
+            Result validation = tool.ValidateArguments(args);
+            await Assert.That(validation.IsFailure).IsTrue();
+            await Assert.That(validation.Error).IsEqualTo(expectedError);
+        }
+
+        string command = """printf '%s' 'héllo "world" \ $HOME'""";
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("command", command);
+            writer.WriteEndObject();
+        }
+        var validArgs = JsonDocument.Parse(buffer.ToArray()).RootElement;
+        ToolResult result = await tool.ExecuteAsync(validArgs, TestToolContext.Create())
+            .WaitAsync(TimeSpan.FromSeconds(15));
+
+        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(proxy.LastSpec!.Arguments.Count).IsEqualTo(2);
+        await Assert.That(proxy.LastSpec.Arguments[0]).IsEqualTo(OperatingSystem.IsWindows() ? "/c" : "-c");
+        await Assert.That(proxy.LastSpec.Arguments[1]).IsEqualTo(command);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     /// <summary>Two stdout lines and one stderr line, exit 0 (unless overridden per test).</summary>
