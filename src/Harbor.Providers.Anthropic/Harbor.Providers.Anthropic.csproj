@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Harbor.Providers.Shared\ProviderChunkDecoder.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\ProviderLlmClientBase.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\ProviderHttp.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\ProviderAuth.cs" LinkBase="Shared" />
