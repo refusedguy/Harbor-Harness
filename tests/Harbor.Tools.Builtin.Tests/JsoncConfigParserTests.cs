@@ -4,6 +4,7 @@
 // config store.
 
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Tools.Builtin;
 
 namespace Harbor.Tools.Builtin.Tests;
