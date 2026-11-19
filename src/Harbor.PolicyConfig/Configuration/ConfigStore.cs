@@ -100,7 +100,7 @@ public sealed class JsonConfigStore : IConfigStore
     private Result<HarborConfig> LoadCore()
     {
         Result pathCheck = ValidateConfigPath();
-        if (pathCheck.IsFailure) return Result.Failure<HarborConfig>(pathCheck.Error);
+        if (pathCheck.IsFailure) return pathCheck.ConvertFailure<HarborConfig>();
 
         if (!File.Exists(_configPath))
         {
