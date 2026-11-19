@@ -1522,3 +1522,27 @@ AOT-профиль не меняются. Issue остаётся OPEN как и�
 
 - Полный текст, таблица по девяти влитым item и список нереализованных:
   [ADR-061](ADR-061-testing-qa-part1-report-verdict.md).
+
+## ADR-062: отчёт orca-features part 1/2 (#2671) — одного общего slice нет
+
+Issue #2671 — self-contained отчёт `orca-features` part 1/2 с разделами
+A01–A20, B01–B22, C01–C15, D01–D13, E01–E27, F01–F02; тело обрывается на F02.
+Инвентаризация `origin/dev` (`01e2f3f7`), комментарии issue,
+`gh pr list --search 2671`, `git log --all --grep=2671` и
+`docs/adr/DECISIONS.md` показали три влитых item: E27 (#2775, `07906b5d`),
+D07 (#2857, `5ddc03a0`) и D04 (#2893, `0dd4dca4`). Все merge commit
+подтверждены как предки `origin/dev` через `git merge-base --is-ancestor`.
+
+Decided: код не писать. Влитые item не перевыводятся, остальные не объединяются
+в meta-PR. Часть идей помечена отчётом как `не нужен` — аналог уже есть в дереве.
+Режимы одобрения, folder trust, rewind файлов, execution journal, агенты,
+workflows, reasoning/vision route, image protocol и diff comments требуют нового
+публичного контракта; retention, pricing, frame scheduler и terminal
+capabilities требуют решения владельца; остальные TUI/CLI-пункты требуют
+потребителя и измеримой цели. Гейты, пороги, golden и AOT-профиль не меняются.
+Issue остаётся OPEN как источник сравнения; комментарий содержит только хеш
+коммита ADR. Пересмотр — по новому факту: владелец называет конкретный item,
+потребителя и цель. Part 2/2 (#2672) этим решением не перевыводится.
+
+- Полный текст, таблица по трём влитым item и список нереализованных:
+  [ADR-062](ADR-062-orca-features-part1-report-verdict.md).
