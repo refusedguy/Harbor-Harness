@@ -53,7 +53,12 @@ public sealed partial class BashTool : ITool
     {
         string command = JsonArgs.GetString(args, "command")!;
         string? cwd = JsonArgs.GetString(args, "cwd");
-        int timeout = JsonArgs.GetInt(args, "timeout") ?? 30;
+        // #3389: the requested timeout, its bounds and the fallback all live
+        // in CommandTimeoutResolver now. The old inline default plus range
+        // clamp encoded the same policy a second time; Resolve is the single
+        // authority and this call is its real product consumer (not just the
+        // resolver's unit tests).
+        int timeout = CommandTimeoutResolver.Resolve(JsonArgs.GetInt(args, "timeout"));
         var env = args.TryGetProperty("env", out var e) && e.ValueKind == JsonValueKind.Object
             ? e.EnumerateObject().ToDictionary(
                 p => p.Name,
@@ -61,8 +66,6 @@ public sealed partial class BashTool : ITool
                 // to the raw token ("123", "true") instead of crashing.
                 p => p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? "" : p.Value.GetRawText())
             : null;
-
-        if (timeout is < 1 or > 600) timeout = 30;
 
         // S2 (#376): an explicit `cwd` wins; otherwise the context working
         // directory (the isolated worktree for sub-agent runs), else the

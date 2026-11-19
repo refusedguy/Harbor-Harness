@@ -132,6 +132,53 @@ public class BashToolProxyTests
         await Assert.That(proxy.Kills).IsEqualTo(1);
     }
 
+    // ── 4b. #3389: the resolver is the product's timeout authority ────────
+
+    /// <summary>
+    ///     #3389. <c>BashTool</c> no longer computes the process timeout inline;
+    ///     it calls <see cref="CommandTimeoutResolver" />. The <c>Executing</c>
+    ///     log (event 1) records the exact value handed to
+    ///     <c>CancellationTokenSource.CancelAfter</c>, so it exposes the resolved
+    ///     timeout without waiting out a real timer. A command that asks for an
+    ///     elevated, in-range timeout must reach the process with that value;
+    ///     a short/default run must use the resolver's base, and an
+    ///     out-of-range request must fall back to it too.
+    /// </summary>
+    [Test]
+    public async Task ResolverWiring_LongRequestIncreased_ShortAndOutOfRangeUseBase()
+    {
+        FakeProcessProxy proxy = new() { Build = _ => new FakeProcessHandle([], [], 0) };
+
+        // Long-running command: 120s is inside [MinSeconds, MaxSeconds], so the
+        // resolver preserves it instead of the 30s base.
+        CapturingLogger<BashTool> longLog = new();
+        BashTool longTool = new(proxy, longLog);
+        var longArgs = JsonDocument.Parse("""{"command":"echo long","timeout":120}""").RootElement;
+        ToolResult longResult = await longTool.ExecuteAsync(longArgs, TestToolContext.Create())
+            .WaitAsync(TimeSpan.FromSeconds(15));
+        await Assert.That(longResult.IsError).IsFalse();
+        await Assert.That(longLog.MessagesFor(1)).Contains("timeout: 120s");
+
+        // Short command: no explicit timeout -> resolver base (30s).
+        CapturingLogger<BashTool> shortLog = new();
+        BashTool shortTool = new(proxy, shortLog);
+        var shortArgs = JsonDocument.Parse("""{"command":"echo short"}""").RootElement;
+        ToolResult shortResult = await shortTool.ExecuteAsync(shortArgs, TestToolContext.Create())
+            .WaitAsync(TimeSpan.FromSeconds(15));
+        await Assert.That(shortResult.IsError).IsFalse();
+        await Assert.That(shortLog.MessagesFor(1)).Contains("timeout: 30s");
+
+        // Out-of-range request must also collapse to the resolver base, proving
+        // no inline clamp survived next to the Resolve call.
+        CapturingLogger<BashTool> overLog = new();
+        BashTool overTool = new(proxy, overLog);
+        var overArgs = JsonDocument.Parse("""{"command":"echo over","timeout":9999}""").RootElement;
+        ToolResult overResult = await overTool.ExecuteAsync(overArgs, TestToolContext.Create())
+            .WaitAsync(TimeSpan.FromSeconds(15));
+        await Assert.That(overResult.IsError).IsFalse();
+        await Assert.That(overLog.MessagesFor(1)).Contains("timeout: 30s");
+    }
+
     // ── 5. Caller cancellation (not timeout) ─────────────────────────────
 
     [Test]
