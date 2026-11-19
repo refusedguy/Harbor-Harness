@@ -10,6 +10,7 @@ using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Repl.Commands;
 using Microsoft.Extensions.Logging;
 using Harbor.Registries.Providers;
+using Harbor.Tools.Builtin;
 
 namespace Harbor.App.Cli.Repl;
 
@@ -83,10 +84,21 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
         string firstPrompt = first.Value;
         await ApplySessionTitleAsync(store, host.SessionModel, HeuristicTitle(firstPrompt), ct).ConfigureAwait(false);
 
+        // The policy builds the naming context from recent user messages; the
+        // service only decides when to ask and what to do with the answer.
+        // #3414: no manual prompt concatenation here any more.
+        var userMessages = new List<string>();
+        foreach (var message in messages.Value)
+        {
+            if (message is UserMessage u)
+            {
+                userMessages.Add(u.Content);
+            }
+        }
+
         // AI upgrade on the pool: full observation inside, the frame loop never waits.
         Session captured = host.SessionModel;
-        string prompt = firstPrompt;
-        _ = Task.Run(() => UpgradeTitleWithAiAsync(captured, prompt));
+        _ = Task.Run(() => UpgradeTitleWithAiAsync(captured, userMessages));
     }
 
     /// <summary>First line of the first prompt, 48 chars max.</summary>
@@ -96,8 +108,23 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
         return title.Length > 48 ? title[..47] + "…" : title;
     }
 
+    /// <summary>
+    ///     Builds the naming request text for a session from its recent user
+    ///     messages (issue #3414). The bounded, deterministic context comes
+    ///     from <see cref="SessionTitlePolicy.BuildPrompt" />; this service
+    ///     only wraps it in the instruction that turns it into a title request.
+    ///     Internal for the policy behavior test (InternalsVisibleTo).
+    /// </summary>
+    internal static string BuildNamingPrompt(IReadOnlyList<string> userMessages)
+    {
+        string context = SessionTitlePolicy.BuildPrompt(userMessages);
+        return "Generate a short chat title (2-5 words) for a conversation that started " +
+               "with these user messages. Reply with the title only — no quotes, no punctuation " +
+               "around it, same language as the messages:\n" + context;
+    }
+
     /// <summary>Background title summarization: one micro-request, timeout 30 s.</summary>
-    private async Task UpgradeTitleWithAiAsync(Session session, string firstUserMessage)
+    private async Task UpgradeTitleWithAiAsync(Session session, IReadOnlyList<string> userMessages)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         try
@@ -113,13 +140,10 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
                 return;
             }
 
-            string excerpt = firstUserMessage.Length > 500 ? firstUserMessage[..500] : firstUserMessage;
+            string prompt = BuildNamingPrompt(userMessages);
             var request = new LlmRequest(
                 Model: session.Model,
-                Messages: [LlmUserMessage.Text(
-                    "Generate a short chat title (2-5 words) for a conversation that started " +
-                    "with this user message. Reply with the title only — no quotes, no punctuation " +
-                    "around it, same language as the message:\n" + excerpt)],
+                Messages: [LlmUserMessage.Text(prompt)],
                 SystemPrompt: "You name chat sessions. Reply with a 2-5 word title only.",
                 Tools: []);
             var sb = new StringBuilder();
