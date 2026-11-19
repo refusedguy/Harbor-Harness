@@ -154,8 +154,13 @@ internal static class RegistryFacade
         // completed command writes is the one every ICommandReceiptStore
         // consumer reads. BCL types only, no new contract to keep in sync.
         Func<string, string, string, DateTimeOffset, CancellationToken, Task> commandReceiptWriter =
-            (commandId, runId, nodeId, stamp, ct) =>
-                ctx.CommandReceiptStore.TryRecordAsync(commandId, runId, nodeId, stamp, ct);
+            async (commandId, runId, nodeId, stamp, ct) =>
+            {
+                // AsyncFixer06: the Task<T> result is a receipt this writer
+                // deliberately does not read; discard it explicitly.
+                _ = await ctx.CommandReceiptStore
+                    .TryRecordAsync(commandId, runId, nodeId, stamp, ct).ConfigureAwait(false);
+            };
 
         var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, providerRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, spillStore, pluginInventory, commandReceiptWriter);
         // The single attach point of both forwarders: the container resolves

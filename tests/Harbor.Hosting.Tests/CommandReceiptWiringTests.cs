@@ -52,8 +52,11 @@ public class CommandReceiptWiringTests
 
         // The exact seam RegistryFacade installs on the production BashTool.
         Func<string, string, string, DateTimeOffset, CancellationToken, Task> writer =
-            (commandId, runId, nodeId, stamp, ct) =>
-                ctx.CommandReceiptStore.TryRecordAsync(commandId, runId, nodeId, stamp, ct);
+            async (commandId, runId, nodeId, stamp, ct) =>
+            {
+                _ = await ctx.CommandReceiptStore
+                    .TryRecordAsync(commandId, runId, nodeId, stamp, ct).ConfigureAwait(false);
+            };
         var tool = new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance)
         {
             ReceiptWriter = writer
