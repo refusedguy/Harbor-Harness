@@ -1,7 +1,8 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
-using EngineInput = Harbor.Tui.CellForge.Input;
+
+// EngineInput is a global alias in this test project; re-aliasing it here is CS1537.
 
 namespace Harbor.Tui.CellForge.Tests;
 
