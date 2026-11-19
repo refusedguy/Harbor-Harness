@@ -1,6 +1,6 @@
 # Harbor.Providers.Shared
 
-Shared source code compiled into provider assemblies via `<Compile Include>` link items (ROP-A). `OpenAiWire.cs` (the canonical chat-completions chunk parser) is linked into the OpenAI and OpenAI-Compatible providers; `SsePump.cs` (stream pump + `ChunkStreamState` diagnostics) is linked into all four providers (OpenAI, OpenAiCompatible, Ollama, Anthropic).
+Shared source code compiled into provider assemblies via `<Compile Include>` link items (ROP-A). `OpenAiWire.cs` (the canonical chat-completions chunk parser) is linked into the OpenAI and OpenAI-Compatible providers; `SsePump.cs` (stream pump + `ChunkStreamState` diagnostics) is linked into all four providers (OpenAI, OpenAiCompatible, Ollama, Anthropic); `ProviderToolCallEmitter.cs` (the one tool-call Start/Delta emit policy) is linked into the three tool-call-emitting providers (OpenAI, OpenAiCompatible, Ollama).
 
 ## Layer
 
@@ -13,7 +13,8 @@ This folder is declared in `FullLayerMatrixTests.SharedSourceFolders` and held a
 | File | Purpose |
 |------|---------|
 | `OpenAiWire.cs` | `OpenAiWire.ParseChatChunk`, `TryParseChatChunkLine` — canonical OpenAI chat-completions SSE chunk parser (span-based, no per-chunk DOM) with stable tool-call id mapping (`indexToId`), counted positional-id fallbacks and synthesized step finishes for usage-without-finish_reason chunks (#203). |
-| `SsePump.cs` | `SsePump.RunAsync/RunSseAsync` — reads SSE streams, feeds `OpenAiWire`, handles malformed chunks, and yields `LlmEvent` sequences. Hosts `ChunkStreamState` (index→id map, malformed/remap/dropped-usage counters, finish-reason memory) and the shared warn-once remap helper. `SsePump.DecodeDataLine` classifies one raw `data:` line on spans (prefix strip + `[DONE]` test allocate nothing, #467); the payload string is materialised once, for the chunk parser. |
+| `SsePump.cs` | `SsePump.RunAsync/RunSseAsync` — reads SSE streams, feeds `OpenAiWire`, handles malformed chunks, and yields `LlmEvent` sequences. Hosts `ChunkStreamState` (index→id map, malformed/remap/dropped-usage counters, finish-reason memory) and the shared warn-once remap helper. `SsePump.DecodeDataLine` classifies one raw `data:` line on spans (prefix strip + `[DONE]` test allocate nothing, #467); the payload string is materialised once, for the chunk parser. `ChunkStreamState.ResolveToolCallId` owns the wire id → remembered → `tc{index}` resolution (#3762). |
+| `ProviderToolCallEmitter.cs` | `ProviderToolCallEmitter.Emit(List<LlmEvent>, ChunkStreamState, int, string?, string?, string?)` — the single place a parsed tool call becomes the `ToolCallStartEvent`/`ToolCallDeltaEvent` pair. Delegates id resolution to `ChunkStreamState.ResolveToolCallId` so OpenAI, the compatible adapter and Ollama cannot drift (#3762). |
 
 ## Public API summary
 

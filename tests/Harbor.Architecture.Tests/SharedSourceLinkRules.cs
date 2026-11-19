@@ -208,9 +208,12 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(25)
+        await Assert.That(links.Length).IsEqualTo(28)
             .Because(
-                "25 `<Compile Include>` link items: the #1499 ProviderLlmClientBase.cs into the "
+                "28 `<Compile Include>` link items: the #3762 ProviderToolCallEmitter.cs into the "
+                + "three tool-call-emitting providers (OpenAI, OpenAiCompatible, Ollama) — the one "
+                + "Start/Delta policy that used to be copied into OpenAiWire and OllamaLlmClient. "
+                + "The #1499 ProviderLlmClientBase.cs into the "
                 + "three native providers (Anthropic, OpenAI, OpenAiCompatible), SsePump and "
                 + "Utf8JsonReaderExtensions into four "
                 + "providers, OpenAiWire, OpenAiImageContent and ProviderArguments into OpenAI + "

@@ -71,7 +71,17 @@ internal static class ProviderPayload
 internal sealed class ChunkStreamState
 {
     /// <summary>First seen id wins per tool-call index.</summary>
-    public Dictionary<int, string> IndexToId { get; } = new(capacity: 4);
+    public Dictionary<int, string> IndexToId { get; private set; } = new(capacity: 4);
+
+    /// <summary>
+    ///     Wrap a caller-owned index→id map in a transient state. The legacy
+    ///     <c>ParseChatChunk</c>/<c>MapNdjsonChunk</c> overloads hand a bare map
+    ///     without a stream state; routing their emit through the shared
+    ///     <c>ProviderToolCallEmitter</c> needs a state that resolves against
+    ///     that same map. The map itself stays the caller's.
+    /// </summary>
+    internal static ChunkStreamState FromMap(Dictionary<int, string> map) =>
+        new() { IndexToId = map };
 
     /// <summary>How many wire chunks were skipped as unparseable this stream.</summary>
     public int MalformedChunks { get; private set; }
@@ -90,6 +100,38 @@ internal sealed class ChunkStreamState
 
     /// <summary>Record one positional id fallback.</summary>
     public void CountRemap() => RemappedToolCalls++;
+
+    /// <summary>
+    ///     Owner version of tool-call id resolution (ROP-A ПР.3). Wire id →
+    ///     remembered id → positional <c>tc{index}</c> fallback, counting the
+    ///     fallback as diagnosable (#203 B8) and remembering the winner for the
+    ///     index so later delta chunks coalesce onto the same id. Every
+    ///     provider emit funnels through here, so the policy lives in exactly
+    ///     one place instead of being copied into each wire parser.
+    /// </summary>
+    public string ResolveToolCallId(int index, string? wireId)
+    {
+        // Only string wire ids count: servers send numeric ids, and the DOM
+        // walk ignored those (ValueKind guard).
+        string? remembered = IndexToId.GetValueOrDefault(index);
+        string id;
+        if (!string.IsNullOrEmpty(wireId))
+        {
+            id = wireId!;
+        }
+        else if (remembered is not null)
+        {
+            id = remembered;
+        }
+        else
+        {
+            id = $"tc{index}";
+            CountRemap();
+        }
+
+        IndexToId[index] = id;
+        return id;
+    }
 
     /// <summary>Whether the once-per-stream remap warning was already logged.</summary>
     public bool RemapWarned { get; private set; }
