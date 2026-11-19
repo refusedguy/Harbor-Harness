@@ -1,5 +1,4 @@
 {
-  "$schema": "../schema/provider.schema.json",
   "id": "openrouter",
   "displayName": "OpenRouter",
   "description": "Multi-provider router with 200+ models from Anthropic, OpenAI, Google, Meta, Mistral, and others.",

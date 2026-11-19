@@ -1,5 +1,4 @@
 {
-  "$schema": "../schema/provider.schema.json",
   "id": "kilocode",
   "displayName": "Kilo Code Gateway",
   "description": "Kilo Code's hosted gateway — multi-provider with FREE models. URL: https://kilo.ai/docs/gateway",
