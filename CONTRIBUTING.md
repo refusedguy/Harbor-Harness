@@ -104,3 +104,24 @@ catalogue, [`docs/ANTIPATTERNS.md`](docs/ANTIPATTERNS.md) for what is forbidden,
 [`docs/CODE_PRINCIPLES_AUDIT.md`](docs/CODE_PRINCIPLES_AUDIT.md) for known
 violations not to repeat, and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what is
 planned next.
+
+## AI-assisted contributions
+
+Pull requests written entirely by an agent are welcome. You, not the agent, are
+responsible for the result. Read the diff as you would read a colleague's work,
+and be ready to explain every line you submit.
+
+Before you open the pull request:
+
+- Read [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md). They carry the
+  operational rules and the code conventions that reviewers enforce.
+- Follow the checklist in
+  [Before you open a pull request](#before-you-open-a-pull-request). The build,
+  the affected test projects, and both markdown gates must pass.
+- Keep the change small. One concrete fix per pull request is easier to review
+  and easier to revert than a broad rewrite.
+- Stage files by explicit path. `git add -A` can pull in generated artifacts and
+  unrelated work.
+
+A pull request that leaves judgment to the agent is not ready for review. The
+same standards apply to code from any source.

@@ -104,6 +104,8 @@
   href: GUARD_VACUITY.md
 - name: Guard Value Measurement
   href: GUARD_VALUE_MEASUREMENT.md
+- name: Howto Package Plugin
+  href: HOWTO_PACKAGE_PLUGIN.md
 - name: I18N String Inventory
   href: I18N_STRING_INVENTORY.md
 - name: Ide Integration Patterns
@@ -130,6 +132,8 @@
   href: PLUGIN_SYSTEM.md
 - name: Project Status
   href: PROJECT_STATUS.md
+- name: Release Checklist
+  href: RELEASE_CHECKLIST.md
 - name: Release Engineering Analysis
   href: RELEASE_ENGINEERING_ANALYSIS.md
 - name: Reference Trimmer
