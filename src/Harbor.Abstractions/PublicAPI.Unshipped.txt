@@ -1,4 +1,6 @@
 #nullable enable
+Harbor.Abstractions.Agents.IAgentBoard
+Harbor.Abstractions.Agents.IAgentBoard.Post(string! kind, string! sourceSession, string? targetSession, string! body) -> bool
 Harbor.Abstractions.Plugins.IPlugin.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Harbor.Abstractions.Sessions.ISessionStore.GetTranscriptAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionTranscript!>>!
 *REMOVED*static Harbor.Abstractions.Agents.SubAgentFailureFormat.TryExtractResumeHint(string! error, string! agentName) -> Harbor.Abstractions.Agents.SubAgentResumeHint?

@@ -81,6 +81,12 @@ public sealed class AgentLoop : IAgentLoop
     // only, no new event and no change to any shipped scenario.
     private readonly bool _hardStopOnLoop;
 
+    // #3384: the shared agent-message board. Optional so every direct-construction
+    // caller (tests, benchmarks, load harnesses) keeps compiling unchanged; the
+    // composition root supplies the one process-wide board, so agent messages
+    // published here are readable by the rest of the app.
+    private readonly IAgentBoard? _agentBoard;
+
     /// <summary>
     ///     The goal round driver (#1761). It reserves a goal's next round at
     ///     the agent's quiescence point and injects the round prompt into the
@@ -171,7 +177,12 @@ public sealed class AgentLoop : IAgentLoop
         // #2212: opt-in hard stop for windowed loop detection. Off by default:
         // hosts that do not pass it keep the advisory RepeatToolGuard and the
         // exact pre-#2212 run behaviour. Forwarded to the turn runner.
-        bool hardStopOnLoop = false)
+        bool hardStopOnLoop = false,
+        // #3384: the shared agent-message board. Optional so every
+        // direct-construction caller keeps compiling unchanged; null keeps
+        // the board-free path, while the composition root injects the one
+        // process-wide instance.
+        IAgentBoard? agentBoard = null)
     {
         _providers = providers;
         _tools = tools;
@@ -236,6 +247,9 @@ public sealed class AgentLoop : IAgentLoop
         // built from the store's goal view, and from nothing at all when the
         // store has none.
         _goalDriver = new GoalRoundDriver(sessionStore as ISessionGoalStore, logger);
+        // #3384: keep the board the composition root supplied. With no board
+        // the loop publishes nothing and every existing caller is unaffected.
+        _agentBoard = agentBoard;
     }
 
     /// <summary>
@@ -256,6 +270,17 @@ public sealed class AgentLoop : IAgentLoop
     /// </remarks>
     private static IEnumerable<IPipelineBehavior> DefaultRunBehaviors(ILogger logger) =>
         [new LoggingBehavior(logger), new PermissionCheckBehavior(logger)];
+
+    /// <summary>
+    ///     #3384: publish one agent message to the shared board. Broadcasting
+    ///     (null target) keeps the board independent of any sub-agent routing;
+    ///     a host without a board pays one null check and publishes nothing.
+    /// </summary>
+    private void PostBoardMessage(string kind, ISessionContext session, string body)
+    {
+        if (_agentBoard is null) return;
+        _agentBoard.Post(kind, session.Session.Id.Value, null, body);
+    }
 
     /// <summary>
     ///     Run the agent loop to completion: prompt → LLM stream → tool execution → next turn,
@@ -329,6 +354,12 @@ public sealed class AgentLoop : IAgentLoop
             var (client, model) = resolved.Value;
 
             await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model, session.Session.Kind), ct).ConfigureAwait(false);
+
+            // #3384: the run's presence on the shared agent board. The body is
+            // the stable, bounded summary of who is running; the board assigns
+            // the id and the Pending state, both readable through its API.
+            PostBoardMessage("info", session,
+                $"Agent {agent.Name.Value} started on {model.Id} in session {session.Session.Id.Value}.");
 
             // PX4 slice 2: the run's start events. UserPromptSubmit is the
             // only new one that can stop the run, so it runs FIRST and its
@@ -566,6 +597,9 @@ public sealed class AgentLoop : IAgentLoop
             // otherwise turn the terminal event into an error).
             await _eventBus.PublishAsync(
                 new AgentEndEvent(SnapshotMessages(session.Messages), Limit: limit), CancellationToken.None).ConfigureAwait(false);
+            // #3384: close the run's board entry with its terminal summary.
+            PostBoardMessage("result", session,
+                $"Agent {agent.Name.Value} finished in session {session.Session.Id.Value} (limit: {limit?.ToString() ?? "none"}).");
             await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
 
             return Result.Success();

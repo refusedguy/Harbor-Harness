@@ -5,10 +5,12 @@ using Harbor.Application.Hooks;
 using Harbor.Application.Observability;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;
+using Harbor.Tools.Builtin;
 using Harbor.Registries.Scopes;
 using Harbor.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
@@ -129,6 +131,11 @@ internal static class CoreModule
         services.AddSingleton<ScopedProviderResolver>(sp => new ScopedProviderResolver(
             sp.GetRequiredService<IProviderRegistry>()));
         services.AddSingleton<IScopedProviderResolver>(sp => sp.GetRequiredService<ScopedProviderResolver>());
+        // #3384: one process-wide agent-message board. The loop publishes the
+        // run's Info/Result messages through IAgentBoard; the concrete board is
+        // registered first so a consumer can resolve the same instance directly.
+        services.AddSingleton<AgentBoard>();
+        services.AddSingleton<IAgentBoard>(sp => sp.GetRequiredService<AgentBoard>());
         services.AddSingleton<IAgentLoop, AgentLoop>();
         services.AddSingleton<DefaultAgent>();
         // sprint3-C C1: IAgent consumers get the tracing proxy (agent.turn span,
