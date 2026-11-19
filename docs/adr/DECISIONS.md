@@ -1548,3 +1548,30 @@ fleet worktree), часть требует своего владельца и п
 
 - Полный текст, таблица по трём влитым item и список нереализованных:
   [ADR-062](ADR-062-orca-features-part1-report-verdict.md).
+
+## ADR-063: отчёт avalonia-product-gaps (#2681) — одного общего slice нет
+
+Issue #2681 — self-contained аудит `Harbor.App.Avalonia`: разделы 0–20, 100
+Concrete item G01–G100 плюс таблица «какие контролы Avalonia нельзя взять как
+есть». Инвентаризация `origin/dev` (`204f4f44`), комментарии issue,
+`gh pr list --search 2681`, `git log --all --grep=2681` и
+`docs/adr/DECISIONS.md` показали одиннадцать влитых item: G08 (#2777,
+`4fce521c`), G65 (#2867, `aa94aa30`), G25 (#2899, `54a34573`), G48 (#2940,
+`3163dfbd`), G77 (#2945, `286a24d6`), G02 (#2955, `5125da50`), G85 (#2950,
+`3d6d39a7`), G27 (#2963, `1e02befc`), G18 (#2967, `e87e93df`), G74 (#2973,
+`ea8acf10`) и G81 (#2974, `b21f2f78`). Все merge commit подтверждены как предки
+`origin/dev` через `git merge-base --is-ancestor`. Item G24 находится в открытом
+PR #2980.
+
+Decided: код не писать. Влитые item и открытый PR не перевыводятся, остальные не
+объединяются в meta-PR. Human-in-the-loop (G05/G06, G38–G44) требует публичного
+контракта и composition root; a11y E2E, perf budget и golden (G71–G73, G79,
+G84, G88, G98–G100) требуют CI-поверхности; OS-уведомления, tray, background
+runs и packaging (G45/G46, G50, G93/G94) требуют владельца платформы; часть
+пунктов выведена отчётом из scope (G07, G31/G56, G61, G80). Гейты, пороги,
+golden и AOT-профиль не меняются. Issue остаётся OPEN как источник сравнения;
+комментарий содержит только хеш коммита ADR. Пересмотр — по новому факту:
+владелец называет конкретный item, потребителя и цель.
+
+- Полный текст, таблица по одиннадцати влитым item и список нереализованных:
+  [ADR-063](ADR-063-avalonia-product-gaps-report-verdict.md).
