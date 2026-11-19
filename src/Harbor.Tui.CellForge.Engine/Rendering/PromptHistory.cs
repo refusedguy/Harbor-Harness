@@ -139,4 +139,15 @@ public sealed class PromptHistory
         _index = -1;
         _savedDraft = null;
     }
+
+    /// <summary>
+    ///     Drop every entry and any in-flight walk. Session switches call this
+    ///     before refilling the rail from the session-scoped store, so a prompt
+    ///     recorded in one conversation can never be recalled in another.
+    /// </summary>
+    public void Clear()
+    {
+        _entries.Clear();
+        Reset();
+    }
 }
