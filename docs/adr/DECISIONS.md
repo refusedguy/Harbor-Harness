@@ -1670,6 +1670,32 @@ AOT-профиль не меняются. Issue остаётся OPEN; комм�
 - Полный текст, таблица по трём новым slice и список устаревших наблюдений:
   [ADR-070](ADR-070-dx-docs-gaps-post-verdict.md).
 
+## ADR-074: Thread lineage + merge-back из форка дельтой (#2660) — вердикт
+
+> Запись вставлена после ADR-070, а не в конец файла: см. объяснение в самом
+> ADR-070 — смежные verdict-ADR добавляются параллельно, и конец файла сдвигается
+> быстрее, чем этот PR проходит CI.
+
+Issue #2660 (gap `product-feature-gaps` S01/S03/G04) просит `ThreadRelation` и
+`session_merge_back` с `--strategy 3way` и базой на точке форка. Проверка
+`origin/dev` и `gh pr list --search 2660`: PR нет, ADR-вердикта по #2660 нет.
+Первая половина уже влита — `ParentSessionId`, `SessionForkService` (slice
+`ac33aec5`), `harbor sessions fork` (slice `a025edbf`); ADR-062 уже зафиксировал
+форк как готовый аналог. Вторая половина (`ThreadRelation`, `session_merge_back`,
+`3way`, тест на конфликт) в дереве отсутствует.
+
+Decided: код не писать. Линия форка не перевыводится. Merge-back не открывается
+заодно: нужны контракт хранения `ThreadRelation`, правило идентичности
+сообщений между fork и merge, форма результата конфликта `3way`, поверхность
+инструмента и запись в `PermissionRuleset.Default`. Гейты, пороги, golden и
+AOT-профиль не меняются. Issue остаётся OPEN; комментарий содержит только хеш
+коммита ADR. Пересмотр по новому факту: владелец называет эти контракты и
+потребителя инструмента. Номер 074 выбран, потому что пока PR был открыт, 071 и
+072 закрепили за другими issue, а 073 занят открытым PR.
+
+- Полный текст и ссылки на код:
+  [ADR-074](ADR-074-thread-lineage-merge-back-verdict.md).
+
 ## ADR-067: issue #2663 (tool search / deferred tools) без общего slice
 
 Issue #2663 предлагает builtin `tool_search(query)` с top-10 по name/description
