@@ -2,6 +2,10 @@ using System.Text;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
+// The global KeyEvent/KeyCode/KeyModifiers aliases point at the legacy Rendering
+// input vocabulary, while KeyContext/KeyGesture live in the engine vocabulary.
+// Name the engine namespace so the two never get mixed up at a call site (#3628).
+using EngineInput = Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 
@@ -52,6 +56,68 @@ public sealed record PaletteFrame(
 public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 {
     private const int PageRows = 5;
+
+    // #3628: the palette is a MODAL key context. Gestures resolve to opaque
+    // action ids owned here, never to ChatKeyMap's global vocabulary. PageUp
+    // and PageDown share one action; direction comes from the key. Arbitrary
+    // runes are the one gesture a KeyGesture cannot express (it matches one
+    // exact rune), so they resolve to TypeAction by fallback in HandleKey.
+    private const string PageAction = "page";
+    private const string TypeAction = "type";
+
+    private static readonly KeyContext PaletteContext = CreatePaletteContext();
+
+    private static KeyContext CreatePaletteContext()
+    {
+        var context = new KeyContext("palette");
+        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Escape), "back");
+        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Enter), "commit");
+        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Up), "move-up");
+        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Down), "move-down");
+        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.PageUp), PageAction);
+        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.PageDown), PageAction);
+        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Backspace), "backspace");
+        return context;
+    }
+
+    // The widget's public key type is the legacy Rendering KeyEvent; KeyContext
+    // matches the engine's verbatim-identical port. Map by ordinal so the two
+    // vocabularies stay decoupled (no cast between unrelated types at call sites).
+    private static EngineInput.KeyEvent ToEngineKey(in KeyEvent key) => new(
+        (EngineInput.KeyCode)(int)key.Key,
+        key.Character,
+        (EngineInput.KeyModifiers)(int)key.Modifiers,
+        (EngineInput.KeyEventType)(int)key.EventType,
+        key.IsKittyEncoded,
+        key.Codepoint);
+
+    // Local translation of the opaque action ids to a closed set. The gate on
+    // string-dispatched switch STATEMENTS (#1575) keeps those ladders out of
+    // src/; an enum dispatch keeps this one out while the KeyContext stays the
+    // single owner of the gesture -> action vocabulary.
+    private enum PaletteAction : byte
+    {
+        None,
+        Back,
+        Commit,
+        MoveUp,
+        MoveDown,
+        Page,
+        Backspace,
+        Type,
+    }
+
+    private static PaletteAction ResolveAction(string? action) => action switch
+    {
+        "back" => PaletteAction.Back,
+        "commit" => PaletteAction.Commit,
+        "move-up" => PaletteAction.MoveUp,
+        "move-down" => PaletteAction.MoveDown,
+        PageAction => PaletteAction.Page,
+        "backspace" => PaletteAction.Backspace,
+        TypeAction => PaletteAction.Type,
+        _ => PaletteAction.None,
+    };
 
     private readonly Stack<PaletteFrame> _frames = new();
     private IReadOnlyList<CommandItem> _commands = [];
@@ -191,76 +257,33 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
             return false;
         }
 
-        switch (key.Key)
+        string? action = PaletteContext.TryMatch(ToEngineKey(key), out EngineInput.ContextBinding hit)
+            ? hit.ActionId
+            : key.Key == KeyCode.Char && key.Modifiers.AcceptsTypedChar() ? TypeAction : null;
+
+        switch (ResolveAction(action))
         {
-            case KeyCode.Escape:
+            case PaletteAction.Back:
                 PopFrame();
                 return true;
 
-            case KeyCode.Enter:
-                if (_frames.Count > 0 && _frames.Peek() is { IsInput: true } inputFrame)
-                {
-                    var val = _query.Trim();
-                    LastInputValue = val;
-                    if (inputFrame.OnInputSubmitAsync is { } submitAsync)
-                    {
-                        _pendingInput = (val, submitAsync);
-                        return true;
-                    }
-
-                    var submit = inputFrame.OnInputSubmit;
-                    Hide();
-                    submit?.Invoke(val);
-                    return true;
-                }
-
-                if (_selectableIndices.Count > 0)
-                {
-                    int resultIndex = Math.Min(_selected, _selectableIndices.Count - 1);
-                    var chosen = _results[resultIndex];
-
-                    if (_frames.Count > 0 && _frames.Peek().OnCommitAsync is { } commitAsync)
-                    {
-                        _pendingCommit = (chosen, commitAsync);
-                        return true;
-                    }
-
-                    int frameDepthBefore = _frames.Count;
-
-                    if (_frames.Count > 0 && _frames.Peek().OnCommit is { } frameCommit)
-                    {
-                        frameCommit.Invoke(chosen);
-                    }
-                    else if (OnCommit is not null)
-                    {
-                        OnCommit.Invoke(chosen);
-                    }
-
-                    if (_frames.Count <= frameDepthBefore)
-                    {
-                        Hide();
-                    }
-                }
-
+            case PaletteAction.Commit:
+                Commit();
                 return true;
 
-            case KeyCode.Up when _selectableIndices.Count > 0:
+            case PaletteAction.MoveUp when _selectableIndices.Count > 0:
                 Move(-1);
                 return true;
 
-            case KeyCode.Down when _selectableIndices.Count > 0:
+            case PaletteAction.MoveDown when _selectableIndices.Count > 0:
                 Move(1);
                 return true;
 
-            case KeyCode.PageUp when _selectableIndices.Count > 0:
-                Move(-PageRows);
+            case PaletteAction.Page when _selectableIndices.Count > 0:
+                Move(key.Key == KeyCode.PageUp ? -PageRows : PageRows);
                 return true;
 
-            case KeyCode.PageDown when _selectableIndices.Count > 0:
-                Move(PageRows);
-                return true;
-
-            case KeyCode.Backspace:
+            case PaletteAction.Backspace:
                 if (_query.Length > 0)
                 {
                     _query = _query[..^1];
@@ -273,19 +296,68 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 
                 return true;
 
-            case KeyCode.Char when key.Modifiers.AcceptsTypedChar():
+            case PaletteAction.Type:
                 _query += key.Character.ToString();
                 Refilter();
                 return true;
 
+            case PaletteAction.None:
             default:
                 return false; // not a palette key — let the host keep routing
+        }
+    }
+
+    /// <summary>Enter: stage async continuations on the frame, never on a host-side stack.</summary>
+    private void Commit()
+    {
+        if (_frames.Count > 0 && _frames.Peek() is { IsInput: true } inputFrame)
+        {
+            var val = _query.Trim();
+            LastInputValue = val;
+            if (inputFrame.OnInputSubmitAsync is { } submitAsync)
+            {
+                _pendingInput = (val, submitAsync);
+                return;
+            }
+
+            var submit = inputFrame.OnInputSubmit;
+            Hide();
+            submit?.Invoke(val);
+            return;
+        }
+
+        if (_selectableIndices.Count == 0)
+        {
+            return;
+        }
+
+        var chosen = _results[Math.Min(_selected, _selectableIndices.Count - 1)];
+        if (_frames.Count > 0 && _frames.Peek().OnCommitAsync is { } commitAsync)
+        {
+            _pendingCommit = (chosen, commitAsync);
+            return;
+        }
+
+        int frameDepthBefore = _frames.Count;
+        if (_frames.Count > 0 && _frames.Peek().OnCommit is { } frameCommit)
+        {
+            frameCommit.Invoke(chosen);
+        }
+        else if (OnCommit is not null)
+        {
+            OnCommit.Invoke(chosen);
+        }
+
+        if (_frames.Count <= frameDepthBefore)
+        {
+            Hide();
         }
     }
 
     private void Move(int delta)
     {
         _selected = Math.Clamp(_selected + delta, 0, _selectableIndices.Count - 1);
+        _navState.MoveTo(_selected); // #3628: keyboard nav drives external state too
         EnsureVisible();
     }
 

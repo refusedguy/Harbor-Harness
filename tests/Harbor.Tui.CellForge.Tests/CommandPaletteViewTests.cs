@@ -167,4 +167,125 @@ public class CommandPaletteViewTests
 
         await Assert.That(art.Trim()).IsEqualTo(string.Empty);
     }
+
+    // #3628: HandleKey dispatches through the modal "palette" KeyContext.
+    // These tests assert the behavior that dispatch produces: nav actions
+    // drive both the legacy selection and GenericNavState, and only bound
+    // gestures (plus typed runes) are consumed.
+
+    [Test]
+    public async Task HandleKey_ContextNavigation_DrivesBothSelections()
+    {
+        var palette = Open();
+        _ = palette.HandleKey(Key(KeyCode.Down));
+        _ = palette.HandleKey(Key(KeyCode.Down));
+
+        await Assert.That(palette.SelectedIndex).IsEqualTo(2);
+        await Assert.That(palette.State.Selected).IsEqualTo(2);
+
+        _ = palette.HandleKey(Key(KeyCode.Up));
+        await Assert.That(palette.SelectedIndex).IsEqualTo(1);
+        await Assert.That(palette.State.Selected).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task HandleKey_Page_MovesByPageAndDrivesState()
+    {
+        var palette = PaletteFixtures.OpenMany(12);
+        _ = palette.HandleKey(Key(KeyCode.PageDown));
+        await Assert.That(palette.SelectedIndex).IsEqualTo(5);
+        await Assert.That(palette.State.Selected).IsEqualTo(5);
+
+        _ = palette.HandleKey(Key(KeyCode.PageUp));
+        await Assert.That(palette.SelectedIndex).IsEqualTo(0);
+        await Assert.That(palette.State.Selected).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task HandleKey_UnboundKey_NotConsumed()
+    {
+        var palette = Open();
+
+        await Assert.That(palette.HandleKey(Key(KeyCode.F1))).IsFalse();
+        await Assert.That(palette.HandleKey(KeyEvent.Char(new Rune('a'), KeyModifiers.Ctrl))).IsFalse();
+    }
+
+    [Test]
+    public async Task HandleKey_Escape_PopsDrillDownFrame()
+    {
+        var palette = Open();
+        palette.PushFrame(new PaletteFrame("Child", "root/child", [new("leaf", "Leaf")]));
+
+        _ = palette.HandleKey(Key(KeyCode.Escape));
+
+        await Assert.That(palette.CurrentBreadcrumb).IsEqualTo(string.Empty);
+        await Assert.That(palette.Visible).IsTrue();
+    }
+
+    [Test]
+    public async Task HandleKey_Backspace_OnEmptyQuery_PopsDrillDownFrame()
+    {
+        var palette = Open();
+        palette.PushFrame(new PaletteFrame("Child", "root/child", [new("leaf", "Leaf")]));
+
+        _ = palette.HandleKey(Key(KeyCode.Backspace));
+
+        await Assert.That(palette.CurrentBreadcrumb).IsEqualTo(string.Empty);
+        await Assert.That(palette.Visible).IsTrue();
+    }
+
+    [Test]
+    public async Task HandleKey_TypedChar_AppendsToQuery()
+    {
+        var palette = Open();
+        foreach (char c in "quit")
+        {
+            _ = palette.HandleKey(KeyEvent.Char(new Rune(c)));
+        }
+
+        await Assert.That(palette.Query).IsEqualTo("quit");
+        await Assert.That(palette.Results).Count().IsEqualTo(1);
+        await Assert.That(palette.Results[0].Id).IsEqualTo("quit");
+    }
+
+    [Test]
+    public async Task HandleKey_Enter_StagesFrameCarriedCommit_AndEscapeDropsIt()
+    {
+        var palette = Open();
+        CommandItem? committed = null;
+        palette.PushFrame(new PaletteFrame(
+            "Child", "root/child", [new("leaf", "Leaf")],
+            OnCommitAsync: (item, _) =>
+            {
+                committed = item;
+                return Task.CompletedTask;
+            }));
+
+        _ = palette.HandleKey(Key(KeyCode.Enter));
+        var pending = palette.TakePendingCommit();
+        await Assert.That(pending).IsNotNull();
+        await Assert.That(pending!.Value.Item.Id).IsEqualTo("leaf");
+        await Assert.That(committed).IsNull(); // host runs the continuation, not the widget
+
+        _ = palette.HandleKey(Key(KeyCode.Escape));
+        await Assert.That(palette.TakePendingCommit()).IsNull(); // dropped with the frame
+    }
+
+    [Test]
+    public async Task Paint_AfterTypedQuery_ShowsFilterAndHint()
+    {
+        var palette = Open();
+        foreach (char c in "quit")
+        {
+            _ = palette.HandleKey(KeyEvent.Char(new Rune(c)));
+        }
+
+        var buffer = TestRender.Buffer(50, 10);
+        palette.Paint(buffer, new Rect(2, 1, 46, 8));
+        string art = TestRender.Art(buffer);
+
+        await Assert.That(art).Contains("quit");
+        await Assert.That(art).Contains("Quit");
+        await Assert.That(art).Contains("esc close");
+    }
 }
