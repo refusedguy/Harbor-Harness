@@ -66,4 +66,27 @@ public class ProviderErrorClassificationTests
         await Assert.That(ProviderErrors.IsTransient(ProviderErrorKind.Auth)).IsFalse();
         await Assert.That(ProviderErrors.IsTransient(ProviderErrorKind.Malformed)).IsFalse();
     }
+
+    /// <summary>
+    ///     #3819: the extracted fallback must be byte-identical to the inline
+    ///     ErrorEvent it replaced — same message, same full exception on the
+    ///     diagnostics slot, same FromException classification, and no status
+    ///     or retry metadata. Every send-failure site now funnels through this
+    ///     one primitive (SsePump default + Ollama + OpenAI-compatible hooks).
+    /// </summary>
+    [Test]
+    public async Task HttpSendFailure_ReproducesTheCanonicalFallbackShape()
+    {
+        var ex = new IOException("stream broken");
+        using var cts = new CancellationTokenSource();
+
+        ErrorEvent error = ProviderErrors.HttpSendFailure(ex, cts.Token);
+
+        await Assert.That(error.Message).IsEqualTo($"HTTP request failed: {ex.Message}");
+        await Assert.That(error.Exception).IsEqualTo(ex.ToString());
+        await Assert.That(error.Kind).IsEqualTo(ProviderErrors.FromException(ex, cts.Token));
+        await Assert.That(error.Kind).IsEqualTo(ProviderErrorKind.Network);
+        await Assert.That(error.StatusCode).IsNull();
+        await Assert.That(error.RetryAfter).IsNull();
+    }
 }

@@ -206,6 +206,20 @@ public static class ProviderErrors
     }
 
     /// <summary>
+    ///     Builds the canonical terminal <see cref="ErrorEvent" /> for a failed
+    ///     HTTP send (#3819): <c>"HTTP request failed: {message}"</c>, the full
+    ///     exception on <see cref="ErrorEvent.Exception" /> for diagnostics, and
+    ///     a <see cref="FromException" /> classification. Single choke point so
+    ///     <c>SsePump</c>'s default send-failure branch and every provider's
+    ///     <c>mapSendFailure</c> hook stamp the byte-identical shape.
+    /// </summary>
+    /// <param name="ex">The exception thrown by the HTTP send.</param>
+    /// <param name="ct">Caller token, for the Cancelled-vs-Timeout verdict.</param>
+    /// <returns>The canonical send-failure event (no status code, no retry hint).</returns>
+    public static ErrorEvent HttpSendFailure(Exception ex, CancellationToken ct) =>
+        new($"HTTP request failed: {ex.Message}", ex.ToString(), FromException(ex, ct));
+
+    /// <summary>
     ///     Maximum provider error-body characters surfaced on the user-facing
     ///     message (#259). A single 429 JSON body carries KBs of nested detail;
     ///     past the head it carries no actionable signal, while every renderer
