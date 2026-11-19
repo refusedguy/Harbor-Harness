@@ -24,7 +24,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     and <c>KeyEventMapper.ToDto</c> DROPS releases by returning null
 ///     (KeyEventMapper.cs:26). So the vocabulary is present and one consumer
 ///     already uses it — <c>ApprovalGateView.HandleKey</c> gates on
-///     <c>Press or Repeat</c> (ApprovalGateView.cs:249).
+///     <c>Press or Repeat</c> (ApprovalGateView.cs:274).
 ///   * <c>DialogOverlay.HandleKey(in KeyEvent)</c> is the outlier: it switches
 ///     on <c>key.Key</c> alone. A release of <c>KeyCode.Char</c> reaches the
 ///     <c>_input += text</c> arm and types the character a SECOND time.
