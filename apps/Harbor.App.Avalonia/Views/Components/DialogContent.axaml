@@ -11,26 +11,27 @@
     -->
     <StackPanel Name="PART_Root" Margin="16" Spacing="12">
         <TextBlock Name="PART_Message"
-                   Text="{Binding Message, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                   Text="{Binding Message}"
                    TextWrapping="Wrap" />
 
         <TextBox Name="PART_Input"
-                 Text="{Binding InputText, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}"
-                 PlaceholderText="{Binding Message, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                 IsVisible="{Binding ShowInput, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                 AutomationProperties.Name="Dialog input"
+                 Text="{Binding InputText, Mode=TwoWay}"
+                 PlaceholderText="{Binding Message}"
+                 IsVisible="{Binding ShowInput}" />
 
         <StackPanel Name="PART_Actions"
                     Orientation="Horizontal"
                     Spacing="8"
                     HorizontalAlignment="Right">
             <Button Name="PART_Cancel"
-                    Content="{Binding CancelLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                    Command="{Binding CancelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                    IsVisible="{Binding ShowCancel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    Content="{Binding CancelLabel}"
+                    Command="{Binding CancelCommand}"
+                    IsVisible="{Binding ShowCancel}" />
             <Button Name="PART_Ok"
-                    Content="{Binding OkLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    Content="{Binding OkLabel}"
                     Classes="hds-primary"
-                    Command="{Binding OkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    Command="{Binding OkCommand}" />
         </StackPanel>
     </StackPanel>
 </UserControl>

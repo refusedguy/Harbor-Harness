@@ -45,9 +45,14 @@ public sealed partial class DialogContent : UserControl
     public static readonly StyledProperty<ICommand?> CancelCommandProperty =
         AvaloniaProperty.Register<DialogContent, ICommand?>(nameof(CancelCommand));
 
-    /// <summary>Construct the form; Avalonia's generated InitializeComponent inflates the XAML.</summary>
+    /// <summary>
+    ///     Construct the form. The control is its own DataContext so the declarative
+    ///     bindings resolve to the StyledProperties below without an ancestor walk;
+    ///     Avalonia's generated InitializeComponent inflates the XAML.
+    /// </summary>
     public DialogContent()
     {
+        DataContext = this;
         if (global::Avalonia.Application.Current is not null)
             InitializeComponent();
     }
