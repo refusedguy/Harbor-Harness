@@ -1803,3 +1803,29 @@ mock-тест одной из частей.
 
 - Полный текст, инвентаризация и условия пересмотра:
   [ADR-073](ADR-073-mcp-elicitation-roots-client-capabilities.md).
+
+## ADR-074: issue #2665 (permission modes и session-wide Allow all edits) — одного общего slice нет
+
+Issue #2665 — product-gap из отчётов product-feature-gaps (A01-A04/M17), Orca
+(A01-A04) и T3code (B1-B11) с четырьмя пунктами: enum из четырёх режимов,
+in-memory `SessionPermissionOverlay`, approval record с `WaitingApproval` и
+`DenyWithFeedback`, а также критерий приёмки auto-accept только для write/edit
+и `not_resumable` после рестарта. Инвентаризация `origin/dev` (`72308740`),
+`gh issue view 2665 --comments` (0), `gh pr list --search 2665` и
+`git log --all --grep=2665` показала, что не влит ни один пункт: `CommonConfig.cs:249`
+держит режим строкой, `PermissionRuleset` не знает режима, `ApprovalCoordinator`
+держит in-memory gates без durable record, `SessionStatus` не знает
+`WaitingApproval`.
+
+Decided: код не писать. Четыре пункта не объединяются в meta-PR: у каждого свой
+публичный контракт, AOT-профиль и владелец по безопасности. Acceptance про
+auto-accept и текстовый отказ меняет `PlainPermissionAsker`,
+`CellForgePermissionAsker` и форму `ToolResult`, поэтому это отдельный slice с
+потребителем в TUI. Гейты, пороги, golden и AOT-профиль не меняются. Issue
+остаётся OPEN как источник сравнения; комментарий содержит только хеш коммита
+ADR. Пересмотр — по новому факту: владелец называет конкретный пункт,
+потребителя и измеримую цель. Номер 074 выбран после проверки DECISIONS.md и
+открытых PR: 073 и 075 уже заняты параллельными ADR (#3002 и #2999).
+
+- Полный текст, таблица по четырём пунктам и условия пересмотра:
+  [ADR-074](ADR-074-permission-modes-session-overlay-verdict.md).
