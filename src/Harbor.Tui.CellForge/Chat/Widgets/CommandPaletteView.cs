@@ -70,13 +70,13 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     private static EngineInput.KeyContext CreatePaletteContext()
     {
         var context = new EngineInput.KeyContext("palette");
-        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Escape), "back");
-        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Enter), "commit");
-        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Up), "move-up");
-        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Down), "move-down");
-        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.PageUp), PageAction);
-        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.PageDown), PageAction);
-        context.Bind(KeyGesture.ForKey(EngineInput.KeyCode.Backspace), "backspace");
+        context.Bind(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.Escape), "back");
+        context.Bind(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.Enter), "commit");
+        context.Bind(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.Up), "move-up");
+        context.Bind(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.Down), "move-down");
+        context.Bind(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.PageUp), PageAction);
+        context.Bind(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.PageDown), PageAction);
+        context.Bind(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.Backspace), "backspace");
         return context;
     }
 
