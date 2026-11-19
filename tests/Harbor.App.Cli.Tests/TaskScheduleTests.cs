@@ -1,13 +1,16 @@
 using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.App.Cli.Commands;
+using Harbor.Tools.Builtin;
 
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
-///     #2674 G11. The cron parser, argument parser, store codec and webhook
-///     proof are pure; pin the contracts here without a clock, a file or an
-///     HTTP listener.
+///     #2674 G11 / #3395. The schedule resolver, argument parser, store codec
+///     and webhook proof are pure; pin the contracts here without a clock, a
+///     file or an HTTP listener. Cron schedules are parsed by the shared
+///     <see cref="CronScheduleParser" />, so these tests cover the real
+///     consumer path rather than a private copy of the grammar.
 /// </summary>
 public class TaskScheduleTests
 {
@@ -15,67 +18,75 @@ public class TaskScheduleTests
         new(2026, 11, 19, 10, 37, 0, TimeSpan.Zero);
 
     [Test]
-    public async Task Cron_Parse_AcceptsStarAndBoundedFields()
+    public async Task ResolveNextFire_CronStepExpressionReturnsNextMatchingMinute()
     {
-        Result<CronExpression> parsed = CronExpression.Parse("*/5 * * * *");
+        Result<DateTimeOffset?> resolved = TaskScheduleVerb.ResolveNextFire("*/5 * * * *", Reference);
 
-        await Assert.That(parsed.IsSuccess).IsTrue();
-        DateTimeOffset? next = parsed.Value.NextAfter(Reference);
+        await Assert.That(resolved.IsSuccess).IsTrue();
+        DateTimeOffset? next = resolved.Value;
         await Assert.That(next.HasValue).IsTrue();
         await Assert.That(next!.Value).IsEqualTo(new DateTimeOffset(2026, 11, 19, 10, 40, 0, TimeSpan.Zero));
     }
 
     [Test]
-    public async Task Cron_Parse_AcceptsRangesListsAndSteps()
+    public async Task ResolveNextFire_DelegatesCronToSharedCronScheduleParser()
     {
-        Result<CronExpression> parsed = CronExpression.Parse("0 9-17/4 1,15 1,7 1-5");
+        CronSchedule? schedule = CronScheduleParser.Parse("*/15 * * * *");
+        Result<DateTimeOffset?> resolved = TaskScheduleVerb.ResolveNextFire("*/15 * * * *", Reference);
 
-        await Assert.That(parsed.IsSuccess).IsTrue();
+        await Assert.That(schedule).IsNotNull();
+        await Assert.That(resolved.IsSuccess).IsTrue();
+        await Assert.That(resolved.Value).IsEqualTo(schedule!.NextOccurrence(Reference));
+    }
+
+    [Test]
+    public async Task ResolveNextFire_CronRangesListsAndStepsResolveNextDate()
+    {
+        Result<DateTimeOffset?> resolved = TaskScheduleVerb.ResolveNextFire("0 9-17/4 1,15 1,7 1-5", Reference);
+
+        await Assert.That(resolved.IsSuccess).IsTrue();
+        DateTimeOffset? next = resolved.Value;
+        await Assert.That(next.HasValue).IsTrue();
         // Month is restricted to January/July; the next match after
         // 2026-11-19 is Fri 2027-01-01 at the first allowed hour/minute.
-        DateTimeOffset? next = parsed.Value.NextAfter(Reference);
-        await Assert.That(next.HasValue).IsTrue();
         await Assert.That(next!.Value).IsEqualTo(new DateTimeOffset(2027, 1, 1, 9, 0, 0, TimeSpan.Zero));
     }
 
     [Test]
-    public async Task Cron_Parse_NormalizesSundaySeven()
+    public async Task ResolveNextFire_CronNormalizesSundaySeven()
     {
-        Result<CronExpression> seven = CronExpression.Parse("0 0 * * 7");
-        Result<CronExpression> zero = CronExpression.Parse("0 0 * * 0");
+        Result<DateTimeOffset?> seven = TaskScheduleVerb.ResolveNextFire("0 0 * * 7", Reference);
+        Result<DateTimeOffset?> zero = TaskScheduleVerb.ResolveNextFire("0 0 * * 0", Reference);
 
         await Assert.That(seven.IsSuccess).IsTrue();
         await Assert.That(zero.IsSuccess).IsTrue();
-        DateTimeOffset? s = seven.Value.NextAfter(Reference);
-        DateTimeOffset? z = zero.Value.NextAfter(Reference);
+        DateTimeOffset? s = seven.Value;
+        DateTimeOffset? z = zero.Value;
         await Assert.That(s.HasValue).IsTrue();
         await Assert.That(s!.Value).IsEqualTo(z!.Value);
         await Assert.That(s.Value.DayOfWeek).IsEqualTo(DayOfWeek.Sunday);
     }
 
     [Test]
-    public async Task Cron_Parse_RejectsMalformedExpressions()
+    public async Task ResolveNextFire_RejectsMalformedCronExpressions()
     {
-        await Assert.That(CronExpression.Parse("").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("* * * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("* * * * * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("60 * * * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("* 24 * * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("* * 0 * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("* * * 13 *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("*/0 * * * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("5-2 * * * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("a * * * *").IsFailure).IsTrue();
-        await Assert.That(CronExpression.Parse("1,,2 * * * *").IsFailure).IsTrue();
+        string[] malformed =
+        [
+            "", "* * * *", "* * * * * *", "60 * * * *", "* 24 * * *", "* * 0 * *",
+            "* * * 13 *", "*/0 * * * *", "5-2 * * * *", "a * * * *", "1,,2 * * * *",
+        ];
+
+        foreach (string expression in malformed)
+            await Assert.That(TaskScheduleVerb.ResolveNextFire(expression, Reference).IsFailure).IsTrue();
     }
 
     [Test]
-    public async Task Cron_NextAfter_DailyAtMidnightIsStrictlyAfterReference()
+    public async Task ResolveNextFire_CronDailyAtMidnightIsStrictlyAfterReference()
     {
-        Result<CronExpression> parsed = CronExpression.Parse("0 0 * * *");
+        Result<DateTimeOffset?> resolved = TaskScheduleVerb.ResolveNextFire("0 0 * * *", Reference);
 
-        await Assert.That(parsed.IsSuccess).IsTrue();
-        DateTimeOffset? next = parsed.Value.NextAfter(Reference);
+        await Assert.That(resolved.IsSuccess).IsTrue();
+        DateTimeOffset? next = resolved.Value;
         await Assert.That(next.HasValue).IsTrue();
         await Assert.That(next!.Value).IsEqualTo(new DateTimeOffset(2026, 11, 20, 0, 0, 0, TimeSpan.Zero));
     }
