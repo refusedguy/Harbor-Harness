@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.App.Cli.Logging;
+using Harbor.Tui.CellForge.Widgets;
 using System.Globalization;
 using System.Threading.Tasks;
 namespace Harbor.App.Cli.Commands;
@@ -45,19 +46,26 @@ namespace Harbor.App.Cli.Commands;
 /// </remarks>
 public sealed class LogsCommand : ICommand
 {
-    private static readonly string LogDir = HarborLogManager.DefaultLogDirectory;
-
     private readonly TextWriter _error;
+    private readonly string _logDir;
+    private readonly IFormInputSource _input;
     private readonly TextWriter _output;
     private readonly string _telemetryPath;
 
     public string Name => "logs";
 
-    public LogsCommand(TextWriter output, TextWriter error, string? telemetryPath = null)
+    public LogsCommand(
+        TextWriter output,
+        TextWriter error,
+        string? telemetryPath = null,
+        IFormInputSource? input = null,
+        string? logDir = null)
     {
         _output = output;
         _error = error;
-        _telemetryPath = telemetryPath ?? Path.Combine(LogDir, "telemetry.txt");
+        _logDir = logDir ?? HarborLogManager.DefaultLogDirectory;
+        _input = input ?? new ConsoleFormInputSource();
+        _telemetryPath = telemetryPath ?? Path.Combine(_logDir, "telemetry.txt");
     }
 
     /// <summary>
@@ -115,38 +123,38 @@ public sealed class LogsCommand : ICommand
 
     private async Task<int> ListFilesAsync(bool all)
     {
-        if (!Directory.Exists(LogDir))
+        if (!Directory.Exists(_logDir))
         {
-            _output.WriteLine($"No log directory yet: {LogDir}");
+            _output.WriteLine($"No log directory yet: {_logDir}");
             return 0;
         }
         FileInfo[] files;
         try
         {
-            files = Directory.GetFiles(LogDir, "harbor-*.log")
+            files = Directory.GetFiles(_logDir, "harbor-*.log")
                 .Select(f => new FileInfo(f))
                 .OrderByDescending(f => f.CreationTimeUtc)
                 .ToArray();
         }
         catch (UnauthorizedAccessException ex)
         {
-            _error.WriteLine($"Cannot read {LogDir}: {ex.Message}");
+            _error.WriteLine($"Cannot read {_logDir}: {ex.Message}");
             return 2;
         }
         catch (IOException ex)
         {
-            _error.WriteLine($"Cannot read {LogDir}: {ex.Message}");
+            _error.WriteLine($"Cannot read {_logDir}: {ex.Message}");
             return 2;
         }
 
         if (files.Length == 0)
         {
-            _output.WriteLine($"No log files in {LogDir}.");
+            _output.WriteLine($"No log files in {_logDir}.");
             _output.WriteLine("Run any harbor command first — each run writes its own file.");
             return 0;
         }
 
-        _output.WriteLine($"Log directory: {LogDir}");
+        _output.WriteLine($"Log directory: {_logDir}");
         _output.WriteLine($"Files: {files.Length}{(all ? "" : " (showing 10 newest — use --list for all)")}");
         _output.WriteLine();
         int take = all ? files.Length : Math.Min(10, files.Length);
@@ -167,33 +175,33 @@ public sealed class LogsCommand : ICommand
 
     private async Task<int> PrintLastAsync(bool follow, CancellationToken ct)
     {
-        if (!Directory.Exists(LogDir))
+        if (!Directory.Exists(_logDir))
         {
-            _error.WriteLine($"No log directory yet: {LogDir}");
+            _error.WriteLine($"No log directory yet: {_logDir}");
             return 0;
         }
         Maybe<FileInfo> latest;
         try
         {
-            latest = Directory.GetFiles(LogDir, "harbor-*.log")
+            latest = Directory.GetFiles(_logDir, "harbor-*.log")
                 .Select(f => new FileInfo(f))
                 .OrderByDescending(f => f.CreationTimeUtc)
                 .TryFirst();
         }
         catch (UnauthorizedAccessException ex)
         {
-            _error.WriteLine($"Cannot read {LogDir}: {ex.Message}");
+            _error.WriteLine($"Cannot read {_logDir}: {ex.Message}");
             return 2;
         }
         catch (IOException ex)
         {
-            _error.WriteLine($"Cannot read {LogDir}: {ex.Message}");
+            _error.WriteLine($"Cannot read {_logDir}: {ex.Message}");
             return 2;
         }
 
         if (latest.HasNoValue)
         {
-            _error.WriteLine($"No log files in {LogDir}.");
+            _error.WriteLine($"No log files in {_logDir}.");
             return 2;
         }
 
@@ -346,26 +354,26 @@ public sealed class LogsCommand : ICommand
     private async Task<int> CleanAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (!Directory.Exists(LogDir))
+        if (!Directory.Exists(_logDir))
         {
-            _output.WriteLine($"No log directory yet: {LogDir}");
+            _output.WriteLine($"No log directory yet: {_logDir}");
             return 0;
         }
         FileInfo[] files;
         try
         {
-            files = Directory.GetFiles(LogDir, "harbor-*.log")
+            files = Directory.GetFiles(_logDir, "harbor-*.log")
                 .Select(f => new FileInfo(f))
                 .ToArray();
         }
         catch (UnauthorizedAccessException ex)
         {
-            _error.WriteLine($"Cannot read {LogDir}: {ex.Message}");
+            _error.WriteLine($"Cannot read {_logDir}: {ex.Message}");
             return 2;
         }
         catch (IOException ex)
         {
-            _error.WriteLine($"Cannot read {LogDir}: {ex.Message}");
+            _error.WriteLine($"Cannot read {_logDir}: {ex.Message}");
             return 2;
         }
 
@@ -375,12 +383,13 @@ public sealed class LogsCommand : ICommand
             return 0;
         }
 
-        _output.WriteLine($"About to delete {files.Length} log file(s) from {LogDir}.");
+        _output.WriteLine($"About to delete {files.Length} log file(s) from {_logDir}.");
         _output.Write("Proceed? [y/N] ");
         _output.Flush();
-        string? answer = Console.ReadLine();
-        if (!string.Equals(answer?.Trim(), "y", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(answer?.Trim(), "yes", StringComparison.OrdinalIgnoreCase))
+
+        var state = new FormPromptState<bool>(FormConverters.Boolean());
+        FormPromptOutcome outcome = state.ReadAndSubmit(_input, out bool proceed, out _);
+        if (outcome != FormPromptOutcome.Submitted || !proceed)
         {
             _output.WriteLine("Cancelled.");
             return 0;
@@ -406,5 +415,11 @@ public sealed class LogsCommand : ICommand
         }
         _output.WriteLine($"Deleted {deleted} file(s); skipped {skipped} (in use or permission denied).");
         return 0;
+    }
+
+    /// <summary>Production input source: one line from the process console.</summary>
+    private sealed class ConsoleFormInputSource : IFormInputSource
+    {
+        public string? ReadLine() => Console.ReadLine();
     }
 }
