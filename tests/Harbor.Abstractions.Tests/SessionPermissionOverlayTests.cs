@@ -11,10 +11,19 @@ public class SessionPermissionOverlayTests
     [Test]
     public async Task PermissionMode_HasTheFourOrderedValues()
     {
-        await Assert.That((int)PermissionMode.Supervised).IsEqualTo(0);
-        await Assert.That((int)PermissionMode.AutoAcceptEdits).IsEqualTo(1);
-        await Assert.That((int)PermissionMode.Auto).IsEqualTo(2);
-        await Assert.That((int)PermissionMode.FullAccess).IsEqualTo(3);
+        PermissionMode[] declared =
+        [
+            PermissionMode.Supervised,
+            PermissionMode.AutoAcceptEdits,
+            PermissionMode.Auto,
+            PermissionMode.FullAccess
+        ];
+
+        await Assert.That(declared.Length).IsEqualTo(4);
+        await Assert.That((int)declared[0]).IsEqualTo(0);
+        await Assert.That((int)declared[1]).IsEqualTo(1);
+        await Assert.That((int)declared[2]).IsEqualTo(2);
+        await Assert.That((int)declared[3]).IsEqualTo(3);
     }
 
     [Test]
