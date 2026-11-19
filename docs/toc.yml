@@ -168,6 +168,8 @@
   href: TUI_UX_PLAN.md
 - name: Testkit Expansion Report
   href: TestKit-Expansion-Report.md
+- name: Upgrade Guide
+  href: UPGRADE.md
 - name: Verified Change
   href: VERIFIED_CHANGE.md
 - name: Workflow Generation
