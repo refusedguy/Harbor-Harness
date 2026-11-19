@@ -1,4 +1,4 @@
-namespace Harbor.Desktop.ViewModels;
+namespace Harbor.Ui.Framework.ViewModels;
 
 /// <summary>
 ///     #2682 Z01: command-palette query history with prefix-scoped arrow

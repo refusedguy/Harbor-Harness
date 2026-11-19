@@ -56,6 +56,21 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
             // drift from the commands it groups.
             Group: SlashCommandCatalog.Find(cmd.Name)?.Group ?? SlashCommandCatalog.GroupOther
         )).ToArray();
+
+        // #3629: the same aliases the slash dispatcher accepts now resolve in
+        // the palette, so typing "quit" finds the /exit row instead of nothing.
+        host._palette.ClearAliases();
+        foreach (var cmd in commands)
+        {
+            foreach (var alias in cmd.Aliases)
+            {
+                if (!string.IsNullOrWhiteSpace(alias))
+                {
+                    host._palette.AddAlias(alias, cmd.Name);
+                }
+            }
+        }
+
         host._palette.PushFrame(new PaletteFrame(
             "Commands",
             "slash",

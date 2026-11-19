@@ -122,6 +122,11 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     };
 
     private readonly Stack<PaletteFrame> _frames = new();
+
+    // #3629: the same BCL-only policies the desktop palette uses. They live
+    // across Show/Hide so usage ranking and query history survive reopening.
+    private readonly global::Harbor.Ui.Framework.ViewModels.CommandPalettePolicies _policies = new();
+
     private IReadOnlyList<CommandItem> _commands = [];
     private List<CommandItem> _results = [];
     private List<(bool IsHeader, string Text, string Detail)> _flatView = new();
@@ -186,6 +191,21 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     /// <summary>Current filtered+ranked result set (all suggestions when the query is empty).</summary>
     public IReadOnlyList<CommandItem> Results => _results;
 
+    /// <summary>Queries committed through this palette, oldest first (#2682 Z01).</summary>
+    public IReadOnlyList<string> RecentQueries => _policies.RecentQueries;
+
+    /// <summary>Exact-query aliases, case-insensitive (#2682 Z03). Alias values are canonical query text, not item ids.</summary>
+    public IReadOnlyDictionary<string, string> Aliases => _policies.Aliases;
+
+    /// <summary>Map an alias such as "quit" to the query text of its canonical row (#2682 Z03).</summary>
+    public void AddAlias(string alias, string canonicalQuery) => _policies.Aliases[alias] = canonicalQuery;
+
+    /// <summary>Remove an alias. Returns false when it was not present.</summary>
+    public bool RemoveAlias(string alias) => _policies.Aliases.Remove(alias);
+
+    /// <summary>Clear all aliases, e.g. when a host swaps in a different command catalog.</summary>
+    public void ClearAliases() => _policies.Aliases.Clear();
+
     /// <summary>Index into the selectable subset of <see cref="_flatView" />.</summary>
     public int SelectedIndex => _selected;
 
@@ -202,6 +222,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     public void Hide()
     {
         _frames.Clear();
+        _policies.ResetHistoryNavigation();
         _pendingCommit = null;
         _pendingInput = null;
         Visible = false;
@@ -222,6 +243,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
         _pendingInput = null;
         _commands = frame.Items;
         _query = string.Empty;
+        _policies.ResetHistoryNavigation();
         _selected = 0;
         LastInputValue = string.Empty;
         Visible = true;
@@ -238,6 +260,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
             var prev = _frames.Peek();
             _commands = prev.Items;
             _query = string.Empty;
+            _policies.ResetHistoryNavigation();
             _selected = 0;
             Refilter();
             FramePopped?.Invoke(this, EventArgs.Empty);
@@ -273,12 +296,30 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
                 Commit();
                 return true;
 
-            case PaletteAction.MoveUp when _selectableIndices.Count > 0:
-                Move(-1);
+            case PaletteAction.MoveUp when _selectableIndices.Count > 0 || _query.Length > 0:
+                if (TryNavigateHistory(up: true))
+                {
+                    return true;
+                }
+
+                if (_selectableIndices.Count > 0)
+                {
+                    Move(-1);
+                }
+
                 return true;
 
-            case PaletteAction.MoveDown when _selectableIndices.Count > 0:
-                Move(1);
+            case PaletteAction.MoveDown when _selectableIndices.Count > 0 || _query.Length > 0:
+                if (TryNavigateHistory(up: false))
+                {
+                    return true;
+                }
+
+                if (_selectableIndices.Count > 0)
+                {
+                    Move(1);
+                }
+
                 return true;
 
             case PaletteAction.Page when _selectableIndices.Count > 0:
@@ -288,6 +329,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
             case PaletteAction.Backspace:
                 if (_query.Length > 0)
                 {
+                    _policies.ResetHistoryNavigation();
                     _query = _query[..^1];
                     Refilter();
                 }
@@ -299,6 +341,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
                 return true;
 
             case PaletteAction.Type:
+                _policies.ResetHistoryNavigation();
                 _query += key.Character.ToString();
                 Refilter();
                 return true;
@@ -333,10 +376,46 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
             return;
         }
 
-        var chosen = _results[Math.Min(_selected, _selectableIndices.Count - 1)];
+        InvokeSelected();
+    }
+
+    private void Move(int delta)
+    {
+        _selected = Math.Clamp(_selected + delta, 0, _selectableIndices.Count - 1);
+        _navState.MoveTo(_selected); // #3628: keyboard nav drives external state too
+        EnsureVisible();
+    }
+
+    /// <summary>
+    /// #2682 Z01: Up/Down first walk typed query history. The typed text is
+    /// adopted as the new query and refiltered; the result selection stays put.
+    /// </summary>
+    private bool TryNavigateHistory(bool up)
+    {
+        if (!_policies.TryNavigateHistory(up, _query, out string next))
+        {
+            return false;
+        }
+
+        _query = next;
+        Refilter();
+        return true;
+    }
+
+    /// <summary>
+    /// Commit the highlighted row. The shared policies record the typed query
+    /// and the row's usage only when a command actually ran, not when the
+    /// frame pushed a drill-down or the host handler threw (#2682 Z01/Z02).
+    /// </summary>
+    private void InvokeSelected()
+    {
+        int resultIndex = Math.Min(_selected, _selectableIndices.Count - 1);
+        var chosen = _results[resultIndex];
+
         if (_frames.Count > 0 && _frames.Peek().OnCommitAsync is { } commitAsync)
         {
             _pendingCommit = (chosen, commitAsync);
+            NoteSelection(chosen);
             return;
         }
 
@@ -352,32 +431,74 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 
         if (_frames.Count <= frameDepthBefore)
         {
+            NoteSelection(chosen);
             Hide();
         }
     }
 
-    private void Move(int delta)
+    /// <summary>#2682 Z01/Z02: commit the typed query and the chosen row's usage count.</summary>
+    private void NoteSelection(CommandItem item)
     {
-        _selected = Math.Clamp(_selected + delta, 0, _selectableIndices.Count - 1);
-        _navState.MoveTo(_selected); // #3628: keyboard nav drives external state too
-        EnsureVisible();
+        _policies.NoteQuery(_query);
+        _policies.NoteInvocation(item.Group, item.Title);
     }
+
+    /// <summary>Adapts the engine-local scorer to the shared policy's (text, query) shape.</summary>
+    private static int Score(string text, string query) => FuzzyMatcher.Score(query, text) ?? -1;
 
     private void Refilter()
     {
         // Filter returns a thread-local reusable buffer; copy it before the
         // group/title sort below so _commands (the frame's source) is never
         // reordered and this palette's results survive another palette's pass.
-        _results = new List<CommandItem>(FuzzyMatcher.Filter(_query, _commands, static c => c.Title + " " + c.Detail));
+        // #3629: aliases resolve before the fuzzy pass, exactly as in the
+        // desktop palette; FuzzyMatcher remains this engine's scorer.
+        string query = _policies.ResolveQuery(_query);
+        List<CommandItem> matches = new(FuzzyMatcher.Filter(query, _commands, static c => c.Title + " " + c.Detail));
 
-        if (_query.Length == 0 && !(_frames.TryPeek(out var top) && top.PreserveOrder))
+        if (query.Length == 0 && !(_frames.TryPeek(out var top) && top.PreserveOrder))
         {
-            _results.Sort((a, b) =>
+            matches.Sort((a, b) =>
             {
                 int gc = string.Compare(a.Group, b.Group, StringComparison.Ordinal);
                 if (gc != 0) return gc;
                 return string.Compare(a.Title, b.Title, StringComparison.Ordinal);
             });
+        }
+
+        // #2682 Z02/Z03: usage leads within a group, the weighted score breaks
+        // ties, and the original position keeps equal rows stable. Grouping
+        // stays contiguous so the header pass below needs no second pass.
+        var buckets = new Dictionary<string, List<(CommandItem Item, double Score, int Index)>>(StringComparer.Ordinal);
+        var groupOrder = new List<string>(matches.Count);
+        for (int i = 0; i < matches.Count; i++)
+        {
+            CommandItem item = matches[i];
+            string group = item.Group;
+            if (!buckets.TryGetValue(group, out var bucket))
+            {
+                bucket = new List<(CommandItem, double, int)>();
+                buckets.Add(group, bucket);
+                groupOrder.Add(group);
+            }
+
+            double score = query.Length == 0
+                ? 0d
+                : global::Harbor.Ui.Framework.ViewModels.CommandPalettePolicies.WeightedScore(
+                    Score, item.Title, item.Detail, item.Group, query);
+            bucket.Add((item, score, i));
+        }
+
+        _results = new List<CommandItem>(matches.Count);
+        foreach (string group in groupOrder)
+        {
+            foreach (var entry in buckets[group]
+                .OrderByDescending(e => _policies.InvocationCount(e.Item.Group, e.Item.Title))
+                .ThenByDescending(e => e.Score)
+                .ThenBy(e => e.Index))
+            {
+                _results.Add(entry.Item);
+            }
         }
 
         _flatView = new List<(bool, string, string)>(_results.Count + 8);
