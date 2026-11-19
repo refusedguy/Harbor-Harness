@@ -95,6 +95,7 @@ internal static class CafPilotVerbs
         app.Add("pr links", CafPrLinkCommands.Links);
         app.Add("pr checks", CafPrWatchCommands.Checks);
         app.Add("pr watch", CafPrWatchCommands.Watch);
+        app.Add("pr steer", CafPrSteerCommands.Steer); // #2666: watch steer contract
         app.Add("help", CafHelpCommands.Help);
         app.Add("completions", CafCompletionCommands.Completions);
 #if HARBOR_WITH_DSL_DEV
