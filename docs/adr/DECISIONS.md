@@ -1575,3 +1575,27 @@ golden и AOT-профиль не меняются. Issue остаётся OPEN 
 
 - Полный текст, таблица по одиннадцати влитым item и список нереализованных:
   [ADR-063](ADR-063-avalonia-product-gaps-report-verdict.md).
+
+## ADR-064: отчёт orca-features part 2/2 (#2672) — одного общего slice нет
+
+Issue #2672 — self-contained отчёт `orca-features` part 2/2, продолжающий
+part 1/2 (#2671). Concrete item F03–F13 и G01–G13, раздел 8 «честно не
+применимо». Инвентаризация `origin/dev` (`50011c23`), комментарии issue,
+`gh pr list --search 2672`, `git log --all --grep=2672` и
+`docs/adr/DECISIONS.md` показали три влитых item: F06 `RetainedOutput`
+(#2781, merge `d193931e`), F13 `FirstRunState` (#2865, merge `a4220347`) и
+G03 `DiffReviewState` (#2898, merge `ed9b457a`). Все merge commit подтверждены
+как предки `origin/dev` через `git merge-base --is-ancestor`.
+
+Decided: код не писать. Влитые item не перевыводятся, остальные не
+объединяются в meta-PR. F04 и F10 имеют готовый аналог (`IToolRegistry`,
+`Harbor.Plugins.*`); G06, G11, G12 и G13 не применимы к терминальному агенту;
+остальные требуют своего владельца и публичного контракта (`IExtensionData`,
+`IConfigurationResolver`, `ISandboxProbe`, `INetworkPolicy`, `IAutomationStore`,
+`IExecutionHost` и др.). Гейты, пороги, golden и AOT-профиль не меняются. Issue
+остаётся OPEN как источник сравнения; комментарий содержит только хеш коммита
+ADR. Пересмотр — по новому факту: владелец называет конкретный item,
+потребителя и цель. Part 1/2 (#2671) этим решением не перевыводится.
+
+- Полный текст, таблица по трём влитым item и список нереализованных:
+  [ADR-064](ADR-064-orca-features-part2-report-verdict.md).
