@@ -648,11 +648,24 @@ $ HARBOR_LOGLEVEL=debug dotnet run --project apps/Harbor.App.Cli
 Если compaction не запускается — возможно `model.ContextWindow` равно 0
 (провайдер не отдал `context_length`).
 
-## Next steps
+## Как устроен один запрос
 
-- Read [BUILD.md](./BUILD.md) for build/publish instructions.
-- Read [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md) to write your own plugins.
-- Read [EXAMPLES.md](./EXAMPLES.md) for 40+ recipes (tools, providers, storage, TUI, plugins).
-- Read [PATTERNS.md](./PATTERNS.md) to understand the codebase (8 patterns catalogued).
-- Read [ANTIPATTERNS.md](./ANTIPATTERNS.md) for what NOT to do (39 antipatterns with code).
-- Read [docs/specs/](./specs/) for the full design rationale.
+Эта модель объясняет вывод из TL;DR выше. Один запрос проходит пять шагов.
+
+1. Текст пользователя становится `UserMessage` и попадает в `AgentLoop`.
+2. `SystemPromptBuilder` собирает system prompt из инструкций, реестра инструментов и подключённых resources и skills.
+3. `ILlmClient.StreamAsync` стримит токены. Каждая дельта публикуется как `MessageUpdateEvent` с вложенным `TextDeltaEvent`.
+4. Если модель запросила tool call, `ToolRegistry.ResolveTools` выбирает инструмент, `PermissionService` проверяет правило, а `ToolResult` возвращается в цикл. Шаги 3 и 4 повторяются, пока tool calls не закончатся.
+5. `AgentEndEvent` закрывает цикл. Рендерер (`HARBOR_TUI=plain|ansi|cellforge`) показывает те же события как текст, ANSI-поток или cell-grid.
+
+Подробности и диаграммы последовательностей находятся в [ARCHITECTURE.md](./ARCHITECTURE.md). Правила слоёв и матрица ссылок между проектами описаны в [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md).
+
+## Куда дальше
+
+Три основных маршрута, по которым стоит выбрать чтение:
+
+- Хотите готовые рецепты для tools, провайдеров, storage, TUI и плагинов? [EXAMPLES.md](./EXAMPLES.md), более 40 рецептов.
+- Нужно узнать аргументы и поведение конкретного встроенного инструмента? [TOOLS_CATALOG.md](./TOOLS_CATALOG.md).
+- Собираетесь расширять Harbor плагином? [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md), quickstart и пять полных примеров.
+
+Остальные справочники: [BUILD.md](./BUILD.md) для сборки и publish, [PATTERNS.md](./PATTERNS.md) и [ANTIPATTERNS.md](./ANTIPATTERNS.md) для соглашений по коду, [docs/specs/](./specs/) для исторического обоснования архитектуры.
