@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Rendering;
 // #436: the diff side of this session speaks the ENGINE grid (DiffEngine,
@@ -30,6 +31,14 @@ public sealed class ScreenSession
     // in-flight frame — placed after the diff, before the backend write.
     // Per-frame state: emitted once by the next flush, dropped on abort.
     private (int X, int Y)? _pendingCursor;
+
+    /// <summary>
+    ///     Pending terminal-title bytes (#3102). Built once by
+    ///     <see cref="TerminalTitleWriter" /> when the run's activity changes
+    ///     and shipped with the next frame, so the OSC sequence never becomes
+    ///     a side channel outside the frame's single backend write.
+    /// </summary>
+    private byte[]? _pendingTerminalTitle;
 
     /// <summary>
     /// Painter-side BACK buffer (#436: the engine is a standalone leaf, so the
@@ -498,6 +507,14 @@ public sealed class ScreenSession
     private void ArmEffects() =>
         _engine.Effects = Effects.Count > 0 ? Effects : null;
 
+    /// <summary>
+    ///     Stages a window title built by <see cref="TerminalTitleWriter" />
+    ///     (#3102). The OSC sequence reaches the terminal once, with the next
+    ///     frame; several changes before one flush keep only the latest state.
+    /// </summary>
+    public void SetTerminalTitle(string? subject, string? glyph, TerminalActivityState state)
+        => _pendingTerminalTitle = Encoding.UTF8.GetBytes(TerminalTitleWriter.Build(subject, glyph, state));
+
     /// <summary>Appends pending #2219 protocol reports to the in-flight frame.
     /// Every emitter is inert unless its capability probe passed and its state
     /// changed, so the classic frame is byte-identical on unsupported terminals.
@@ -508,6 +525,12 @@ public sealed class ScreenSession
         Progress.Emit(_writer);
         WorkingDirectory.Emit(_writer);
         CursorShape.Emit(_writer);
+
+        if (_pendingTerminalTitle is { } title)
+        {
+            _writer.RawBytes(title);
+            _pendingTerminalTitle = null;
+        }
     }
 
     /// <summary>
