@@ -1,17 +1,34 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
+/// Serializable snapshot of the camera's mutable world-space origin. The
+/// viewport size is geometry supplied by the host and is not persisted.
+/// </summary>
+/// <param name="OriginX">World-space x of the viewport's top-left tile.</param>
+/// <param name="OriginY">World-space y of the viewport's top-left tile.</param>
+public readonly record struct TileCameraState(int OriginX, int OriginY);
+
+/// <summary>
 /// Pure 2D camera arithmetic for tile worlds. Holds a world-space origin and a
 /// screen viewport size, and offers bounds clamping, deadzone following and
 /// world/screen coordinate conversion. No rendering, no field-of-view or
 /// following strategy, no shared state: the game decides when to call each
 /// method. BCL-only and allocation-free, so it is safe under NativeAOT.
 /// </summary>
-public sealed class TileCamera
+public sealed class TileCamera : IStatefulNode<TileCameraState>
 {
-    /// <summary>Creates a camera for a viewport measured in terminal cells.</summary>
+    private readonly ElementId _stateId;
+
+    /// <summary>Creates a camera whose state is keyed by the frame root.</summary>
     public TileCamera(int viewportWidth, int viewportHeight)
+        : this(ElementId.Root, viewportWidth, viewportHeight)
     {
+    }
+
+    /// <summary>Creates a camera bound to a stable state key.</summary>
+    public TileCamera(ElementId stateId, int viewportWidth, int viewportHeight)
+    {
+        _stateId = stateId;
         if (viewportWidth <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(viewportWidth), "Viewport width must be positive.");
@@ -37,6 +54,9 @@ public sealed class TileCamera
     /// <summary>Viewport height in cells.</summary>
     public int ViewportHeight { get; }
 
+    /// <inheritdoc />
+    public ElementId StateId => _stateId;
+
     /// <summary>The visible world rectangle at the current origin.</summary>
     public Rect View => new(OriginX, OriginY, ViewportWidth, ViewportHeight);
 
@@ -48,6 +68,12 @@ public sealed class TileCamera
 
     /// <summary>Converts viewport-local cell coordinates to a world tile. Inverse of <see cref="WorldToScreen"/>.</summary>
     public (int X, int Y) ScreenToWorld(int screenX, int screenY) => (screenX + OriginX, screenY + OriginY);
+
+    /// <inheritdoc />
+    public TileCameraState CaptureState() => new(OriginX, OriginY);
+
+    /// <summary>Re-applies a captured origin. Call <see cref="ClampTo"/> afterwards for a finite world.</summary>
+    public void RestoreState(TileCameraState state) => MoveTo(state.OriginX, state.OriginY);
 
     /// <summary>Moves the origin directly. Returns true when it changed.</summary>
     public bool MoveTo(int originX, int originY)

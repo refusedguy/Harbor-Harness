@@ -1,4 +1,14 @@
+using Harbor.Tui.CellForge.Rendering;
+
 namespace Harbor.Tui.CellForge.Widgets;
+
+/// <summary>
+/// Serializable snapshot of the one piece of viewport state that must outlive
+/// a frame: the clamped content offset. Content total and viewport height come
+/// from layout each frame, so they are deliberately not persisted.
+/// </summary>
+/// <param name="Offset">Top row of the viewport in content space.</param>
+public readonly record struct ScrollableViewportState(long Offset);
 
 /// <summary>
 /// Reusable scrollable-viewport core ([PRIM3a], part of #288): a clamped
@@ -12,11 +22,23 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// layout (estimates, measure/settle, anchors) stays in
 /// <see cref="TimelineLayoutCache"/>. Allocation-free and AOT-safe.
 /// </summary>
-public sealed class ScrollableViewport : IScrollInfoProvider
+public sealed class ScrollableViewport : IScrollInfoProvider, IStatefulNode<ScrollableViewportState>
 {
+    private readonly ElementId _stateId;
     private long _totalContent;
     private int _viewportH;
     private long _offset;
+
+    /// <summary>Creates a viewport whose state is keyed by the frame root.</summary>
+    public ScrollableViewport() : this(ElementId.Root)
+    {
+    }
+
+    /// <summary>Creates a viewport bound to a stable state key.</summary>
+    public ScrollableViewport(ElementId stateId)
+    {
+        _stateId = stateId;
+    }
 
     /// <summary>Total content rows (uniform row space).</summary>
     public long TotalContent => _totalContent;
@@ -35,6 +57,9 @@ public sealed class ScrollableViewport : IScrollInfoProvider
 
     /// <summary>True when pinned to the last visible window.</summary>
     public bool AtBottom => _offset >= MaxOffset;
+
+    /// <inheritdoc />
+    public ElementId StateId => _stateId;
 
     /// <summary>
     /// Largest legal offset for the given content total and viewport height.
@@ -79,6 +104,16 @@ public sealed class ScrollableViewport : IScrollInfoProvider
         _offset = Math.Clamp(offset, 0, MaxOffset);
         return _offset;
     }
+
+    /// <inheritdoc />
+    public ScrollableViewportState CaptureState() => new(_offset);
+
+    /// <summary>
+    /// Re-applies a captured offset. Call after <see cref="Configure"/> for the
+    /// new frame so clamping uses current geometry rather than the old one.
+    /// </summary>
+    public void RestoreState(ScrollableViewportState state) =>
+        _offset = Math.Clamp(state.Offset, 0, MaxOffset);
 
     /// <summary>Moves by a signed delta (clamped). Returns the clamped offset.</summary>
     public long ScrollBy(long delta) => SetOffset(_offset + delta);

@@ -67,6 +67,27 @@ public readonly record struct BlockTransfer(string BlockId, BlockLineRange Range
 public readonly record struct ChangeRow(string Text, bool IsCursor, bool IsSelected, bool IsActive);
 
 /// <summary>
+/// Serializable snapshot of focus and both sides' navigation state. The
+/// prepared blocks are content supplied by the host each frame, so they are not
+/// part of this snapshot.
+/// </summary>
+/// <param name="Active">Side that owns focus.</param>
+/// <param name="LeftBlock">Focused block index on the left side.</param>
+/// <param name="LeftLine">Line cursor on the left side.</param>
+/// <param name="LeftAnchor">Range anchor on the left side, or null.</param>
+/// <param name="RightBlock">Focused block index on the right side.</param>
+/// <param name="RightLine">Line cursor on the right side.</param>
+/// <param name="RightAnchor">Range anchor on the right side, or null.</param>
+public readonly record struct ChangeBlocksState(
+    BlockSide Active,
+    int LeftBlock,
+    int LeftLine,
+    int? LeftAnchor,
+    int RightBlock,
+    int RightLine,
+    int? RightAnchor);
+
+/// <summary>
 /// State for the navigable change-blocks pattern (lazygit, gitui, tig): blocks
 /// of lines on two sides, one active side, next/previous block navigation, and
 /// a line selection that is either the cursor line or an anchored range. Both
@@ -87,8 +108,9 @@ public readonly record struct ChangeRow(string Text, bool IsCursor, bool IsSelec
 /// produce the same rows.
 /// </para>
 /// </remarks>
-public sealed class NavigableChangeBlocks
+public sealed class NavigableChangeBlocks : IStatefulNode<ChangeBlocksState>
 {
+    private readonly ElementId _stateId;
     private IReadOnlyList<ChangeBlock> _blocks = Array.Empty<ChangeBlock>();
     private int _leftBlock;
     private int _leftLine;
@@ -97,6 +119,20 @@ public sealed class NavigableChangeBlocks
     private int? _leftAnchor;
     private int? _rightAnchor;
     private BlockSide _active = BlockSide.Left;
+
+    /// <summary>Creates a view whose state is keyed by the frame root.</summary>
+    public NavigableChangeBlocks() : this(ElementId.Root)
+    {
+    }
+
+    /// <summary>Creates a view bound to a stable state key.</summary>
+    public NavigableChangeBlocks(ElementId stateId)
+    {
+        _stateId = stateId;
+    }
+
+    /// <inheritdoc />
+    public ElementId StateId => _stateId;
 
     /// <summary>Blocks supplied by the caller for both sides.</summary>
     public IReadOnlyList<ChangeBlock> Blocks => _blocks;
@@ -112,6 +148,33 @@ public sealed class NavigableChangeBlocks
 
     /// <summary>Anchor of a range selection on one side, or null for a single line.</summary>
     public int? Anchor(BlockSide side) => side == BlockSide.Left ? _leftAnchor : _rightAnchor;
+
+    /// <inheritdoc />
+    public ChangeBlocksState CaptureState() => new(
+        _active,
+        _leftBlock,
+        _leftLine,
+        _leftAnchor,
+        _rightBlock,
+        _rightLine,
+        _rightAnchor);
+
+    /// <summary>
+    /// Re-applies captured focus, cursors and anchors, clamped to the current
+    /// blocks. Call <see cref="Replace"/> with the new frame's blocks first.
+    /// </summary>
+    public void RestoreState(ChangeBlocksState state)
+    {
+        _active = state.Active;
+        _leftBlock = state.LeftBlock;
+        _leftLine = state.LeftLine;
+        _leftAnchor = state.LeftAnchor;
+        _rightBlock = state.RightBlock;
+        _rightLine = state.RightLine;
+        _rightAnchor = state.RightAnchor;
+        _ = ClampSide(BlockSide.Left);
+        _ = ClampSide(BlockSide.Right);
+    }
 
     /// <summary>Index of the focused block on the active side.</summary>
     public int BlockIndex() => BlockIndex(_active);
