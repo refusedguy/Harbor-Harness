@@ -108,6 +108,8 @@
   href: IDE_INTEGRATION_PATTERNS.md
 - name: Killer Features
   href: KILLER_FEATURES.md
+- name: Migration Notes
+  href: MIGRATION.md
 - name: Nuget Packaging
   href: NUGET_PACKAGING.md
 - name: Observed Instrumentation
