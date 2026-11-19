@@ -77,14 +77,13 @@ public class ProviderCapabilitiesTests
             version: "v2");
         var provider = new ProviderCapabilities(
             supportsStreaming: true,
-            supportsToolCalls: true,
             supportsInterrupt: true,
             version: "v2");
 
         ProviderCapabilities effective = requested.Intersect(provider);
 
         await Assert.That(effective.SupportsStreaming).IsTrue();
-        await Assert.That(effective.SupportsToolCalls).IsTrue();
+        await Assert.That(effective.SupportsToolCalls).IsFalse();
         await Assert.That(effective.SupportsInterrupt).IsTrue();
         await Assert.That(effective.SupportsSteer).IsFalse();
         await Assert.That(effective.SupportsNativeFork).IsFalse();
@@ -119,14 +118,24 @@ public class ProviderCapabilitiesTests
     }
 
     [Test]
-    public async Task Intersect_WithEmpty_IsEmpty()
+    public async Task Intersect_WithUndeclaredProvider_ClearsEveryFlag()
     {
         var capabilities = new ProviderCapabilities(
             supportsStreaming: true,
             supportsToolCalls: true,
             version: "v2");
 
-        await Assert.That(capabilities.Intersect(new ProviderCapabilities()).IsEmpty).IsTrue();
-        await Assert.That(new ProviderCapabilities().Intersect(capabilities).IsEmpty).IsTrue();
+        ProviderCapabilities effective = capabilities.Intersect(new ProviderCapabilities());
+
+        await Assert.That(effective.SupportsStreaming).IsFalse();
+        await Assert.That(effective.SupportsToolCalls).IsFalse();
+        await Assert.That(effective.Version).IsEqualTo("v2");
+        await Assert.That(effective.IsEmpty).IsFalse();
+    }
+
+    [Test]
+    public async Task Intersect_TwoEmpty_IsEmpty()
+    {
+        await Assert.That(new ProviderCapabilities().Intersect(new ProviderCapabilities()).IsEmpty).IsTrue();
     }
 }
