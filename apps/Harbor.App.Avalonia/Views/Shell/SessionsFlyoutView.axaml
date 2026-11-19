@@ -2,6 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework.ViewModels"
              xmlns:local="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
+             xmlns:comp="clr-namespace:Harbor.App.Avalonia.Views.Components"
              x:Class="Harbor.App.Avalonia.Views.Shell.SessionsFlyoutView"
              Width="280"
              MinWidth="280"
@@ -48,23 +50,16 @@
                          NOT SessionRowViewModel — the stale DataType made compiled
                          bindings fail the runtime cast and render blank titles. -->
                     <DataTemplate DataType="vm:SessionItemViewModel" x:DataType="vm:SessionItemViewModel">
-                        <Border Background="Transparent"
-                                CornerRadius="{DynamicResource RadiusSm}"
-                                Padding="8"
-                                MinHeight="40">
-                            <DockPanel>
-                                <TextBlock Text="{Binding Title}"
-                                           DockPanel.Dock="Left"
-                                           FontWeight="SemiBold"
-                                           FontSize="13"
-                                           Foreground="{DynamicResource TextPrimaryBrush}"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding MetaLine}"
-                                           DockPanel.Dock="Right"
-                                           FontSize="11"
-                                           Foreground="{DynamicResource TextTertiaryBrush}"/>
-                            </DockPanel>
-                        </Border>
+                        <!-- #2681 G24: reuse the presentational row instead of an
+                             inline title/meta template. SessionItemViewModel already
+                             carries status, git dirt, relative time and message count,
+                             so the flyout now shows the same state as the board card. -->
+                        <comp:SessionRow Title="{Binding Title}"
+                                         Subtitle="{Binding MetaLine}"
+                                         RelativeTime="{Binding RelativeTime}"
+                                         MessageCount="{Binding MessageCount}"
+                                         IsDirty="{Binding GitIsDirty}"
+                                         StatusColorKey="{Binding Status, Converter={x:Static vw:SessionStatusToBrushKeyConverter.Instance}}"/>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
