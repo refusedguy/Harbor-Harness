@@ -1,3 +1,4 @@
+using Harbor.Tui.CellForge.Generic;
 using Harbor.Tui.CellForge.Mascot;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
@@ -557,6 +558,19 @@ public sealed record ChatScreen(
     /// <summary>Rows the composer and status row refuse to give up.</summary>
     public int ChromeMinRows { get; init; } = 4;
 
+    /// <summary>
+    ///     Engine-side composition of the panels this factory seated in
+    ///     <see cref="Tree"/>. Build adapts each panel with
+    ///     <see cref="PanelNodeAdapter"/> into a keyed <see cref="FlexSplitNode"/>,
+    ///     so the measure/arrange/prepaint/paint pipeline can render the very
+    ///     same panels the layout tree owns (#2688 idea 1, wired by #3371).
+    ///     The canonical renderer keeps painting <see cref="Tree"/>: this root
+    ///     is a second VIEW of those panels, not a second tree, and nothing in
+    ///     the default frame path reads it — every existing golden is untouched.
+    ///     Null only for a record created outside <see cref="Build"/>.
+    /// </summary>
+    internal FlexSplitNode? CompositionRoot { get; init; }
+
     /// <summary>Modal dialog state; seated by <see cref="SyncOverlays"/> (PRIM2c).</summary>
     public DialogOverlay Dialog => OverlaySeats.Dialog;
 
@@ -633,7 +647,8 @@ public sealed record ChatScreen(
         bool includeSidebar = true,
         MascotMode? mascotMode = null,
         bool includeTabStrip = true,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IReadOnlyList<Panel>? pluginPanels = null)
     {
         var tree = new LayoutTree();
         // Pin the auto-show policy (SideBarLayout.AutoShowMinWidth = 120):
@@ -700,11 +715,22 @@ public sealed record ChatScreen(
             statusRow.FooterMascotEnabled = false;
         }
 
+        // #3371 — adapt the panels this factory just seated into the engine
+        // node pipeline. Keyed by panel id (not by position) so the prepaint
+        // records a node commits stay bound to the panel when siblings move.
+        // Construction is inert: an adapter only touches its panel on Arrange
+        // and Paint, so no existing frame path changes by having one here.
+        var composition = new FlexSplitNode(SplitDir.Vertical);
+        composition.Add(new PanelNodeAdapter(timeline), timeline.Id, FlexTrack.Fill());
+        composition.Add(new PanelNodeAdapter(composerPanel), composerPanel.Id, FlexTrack.Fill());
+        composition.Add(new PanelNodeAdapter(statusRow), statusRow.Id, FlexTrack.Fill());
+
         return new ChatScreen(tree, timeline, composerPanel, statusRow, sidebar, mascotPanel, tabStrip)
         {
             TimelineRatio = timelineRatio,
             TimelineMinRows = timeline.Min.Height,
-            ChromeMinRows = composerPanel.Min.Height + statusRow.Min.Height
+            ChromeMinRows = composerPanel.Min.Height + statusRow.Min.Height,
+            CompositionRoot = composition
         };
     }
 
