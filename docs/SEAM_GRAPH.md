@@ -186,7 +186,7 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `RateLimitedLlmClient`, [`tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs`](../tests/Harbor.TestKit.Support/Fakes/ILlmClient.RateLimited.cs)
   - `ScriptedLlmClient (Harbor.TestKit)`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
   - `ThrowingLlmClient`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
-- **Named by** 57 file(s) in 27 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia.Tests, Harbor.App.Cli, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Benchmarks, Harbor.Config.Tests, Harbor.Core.Tests
+- **Named by** 58 file(s) in 27 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia.Tests, Harbor.App.Cli, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Benchmarks, Harbor.Config.Tests, Harbor.Core.Tests
 - **Registered in the container**: **no DI registration**
 - **Bypassed**: 3 direct construction(s) of the concrete type, 0 signature(s) naming the concrete type where the interface was the contract:
   - `RetryLlmClientDecorator` instead of `ILlmClient`, construction at [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs):274
