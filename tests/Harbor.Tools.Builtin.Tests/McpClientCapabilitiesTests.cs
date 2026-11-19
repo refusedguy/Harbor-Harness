@@ -13,6 +13,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     the addressed response, and a working-directory change emits
 ///     notifications/roots/list_changed before the next request.
 /// </summary>
+[NotInParallel("process-spawn")]
 public class McpClientCapabilitiesTests
 {
     [Test]
