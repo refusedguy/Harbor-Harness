@@ -20,6 +20,7 @@ using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Capabilities;
+using Harbor.Tui.CellForge.Generic;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge;
@@ -54,6 +55,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     public ChatScreen? Screen { get; set; }
 
     private readonly UiStore _store;
+    // #3084: the product view : State -> Tree envelope. Reconciled from the
+    // newest store state on the render pass. It owns its retained tree and
+    // element state and never writes into the painted frame, so existing
+    // golden frames stay byte-identical.
+    private readonly StateTreeView _stateTree = new();
     private readonly ISessionManager? _sessions;
 
     /// <summary>
@@ -356,6 +362,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         // before any placement paints, so the widgets a view reads are the
         // ones this event's state produced (#466).
         _ = PumpProjection();
+        // #3084: run the generated BuildRoot over the newest state on the render
+        // pass. This stays out of the coalesced widget projection, which has a
+        // per-delta allocation budget (#466). Value-only changes become a
+        // mutation batch and element state survives across frames.
+        _ = _stateTree.Sync(ActiveStore.State);
         return base.RenderAsync(@event, ct);
     }
 
@@ -384,6 +395,13 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     {
         _ = Projectors.Project(ChatScreenProjector.ChatScreenId, state);
     }
+
+    /// <summary>
+    ///     The State -> Tree envelope reconciled on every render pass (#3084).
+    ///     Test/diagnostic seam; the renderer never paints its tree into the
+    ///     chat frame.
+    /// </summary>
+    internal StateTreeView StateTree => _stateTree;
 
 
     public override void Dispose()
