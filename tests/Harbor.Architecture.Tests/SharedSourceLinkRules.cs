@@ -208,9 +208,9 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(28)
+        await Assert.That(links.Length).IsEqualTo(30)
             .Because(
-                "28 `<Compile Include>` link items: the #3762 ProviderToolCallEmitter.cs into the "
+                "30 `<Compile Include>` link items: the #3762 ProviderToolCallEmitter.cs into the "
                 + "three tool-call-emitting providers (OpenAI, OpenAiCompatible, Ollama) — the one "
                 + "Start/Delta policy that used to be copied into OpenAiWire and OllamaLlmClient. "
                 + "The #1499 ProviderLlmClientBase.cs into the "
@@ -233,7 +233,7 @@ public sealed class SharedSourceLinkRules
                 + "Jsonl and Sqlite stores, the one domain ↔ persist-form projection for content "
                 + "parts the two backends used to hand-maintain separately — Memory is not a "
                 + "consumer (it links SessionStoreErrors alone and does not compile its own "
-                + "message-codec read path).");
+                + "message-codec read path). Two more are #3773's: ProviderHttp.cs and ProviderAuth.cs into Anthropic, the minimal wire-envelope and raw-header primitives that replaced the hand-assembled HttpRequestMessage and TryAddWithoutValidation calls in AnthropicRequestBuilder.");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 

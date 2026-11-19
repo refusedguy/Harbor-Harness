@@ -1,8 +1,8 @@
 using System.Buffers;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
+using Harbor.Providers.Internal;
 
 namespace Harbor.Providers.Anthropic;
 
@@ -61,16 +61,16 @@ internal static class AnthropicRequestBuilder
     {
         string url = string.Concat(baseUrl, "/messages");
 
-        var msg = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = new ByteArrayContent(WritePayload(request))
-        };
-        msg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        // #3773: the HTTP envelope and the raw header writes live in the shared
+        // ProviderHttp / ProviderAuth primitives. The version and beta values are
+        // supplied by the caller (AnthropicConfig / the provider JSON), not baked
+        // into the primitive; the constants below are the documented defaults
+        // that used to sit inline here. The wire shape is unchanged byte-for-byte.
+        HttpRequestMessage msg = ProviderHttp.PostJson(url, WritePayload(request));
 
-        // Auth: x-api-key header
-        msg.Headers.TryAddWithoutValidation("x-api-key", apiKey);
-        msg.Headers.TryAddWithoutValidation("anthropic-version", apiVersion ?? DefaultApiVersion);
-        msg.Headers.TryAddWithoutValidation("anthropic-beta", betaFeatures ?? DefaultBetaFeatures);
+        ProviderAuth.ApplyApiKey(msg, "x-api-key", apiKey);
+        ProviderAuth.ApplyApiKey(msg, "anthropic-version", apiVersion ?? DefaultApiVersion);
+        ProviderAuth.ApplyApiKey(msg, "anthropic-beta", betaFeatures ?? DefaultBetaFeatures);
 
         return msg;
     }
