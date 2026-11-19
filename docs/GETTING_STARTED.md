@@ -135,6 +135,24 @@ LLM вызовет `grep` с паттерном `TODO\(principles\)`, потом
 
 ## Quick start (5 minutes)
 
+### Install paths
+
+Harbor has no installer. Pick the lane that matches how much stability you need:
+
+| Path | What you get | Check the version |
+|---|---|---|
+| Tagged release archive (`harbor-<rid>` from the [release lane](./DAILY_BUILDS.md)) | a reproducible, pinned CLI | `./Harbor.App.Cli version` |
+| Source build (`git clone` + `dotnet build -c Release`) | the tip of `dev` or an exact tag | `dotnet run --project apps/Harbor.App.Cli -- version` and `git rev-parse --short HEAD` |
+| Beta artifact (`harbor-cli-linux-x64` from the [beta lane](./DAILY_BUILDS.md)) | the newest `dev` build, 14-day retention | `./Harbor.App.Cli version` |
+
+The `nightly` workflow publishes coverage and build measurements only, not a
+CLI binary. See [Daily and pre-release builds](./DAILY_BUILDS.md) for artifact
+links and [Upgrading Harbor](./UPGRADE.md) for the commands that move between
+lanes. Verify a downloaded archive against `SHA256SUMS.txt` before running it.
+
+The steps below use the source build. If you choose a release or beta archive,
+skip step 2 and put the CLI directory on your `PATH`.
+
 ### 1. Install .NET 10
 
 Download from https://dot.net or use your package manager:
