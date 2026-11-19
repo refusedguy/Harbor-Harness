@@ -1616,3 +1616,25 @@ shipped-примитивы не открываются заново без вл�
 
 - Полный текст, таблица по трём контрактам и условия пересмотра:
   [ADR-065](ADR-065-tui-ui-primitives-catalog-post-verdict.md).
+
+## ADR-066: issue #2667 (scheduler и webhooks в daemon) без общего slice
+
+Issue #2667 выведен из `product-feature-gaps.md` разделами K01 и N01-N03, N07.
+Он просит `harbor task schedule --cron --prompt`, `harbor daemon hook` с HMAC,
+dedupe и rate-limit, а также `INotificationPolicy` с snooze и OSC 777.
+Проверка `origin/dev` (`74060665`) и `gh pr list --search 2667` (ноль PR)
+показала, что отправительная половина уже влита через #2674 G11
+(PR [#2957](https://github.com/refusedguy/Harbor-Harness/pull/2957)), вместе
+с five-field cron, `tasks.json`, HMAC-SHA256 и fixed-time сравнением.
+ADR-060 уже отнёс HTTP-эндпоинт `harbor daemon hook` и fire-диспетчер к тому
+же item G11.
+
+Decided: код не писать. Принимающий эндпоинт, dedupe, rate-limit 60 req/min и
+политика уведомлений с snooze остаются без владельца и требуют отдельной
+issue и PR. Существующая отправка не перевыводится. Гейты, пороги, golden и
+AOT-профиль не меняются. Issue остаётся OPEN; комментарий содержит только
+хеш коммита ADR. Пересмотр по новому факту: владелец называет конкретную
+часть, потребителя и измеримую цель.
+
+- Полный текст, таблица по четырём готовым частям и список недостающих:
+  [ADR-066](ADR-066-scheduler-webhooks-daemon-verdict.md).
