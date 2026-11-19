@@ -135,10 +135,10 @@ public sealed class MarkupGenerator : IIncrementalGenerator
                 if (!module.Parse.IsValid || graph.BlockedPaths.Contains(module.Path))
                     continue;
 
-                var source = module.HasUses
-                    ? BuildRootEmitter.EmitBuildRootWithModules(
-                        module.Identifier, module.Path, module.Arena, module, graph)
-                    : BuildRootEmitter.EmitBuildRoot(module.Identifier, module.Arena);
+                // Every module gets its own BuildRoot and its own offset
+                // BuildModule, so an importing screen can call it directly.
+                var source = BuildRootEmitter.EmitBuildRootWithModules(
+                    module.Identifier, module.Path, module.Arena, module, graph);
 
                 spc.AddSource(
                     module.Identifier + ".BuildRoot.g.cs",

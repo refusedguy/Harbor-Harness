@@ -217,58 +217,7 @@ public sealed class DevReloadInterpreter
         var signature = ComputeTemplateSignature(fresh);
         var checksum = MarkupModuleResolver.GraphChecksum(sources);
         var wrapper = new MarkupParseResult(fresh, []);
-        bool logicChanged = LogicChanged(_current, wrapper);
-
-        if (signature == _signature)
-        {
-            if (checksum == _checksum)
-                return Snapshot(ReloadOutcome.Unchanged, signature, checksum, "source unchanged after normalization");
-
-            if (logicChanged)
-            {
-                return Rebuild(wrapper, signature, checksum, ReloadOutcome.RestartRequired,
-                    "logic changed; tree rebuilt and host restart requested");
-            }
-
-            var patch = ComputePatch(_currentArena, fresh);
-            var applied = _applier.Apply(patch);
-            if (applied.IsFailure)
-            {
-                return Rebuild(wrapper, signature, checksum, ReloadOutcome.Rebuilt,
-                    "patch rejected by the applier; rebuilt: " + applied.Error);
-            }
-
-            _current = wrapper;
-            _currentArena = fresh;
-            _signature = signature;
-            _checksum = checksum;
-
-            var preserved = new List<int>();
-            foreach (int id in _sessions.Keys)
-            {
-                if (_applier.Contains(id))
-                    preserved.Add(id);
-            }
-
-            preserved.Sort();
-            return new ReloadResult(
-                applied.Value.Dirty ? ReloadOutcome.Patched : ReloadOutcome.Unchanged,
-                _applier.Revision,
-                _applier.RootId,
-                preserved,
-                signature,
-                checksum,
-                applied.Value.Dirty ? "values patched in place on stable element ids" : "no value changed");
-        }
-
-        return Rebuild(
-            wrapper,
-            signature,
-            checksum,
-            logicChanged ? ReloadOutcome.RestartRequired : ReloadOutcome.Rebuilt,
-            logicChanged
-                ? "template and logic changed; tree rebuilt and host restart requested"
-                : "template changed; tree rebuilt");
+        return ApplyFresh(wrapper, signature, checksum, LogicChanged(_current, wrapper));
     }
 
     private ReloadResult RejectedGraph(string reason) =>
@@ -297,8 +246,20 @@ public sealed class DevReloadInterpreter
 
         var signature = ComputeTemplateSignature(fresh.Arena);
         var checksum = MarkupChecksum.Compute(markup ?? string.Empty);
-        bool logicChanged = LogicChanged(_current, fresh);
+        return ApplyFresh(fresh, signature, checksum, LogicChanged(_current, fresh));
+    }
 
+    /// <summary>
+    ///     The one patch/rebuild decision, shared by the single-file and the
+    ///     graph paths. Both hand it a freshly parsed (or expanded) arena; only
+    ///     the source of that arena differs.
+    /// </summary>
+    private ReloadResult ApplyFresh(
+        MarkupParseResult fresh,
+        string signature,
+        string checksum,
+        bool logicChanged)
+    {
         if (signature == _signature)
         {
             // A comment-only or whitespace-only edit normalizes to the same text.

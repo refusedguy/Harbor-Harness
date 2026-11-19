@@ -172,12 +172,13 @@ public class MarkupModuleGraphTests
                 [root] = File.GetLastWriteTimeUtc(screenPath),
             };
             var sources = new Dictionary<string, DevMarkupFileSource>(StringComparer.Ordinal);
-            foreach (var path in texts.Keys)
+            foreach (var path in new[] { sharedPath, screenPath })
             {
-                string captured = path;
-                sources[path] = new DevMarkupFileSource(
-                    () => stamps[captured],
-                    () => File.ReadAllText(captured));
+                string original = path;
+                string key = MarkupPaths.Normalize(path);
+                sources[key] = new DevMarkupFileSource(
+                    () => stamps[key],
+                    () => File.ReadAllText(original));
             }
 
             using var watcher = new DslDevFileWatcher(root, sources, interpreter, channel,

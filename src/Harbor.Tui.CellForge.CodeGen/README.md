@@ -63,7 +63,7 @@ Paths are resolved by collapsing `.` and `..` segments as strings. The resolver 
 
 `MarkupModuleResolver` builds a module graph inside a `SpecArena`. Each module keeps its own parsed arena and its resolved imports, so an imported spec is reachable by name. `SpecArena.DetectImportCycles` walks the graph depth-first and reports every back edge at the import line. A cycle gets `HZ0002`, an import that does not name a known file gets `HZ0003`. Both are errors with a source location; neither crashes the generator. Modules in a cycle emit no source, the rest of the compilation still does.
 
-The generator emits one `BuildRoot` per module. A module with `.use` operations also gets a `BuildModule(ICellForgeRoot root, int baseSequence)` method. At a use site the screen calls the imported module's own builder with the next free sequence offset, so cell-diff keys stay unique across the screen without copying the shared component's nodes into its source. The incremental key is the collected set of all markup files, so editing an imported file re-runs generation for the whole graph.
+The generator emits one `BuildRoot` per module, with dense literal sequence numbers. Every module also gets a `BuildModule(ICellForgeRoot root, int baseSequence)` method whose sequences are relative to the caller's offset. At a use site the screen calls the imported module's `BuildModule` with the next free sequence, so cell-diff keys stay unique without copying the shared component's nodes into its source. The incremental key is the collected set of all markup files, so editing an imported file re-runs generation for the whole graph.
 
 Every node is single-use. `SpecNode.AddChild` rejects a child that already has a parent, and `SpecNode.Claim` rejects a second consumer. Both throw `SpecNodeReuseException` naming the kind and source line instead of leaving two owners pointing at one node.
 
@@ -82,7 +82,7 @@ The generator resolves the path with Roslyn symbols at build time. A missing `st
 
 ## Generation phases (#2428 and #2429)
 
-For each `.harbor-ui` file the generator emits four sources. With #3083 the phase-2 source is one per module, and a module that uses imports also carries a sequence-offset `BuildModule` helper:
+For each `.harbor-ui` file the generator emits four sources. With #3083 the phase-2 source is one per module, and every module carries a sequence-offset `BuildModule` helper:
 
 1. `CellForgeRootContract.g.cs` is added once per compilation during post-initialization. It declares `internal interface ICellForgeRoot` with `Begin(int sequence)`, `TestId(int sequence, string testId)` (#2438), `Text(int sequence, string text)` and `End()`. The interface types the `root` parameter, so it reaches the compilation before any file is generated.
 2. `<Identifier>.Declarations.g.cs` is phase 1. It holds the `internal partial class` and its declarations (`TargetPath`, `RootCount`, `SequenceCount`). Its provider is `MarkupGenerator.Phase1Declarations`.
