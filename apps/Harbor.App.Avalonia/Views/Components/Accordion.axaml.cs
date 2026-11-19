@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Harbor.App.Avalonia.ViewModels;
@@ -12,13 +13,19 @@ namespace Harbor.App.Avalonia.Views.Components;
 /// </summary>
 /// <param name="Id">Stable identity used in the expanded set.</param>
 /// <param name="Header">Header text painted on the Expander.</param>
-/// <param name="Content">Body text painted when the section is open.</param>
+/// <param name="Content">Body text used when no <paramref name="Body"/> is supplied.</param>
 /// <param name="IsDisabled">Whether this row refuses toggles.</param>
+/// <param name="Body">
+///     Optional live content for the row. A host that needs more than a sentence
+///     (a settings section, a provider model list) supplies its controls here;
+///     the primitive keeps the text body for hosts that do not.
+/// </param>
 public readonly record struct AccordionSection(
     string Id,
     string Header,
     string Content,
-    bool IsDisabled = false);
+    bool IsDisabled = false,
+    Control? Body = null);
 
 /// <summary>
 ///     Reusable HDS accordion: a stack of <see cref="Expander"/> rows governed
@@ -62,6 +69,10 @@ public partial class Accordion : UserControl
     public static readonly StyledProperty<bool> IsDisabledProperty =
         AvaloniaProperty.Register<Accordion, bool>(nameof(IsDisabled));
 
+    // _cache keeps a row alive across a search filter so the section's live
+    // controls (and their bindings) keep their visual parent. _rows holds only
+    // the rows currently painted, in Sections order, for the policy loops.
+    private readonly Dictionary<string, Expander> _cache = new(StringComparer.Ordinal);
     private readonly List<Expander> _rows = [];
     private IReadOnlySet<string> _expanded = AccordionRules.Empty();
     private bool _applying;
@@ -141,7 +152,7 @@ public partial class Accordion : UserControl
         // it honour the current one before it drives any row.
         _expanded = AccordionRules.Normalize(_expanded, Mode);
 
-        foreach (Expander row in _rows) row.PropertyChanged -= OnRowPropertyChanged;
+        foreach (Expander row in _cache.Values) row.PropertyChanged -= OnRowPropertyChanged;
         _rows.Clear();
         ItemsHost.Children.Clear();
 
@@ -149,21 +160,33 @@ public partial class Accordion : UserControl
         for (int i = 0; i < sections.Count; i++)
         {
             AccordionSection section = sections[i];
-            var row = new Expander
+            if (!_cache.TryGetValue(section.Id, out Expander? row))
             {
-                Header = section.Header,
-                Content = new TextBlock
+                row = new Expander();
+                row.Classes.Add("hds-accordion-item");
+                _cache[section.Id] = row;
+            }
+
+            // Reused rows were unsubscribed above; every live row must listen
+            // again or a toggle after a search filter would be invisible.
+            row.PropertyChanged += OnRowPropertyChanged;
+            row.Header = section.Header;
+            AutomationProperties.SetName(row, section.Header);
+            row.Content = section.Body
+                ?? new TextBlock
                 {
                     Text = section.Content,
                     TextWrapping = TextWrapping.Wrap,
-                },
-                IsExpanded = AccordionRules.IsExpanded(_expanded, section.Id),
-            };
-            row.Classes.Add("hds-accordion-item");
-            row.PropertyChanged += OnRowPropertyChanged;
+                };
+
             _rows.Add(row);
             ItemsHost.Children.Add(row);
         }
+
+        // Rows stay cached even while filtered out. A host may supply a live
+        // Control as a section body; that control must keep the same Expander
+        // as its parent across filters or Avalonia cannot re-parent it.
+        ApplyExpansion(_expanded);
         ApplyRowState();
     }
 

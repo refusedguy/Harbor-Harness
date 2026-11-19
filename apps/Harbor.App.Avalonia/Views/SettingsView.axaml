@@ -2,8 +2,212 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+             xmlns:comp="clr-namespace:Harbor.App.Avalonia.Views.Components"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.SettingsView">
+
+    <!--
+        Section bodies. Each key is named by SettingsSections so the search
+        can filter the accordion's Sections without losing a live control: the
+        body stays parented to its row and every AutomationProperties.Name on
+        an input is exactly where it was before the accordion conversion.
+    -->
+    <UserControl.Resources>
+        <!-- Theme -->
+        <StackPanel x:Key="ThemeBody" Spacing="4">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180"
+                          AutomationProperties.Name="Theme">
+                    <ComboBoxItem Content="dark" />
+                    <ComboBoxItem Content="light" />
+                    <ComboBoxItem Content="system" />
+                </ComboBox>
+                <Button Classes="Subtle" Content="Preview"
+                        Command="{Binding ThemeSettings.ApplyThemeCommand}"
+                        ToolTip.Tip="Apply the theme immediately without saving." />
+            </StackPanel>
+
+            <!--
+                Palette picker (#583). The ItemsSource is the catalog's own
+                projection, so this list cannot fall out of step with Themes/Hds/.
+            -->
+            <StackPanel Spacing="6" Margin="0,8,0,0">
+                <TextBlock Text="Palette" Classes="Label" />
+                <ItemsControl ItemsSource="{Binding ThemeSettings.AvailableThemes}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="150" Height="64" Margin="0,0,8,8"
+                                    CornerRadius="6" ClipToBounds="True"
+                                    Background="{Binding Surface}"
+                                    BorderBrush="{Binding Accent}" BorderThickness="1"
+                                    ToolTip.Tip="{Binding DisplayName}"
+                                    PointerPressed="OnThemePreviewClick">
+                                <StackPanel VerticalAlignment="Bottom" Margin="8,0,8,6" Spacing="4">
+                                    <Rectangle Height="4" Width="28" HorizontalAlignment="Left"
+                                               Fill="{Binding Accent}" />
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               Foreground="{Binding Text}"
+                                               FontSize="11" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Default provider -->
+        <StackPanel x:Key="DefaultProviderBody" Spacing="4">
+            <!-- #2681 G17: pick from the same provider catalogue the
+                 wizard uses instead of free-form text. The VM's
+                 SelectedProviderId seam keeps an unset/custom id
+                 from being erased by an unmatched ComboBox. -->
+            <ComboBox ItemsSource="{Binding AvailableProviderIds}"
+                      SelectedItem="{Binding SelectedProviderId, Mode=TwoWay}"
+                      AutomationProperties.Name="Default provider"
+                      HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <!-- Default model -->
+        <StackPanel x:Key="DefaultModelBody" Spacing="4">
+            <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
+                     AutomationProperties.Name="Default model"
+                     PlaceholderText="tencent/hy3:free, gpt-4o, claude-sonnet-4, …" />
+        </StackPanel>
+
+        <!-- Font family -->
+        <StackPanel x:Key="FontFamilyBody" Spacing="4">
+            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter"
+                     AutomationProperties.Name="Font family" />
+        </StackPanel>
+
+        <!-- Storage backend -->
+        <StackPanel x:Key="StorageBackendBody" Spacing="4">
+            <!-- #677: an empty selection is a real state, not a bug — it
+                 means "not chosen", and the composition preset decides
+                 (CLI jsonl, desktop memory). -->
+            <!-- #2681 G18: only backends the desktop build can actually
+                 resolve may be offered here. The sqlite factory in
+                 SessionStoreRegistry sits behind HARBOR_WITH_ALL_PROVIDERS,
+                 which the Avalonia csproj does not define. -->
+            <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180"
+                      AutomationProperties.Name="Storage backend">
+                <ComboBoxItem Content="memory" />
+                <ComboBoxItem Content="jsonl" />
+            </ComboBox>
+            <TextBlock Text="Leave empty to use the app's default backend."
+                       FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+        </StackPanel>
+
+        <!-- Log level -->
+        <StackPanel x:Key="LogLevelBody" Spacing="4">
+            <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180"
+                      AutomationProperties.Name="Log level">
+                <ComboBoxItem Content="trace" />
+                <ComboBoxItem Content="debug" />
+                <ComboBoxItem Content="info" />
+                <ComboBoxItem Content="warning" />
+                <ComboBoxItem Content="error" />
+            </ComboBox>
+        </StackPanel>
+
+        <!-- Ollama host. Read-only on purpose (#677): ProviderFactories
+             snapshots OLLAMA_HOST into an HttpClient while AddHarbor
+             composes, so this screen cannot change a running app. -->
+        <StackPanel x:Key="OllamaHostBody" Spacing="4">
+            <TextBox Text="{Binding OllamaHost, Mode=OneWay}" IsReadOnly="True"
+                     AutomationProperties.Name="Ollama host"
+                     PlaceholderText="http://localhost:11434"
+                     ToolTip.Tip="Read from OLLAMA_HOST when Harbor starts. Set the environment variable before launching to change it." />
+        </StackPanel>
+
+        <!-- Onboarding -->
+        <StackPanel x:Key="OnboardingBody" Spacing="4">
+            <Button Classes="Subtle" Content="Re-run setup wizard"
+                    Command="{Binding RerunOnboardingCommand}"
+                    ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard." />
+        </StackPanel>
+
+        <!-- Provider Configuration (per-provider API keys + model browser) -->
+        <StackPanel x:Key="ProviderConfigurationBody" Spacing="6">
+            <TextBlock Text="Set an API key per provider, then click Test to verify the connection."
+                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                       TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding ProviderConfigs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:ProviderConfigViewModel">
+                        <Border Background="{StaticResource MochaMantle}" CornerRadius="6"
+                                Padding="10" Margin="0,3">
+                            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                                <!-- Provider name + auth badge -->
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal"
+                                            Spacing="8">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Id}" FontSize="10"
+                                               FontFamily="{StaticResource FontMono}"
+                                               Foreground="{StaticResource TextMutedBrush}" />
+                                </StackPanel>
+                                <Border Grid.Row="0" Grid.Column="1"
+                                        Background="{StaticResource MochaSurface0}"
+                                        CornerRadius="4" Padding="6,2">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="{Binding AuthIcon}" FontSize="12"
+                                                   Foreground="{StaticResource MochaGreen}" />
+                                        <TextBlock Text="{Binding AuthText}" FontSize="10"
+                                                   Foreground="{StaticResource TextMutedBrush}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- API key input (hidden for no-key providers like Ollama) -->
+                                <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                         Margin="0,6,0,0"
+                                         IsVisible="{Binding RequiresApiKey}"
+                                         AutomationProperties.Name="Provider API key"
+                                         Text="{Binding ApiKey, Mode=TwoWay}"
+                                         PasswordChar="•"
+                                         PlaceholderText="Paste API key…" />
+
+                                <!-- Action row -->
+                                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                            Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                                    <Button Classes="Subtle" Content="Save key" Padding="10,4"
+                                            Command="{Binding SaveKeyCommand}" />
+                                    <Button Classes="Subtle" Content="Test connection" Padding="10,4"
+                                            Command="{Binding TestConnectionCommand}"
+                                            IsEnabled="{Binding !IsTesting}" />
+                                    <TextBlock Text="{Binding TestResult}" FontSize="11"
+                                               Foreground="{StaticResource TextMutedBrush}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Model browser -->
+        <StackPanel x:Key="BrowseModelsBody" Spacing="4">
+            <TextBlock Text="Pick a model to make it the active session's model."
+                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                       TextWrapping="Wrap" />
+            <ctrl:ProviderModelPicker DataContext="{Binding Picker}" Height="380" />
+        </StackPanel>
+
+        <!--
+            K29: filter settings by section title. The query is view state only
+            (never persisted); the code-behind filters SettingsSections.All with
+            the same alias strings the view-model uses to compute
+            HasSearchResults, so the two cannot disagree.
+        -->
+    </UserControl.Resources>
 
     <!--
         Settings modal — overlay with a centered card.
@@ -12,18 +216,11 @@
           • Backdrop: 50% black scrim that captures clicks (so a click
             outside the card reads as "dismiss").
           • Card: 760×640, padded, rounded, surface-tinted background.
-          • Search row: TextBox + Clear button; filters the sections below
-            by title and shows an empty state when nothing matches (K29).
-          • Sections, each a labeled StackPanel:
-              - Theme (dark / light / system) — ComboBox, applied immediately
-                on selection AND on Save.
-              - Default provider — TextBox (ollama / openai / anthropic / …).
-              - Default model — TextBox (provider-specific model id).
-              - Font family — TextBox (Inter default).
-              - Storage backend — ComboBox (memory / jsonl).
-              - Log level — ComboBox (trace / debug / info / warning / error).
-              - Ollama host — TextBox (URL).
-              - Onboarding re-run — button.
+          • Search row: TextBox + Clear button; filters the accordion sections.
+          • Sections: an HDS Accordion over the data in SettingsSections; each
+            row is an Expander that owns one of the bodies above. All rows open
+            by default, so the screen shows the same controls it always did;
+            automation names and the no-results state are unchanged.
           • Footer: Cancel (revert + close) + Save (persist + close).
     -->
 
@@ -55,12 +252,7 @@
                             Click="Close_Click" ToolTip.Tip="Close (Esc)" />
                 </Grid>
 
-                <!--
-                    K29: filter settings by section title. The query is view
-                    state only (never persisted); each section below binds its
-                    IsVisible to the same alias string the view-model uses to
-                    compute HasSearchResults, so the two cannot disagree.
-                -->
+                <!-- Search row -->
                 <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
                     <TextBox Grid.Column="0"
                              Text="{Binding SearchQuery, Mode=TwoWay}"
@@ -75,258 +267,31 @@
                 </Grid>
 
                 <Grid Grid.Row="2">
-                <!-- Scrollable settings -->
-                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                              IsVisible="{Binding HasSearchResults}">
-                    <StackPanel Spacing="14">
+                    <!-- Scrollable settings: one accordion row per matching section -->
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  IsVisible="{Binding HasSearchResults}">
+                        <comp:Accordion x:Name="SettingsSectionsAccordion"
+                                        AutomationProperties.Name="Settings sections"
+                                        Mode="Multiple" />
+                    </ScrollViewer>
 
-                        <!-- Theme -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.ThemeAliases}}">
-                            <TextBlock Text="Theme" Classes="Label" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180"
-                                          AutomationProperties.Name="Theme">
-                                    <ComboBoxItem Content="dark" />
-                                    <ComboBoxItem Content="light" />
-                                    <ComboBoxItem Content="system" />
-                                </ComboBox>
-                                <Button Classes="Subtle" Content="Preview"
-                                        Command="{Binding ThemeSettings.ApplyThemeCommand}"
-                                        ToolTip.Tip="Apply the theme immediately without saving." />
-                            </StackPanel>
-
-                            <!--
-                                Palette picker (#583). The ItemsSource is the
-                                catalog's own projection, so this list cannot fall
-                                out of step with Themes/Hds/ — a palette name typed
-                                here would be the second source of truth #673
-                                deleted. The swatches are the palette's own
-                                brushes, read out of its dictionary, so a thumbnail
-                                always shows the palette that pressing it installs.
-                            -->
-                            <StackPanel Spacing="6" Margin="0,8,0,0">
-                                <TextBlock Text="Palette" Classes="Label" />
-                                <ItemsControl ItemsSource="{Binding ThemeSettings.AvailableThemes}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Width="150" Height="64" Margin="0,0,8,8"
-                                                    CornerRadius="6" ClipToBounds="True"
-                                                    Background="{Binding Surface}"
-                                                    BorderBrush="{Binding Accent}" BorderThickness="1"
-                                                    ToolTip.Tip="{Binding DisplayName}"
-                                                    PointerPressed="OnThemePreviewClick">
-                                                <StackPanel VerticalAlignment="Bottom" Margin="8,0,8,6" Spacing="4">
-                                                    <Rectangle Height="4" Width="28" HorizontalAlignment="Left"
-                                                               Fill="{Binding Accent}" />
-                                                    <TextBlock Text="{Binding DisplayName}"
-                                                               Foreground="{Binding Text}"
-                                                               FontSize="11" TextWrapping="Wrap" />
-                                                </StackPanel>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <Separator Margin="0,2" IsVisible="{Binding !IsFiltering}" />
-
-                        <!-- Default provider -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.DefaultProviderAliases}}">
-                            <TextBlock Text="Default provider" Classes="Label" />
-                            <!-- #2681 G17: pick from the same provider catalogue the
-                                 wizard uses instead of free-form text. The VM's
-                                 SelectedProviderId seam keeps an unset/custom id
-                                 from being erased by an unmatched ComboBox. -->
-                            <ComboBox ItemsSource="{Binding AvailableProviderIds}"
-                                      SelectedItem="{Binding SelectedProviderId, Mode=TwoWay}"
-                                      AutomationProperties.Name="Default provider"
-                                      HorizontalAlignment="Stretch" />
-                        </StackPanel>
-
-                        <!-- Default model -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.DefaultModelAliases}}">
-                            <TextBlock Text="Default model" Classes="Label" />
-                            <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
-                                     AutomationProperties.Name="Default model"
-                                     PlaceholderText="tencent/hy3:free, gpt-4o, claude-sonnet-4, …" />
-                        </StackPanel>
-
-                        <!-- Font family -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.FontFamilyAliases}}">
-                            <TextBlock Text="Font family" Classes="Label" />
-                            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter"
-                                     AutomationProperties.Name="Font family" />
-                        </StackPanel>
-
-                        <!-- Storage backend -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.StorageBackendAliases}}">
-                            <TextBlock Text="Storage backend" Classes="Label" />
-                            <!-- #677: an empty selection is a real state, not a bug — it
-                                 means "not chosen", and the composition preset decides
-                                 (CLI jsonl, desktop memory). The old view-model filled this
-                                 box with "jsonl" so the preset was unreachable. -->
-                            <!-- #2681 G18: only backends the desktop build can actually
-                                 resolve may be offered here. The sqlite factory in
-                                 SessionStoreRegistry sits behind HARBOR_WITH_ALL_PROVIDERS,
-                                 which the Avalonia csproj does not define; storing "sqlite"
-                                 here made the next composition throw "Unknown
-                                 HARBOR_STORAGE: 'sqlite'" at startup. Adding the factory
-                                 would pull in the full provider/tool set, so the honest
-                                 fix is to drop the unreachable option. -->
-                            <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180"
-                                      AutomationProperties.Name="Storage backend">
-                                <ComboBoxItem Content="memory" />
-                                <ComboBoxItem Content="jsonl" />
-                            </ComboBox>
-                            <TextBlock Text="Leave empty to use the app's default backend."
-                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
-                        </StackPanel>
-
-                        <!-- Log level -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.LogLevelAliases}}">
-                            <TextBlock Text="Log level" Classes="Label" />
-                            <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180"
-                                      AutomationProperties.Name="Log level">
-                                <ComboBoxItem Content="trace" />
-                                <ComboBoxItem Content="debug" />
-                                <ComboBoxItem Content="info" />
-                                <ComboBoxItem Content="warning" />
-                                <ComboBoxItem Content="error" />
-                            </ComboBox>
-                        </StackPanel>
-
-                        <!-- Ollama host. Read-only on purpose (#677): ProviderFactories
-                             snapshots OLLAMA_HOST into an HttpClient while AddHarbor
-                             composes, so this screen could never change a running
-                             app — it used to appear to, by writing the process
-                             environment and showing a "Settings saved" toast. -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.OllamaHostAliases}}">
-                            <TextBlock Text="Ollama host" Classes="Label" />
-                            <TextBox Text="{Binding OllamaHost, Mode=OneWay}" IsReadOnly="True"
-                                     AutomationProperties.Name="Ollama host"
-                                     PlaceholderText="http://localhost:11434"
-                                     ToolTip.Tip="Read from OLLAMA_HOST when Harbor starts. Set the environment variable before launching to change it." />
-                        </StackPanel>
-
-                        <Separator Margin="0,2" IsVisible="{Binding !IsFiltering}" />
-
-                        <!-- Onboarding -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.OnboardingAliases}}">
-                            <TextBlock Text="Onboarding" Classes="Label" />
-                            <Button Classes="Subtle" Content="Re-run setup wizard"
-                                    Command="{Binding RerunOnboardingCommand}"
-                                    ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard." />
-                        </StackPanel>
-
-                        <Separator Margin="0,4" IsVisible="{Binding !IsFiltering}" />
-
-                        <!-- ════════════ Provider Configuration (per-provider API keys + model browser) ════════════ -->
-                        <StackPanel Spacing="6"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.ProviderConfigurationAliases}}">
-                            <TextBlock Text="Provider Configuration" Classes="Label" />
-                            <TextBlock Text="Set an API key per provider, then click Test to verify the connection."
-                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
-                                       TextWrapping="Wrap" />
-                            <ItemsControl ItemsSource="{Binding ProviderConfigs}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="vm:ProviderConfigViewModel">
-                                        <Border Background="{StaticResource MochaMantle}" CornerRadius="6"
-                                                Padding="10" Margin="0,3">
-                                            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
-                                                <!-- Provider name + auth badge -->
-                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal"
-                                                            Spacing="8">
-                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding Id}" FontSize="10"
-                                                               FontFamily="{StaticResource FontMono}"
-                                                               Foreground="{StaticResource TextMutedBrush}" />
-                                                </StackPanel>
-                                                <Border Grid.Row="0" Grid.Column="1"
-                                                        Background="{StaticResource MochaSurface0}"
-                                                        CornerRadius="4" Padding="6,2">
-                                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <TextBlock Text="{Binding AuthIcon}" FontSize="12"
-                                                                   Foreground="{StaticResource MochaGreen}" />
-                                                        <TextBlock Text="{Binding AuthText}" FontSize="10"
-                                                                   Foreground="{StaticResource TextMutedBrush}" />
-                                                    </StackPanel>
-                                                </Border>
-
-                                                <!-- API key input (hidden for no-key providers like Ollama) -->
-                                                <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                                         Margin="0,6,0,0"
-                                                         IsVisible="{Binding RequiresApiKey}"
-                                                         AutomationProperties.Name="Provider API key"
-                                                         Text="{Binding ApiKey, Mode=TwoWay}"
-                                                         PasswordChar="•"
-                                                         PlaceholderText="Paste API key…" />
-
-                                                <!-- Action row -->
-                                                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
-                                                            Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
-                                                    <Button Classes="Subtle" Content="Save key" Padding="10,4"
-                                                            Command="{Binding SaveKeyCommand}" />
-                                                    <Button Classes="Subtle" Content="Test connection" Padding="10,4"
-                                                            Command="{Binding TestConnectionCommand}"
-                                                            IsEnabled="{Binding !IsTesting}" />
-                                                    <TextBlock Text="{Binding TestResult}" FontSize="11"
-                                                               Foreground="{StaticResource TextMutedBrush}"
-                                                               VerticalAlignment="Center"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-
-                        <Separator Margin="0,4" IsVisible="{Binding !IsFiltering}" />
-
-                        <!-- Model browser (embeds the picker control) -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.BrowseModelsAliases}}">
-                            <TextBlock Text="Browse Models" Classes="Label" />
-                            <TextBlock Text="Pick a model to make it the active session's model."
-                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
-                                       TextWrapping="Wrap" />
-                            <ctrl:ProviderModelPicker DataContext="{Binding Picker}"
-                                                      Height="380" />
-                        </StackPanel>
+                    <!--
+                        K29: an explicit empty state. Without it a query that
+                        matches nothing leaves a blank scroll area, which reads as
+                        "the settings disappeared" rather than "no match".
+                    -->
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Spacing="8" Margin="24"
+                                AutomationProperties.Name="Settings empty state"
+                                IsVisible="{Binding !HasSearchResults}">
+                        <TextBlock Text="No settings match this search"
+                                   FontSize="15" FontWeight="SemiBold"
+                                   Foreground="{StaticResource MochaBlue}"
+                                   TextAlignment="Center" />
+                        <TextBlock Text="Try a section name such as theme, model, storage or API key."
+                                   FontSize="12" Foreground="{StaticResource TextMutedBrush}"
+                                   TextAlignment="Center" TextWrapping="Wrap" />
                     </StackPanel>
-                </ScrollViewer>
-
-                <!--
-                    K29: an explicit empty state. Without it a query that
-                    matches nothing leaves a blank scroll area, which reads as
-                    "the settings disappeared" rather than "no match".
-                -->
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Spacing="8" Margin="24"
-                            IsVisible="{Binding !HasSearchResults}">
-                    <TextBlock Text="No settings match this search"
-                               FontSize="15" FontWeight="SemiBold"
-                               Foreground="{StaticResource MochaBlue}"
-                               TextAlignment="Center" />
-                    <TextBlock Text="Try a section name such as theme, model, storage or API key."
-                               FontSize="12" Foreground="{StaticResource TextMutedBrush}"
-                               TextAlignment="Center" TextWrapping="Wrap" />
-                </StackPanel>
                 </Grid>
 
                 <!-- Footer -->
