@@ -8,12 +8,17 @@ using System.Text;
 using Harbor.Tui.CellForge.Catalog;
 using Harbor.Tui.CellForge.Rendering;
 using TUnit.Assertions;
+// The suite's GlobalUsings alias the RENDERER twins of these names; the
+// catalog is an ENGINE surface, so name the engine types explicitly.
+using EngineCell = Harbor.Tui.CellForge.Rendering.Cell;
+using EngineRect = Harbor.Tui.CellForge.Rendering.Rect;
+using EngineScreenBuffer = Harbor.Tui.CellForge.Rendering.ScreenBuffer;
 
 namespace Harbor.Tui.CellForge.Tests;
 
 public sealed class WidgetCatalogTests
 {
-    private static string Art(ScreenBuffer buffer)
+    private static string Art(EngineScreenBuffer buffer)
     {
         var rows = new string[buffer.Rows];
         for (int y = 0; y < buffer.Rows; y++)
@@ -27,8 +32,8 @@ public sealed class WidgetCatalogTests
 
             for (int x = 0; x < end; x++)
             {
-                Cell cell = buffer.Get(x, y);
-                row.Append(cell.Width == Cell.WSkip ? '\0' : (char)cell.Rune);
+                EngineCell cell = buffer.Get(x, y);
+                row.Append(cell.Width == EngineCell.WSkip ? '\0' : (char)cell.Rune);
             }
 
             rows[y] = row.ToString();
@@ -39,8 +44,8 @@ public sealed class WidgetCatalogTests
 
     private static string Frame(int cols, int rows, WidgetSpec spec)
     {
-        var buffer = new ScreenBuffer(cols, rows);
-        WidgetCatalog.Paint(spec, buffer, new Rect(0, 0, cols, rows));
+        var buffer = new EngineScreenBuffer(cols, rows);
+        WidgetCatalog.Paint(spec, buffer, new EngineRect(0, 0, cols, rows));
         return Art(buffer);
     }
 
@@ -153,8 +158,8 @@ public sealed class WidgetCatalogTests
     [Test]
     public async Task Painting_StaysInsideTheGivenArea()
     {
-        var buffer = new ScreenBuffer(6, 4);
-        WidgetCatalog.Paint(RuleSpec.Dashed(), buffer, new Rect(1, 1, 3, 2));
+        var buffer = new EngineScreenBuffer(6, 4);
+        WidgetCatalog.Paint(RuleSpec.Dashed(), buffer, new EngineRect(1, 1, 3, 2));
 
         await Assert.That(buffer.Get(0, 1).Rune).IsEqualTo((int)' ');
         await Assert.That(buffer.Get(1, 1).Rune).IsEqualTo((int)'-');
@@ -167,9 +172,9 @@ public sealed class WidgetCatalogTests
     [Test]
     public async Task OffscreenAndZeroAreasAreNoOps()
     {
-        var buffer = new ScreenBuffer(4, 2);
-        WidgetCatalog.Paint(RuleSpec.Dashed(), buffer, new Rect(-5, -5, 2, 2));
-        WidgetCatalog.Paint(RuleSpec.Dashed(), buffer, new Rect(0, 0, 0, 1));
+        var buffer = new EngineScreenBuffer(4, 2);
+        WidgetCatalog.Paint(RuleSpec.Dashed(), buffer, new EngineRect(-5, -5, 2, 2));
+        WidgetCatalog.Paint(RuleSpec.Dashed(), buffer, new EngineRect(0, 0, 0, 1));
 
         await Assert.That(Art(buffer)).IsEqualTo("\n");
     }
