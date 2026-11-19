@@ -1781,3 +1781,25 @@ Issue остаётся OPEN; комментарий содержит тольк�
 
 - Полный текст, таблица U01-U06 и dependency order:
   [ADR-072](ADR-072-file-rewind-preimage-design.md).
+
+## ADR-073: issue #2661 (MCP elicitation и roots как client capabilities)
+
+Issue #2661 просит `roots/list`, `notifications/roots/list_changed` при смене
+workingDirectory и `ElicitationRequestedEvent` с CLI-формой (обязательные поля,
+defaults, таймаут 300 с, Ctrl+C). Base `origin/dev` (`11db4c63`): клиентского
+`initialize` нет, `McpJsonRpcTransport` не различает ответ и входящий запрос
+сервера, готового события и responder нет. `IUserQuestionService` уже даёт форму
+с таймаутом до 10 минут и отменой через `ct`, поэтому окно 300 с не требует
+нового механизма ввода.
+
+Decided: код не писать. Issue делится на три slice с разными контрактами:
+handshake и roots внутри `Harbor.Tools.Builtin/Tools/Mcp` без изменения
+`IMcpRegistry`; событие в `Harbor.Abstractions.Contracts` и responder через
+`IUserQuestionService`; mock-тест с scripted потоками, где `elicitation/create`
+приходит посреди `tools/list` и не роняет turn. Гейты, пороги, golden и
+AOT-профиль не меняются. Issue остаётся OPEN; комментарий содержит только хеш
+коммита ADR. Пересмотр по новому факту: владелец называет потребителя и
+mock-тест одной из частей.
+
+- Полный текст, инвентаризация и условия пересмотра:
+  [ADR-073](ADR-073-mcp-elicitation-roots-client-capabilities.md).
