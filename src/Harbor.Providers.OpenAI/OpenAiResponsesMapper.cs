@@ -423,7 +423,18 @@ internal static class OpenAiResponsesMapper
 
             case ResponsesChunkKind.FunctionCallArgumentsDelta:
                 if (!string.IsNullOrEmpty(deltaText))
-                    events.Add(new ToolCallDeltaEvent(ResolveArgumentsDeltaId(state, outputIndex, sawOutputIndex), deltaText!));
+                {
+                    // Fallback rules preserved: no wire index -> "0"; stateless
+                    // path -> bare index; otherwise the shared resolver prefers
+                    // the remembered wire call id and counts bare-index remaps.
+                    string id = !sawOutputIndex
+                        ? "0"
+                        : state is null
+                            ? outputIndex.ToString()
+                            : state.ResolveToolCallId(outputIndex, positionalPrefix: "");
+                    events.Add(new ToolCallDeltaEvent(id, deltaText!));
+                }
+
                 break;
 
             case ResponsesChunkKind.OutputItemAdded:
@@ -446,25 +457,6 @@ internal static class OpenAiResponsesMapper
             case ResponsesChunkKind.Unknown:
                 break;
         }
-    }
-
-    /// <summary>
-    ///     Resolve the function-call arguments delta id: the wire call id
-    ///     recorded at <c>output_item.added</c> for this output index; the
-    ///     legacy positional index string when the added event was never
-    ///     seen (counted, #203 B8); "0" when the index itself is missing.
-    /// </summary>
-    private static string ResolveArgumentsDeltaId(ChunkStreamState? state, int outputIndex, bool sawOutputIndex)
-    {
-        if (!sawOutputIndex)
-            return "0";
-        if (state is null)
-            return outputIndex.ToString();
-        string? remembered = state.IndexToId.GetValueOrDefault(outputIndex);
-        if (remembered is not null)
-            return remembered;
-        state.CountRemap();
-        return outputIndex.ToString();
     }
 
 }
