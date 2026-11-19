@@ -66,6 +66,13 @@ public sealed record IsolatedWorkspace(
 /// <param name="WorktreePath">Absolute path of the materialized worktree.</param>
 /// <param name="State">Lifecycle state.</param>
 /// <param name="CreatedAtUtc">Manifest creation time.</param>
+/// <param name="OwnerSessionId">
+///     Session that currently owns the worktree. Null means unowned (a run
+///     materialized before ownership existed, or one no session has claimed).
+///     Only <c>WorkspaceMaterializer.Handoff</c> changes it, and only the
+///     current owner can authorize that change. A second session cannot take
+///     a worktree by guessing its run id.
+/// </param>
 public sealed record RunManifest(
     string RunId,
     string RepoRoot,
@@ -76,4 +83,5 @@ public sealed record RunManifest(
     int MaxSteps,
     string WorktreePath,
     RunState State,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    string? OwnerSessionId = null);

@@ -59,7 +59,8 @@ public static class WorkspaceMaterializer
     public static async Task<Result<IsolatedWorkspace>> MaterializeAsync(
         WorkspaceContract contract,
         RunId runId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? ownerSessionId = null)
     {
         if (contract is null)
             return Result.Failure<IsolatedWorkspace>("Workspace contract must not be null.");
@@ -179,7 +180,8 @@ public static class WorkspaceMaterializer
             contract.Limits.MaxSteps,
             worktreePath,
             RunState.Isolated,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            ownerSessionId);
         Result<string> written = WriteManifestAtomic(manifestPath, manifest, overwrite: false);
         if (written.IsFailure)
         {
@@ -245,6 +247,46 @@ public static class WorkspaceMaterializer
             .Bind(advanced => WriteManifestAtomic(
                     Path.Combine(RunDir(advanced.RunId), "manifest.json"), advanced, overwrite: true)
                 .Map(_ => advanced));
+
+    /// <summary>
+    ///     Transfer ownership of a materialized worktree to another session
+    ///     (#2664). The current owner lives in the manifest, so the guard
+    ///     survives a process restart: a caller that does not name the current
+    ///     owner is refused and the manifest is left untouched. A run with no
+    ///     owner (an older manifest, or one materialized without an owner) may
+    ///     be claimed by its first caller. The target id is never left empty.
+    /// </summary>
+    /// <param name="runIdValue">Run whose worktree is handed off.</param>
+    /// <param name="fromOwnerSessionId">Session authorizing the transfer.</param>
+    /// <param name="toOwnerSessionId">Session taking ownership.</param>
+    /// <returns>The updated manifest, or the reason the transfer was refused.</returns>
+    public static Result<RunManifest> Handoff(
+        string? runIdValue,
+        string? fromOwnerSessionId,
+        string? toOwnerSessionId)
+    {
+        if (string.IsNullOrWhiteSpace(toOwnerSessionId))
+            return Result.Failure<RunManifest>("Handoff target session id must not be empty.");
+
+        Result<RunManifest> loaded = TryLoad(runIdValue);
+        if (loaded.IsFailure)
+            return loaded;
+
+        RunManifest manifest = loaded.Value;
+        string? current = manifest.OwnerSessionId;
+        if (current is not null
+            && !current.Equals(fromOwnerSessionId, StringComparison.Ordinal))
+        {
+            return Result.Failure<RunManifest>(
+                $"Refusing worktree handoff for run '{manifest.RunId}': " +
+                $"owned by session '{current}', not '{fromOwnerSessionId ?? "<none>"}'.");
+        }
+
+        var handedOff = manifest with { OwnerSessionId = toOwnerSessionId };
+        string manifestPath = Path.Combine(RunDir(manifest.RunId), "manifest.json");
+        return WriteManifestAtomic(manifestPath, handedOff, overwrite: true)
+            .Map(_ => handedOff);
+    }
 
     /// <summary>
     ///     Release the run: <c>git worktree remove --force</c> plus
@@ -398,6 +440,10 @@ public static class WorkspaceMaterializer
                 writer.WriteString("worktreePath", manifest.WorktreePath);
                 writer.WriteString("state", manifest.State.ToString());
                 writer.WriteString("createdAtUtc", manifest.CreatedAtUtc);
+                if (manifest.OwnerSessionId is null)
+                    writer.WriteNull("ownerSessionId");
+                else
+                    writer.WriteString("ownerSessionId", manifest.OwnerSessionId);
                 writer.WriteEndObject();
             }
             bytes = ms.ToArray();
@@ -472,9 +518,11 @@ public static class WorkspaceMaterializer
             return Result.Failure<RunManifest>($"Manifest for run '{runId}' has invalid 'createdAtUtc'.");
         }
         string? baseBranch = GetString(root, "baseBranch");
+        string? ownerSessionId = GetString(root, "ownerSessionId");
         return Result.Success(new RunManifest(
             fileRunId, repoRoot, baseRevision, baseBranch, isolation,
-            timeoutSeconds, maxSteps, worktreePath, state, createdAtUtc));
+            timeoutSeconds, maxSteps, worktreePath, state, createdAtUtc,
+            ownerSessionId));
     }
 
     private static string? GetString(JsonElement root, string name)

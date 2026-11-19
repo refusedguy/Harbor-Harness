@@ -275,6 +275,117 @@ public class WorkspaceMaterializerTests : ChangeTrackingTestBase
         });
     }
 
+    [Test]
+    public async Task Handoff_CurrentOwner_TransfersAndPersists()
+    {
+        await WithIsolatedHome(async _ =>
+        {
+            string dir = InitRepo(branch: true);
+            try
+            {
+                var contract = await InspectContractOrFailAsync(dir);
+                var created = await WorkspaceMaterializer.MaterializeAsync(
+                    contract, RunId.New(), ownerSessionId: "session-a");
+                await Assert.That(created.IsSuccess).IsTrue();
+                string runId = created.Value.RunId.Value;
+                try
+                {
+                    var initial = WorkspaceMaterializer.TryLoad(runId);
+                    await Assert.That(initial.Value.OwnerSessionId).IsEqualTo("session-a");
+
+                    var handed = WorkspaceMaterializer.Handoff(runId, "session-a", "session-b");
+                    await Assert.That(handed.IsSuccess).IsTrue();
+                    await Assert.That(handed.Value.OwnerSessionId).IsEqualTo("session-b");
+
+                    // Re-read from disk: ownership survives a process restart.
+                    var reloaded = WorkspaceMaterializer.TryLoad(runId);
+                    await Assert.That(reloaded.Value.OwnerSessionId).IsEqualTo("session-b");
+                }
+                finally
+                {
+                    var release = await WorkspaceMaterializer.ReleaseAsync(runId);
+                    await Assert.That(release.IsSuccess).IsTrue();
+                }
+            }
+            finally
+            {
+                DeleteDir(dir);
+            }
+        });
+    }
+
+    [Test]
+    public async Task Handoff_ForeignSession_RefusedWithoutChangingOwner()
+    {
+        await WithIsolatedHome(async _ =>
+        {
+            string dir = InitRepo(branch: true);
+            try
+            {
+                var contract = await InspectContractOrFailAsync(dir);
+                var created = await WorkspaceMaterializer.MaterializeAsync(
+                    contract, RunId.New(), ownerSessionId: "session-a");
+                await Assert.That(created.IsSuccess).IsTrue();
+                string runId = created.Value.RunId.Value;
+                try
+                {
+                    var stolen = WorkspaceMaterializer.Handoff(runId, "session-b", "session-c");
+                    await Assert.That(stolen.IsFailure).IsTrue();
+                    await Assert.That(stolen.Error).Contains("Refusing worktree handoff");
+                    await Assert.That(WorkspaceMaterializer.TryLoad(runId).Value.OwnerSessionId).IsEqualTo("session-a");
+
+                    var emptyTarget = WorkspaceMaterializer.Handoff(runId, "session-a", " ");
+                    await Assert.That(emptyTarget.IsFailure).IsTrue();
+                    await Assert.That(WorkspaceMaterializer.TryLoad(runId).Value.OwnerSessionId).IsEqualTo("session-a");
+                }
+                finally
+                {
+                    var release = await WorkspaceMaterializer.ReleaseAsync(runId);
+                    await Assert.That(release.IsSuccess).IsTrue();
+                }
+            }
+            finally
+            {
+                DeleteDir(dir);
+            }
+        });
+    }
+
+    [Test]
+    public async Task Handoff_UnownedRun_CanBeClaimedOnce()
+    {
+        await WithIsolatedHome(async _ =>
+        {
+            string dir = InitRepo(branch: true);
+            try
+            {
+                var contract = await InspectContractOrFailAsync(dir);
+                var created = await WorkspaceMaterializer.MaterializeAsync(contract);
+                await Assert.That(created.IsSuccess).IsTrue();
+                string runId = created.Value.RunId.Value;
+                try
+                {
+                    var claimed = WorkspaceMaterializer.Handoff(runId, null, "session-a");
+                    await Assert.That(claimed.IsSuccess).IsTrue();
+                    await Assert.That(claimed.Value.OwnerSessionId).IsEqualTo("session-a");
+
+                    var reclaimed = WorkspaceMaterializer.Handoff(runId, "session-b", "session-b");
+                    await Assert.That(reclaimed.IsFailure).IsTrue();
+                    await Assert.That(WorkspaceMaterializer.TryLoad(runId).Value.OwnerSessionId).IsEqualTo("session-a");
+                }
+                finally
+                {
+                    var release = await WorkspaceMaterializer.ReleaseAsync(runId);
+                    await Assert.That(release.IsSuccess).IsTrue();
+                }
+            }
+            finally
+            {
+                DeleteDir(dir);
+            }
+        });
+    }
+
     /// <summary>
     ///     Compare shell-printed paths across platforms: backslashes become
     ///     forward slashes and a leading MSYS drive prefix (`/c/...`) becomes
