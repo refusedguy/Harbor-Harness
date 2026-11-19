@@ -208,13 +208,13 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(30)
+        await Assert.That(links.Length).IsEqualTo(31)
             .Because(
-                "30 `<Compile Include>` link items: the #3762 ProviderToolCallEmitter.cs into the "
+                "31 `<Compile Include>` link items: the #3762 ProviderToolCallEmitter.cs into the "
                 + "three tool-call-emitting providers (OpenAI, OpenAiCompatible, Ollama) — the one "
                 + "Start/Delta policy that used to be copied into OpenAiWire and OllamaLlmClient. "
                 + "The #1499 ProviderLlmClientBase.cs into the "
-                + "three native providers (Anthropic, OpenAI, OpenAiCompatible), SsePump and "
+                + "four native providers (Anthropic, Ollama, OpenAI, OpenAiCompatible), SsePump and "
                 + "Utf8JsonReaderExtensions into four "
                 + "providers, OpenAiWire, OpenAiImageContent and ProviderArguments into OpenAI + "
                 + "OpenAiCompatible, and four files out of Harbor.Storage.Shared into the Jsonl and "
@@ -233,7 +233,8 @@ public sealed class SharedSourceLinkRules
                 + "Jsonl and Sqlite stores, the one domain ↔ persist-form projection for content "
                 + "parts the two backends used to hand-maintain separately — Memory is not a "
                 + "consumer (it links SessionStoreErrors alone and does not compile its own "
-                + "message-codec read path). Two more are #3773's: ProviderHttp.cs and ProviderAuth.cs into Anthropic, the minimal wire-envelope and raw-header primitives that replaced the hand-assembled HttpRequestMessage and TryAddWithoutValidation calls in AnthropicRequestBuilder.");
+                + "message-codec read path). Two more are #3773's: ProviderHttp.cs and ProviderAuth.cs into Anthropic, the minimal wire-envelope and raw-header primitives that replaced the hand-assembled HttpRequestMessage and TryAddWithoutValidation calls in AnthropicRequestBuilder. "
+                + "One more is #3767's: ProviderLlmClientBase.cs into Ollama, the last skeleton client to inherit the template method.");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 

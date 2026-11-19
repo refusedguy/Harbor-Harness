@@ -134,6 +134,40 @@ public class ProviderStreamTests
     }
 
     [Test]
+    public async Task Ollama_NdjsonChunks_StreamTextDeltasInOrderThenFinish()
+    {
+        // #3767: the inherited Template-Method StreamAsync drives the raw-line
+        // (NDJSON) pump. Every line is one chunk, EOF is the end of stream.
+        HttpResponseMessage responder(HttpRequestMessage _)
+        {
+            string ndjson =
+                """{"message":{"content":"hel"},"done":false}""" + "\n" +
+                """{"message":{"content":"lo"},"done":false}""" + "\n" +
+                """{"done":true,"prompt_eval_count":5,"eval_count":9}""" + "\n";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(ndjson, Encoding.UTF8, "application/x-ndjson")
+            };
+        }
+
+        var client = new OllamaLlmClient(
+            new HttpClient(new StubHttpMessageHandler(responder)),
+            new OllamaConfig(),
+            NullLogger<OllamaLlmClient>.Instance);
+
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
+            "llama3", [LlmUserMessage.Text("hello")], "", [])));
+
+        string text = string.Concat(events.OfType<TextDeltaEvent>().Select(t => t.Delta));
+        await Assert.That(text).IsEqualTo("hello");
+        var finish = events.OfType<StepFinishEvent>().Single();
+        await Assert.That(finish.Usage!.InputTokens).IsEqualTo(5);
+        await Assert.That(finish.Usage!.OutputTokens).IsEqualTo(9);
+        await Assert.That(events.Count(e => e is ErrorEvent)).IsEqualTo(0);
+        await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task MalformedChunk_IsSkipped_StreamSurvives()
     {
         // ROP-A ПР.4: one unparseable line must NOT terminate the stream
