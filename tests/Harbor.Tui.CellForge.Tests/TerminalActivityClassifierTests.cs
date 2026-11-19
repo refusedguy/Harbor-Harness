@@ -3,6 +3,8 @@
 // behaviour tests — they assert what a caller sees (the state and the text),
 // not how the switch is written.
 
+using Harbor.Tui.CellForge.Rendering;
+
 namespace Harbor.Tui.CellForge.Tests;
 
 public class TerminalActivityClassifierTests
