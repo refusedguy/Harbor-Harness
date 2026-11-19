@@ -1,6 +1,7 @@
 using System.Linq;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Attachments;
 using Harbor.Tui.CellForge.Capabilities;
@@ -10,6 +11,7 @@ using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging;
 // #436: same shared-name pins as Harbor.Tui.CellForge/GlobalUsings.cs — the
 // Rendering vocabulary keeps its historical meaning in this file; engine-typed
@@ -66,6 +68,19 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
     /// </summary>
     private bool _markupSendInFlight;
 
+    /// <summary>
+    ///     #3111: durable, session-scoped prompt store. The composer owns the
+    ///     readline walk (draft save/restore), but its rail is in-memory and
+    ///     survives a session switch unchanged. This store is the session
+    ///     boundary: submits are recorded against the active <see cref="SessionId"/>
+    ///     and the rail is refilled from it whenever that id changes, so Up/Down
+    ///     can only ever recall prompts from the conversation being viewed.
+    /// </summary>
+    private readonly SessionPromptHistory _promptHistory = new();
+
+    /// <summary>Last session id the composer rail was populated for.</summary>
+    private string? _promptHistorySessionId;
+
     // ── Input routing ──────────────────────────────────────────────────────
 
     /// <summary>
@@ -97,6 +112,10 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // Any user input can mutate composer, palette, scroll or selection —
         // the next frame takes the conservative full-scan path.
         host._replStore.DamageAll();
+        // #3111: a session switch is observed on the next input event. Refill
+        // the composer rail first, so the Up/Down in this very event walks the
+        // prompts of the session it now belongs to (never the previous one).
+        SyncPromptHistoryForSession();
         switch (evt.Kind)
         {
             case InputEventKind.Key:
@@ -644,6 +663,10 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             }
 
             case ComposerAction.Submitted:
+                // #3111: record BEFORE SubmitAsync — it calls TakeText(), which
+                // clears the buffer. The text still in the buffer here is the
+                // exact line the user submitted, keyed to the live session.
+                RecordSubmittedPrompt(_promptHistory, host.SessionModel.Id, host._composer.Buffer.SnapshotText());
                 await host.Pipeline.SubmitAsync(ct).ConfigureAwait(false);
                 break;
 
@@ -915,6 +938,57 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         host.Bridge.AppendSystemLine($"⧉ скопировано {text.Length} симв.");
         host._selection.Clear();
         host._wake.Writer.TryWrite(null);
+    }
+
+    // ── #3111: session-scoped prompt history ────────────────────────────────
+
+    /// <summary>
+    ///     Rebinds the composer rail when the active session changed. Called
+    ///     on every input event so every switch path (palette, quick-switch
+    ///     chord, new session) is covered in one place — no edit to the switch
+    ///     manager itself. The rail is cleared first, so an unrecoverable
+    ///     prompt from the previous conversation cannot leak into the new one.
+    /// </summary>
+    private void SyncPromptHistoryForSession()
+    {
+        string sessionId = host.SessionModel.Id;
+        if (string.Equals(_promptHistorySessionId, sessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _promptHistorySessionId = sessionId;
+        PopulatePromptHistory(host._composer, _promptHistory, sessionId);
+    }
+
+    /// <summary>
+    ///     Records a submitted line against its session. Trims like the
+    ///     composer rail does, so the two stay in step; blank lines are ignored
+    ///     by <see cref="SessionPromptHistory.Record" /> itself.
+    /// </summary>
+    internal static void RecordSubmittedPrompt(SessionPromptHistory store, string sessionId, string text) =>
+        store.Record(SessionId.Create(sessionId), text?.Trim());
+
+    /// <summary>
+    ///     Refills the composer's readline rail from the session store. Reads
+    ///     through <see cref="SessionPromptHistory.At" /> (index from newest)
+    ///     and pushes oldest-first, so the rail's newest entry is the last
+    ///     prompt submitted in this session — exactly what Up recalls first.
+    ///     Internal for the session-isolation behavior test.
+    /// </summary>
+    internal static void PopulatePromptHistory(ComposerController composer, SessionPromptHistory store, string sessionId)
+    {
+        composer.History.Clear();
+        var id = SessionId.Create(sessionId);
+        int count = store.Count(id);
+        for (int indexFromNewest = count - 1; indexFromNewest >= 0; indexFromNewest--)
+        {
+            string? entry = store.At(id, indexFromNewest);
+            if (entry is not null)
+            {
+                composer.History.Push(entry);
+            }
+        }
     }
 }
 
