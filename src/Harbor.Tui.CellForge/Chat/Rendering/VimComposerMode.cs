@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text;
 using Harbor.Ui.Framework.Rendering.Input;
 // File-level alias: the engine owns KeyContext/KeyGesture (Harbor.Tui.CellForge.Input)
@@ -15,6 +16,33 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// </summary>
 public sealed class VimComposerMode
 {
+    // #3437: one owner for the opaque chord id -> host behavior map. A table
+    // (not a string switch) keeps the repository's string-switch ratchet
+    // intact: the engine names actions, this host gives them meaning.
+    private static readonly FrozenDictionary<string, Func<VimComposerMode, ComposerController, ComposerAction>> ChordHandlers =
+        FrozenDictionary.ToFrozenDictionary(
+            new Dictionary<string, Func<VimComposerMode, ComposerController, ComposerAction>>(StringComparer.Ordinal)
+            {
+                ["move-left"] = static (mode, c) => { _ = c.Buffer.MoveLeft(); return ComposerAction.Edited; },
+                ["move-right"] = static (mode, c) => { _ = c.Buffer.MoveRight(); return ComposerAction.Edited; },
+                ["move-word-right"] = static (mode, c) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; },
+                ["move-word-left"] = static (mode, c) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; },
+                ["line-start"] = static (mode, c) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; },
+                ["line-end"] = static (mode, c) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; },
+                ["delete-forward"] = static (mode, c) => { _ = c.Buffer.DeleteForward(); return ComposerAction.Edited; },
+
+                // j/k reuse the composer's own Up/Down path: history recall from the
+                // first/last line, caret movement inside multi-line drafts.
+                ["history-next"] = static (mode, c) => c.HandleKey(KeyEvent.Simple(KeyCode.Down)),
+                ["history-prev"] = static (mode, c) => c.HandleKey(KeyEvent.Simple(KeyCode.Up)),
+
+                ["insert-end"] = static (mode, c) => { _ = c.Buffer.MoveToLineEnd(); mode.NormalMode = false; return ComposerAction.Edited; },
+                ["insert-start"] = static (mode, c) => { _ = c.Buffer.MoveToLineStart(); mode.NormalMode = false; return ComposerAction.Edited; },
+                ["insert-append"] = static (mode, c) => { _ = c.Buffer.MoveRight(); mode.NormalMode = false; return ComposerAction.Edited; },
+                ["insert"] = static (mode, c) => { mode.NormalMode = false; return ComposerAction.Edited; },
+            },
+            StringComparer.Ordinal);
+
     // #3437: normal-mode chords are a declarative KeyContext ("composer.vim"),
     // a child of the composer context. Opaque action ids keep the engine free
     // of host behavior; HandleNormal gives them meaning. The type is BCL-only.
@@ -90,23 +118,12 @@ public sealed class VimComposerMode
             return ComposerAction.Ignored;
         }
 
-        var buffer = composer.Buffer;
-        switch (hit.ActionId)
+        var actionId = hit.ActionId;
+        if (actionId is null || !ChordHandlers.TryGetValue(actionId, out var handler))
         {
-            case "move-left": _ = buffer.MoveLeft(); return ComposerAction.Edited;
-            case "move-right": _ = buffer.MoveRight(); return ComposerAction.Edited;
-            case "move-word-right": _ = buffer.MoveWordRight(); return ComposerAction.Edited;
-            case "move-word-left": _ = buffer.MoveWordLeft(); return ComposerAction.Edited;
-            case "line-start": _ = buffer.MoveToLineStart(); return ComposerAction.Edited;
-            case "line-end": _ = buffer.MoveToLineEnd(); return ComposerAction.Edited;
-            case "delete-forward": _ = buffer.DeleteForward(); return ComposerAction.Edited;
-            case "history-next": return composer.HandleKey(KeyEvent.Simple(KeyCode.Down));
-            case "history-prev": return composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
-            case "insert-end": _ = buffer.MoveToLineEnd(); NormalMode = false; return ComposerAction.Edited;
-            case "insert-start": _ = buffer.MoveToLineStart(); NormalMode = false; return ComposerAction.Edited;
-            case "insert-append": _ = buffer.MoveRight(); NormalMode = false; return ComposerAction.Edited;
-            case "insert": NormalMode = false; return ComposerAction.Edited;
-            default: return ComposerAction.Ignored;
+            return ComposerAction.Ignored;
         }
+
+        return handler(this, composer);
     }
 }
