@@ -306,6 +306,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 if (agentEvt is AgentStartEvent)
                 {
                     host.ScreenSession.ProgramStatus.Set(ProgramStatusState.Working, "harbor");
+                    SetAgentTitle(host.ScreenSession, agentEvt);
                 }
 
                 if (agentEvt is ToolExecutionStartEvent)
@@ -337,6 +338,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 {
                     host.ScreenSession.ProgramStatus.Set(ProgramStatusState.Done, "harbor");
                     host.ScreenSession.Progress.Clear();
+                    SetAgentTitle(host.ScreenSession, agentEvt);
                     await host.Titles.MaybeAutoTitleAsync(ct).ConfigureAwait(false);
                 }
 
@@ -514,6 +516,24 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// </summary>
     internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating, bool windowFocused = true) =>
         windowFocused && (mode is StatusBarMode.Running or StatusBarMode.Compacting || mascotAnimating);
+
+    /// <summary>
+    ///     #3102: projects a run boundary onto the window title. The frame
+    ///     loop calls this for AgentStart and AgentEnd; the title bytes ride
+    ///     the next frame through <see cref="ScreenSession.SetTerminalTitle" />.
+    ///     Internal for the title behavior test (InternalsVisibleTo).
+    /// </summary>
+    internal static void SetAgentTitle(ScreenSession session, AgentEvent evt)
+    {
+        if (evt is AgentStartEvent)
+        {
+            session.SetTerminalTitle("Harbor", null, TerminalActivityState.Busy);
+        }
+        else if (evt is AgentEndEvent)
+        {
+            session.SetTerminalTitle("Harbor", null, TerminalActivityState.Done);
+        }
+    }
 
     /// <summary>Forwarder — the ENG7-gated frame lives on <see cref="ReplFrameRenderer"/>.</summary>
     private Task RenderFrameGatedAsync(AnimationClock animationClock, CancellationToken ct) =>
