@@ -679,9 +679,10 @@ public sealed class CellForgeWidgetAxisRules
             // canonical token on a line naming the marker, so it describes the
             // decision rather than teaching plugin authors the contract.
             "docs/DESIGN_FAQ.md",
-            // Packaging how-to names the closed seam in one sentence about the
-            // axes the out-of-process host carries, but does not carry the
-            // canonical closure token a teaching doc must state.
+            // A packaging guide names ITuiPlugin in its "refused axes" table
+            // and says the seam is closed, but without the canonical token on
+            // the marker line: it records the decision for plugin authors
+            // rather than teaching the view-seam recipe.
             "docs/HOWTO_PACKAGE_PLUGIN.md",
             // A delivered-checklist row for the contract, not an instruction.
             "docs/ROADMAP.md",
@@ -700,6 +701,11 @@ public sealed class CellForgeWidgetAxisRules
             // way a component file table names it, and a closure sentence in a
             // generated table would be noise.
             "docs/SEAM_GRAPH.md",
+            // Names ITuiPlugin in its process-boundary table and calls it a
+            // "closed seam everywhere", but omits the canonical closure token
+            // on the naming line, so it describes the decision rather than
+            // teaching plugin authors the contract.
+            "docs/HOWTO_PACKAGE_PLUGIN.md",
             // REMOVED in #794: `samples/plugins/Harbor.Plugin.TodoWrite/README.md`.
             // It used to sit here as a "one-line sample blurb that also names
             // the seam", and that blurb was a fabrication — commit 487a68a0
