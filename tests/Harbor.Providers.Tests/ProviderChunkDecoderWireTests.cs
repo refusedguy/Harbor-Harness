@@ -137,7 +137,7 @@ public class ProviderChunkDecoderWireTests
         int parsedBytes = -1;
         int logged = 0;
 
-        AnthropicParseUtf8Chunk parse = (ReadOnlySpan<byte> utf8, ChunkStreamState? s) =>
+        AnthropicParseUtf8Chunk parse = (utf8, _) =>
         {
             if (utf8.Length == 0 || utf8[0] != (byte)'{')
                 throw new FormatException("not a wire chunk");
