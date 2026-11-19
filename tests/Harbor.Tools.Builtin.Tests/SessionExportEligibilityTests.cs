@@ -124,7 +124,9 @@ public class SessionExportEligibilityTests
     }
 
     [Test]
-    public async Task DisabledSession_IsNotExported()
+    [Arguments("0", "disabled")]
+    [Arguments("not-a-switch", "unrecognised value")]
+    public async Task IneligibleSession_IsNotExported(string raw, string expectedReason)
     {
         bool exportInvoked = false;
         Result result = await SessionExportEligibility.Guard(
@@ -133,28 +135,11 @@ public class SessionExportEligibilityTests
                 exportInvoked = true;
                 return Task.FromResult(Result.Success());
             },
-            "0");
+            raw);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(exportInvoked).IsFalse();
-        await Assert.That(result.Error).Contains("disabled");
-    }
-
-    [Test]
-    public async Task InvalidSwitch_DoesNotInvokeExport()
-    {
-        bool exportInvoked = false;
-        Result result = await SessionExportEligibility.Guard(
-            () =>
-            {
-                exportInvoked = true;
-                return Task.FromResult(Result.Success());
-            },
-            "not-a-switch");
-
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(exportInvoked).IsFalse();
-        await Assert.That(result.Error).Contains("unrecognised value");
+        await Assert.That(result.Error).Contains(expectedReason);
     }
 
     [Test]
