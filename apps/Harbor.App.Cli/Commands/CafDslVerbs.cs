@@ -161,7 +161,14 @@ internal static class DslDevCommands
         }
 
         var channel = CreateDevLog(devlog, out _);
-        if (!DevReloadInterpreter.TryCreate(File.ReadAllText(file), out var interpreter, out var error))
+
+        // #3083: watch every .harbor-ui file next to the screen, not just the
+        // one named on the command line. The interpreter expands only modules
+        // reachable from the root, so an unrelated edit cannot change the live
+        // tree. All file IO stays here; the tooling assembly sees text only.
+        var texts = ReadMarkupGraph(file);
+        var root = Path.GetFullPath(file).Replace('\\', '/').TrimStart('/');
+        if (!DevReloadInterpreter.TryCreateFromGraph(texts, root, out var interpreter, out var error))
         {
             channel.Write("watcher", "initial parse rejected: " + error);
             Console.Error.WriteLine("dsl watch: " + error);
@@ -171,10 +178,16 @@ internal static class DslDevCommands
         interpreter!.AttachLog(channel);
         channel.Write("watcher", $"watching {file}");
 
-        var source = new DevMarkupFileSource(
-            () => File.Exists(file) ? File.GetLastWriteTimeUtc(file) : DateTime.MinValue,
-            () => File.ReadAllText(file));
-        using var watcher = new DslDevFileWatcher(source, interpreter, channel);
+        var sources = new Dictionary<string, DevMarkupFileSource>(texts.Count, StringComparer.Ordinal);
+        foreach (var path in texts.Keys)
+        {
+            string captured = path;
+            sources[path] = new DevMarkupFileSource(
+                () => File.Exists(captured) ? File.GetLastWriteTimeUtc(captured) : DateTime.MinValue,
+                () => File.Exists(captured) ? File.ReadAllText(captured) : string.Empty);
+        }
+
+        using var watcher = new DslDevFileWatcher(root, sources, interpreter, channel);
         using var cts = new CancellationTokenSource();
         ConsoleCancelEventHandler onCancel = (_, args) =>
         {
@@ -192,6 +205,18 @@ internal static class DslDevCommands
         }
 
         return 0;
+    }
+
+    /// <summary>Reads every markup file beside the watched screen into a path-to-text map.</summary>
+    private static Dictionary<string, string> ReadMarkupGraph(string rootFile)
+    {
+        var root = Path.GetFullPath(rootFile);
+        var directory = Path.GetDirectoryName(root) ?? ".";
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var path in Directory.GetFiles(directory, "*.harbor-ui"))
+            result[path.Replace('\\', '/').TrimStart('/')] = File.ReadAllText(path);
+
+        return result;
     }
 
     /// <summary>Prints the component table as a JSON schema or C# enum.</summary>

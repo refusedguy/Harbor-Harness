@@ -6,7 +6,7 @@ Build-time Roslyn component for the CellForge markup DSL (issue #2424). It sits 
 
 - `MarkupGenerator` is the `[Generator]` entry point with one member, `Initialize(IncrementalGeneratorInitializationContext)`.
 - `PanelDescriptorGenerator` is the second `[Generator]`. It reports `HUI006` on a class that implements `IPanelDescriptor` without declaring a `StateType` property.
-- `MarkupParser.Parse(string)` reads `.harbor-ui` text into a `MarkupParseResult`. The result carries a `SpecArena`, an optional `state:` type, and a list of `MarkupDiagnostic` values with line and column.
+- `MarkupParser.Parse(string)` reads `.harbor-ui` text into a `MarkupParseResult`. The result carries a `SpecArena`, an optional `state:` type, import directives, and a list of `MarkupDiagnostic` values with line and column.
 - `MarkupParseResult` and `MarkupDiagnostic` are the value types returned by the parser.
 - `TypedBindingsEmitter` resolves `{Binding ...}` paths against the state type through Roslyn symbols and emits typed delegates.
 - The emitted contract, declarations, `BuildRoot` and binding delegates live in the consuming compilation under `Harbor.Tui.CellForge.CodeGen.Generated`; the emitters (`BuildRootEmitter` and `TypedBindingsEmitter`) are internal to this assembly.
@@ -47,6 +47,24 @@ panel "main":
 
 The kind list covers the current generic widgets: `Panel`, `Text`, `FilterList`, `SortableTable`, `Tree`, `LogView`, `TextInput`, `DatePicker`, `Table`, `SelectionList`, `TextField`, `NumberInput`, `MultilineTextInput`, `Accordion`, `ActionButton`, `AnchoredMenu`, `AnchoredOverlay`, `AttachmentCard`, `CompactLabel`, `CopyMode`, `DocumentView`, `Dropdown`, `FocusTooltip`, `Form`, `FormScaffold`, `LiveRegion`, `Progress`, `Questionnaire`, `Rating`, `SettingsPanel`, `Spinner`, `Stepper`, `ToggleSelect`, `Toolbar` and `VirtualList`.
 
+### Imports and the module graph (#3083)
+
+A file can import another `.harbor-ui` file by a path relative to its own location. An `import` is a directive, not a widget node. A `.use` operation instantiates the imported module at that point in the tree:
+
+```text
+import "Fixtures/Shared.harbor-ui"
+
+panel "screen":
+    .use "Fixtures/Shared.harbor-ui"
+    text "Screen body"
+```
+
+Paths are resolved by collapsing `.` and `..` segments as strings. The resolver never reads the disk: the generator gets files from `AdditionalText`, the dev watcher gets texts it read itself. The stable, normalized file path is the module name.
+
+`MarkupModuleResolver` builds a module graph inside a `SpecArena`. Each module keeps its own parsed arena and its resolved imports, so an imported spec is reachable by name. `SpecArena.DetectImportCycles` walks the graph depth-first and reports every back edge at the import line. A cycle gets `HZ0002`, an import that does not name a known file gets `HZ0003`. Both are errors with a source location; neither crashes the generator. Modules in a cycle emit no source, the rest of the compilation still does.
+
+The generator emits one `BuildRoot` per module. A module with `.use` operations also gets a `BuildModule(ICellForgeRoot root, int baseSequence)` method. At a use site the screen calls the imported module's own builder with the next free sequence offset, so cell-diff keys stay unique across the screen without copying the shared component's nodes into its source. The incremental key is the collected set of all markup files, so editing an imported file re-runs generation for the whole graph.
+
 Every node is single-use. `SpecNode.AddChild` rejects a child that already has a parent, and `SpecNode.Claim` rejects a second consumer. Both throw `SpecNodeReuseException` naming the kind and source line instead of leaving two owners pointing at one node.
 
 Issue #2429 adds a `state:` directive and typed bindings. The directive names a C# type visible to the compilation; it is parsed once and is not a widget node.
@@ -64,7 +82,7 @@ The generator resolves the path with Roslyn symbols at build time. A missing `st
 
 ## Generation phases (#2428 and #2429)
 
-For each `.harbor-ui` file the generator emits four sources:
+For each `.harbor-ui` file the generator emits four sources. With #3083 the phase-2 source is one per module, and a module that uses imports also carries a sequence-offset `BuildModule` helper:
 
 1. `CellForgeRootContract.g.cs` is added once per compilation during post-initialization. It declares `internal interface ICellForgeRoot` with `Begin(int sequence)`, `TestId(int sequence, string testId)` (#2438), `Text(int sequence, string text)` and `End()`. The interface types the `root` parameter, so it reaches the compilation before any file is generated.
 2. `<Identifier>.Declarations.g.cs` is phase 1. It holds the `internal partial class` and its declarations (`TargetPath`, `RootCount`, `SequenceCount`). Its provider is `MarkupGenerator.Phase1Declarations`.
@@ -101,6 +119,8 @@ The interpreter lives in this build-time tooling assembly, not in the runtime. T
 `DevReload.DevLogChannel` is the diagnostic channel for the markup dev tools. A producer writes one short record (UTC time, source, message) to a bounded in-memory tail and to an append callback. The dev CLI supplies that callback and appends JSONL to a file under `~/.harbor/dev`. Neither the channel nor its producers touch `IEventBus`, an `ILogger` provider or a renderer, so a watcher or interpreter write cannot mark a frame dirty or paint into the CellForge cell grid.
 
 `DslDevFileWatcher` polls a `.harbor-ui` file at 250 ms with a 200 ms debounce and calls the shared interpreter. The host supplies file access through `DevMarkupFileSource` because this assembly is a Roslyn component. Both the watcher and `DevReloadInterpreter.Reload` write to the channel; a rejected edit leaves the live tree, and therefore the screen's last valid frame, untouched.
+
+With #3083 the watcher takes a map of file sources and a root path. It merges their stamps into one aggregate, debounces the graph as one unit, and calls `DevReloadInterpreter.ReloadFromGraph`. The interpreter resolves the graph, expands imported modules at their `.use` sites with `MarkupModuleExpander` (fresh nodes, single-use semantics intact), and patches the retained tree. Changing a shared component therefore patches the same live tree as editing the screen. A cyclic graph is rejected through the channel and leaves the tree unchanged. The one-file constructor still works and delegates to the graph path.
 
 `harbor dsl watch <file> [--devlog <path>]` starts the producer and writes nothing to the console. `harbor dsl devlog [--devlog <path>] [--count <N>]` is the separate reader and prints the tail to stdout. Both commands are behind `HARBOR_WITH_DSL_DEV`, and the channel, watcher and interpreter all live in this tooling assembly, which the CLI references only when `HarborWithDslDev=true`. The file IO stays in the dev CLI. An AOT publish switches the flag off, so the channel is not in the AOT binary.
 

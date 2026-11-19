@@ -23,6 +23,14 @@
 
   <ItemGroup>
     <!--
+      #3083: the test project drives the resolver and the expander directly,
+      the same way it already drives the internal emitters through the driver.
+    -->
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
       PrivateAssets=all: the generator runs in the compiler, which hosts
       Roslyn; no Roslyn type reaches a consumer at run time. Proj0037 is
       scoped here for the same reason as in src/Harbor.CodeGen: the local

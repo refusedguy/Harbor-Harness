@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -111,18 +112,38 @@ public sealed class MarkupGenerator : IIncrementalGenerator
 
         // Phase 2 takes phase 1's provider as its input, so it cannot be
         // evaluated before the declarations have been produced.
-        var implementations = declarations
-            .Select(static (input, _) => EmitBuildRootModel(input))
-            .WithTrackingName("MarkupGenerator.Phase2BuildRoot");
+        // #3083: Collect makes the set of all markup files the graph key.
+        // Editing an imported component therefore changes this step's input
+        // and re-emits every screen that imports it, while single-file markup
+        // still goes through the original emitter unchanged.
+        var moduleGraph = declarations
+            .Collect()
+            .Select(static (files, _) => MarkupModuleResolver.Resolve(
+                files.Select(static file => new MarkupModuleSource(file.TargetPath, file.Text)).ToArray()))
+            .WithTrackingName("MarkupGenerator.Phase2ModuleGraph");
 
-        context.RegisterSourceOutput(implementations, static (spc, output) =>
+        context.RegisterSourceOutput(moduleGraph, static (spc, graph) =>
         {
-            if (!output.IsValid)
-                return;
+            foreach (var finding in graph.Findings)
+            {
+                spc.ReportDiagnostic(MarkupDiagnostics.GraphError(
+                    finding.Id, finding.Path, finding.Text, finding.Diagnostic));
+            }
 
-            spc.AddSource(
-                output.Identifier + ".BuildRoot.g.cs",
-                SourceText.From(output.Source, Encoding.UTF8));
+            foreach (var module in graph.Modules)
+            {
+                if (!module.Parse.IsValid || graph.BlockedPaths.Contains(module.Path))
+                    continue;
+
+                var source = module.HasUses
+                    ? BuildRootEmitter.EmitBuildRootWithModules(
+                        module.Identifier, module.Path, module.Arena, module, graph)
+                    : BuildRootEmitter.EmitBuildRoot(module.Identifier, module.Arena);
+
+                spc.AddSource(
+                    module.Identifier + ".BuildRoot.g.cs",
+                    SourceText.From(source, Encoding.UTF8));
+            }
         });
 
         // #2429. Resolving property paths needs the compilation's symbols.
@@ -255,15 +276,6 @@ public sealed class MarkupGenerator : IIncrementalGenerator
                     parse,
                     MarkupChecksum.Compute(input.Text)),
                 Encoding.UTF8));
-    }
-
-    private static BuildRootOutput EmitBuildRootModel(DeclarationInput input)
-    {
-        var parse = MarkupParser.Parse(input.Text);
-        return new BuildRootOutput(
-            input.Identifier,
-            BuildRootEmitter.EmitBuildRoot(input.Identifier, parse.Arena),
-            parse.Diagnostics.Count == 0);
     }
 
     private static string Normalize(string path) => path.Replace('\\', '/').TrimStart('/');
