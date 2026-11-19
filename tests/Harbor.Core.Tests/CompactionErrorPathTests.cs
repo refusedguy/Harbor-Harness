@@ -5,10 +5,15 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Sessions;
+using Harbor.Diagnostics;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using TUnit.Assertions.Extensions;
 using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
+using TestSessionContext = Harbor.TestKit.TestSessionContext; // TUnit.Core has a same-named type
 
 namespace Harbor.Core.Tests;
 
@@ -38,6 +43,35 @@ public class CompactionErrorPathTests : CompactionTestBase
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("empty summary");
+    }
+
+    /// <summary>
+    ///     #3391: a real <see cref="CompactionService" /> classifies the raw
+    ///     summarizer reply before it can become the session's anchor. Feed a
+    ///     visibly truncated reply through the REAL consumer and assert the
+    ///     observable outcome: CompactionFailedEvent, no summary message and
+    ///     the truncation fallback engaged. Never a broken snapshot.
+    /// </summary>
+    [Test]
+    public async Task CompactionBehavior_TruncatedSummary_RefusesSnapshotAndPublishesFailure()
+    {
+        var client = new CapturingLlmClient("## Progress\nStill editing the reade...", [TestModel()]);
+        var service = CreateService(client, keepRecentTokens: 60);
+        var session = new TestSessionContext(
+            Session.Create("/tmp/harbor-3391", "code", "test", "test-model"),
+            FourLongMessages());
+        var bus = new FakeEventBus();
+        var behavior = new CompactionBehavior(
+            service, new FakeTokenTracker(shouldCompact: true), bus,
+            NullMetrics.Instance, NullLogger.Instance);
+
+        CompactionOutcome outcome = await behavior.BeforeTurnAsync(
+            session, session.Messages, TestModel(), truncationFallback: false, CancellationToken.None);
+
+        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).Count().IsEqualTo(1);
+        await Assert.That(bus.Events.OfType<CompactionCompletedEvent>()).IsEmpty();
+        await Assert.That(session.Messages.OfType<AssistantMessage>().Any(m => m.IsSummary)).IsFalse();
+        await Assert.That(outcome.TruncationFallback).IsTrue();
     }
 
     [Test]
