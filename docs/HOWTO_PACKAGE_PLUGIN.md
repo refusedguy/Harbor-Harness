@@ -72,7 +72,8 @@ Package for this lane in one of two ways:
 
 What crosses the process boundary is declared once in the route axis registry.
 The tool axis is carried; provider, agent, and TUI axes are refused with a
-reason, and `ITuiPlugin` is a closed seam everywhere. A plugin that contributes
+reason, and `ITuiPlugin` is a closed seam (#564) everywhere: a plugin panel goes
+through `ITuiPanelPlugin` / `IPanelRegistry` instead. A plugin that contributes
 only refused axes is reported as not loaded rather than as loaded and useless.
 
 Verify which route a plugin took from the startup log: it names the plugin

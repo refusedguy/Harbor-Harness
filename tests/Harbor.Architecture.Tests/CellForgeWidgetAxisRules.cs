@@ -648,6 +648,9 @@ public sealed class CellForgeWidgetAxisRules
             "CLAUDE.md",
             "README.md",
             "docs/EXAMPLES.md",
+            // The packaging how-to names the closed seam on the route-axis
+            // paragraph and points plugin authors to the live panel seam.
+            "docs/HOWTO_PACKAGE_PLUGIN.md",
             // States the closure in its "Why is ITuiPlugin a closed seam?" section.
             "docs/DESIGN_FAQ.md",
             "docs/PLUGIN_DEVELOPMENT.md",
