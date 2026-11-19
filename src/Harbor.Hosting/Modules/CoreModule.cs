@@ -74,6 +74,10 @@ internal static class CoreModule
         services.AddSingleton(sp => new MessageConverter(
             sp.GetService<IToolOutputSpillStore>(),
             ctx.Harbor.ToolOutput.SpillMaxChars));
+        // #3407: the 3way merge-back service is stateless and store-generic.
+        // It was added in #3057 with no production caller; the CLI's
+        // `sessions merge-back` verb now resolves it from here.
+        services.AddSingleton<SessionMergeBackService>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
         services.AddSingleton<IToolRetryDecider, DefaultToolRetryDecider>();
         // PX4: user hooks (plain shell commands from ~/.harbor/hooks.json —
