@@ -112,7 +112,7 @@ public class RuleImporterTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Count).IsEqualTo(2);
-        await Assert.That(result.Value[0].SourceFileName).IsEqualTo(".CURSORRULES");
+        await Assert.That(result.Value[0].SourceFileName).IsEqualTo(".cursorrules");
         await Assert.That(result.Value[0].Markdown).Contains("first");
         await Assert.That(result.Value[1].Format).IsEqualTo(LegacyRuleFormat.RooRules);
         await Assert.That(result.Value[1].Markdown).Contains("second");

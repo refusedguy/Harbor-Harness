@@ -140,7 +140,6 @@ public static class RuleImporter
         string name = Path.GetFileName(file.FileName.Trim());
         string markdown = string.Concat(
             BeginMarker,
-            " ",
             name,
             " -->\n",
             "## Project rules (migrated from `",
@@ -182,7 +181,7 @@ public static class RuleImporter
                 Result<ImportedRuleSection> converted = Import(file);
                 if (converted.IsFailure)
                 {
-                    return Result.Failure<IReadOnlyList<ImportedRuleSection>>(converted.Error);
+                    return converted.ConvertFailure<IReadOnlyList<ImportedRuleSection>>();
                 }
 
                 sections.Add(converted.Value);
