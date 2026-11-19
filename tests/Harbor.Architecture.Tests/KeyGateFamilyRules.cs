@@ -22,7 +22,8 @@
 //     Prompt/Multiline/Approval do — decided by `_kind`, again instance state.
 //   * ComposerController is a buffer, but VimComposerMode turns the SAME rune
 //     into a command in normal mode, and the composer's OWN chord table
-//     (`ComposerController.KeyBinding`) tests modifiers to decide chords. A widget that
+//     (`ComposerController.ComposerKeyContext`) maps command chords to actions.
+//     A widget that
 //     is a buffer
 //     still needs a command gate on a different key.
 //
@@ -150,7 +151,7 @@
 // A source scan was tried and abandoned: key-routing-shaped code also lives in
 // the key VOCABULARY (KeyEvent.cs, KeyCode.cs, KeyEventMapper.cs, UiKey.cs),
 // which is not a site, and in the composer's CHORD TABLE
-// (`ComposerController.KeyBinding`), where a 2-flag mask like `(Meta | Alt)` is a
+// (`ComposerController.ComposerKeyContext`), where a gesture binding is a
 // legitimate chord
 // matcher and not the typing gate at all. Distinguishing "a widget routing a
 // key" from "a type declaring what a key is" by regex is a guess, and a guard
@@ -182,8 +183,8 @@
 // everything) — so a call site says which family it is in instead of writing a
 // bare `!= KeyModifiers.None` a reader has to interpret.
 //
-// NOT refactored, deliberately: the composer's chord TABLE
-// (`ComposerController.KeyBinding`) and the
+// NOT routed through the gate, deliberately: chord tables such as the
+// composer's `ComposerKeyContext` and the
 // remaining `(mods & KeyModifiers.Ctrl) != 0` forms. Those match a SPECIFIC
 // chord, which is a different question from "is this a command or text" — Ctrl+C
 // means "clear", not "this is a command" — and routing them through the gate

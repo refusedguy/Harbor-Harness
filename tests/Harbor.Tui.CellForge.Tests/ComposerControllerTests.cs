@@ -1,7 +1,6 @@
 using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
-using UiKey = Harbor.Ui.Framework.Rendering.Input;
+using EngineInput = Harbor.Tui.CellForge.Input;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -328,19 +327,27 @@ public class ComposerControllerTests
 
 public class ComposerKeyContextTests
 {
-    private static UiKey.KeyEvent Char(char c, UiKey.KeyModifiers mods = UiKey.KeyModifiers.None) =>
-        UiKey.KeyEvent.Char(new Rune(c), mods);
+    private static KeyEvent Char(char c, KeyModifiers mods = KeyModifiers.None) =>
+        KeyEvent.Char(new Rune(c), mods);
+
+    private static KeyEvent Named(KeyCode key, KeyModifiers mods = KeyModifiers.None) =>
+        KeyEvent.Simple(key, mods);
 
     [Test]
-    public async Task HandleKey_Uses_ComposerKeyContext_TryMatch_ForChordFamilies()
+    public async Task HandleKey_Resolves_Chord_Families_Through_ComposerKeyContext()
     {
+        // The real consumer: the context matches the gesture, the host executes the
+        // opaque id. Both overloads (UI-framework key and engine key) share the path.
         var composer = new ComposerController();
-        var engineKey = KeyEvent.Char(new Rune('c'), KeyModifiers.Ctrl);
 
-        await Assert.That(composer.ComposerKeyContext.TryMatch(engineKey, out var hit)).IsTrue();
+        await Assert.That(composer.ComposerKeyContext.TryMatch(
+                EngineInput.KeyEvent.Char(new Rune('c'), EngineInput.KeyModifiers.Ctrl), out var hit))
+            .IsTrue();
         await Assert.That(hit.ActionId).IsEqualTo("char.ctrl-c");
+        await Assert.That(composer.HandleKey(Char('c', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Aborted);
 
-        await Assert.That(composer.HandleKey(Char('c', UiKey.KeyModifiers.Ctrl)))
+        await Assert.That(composer.HandleKey(
+                EngineInput.KeyEvent.Char(new Rune('c'), EngineInput.KeyModifiers.Ctrl)))
             .IsEqualTo(ComposerAction.Aborted);
     }
 
@@ -348,12 +355,12 @@ public class ComposerKeyContextTests
     public async Task ComposerKeyContext_Rebind_HasPriority_ForMatchedGesture()
     {
         var composer = new ComposerController();
-        composer.ComposerKeyContext.Bind(KeyGesture.ForChar('a', KeyModifiers.Ctrl), "char.ctrl-e");
+        composer.ComposerKeyContext.Bind(EngineInput.KeyGesture.ForChar('a', EngineInput.KeyModifiers.Ctrl), "char.ctrl-e");
 
         _ = composer.Buffer.InsertText("abc");
-        _ = composer.HandleKey(Char('a', UiKey.KeyModifiers.Ctrl));
+        _ = composer.HandleKey(Char('a', KeyModifiers.Ctrl));
 
-        // Rebound to ctrl-e action: moves caret to line end, text unchanged.
+        // Rebound to the ctrl-e action: caret to line end, text unchanged.
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("abc");
         await Assert.That(composer.Buffer.Cursor).IsEqualTo(3);
     }
@@ -362,13 +369,80 @@ public class ComposerKeyContextTests
     public async Task ComposerKeyContext_BindNoAction_ConsumesMatchedGesture()
     {
         var composer = new ComposerController();
-        composer.ComposerKeyContext.BindNoAction(KeyGesture.ForKey(KeyCode.Left, KeyModifiers.None));
+        composer.ComposerKeyContext.BindNoAction(EngineInput.KeyGesture.ForKey(EngineInput.KeyCode.Left));
 
         _ = composer.Buffer.InsertText("ab");
-        var action = composer.HandleKey(UiKey.KeyEvent.Simple(UiKey.KeyCode.Left));
+        var action = composer.HandleKey(Named(KeyCode.Left));
 
         await Assert.That(action).IsEqualTo(ComposerAction.Ignored);
         await Assert.That(composer.Buffer.Cursor).IsEqualTo(2);
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("ab");
     }
+
+    [Test]
+    public async Task Edit_Keys_Reach_The_Buffer_Through_The_Context()
+    {
+        // Backspace / Delete / Right were the edit rows without their own key-path
+        // test; each must still edit exactly as the pre-KeyContext table did.
+        var composer = new ComposerController();
+        _ = composer.Buffer.InsertText("ab");
+        _ = composer.HandleKey(Named(KeyCode.Left));
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(1);
+
+        await Assert.That(composer.HandleKey(Named(KeyCode.Delete))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("a");
+
+        _ = composer.Buffer.InsertText("z");
+        await Assert.That(composer.HandleKey(Named(KeyCode.Backspace, KeyModifiers.Shift))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("a");
+
+        // Alt+Left is the plain move (word jumps refuse Alt), the divider the old
+        // predicate drew between the two edit families.
+        _ = composer.Buffer.InsertText("bc");
+        _ = composer.Buffer.MoveTo(BufferEnd(composer));
+        await Assert.That(composer.HandleKey(Named(KeyCode.Left, KeyModifiers.Alt))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(BufferEnd(composer) - 1);
+    }
+
+    [Test]
+    public async Task Meta_And_Alt_Bind_The_Same_Char_Chord()
+    {
+        // Legacy terminals encode M-s as ESC-s (Meta); kitty reports Alt. One chord.
+        foreach (KeyModifiers mods in new[] { KeyModifiers.Meta, KeyModifiers.Alt })
+        {
+            var composer = new ComposerController();
+            _ = composer.Buffer.InsertText("pay");
+            await Assert.That(composer.HandleKey(Char('s', mods))).IsEqualTo(ComposerAction.Edited);
+            await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("**pay**");
+        }
+    }
+
+    [Test]
+    public async Task Extra_Command_Modifier_Is_Not_The_Base_Chord()
+    {
+        // KeyGesture is exact-modifier: Ctrl+Alt+C is a different gesture than
+        // Ctrl+C and stays unbound, so it cannot clear the draft behind the user.
+        var composer = new ComposerController();
+        _ = composer.Buffer.InsertText("draft");
+
+        await Assert.That(composer.HandleKey(Char('c', KeyModifiers.Ctrl | KeyModifiers.Alt)))
+            .IsEqualTo(ComposerAction.Ignored);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("draft");
+    }
+
+    [Test]
+    public async Task History_Keys_Are_Bound_Unmodified_Only()
+    {
+        var composer = new ComposerController();
+        composer.History.Push("recalled");
+
+        await Assert.That(composer.HandleKey(Named(KeyCode.Up, KeyModifiers.Shift)))
+            .IsEqualTo(ComposerAction.Ignored);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo(string.Empty);
+
+        await Assert.That(composer.HandleKey(Named(KeyCode.Up))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("recalled");
+    }
+
+    private static int BufferEnd(ComposerController composer) => composer.Buffer.Length;
 }
