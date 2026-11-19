@@ -31,7 +31,7 @@ public class AgentBoardRunTests
         Result result = await loop.RunAsync(session, TestAgents.AllowAll());
 
         await Assert.That(result.IsSuccess).IsTrue();
-        string sessionId = session.Session.Id.Value;
+        string sessionId = session.Session.Id;
 
         IReadOnlyList<AgentBoardMessage> pending = board.PendingFor(sessionId);
         await Assert.That(pending.Count).IsGreaterThanOrEqualTo(2);

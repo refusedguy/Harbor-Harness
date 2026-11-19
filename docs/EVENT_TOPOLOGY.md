@@ -33,7 +33,7 @@ snapshot of subscribers in the publisher's own call stack**.
 
 ```
 producers (await PublishAsync directly)
-  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:331,489,542,567,582,597,608
+  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:356,520,573,598,616,631,642
   ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,936
   ToolCallGate .................. src/Harbor.AgentRuntime/Agents/ToolCallGate.cs:191
   CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:275,311,604

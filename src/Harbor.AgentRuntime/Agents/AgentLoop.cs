@@ -279,7 +279,7 @@ public sealed class AgentLoop : IAgentLoop
     private void PostBoardMessage(string kind, ISessionContext session, string body)
     {
         if (_agentBoard is null) return;
-        _agentBoard.Post(kind, session.Session.Id.Value, null, body);
+        _agentBoard.Post(kind, session.Session.Id, null, body);
     }
 
     /// <summary>
@@ -359,7 +359,7 @@ public sealed class AgentLoop : IAgentLoop
             // the stable, bounded summary of who is running; the board assigns
             // the id and the Pending state, both readable through its API.
             PostBoardMessage("info", session,
-                $"Agent {agent.Name.Value} started on {model.Id} in session {session.Session.Id.Value}.");
+                $"Agent {agent.Name.Value} started on {model.Id} in session {session.Session.Id}.");
 
             // PX4 slice 2: the run's start events. UserPromptSubmit is the
             // only new one that can stop the run, so it runs FIRST and its
@@ -599,7 +599,7 @@ public sealed class AgentLoop : IAgentLoop
                 new AgentEndEvent(SnapshotMessages(session.Messages), Limit: limit), CancellationToken.None).ConfigureAwait(false);
             // #3384: close the run's board entry with its terminal summary.
             PostBoardMessage("result", session,
-                $"Agent {agent.Name.Value} finished in session {session.Session.Id.Value} (limit: {limit?.ToString() ?? "none"}).");
+                $"Agent {agent.Name.Value} finished in session {session.Session.Id} (limit: {limit?.ToString() ?? "none"}).");
             await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
 
             return Result.Success();
