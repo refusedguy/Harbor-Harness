@@ -669,6 +669,10 @@ public sealed class CellForgeWidgetAxisRules
             "docs/CODE_PRINCIPLES_AUDIT.md",
             // Already reports the seam as dead — a DIM example in §6.
             "docs/PATTERNS.md",
+            // FAQ entry explains why the seam is closed, but does not carry the
+            // canonical token on a line naming the marker, so it describes the
+            // decision rather than teaching plugin authors the contract.
+            "docs/DESIGN_FAQ.md",
             // A delivered-checklist row for the contract, not an instruction.
             "docs/ROADMAP.md",
             // A historical note about a freeze test that once overrode a member.
