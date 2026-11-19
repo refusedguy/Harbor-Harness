@@ -49,17 +49,31 @@ public sealed class HookRunner : IHookRunner
     private readonly HookConfig _config;
     private readonly ILogger<HookRunner> _logger;
     private readonly TimeSpan _defaultTimeout;
+    private readonly Func<string, string, DateTimeOffset, bool>? _deliveryAdmission;
     private string? _lastLoadErrorLogged;
 
     /// <summary>Construct a hook runner.</summary>
     /// <param name="configPath">hooks.json override; defaults to <see cref="HookConfig.GetDefaultPath" />.</param>
     /// <param name="logger">Optional logger.</param>
     /// <param name="defaultTimeout">Default per-hook ceiling; defaults to <see cref="DefaultHookTimeout" />.</param>
-    public HookRunner(string? configPath = null, ILogger<HookRunner>? logger = null, TimeSpan? defaultTimeout = null)
+    /// <param name="deliveryAdmission">
+    ///     Optional delivery policy for advisory hooks: <c>(sessionId, deliveryId, now) => accept</c>.
+    ///     When supplied, <see cref="RunAdvisoryAsync" /> asks it before invoking any hook, so a
+    ///     duplicate or over-rate delivery is dropped without spawning a process. The host wires
+    ///     the real <c>HookDeliveryGuard</c> here; the runner itself stays policy-agnostic and
+    ///     takes no dependency on the CLI. A runner with no admission predicate keeps the
+    ///     historical "always deliver" behaviour (the core/daemon path).
+    /// </param>
+    public HookRunner(
+        string? configPath = null,
+        ILogger<HookRunner>? logger = null,
+        TimeSpan? defaultTimeout = null,
+        Func<string, string, DateTimeOffset, bool>? deliveryAdmission = null)
     {
         _config = new HookConfig(configPath);
         _logger = logger ?? NullLogger<HookRunner>.Instance;
         _defaultTimeout = defaultTimeout ?? DefaultHookTimeout;
+        _deliveryAdmission = deliveryAdmission;
     }
 
     /// <inheritdoc />
@@ -253,6 +267,22 @@ public sealed class HookRunner : IHookRunner
         if (ct.IsCancellationRequested)
         {
             return;
+        }
+
+        // #3378: ask the host-supplied delivery policy before touching a hook.
+        // The identity is the session plus the advisory event (and tool, when
+        // present): a repeated delivery of the same event is dropped, and the
+        // policy's sliding-window ceiling caps the whole session at 60/min.
+        // This runs ahead of GetHooks/RunOneAsync, so a rejected delivery costs
+        // no config read and spawns no process.
+        if (_deliveryAdmission is not null)
+        {
+            string deliveryId = toolName is null ? eventName : $"{eventName}:{toolName}";
+            if (!_deliveryAdmission(payload.SessionId, deliveryId, DateTimeOffset.UtcNow))
+            {
+                HookRunnerLog.HookDeliverySkipped(_logger, eventName, deliveryId);
+                return;
+            }
         }
 
         try
@@ -617,5 +647,8 @@ internal static partial class HookRunnerLog
 
     [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "Hook '{Command}' could not be killed during timeout cleanup")]
     public static partial void HookKillFailed(ILogger logger, Exception ex, string command);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Debug, Message = "{EventName} delivery '{DeliveryId}' skipped by delivery policy (duplicate or rate-limited)")]
+    public static partial void HookDeliverySkipped(ILogger logger, string eventName, string deliveryId);
 
 }

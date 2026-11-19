@@ -1,7 +1,9 @@
 using Harbor.App.Cli.Configuration;
 using Harbor.Abstractions.Env;
+using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Demo;
 using Harbor.Application.Configuration;
+using Harbor.Application.Hooks;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
 using Harbor.Telemetry;
@@ -40,6 +42,14 @@ internal static partial class HostBuilder
 
         // Весь граф — один вызов. Специфика CLI выражена пресетом (§3.3).
         builder.Services.AddHarbor(CliOptions(harborDir, cliConfig, builder.Configuration));
+
+        // #3378: the CLI owns the receiving-half delivery policy (#2667). Core
+        // registers an ungated HookRunner; re-register here so advisory hooks
+        // pass through HookDeliveryGuard (dedupe + 60/min) before spawning.
+        // Last registration wins — the same override pattern as AddCellForge.
+        builder.Services.AddSingleton<IHookRunner>(sp => new HookRunner(
+            logger: sp.GetRequiredService<ILogger<HookRunner>>(),
+            deliveryAdmission: new HookDeliveryGuard().TryAccept));
 
         builder.Services.AddCliCompositeConfig();
 
