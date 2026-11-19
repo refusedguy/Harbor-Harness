@@ -12,6 +12,7 @@
     <Compile Include="..\Harbor.Providers.Shared\SsePump.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\ProviderToolCallEmitter.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\Utf8JsonReaderExtensions.cs" LinkBase="Shared" />
+    <Compile Include="..\Harbor.Providers.Shared\ProviderPayloadWriter.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>

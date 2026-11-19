@@ -122,7 +122,7 @@ internal static class OpenAiRequestBuilder
                 writer.WriteNumber("top_p", request.TopP.Value);
             }
 
-            WriteChatTools(writer, request.Tools);
+            ProviderPayloadWriter.WriteTools(writer, request.Tools);
             WriteChatToolChoice(writer, request.ToolChoice);
 
             writer.WriteEndObject();
@@ -137,7 +137,7 @@ internal static class OpenAiRequestBuilder
 
         if (!string.IsNullOrEmpty(request.SystemPrompt))
         {
-            WriteRoleAndText(writer, "system", request.SystemPrompt);
+            ProviderPayloadWriter.WriteRoleAndText(writer, "system", request.SystemPrompt);
         }
 
         for (int i = 0; i < request.Messages.Count; i++)
@@ -163,7 +163,7 @@ internal static class OpenAiRequestBuilder
                     break;
 
                 default:
-                    WriteRoleAndText(writer, "user", "");
+                    ProviderPayloadWriter.WriteRoleAndText(writer, "user", "");
                     break;
             }
         }
@@ -180,7 +180,7 @@ internal static class OpenAiRequestBuilder
     {
         if (!OpenAiImageContent.HasImage(user.Content))
         {
-            WriteRoleAndText(writer, "user", ProviderPayload.FirstTextOrEmpty(user.Content, logger, "openai"));
+            ProviderPayloadWriter.WriteRoleAndText(writer, "user", ProviderPayload.FirstTextOrEmpty(user.Content, logger, "openai"));
             return;
         }
 
@@ -263,31 +263,6 @@ internal static class OpenAiRequestBuilder
         writer.WriteEndObject();
     }
 
-    private static void WriteChatTools(Utf8JsonWriter writer, IReadOnlyList<ToolDefinition> tools)
-    {
-        if (tools.Count == 0)
-        {
-            return;
-        }
-
-        writer.WriteStartArray("tools");
-        for (int i = 0; i < tools.Count; i++)
-        {
-            ToolDefinition tool = tools[i];
-            writer.WriteStartObject();
-            writer.WriteString("type", "function");
-            writer.WriteStartObject("function");
-            writer.WriteString("name", tool.Name);
-            writer.WriteString("description", tool.Description);
-            writer.WritePropertyName("parameters");
-            tool.InputSchema.WriteTo(writer);
-            writer.WriteEndObject();
-            writer.WriteEndObject();
-        }
-
-        writer.WriteEndArray();
-    }
-
     /// <summary>
     ///     Chat Completions takes a bare string for the three generic choices and
     ///     an object only for a pinned tool.
@@ -368,7 +343,7 @@ internal static class OpenAiRequestBuilder
 
         if (!string.IsNullOrEmpty(request.SystemPrompt))
         {
-            WriteRoleAndText(writer, "system", request.SystemPrompt);
+            ProviderPayloadWriter.WriteRoleAndText(writer, "system", request.SystemPrompt);
         }
 
         for (int i = 0; i < request.Messages.Count; i++)
@@ -401,7 +376,7 @@ internal static class OpenAiRequestBuilder
                     break;
 
                 default:
-                    WriteRoleAndText(writer, "user", "");
+                    ProviderPayloadWriter.WriteRoleAndText(writer, "user", "");
                     break;
             }
         }
@@ -418,7 +393,7 @@ internal static class OpenAiRequestBuilder
     {
         if (!OpenAiImageContent.HasImage(user.Content))
         {
-            WriteRoleAndText(writer, "user", ProviderPayload.FirstTextOrEmpty(user.Content, logger, "openai"));
+            ProviderPayloadWriter.WriteRoleAndText(writer, "user", ProviderPayload.FirstTextOrEmpty(user.Content, logger, "openai"));
             return;
         }
 
@@ -480,15 +455,6 @@ internal static class OpenAiRequestBuilder
     // ---------------------------------------------------------------------
     // shared
     // ---------------------------------------------------------------------
-
-    /// <summary>The <c>{"role":…,"content":"…"}</c> shape used by both APIs.</summary>
-    private static void WriteRoleAndText(Utf8JsonWriter writer, string role, string content)
-    {
-        writer.WriteStartObject();
-        writer.WriteString("role", role);
-        writer.WriteString("content", content);
-        writer.WriteEndObject();
-    }
 
     /// <summary>
     ///     The first text block's text, or <see langword="null" /> when the turn

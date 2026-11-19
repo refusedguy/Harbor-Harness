@@ -208,7 +208,7 @@ public sealed class OllamaLlmClient : ILlmClient
             // keep_alive for model persistence (5 minutes by default)
             writer.WriteString("keep_alive", _config.KeepAlive);
 
-            WriteTools(writer, request.Tools);
+            ProviderPayloadWriter.WriteTools(writer, request.Tools);
 
             writer.WriteEndObject();
         }
@@ -231,38 +231,13 @@ public sealed class OllamaLlmClient : ILlmClient
         writer.WriteEndObject();
     }
 
-    private static void WriteTools(Utf8JsonWriter writer, IReadOnlyList<ToolDefinition> tools)
-    {
-        if (tools.Count == 0)
-        {
-            return;
-        }
-
-        writer.WriteStartArray("tools");
-        for (int i = 0; i < tools.Count; i++)
-        {
-            ToolDefinition tool = tools[i];
-            writer.WriteStartObject();
-            writer.WriteString("type", "function");
-            writer.WriteStartObject("function");
-            writer.WriteString("name", tool.Name);
-            writer.WriteString("description", tool.Description);
-            writer.WritePropertyName("parameters");
-            tool.InputSchema.WriteTo(writer);
-            writer.WriteEndObject();
-            writer.WriteEndObject();
-        }
-
-        writer.WriteEndArray();
-    }
-
     private static void WriteMessages(Utf8JsonWriter writer, LlmRequest request, ILogger logger)
     {
         writer.WriteStartArray("messages");
 
         if (!string.IsNullOrEmpty(request.SystemPrompt))
         {
-            WriteRoleAndText(writer, "system", request.SystemPrompt);
+            ProviderPayloadWriter.WriteRoleAndText(writer, "system", request.SystemPrompt);
         }
 
         for (int i = 0; i < request.Messages.Count; i++)
@@ -271,7 +246,7 @@ public sealed class OllamaLlmClient : ILlmClient
             {
                 case LlmUserMessage user:
                     // ROP-A ПР.12: non-text blocks dropped loudly.
-                    WriteRoleAndText(writer, "user", ProviderPayload.FirstTextOrEmpty(user.Content, logger, "ollama"));
+                    ProviderPayloadWriter.WriteRoleAndText(writer, "user", ProviderPayload.FirstTextOrEmpty(user.Content, logger, "ollama"));
                     break;
 
                 case LlmAssistantMessage assistant:
@@ -279,11 +254,11 @@ public sealed class OllamaLlmClient : ILlmClient
                     break;
 
                 case LlmToolResultMessage result:
-                    WriteRoleAndText(writer, "tool", result.Output);
+                    ProviderPayloadWriter.WriteRoleAndText(writer, "tool", result.Output);
                     break;
 
                 default:
-                    WriteRoleAndText(writer, "user", "");
+                    ProviderPayloadWriter.WriteRoleAndText(writer, "user", "");
                     break;
             }
         }
@@ -321,14 +296,6 @@ public sealed class OllamaLlmClient : ILlmClient
         }
 
         writer.WriteEndArray();
-        writer.WriteEndObject();
-    }
-
-    private static void WriteRoleAndText(Utf8JsonWriter writer, string role, string content)
-    {
-        writer.WriteStartObject();
-        writer.WriteString("role", role);
-        writer.WriteString("content", content);
         writer.WriteEndObject();
     }
 

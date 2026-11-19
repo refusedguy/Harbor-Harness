@@ -7,7 +7,9 @@
 //
 //   src/Harbor.Providers.Shared/  SsePump.cs, OpenAiWire.cs, OpenAiImageContent.cs,
 //                                  ProviderArguments.cs (#1102),
-//                                  Utf8JsonReaderExtensions.cs (#1563)
+//                                  Utf8JsonReaderExtensions.cs (#1563),
+//                                  ProviderToolCallEmitter.cs (#3762),
+//                                  ProviderPayloadWriter.cs (#3786)
 //   src/Harbor.Storage.Shared/     SessionLockStrip.cs, SessionStoreErrors.cs,
 //                                  SessionStatsAggregator.cs
 //
@@ -208,12 +210,14 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(28)
+        await Assert.That(links.Length).IsEqualTo(31)
             .Because(
-                "28 `<Compile Include>` link items: the #3762 ProviderToolCallEmitter.cs into the "
-                + "three tool-call-emitting providers (OpenAI, OpenAiCompatible, Ollama) — the one "
-                + "Start/Delta policy that used to be copied into OpenAiWire and OllamaLlmClient. "
-                + "The #1499 ProviderLlmClientBase.cs into the "
+                "31 `<Compile Include>` link items: the original 25 plus three for #3762's "
+                + "ProviderToolCallEmitter.cs (the one Start/Delta policy for the three "
+                + "tool-call-emitting providers) and three for #3786's ProviderPayloadWriter.cs "
+                + "(the tools[]/role+content shapes shared by Ollama, OpenAI and "
+                + "OpenAiCompatible). The count stays exact so a dropped link still fails here. "
+                + "The original 25 were: the #1499 ProviderLlmClientBase.cs into the "
                 + "three native providers (Anthropic, OpenAI, OpenAiCompatible), SsePump and "
                 + "Utf8JsonReaderExtensions into four "
                 + "providers, OpenAiWire, OpenAiImageContent and ProviderArguments into OpenAI + "

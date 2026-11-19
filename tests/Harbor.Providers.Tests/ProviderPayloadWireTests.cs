@@ -12,6 +12,7 @@ using Harbor.Providers.OpenAI;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using CompatProviderArgs = CompatWire::Harbor.Providers.Internal.ProviderArguments;
+using ProviderPayloadWriter = CompatWire::Harbor.Providers.Internal.ProviderPayloadWriter;
 
 namespace Harbor.Providers.Tests;
 
@@ -455,6 +456,46 @@ public class ProviderPayloadWireTests
         string body = OllamaBody(Request(system: ""), new OllamaConfig { KeepAlive = "30m" });
 
         await Assert.That(body).Contains("\"keep_alive\":\"30m\"");
+    }
+
+    // =================================================================
+    // #3786 — ProviderPayloadWriter: extracted, byte-identical
+    // =================================================================
+
+    [Test]
+    public async Task Ollama_WithTools_PinsTheFunctionArray()
+    {
+        // No existing test pinned Ollama's request-level tools[]. This one does,
+        // through the real consumer, so the extraction in #3786 cannot quietly
+        // change the bytes the local model receives.
+        string body = OllamaBody(Request(
+            model: "llama3",
+            messages: [LlmUserMessage.Text("hi")],
+            tools: [Tool()]));
+
+        await Assert.That(body).IsEqualTo(
+            """{"model":"llama3","messages":[{"role":"system","content":"be brief"},{"role":"user","content":"hi"}],"stream":true,"options":{},"keep_alive":"5m","tools":[{"type":"function","function":{"name":"read","description":"Read a file.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}]}""")
+            .Because("tools[] now comes from ProviderPayloadWriter; the hand-written writer it "
+                   + "replaced emitted exactly these bytes");
+    }
+
+    [Test]
+    public async Task ProviderPayloadWriter_WritesBothShapesByteForByte()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            ProviderPayloadWriter.WriteTools(writer, [Tool()]);
+            writer.WritePropertyName("message");
+            ProviderPayloadWriter.WriteRoleAndText(writer, "tool", "body");
+            writer.WriteEndObject();
+        }
+
+        await Assert.That(Encoding.UTF8.GetString(buffer.WrittenSpan)).IsEqualTo(
+            """{"tools":[{"type":"function","function":{"name":"read","description":"Read a file.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}],"message":{"role":"tool","content":"body"}}""")
+            .Because("the primitive is the single source for both shapes the three providers "
+                   + "used to write locally; any key rename or reorder is a wire change");
     }
 
     // =================================================================
