@@ -679,6 +679,10 @@ public sealed class CellForgeWidgetAxisRules
             // canonical token on a line naming the marker, so it describes the
             // decision rather than teaching plugin authors the contract.
             "docs/DESIGN_FAQ.md",
+            // Packaging how-to names the closed seam in one sentence about the
+            // axes the out-of-process host carries, but does not carry the
+            // canonical closure token a teaching doc must state.
+            "docs/HOWTO_PACKAGE_PLUGIN.md",
             // A delivered-checklist row for the contract, not an instruction.
             "docs/ROADMAP.md",
             // A historical note about a freeze test that once overrode a member.
