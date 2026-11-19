@@ -43,6 +43,19 @@ public class CellForgeKeymapContourTests
     }
 
     [Test]
+    public async Task Resolve_GlobalChords_MapToHostEffectActions()
+    {
+        // #3615: the four chords the REPL used to decode by hand travel the
+        // same raw-key → mapper → adapter → ChatKeyMap path as every other key.
+        // A plain char still falls through to Char rather than being claimed.
+        await Assert.That(Resolve(KeyEvent.Char(new Rune('p'), KeyModifiers.Ctrl))).IsEqualTo(ChatAction.TogglePalette);
+        await Assert.That(Resolve(KeyEvent.Char(new Rune('j'), KeyModifiers.Ctrl))).IsEqualTo(ChatAction.JumpPalette);
+        await Assert.That(Resolve(KeyEvent.Char(new Rune('e'), KeyModifiers.Ctrl))).IsEqualTo(ChatAction.OpenExternalEditor);
+        await Assert.That(Resolve(KeyEvent.Char(new Rune('/')))).IsEqualTo(ChatAction.OpenSlashPalette);
+        await Assert.That(Resolve(KeyEvent.Char(new Rune('x')))).IsEqualTo(ChatAction.Char);
+    }
+
+    [Test]
     public async Task TryMap_Release_CarriesNoKeyMeaning()
     {
         var release = new KeyEvent(KeyCode.Char, new Rune('x'), KeyModifiers.None, KeyEventType.Release, false);

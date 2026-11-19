@@ -441,68 +441,6 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
-        // Command palette: ctrl+p toggles; a visible palette claims keys first
-        // so Enter/Esc/letters never leak into the approval gate or composer.
-        if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
-            && char.ToLowerInvariant((char)key.Character.Value) == 'p')
-        {
-            if (host._palette.Visible)
-            {
-                host._palette.Hide();
-            }
-            else
-            {
-                host.Commands.OpenCommandPalette();
-            }
-
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
-        // Jump palette: ctrl+j toggles the /jump frame, dispatched through the
-        // catalog exactly as the ctrl+p block above dispatches its own palette
-        // (#857). This chord is intercepted HERE, ahead of the store
-        // dual-write further down, because ChatKeyMap's `ChatAction.JumpPalette`
-        // is the panel-plane route: it toggles a `Center`-placed
-        // IPanelProvider whose OnKey no host can reach, so it resolved and
-        // painted nothing. Claiming the key here gives Ctrl+J a route that
-        // exists, without adding a second input path — and the bare-LF alias
-        // stays on the keymap for the desktop host, which is not this loop.
-        if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
-            && char.ToLowerInvariant((char)key.Character.Value) == 'j')
-        {
-            // Only the jump frame itself toggles closed. Any other visible
-            // frame (ctrl+p's command list, /tree) is somebody else's palette
-            // and must survive a Ctrl+J.
-            if (host._palette.Visible && host._palette.CurrentBreadcrumb == JumpCommand.Breadcrumb)
-            {
-                host._palette.Hide();
-            }
-            else
-            {
-                await host.Commands.ExecutePaletteItemAsync(
-                    new CommandItem(JumpCommand.CommandId, JumpCommandTitle), ct).ConfigureAwait(false);
-            }
-
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
-        // External editor (issue #2495): Ctrl+E hands the terminal to
-        // $VISUAL / $EDITOR. Press-only so a held chord cannot spawn several
-        // children; the scope restores raw mode and forces a full repaint in
-        // its own finally. Claimed here, ahead of the palette and composer,
-        // so the chord never leaks into the prompt as a character.
-        if (key.Key == KeyCode.Char
-            && key.Modifiers == KeyModifiers.Ctrl
-            && key.EventType == KeyEventType.Press
-            && char.ToLowerInvariant((char)key.Character.Value) == 'e')
-        {
-            await host.OpenExternalEditorAsync(ct).ConfigureAwait(false);
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
         if (host._palette.Visible && host._palette.HandleKey(key))
         {
             // Frame-carried continuations: no host-side stacks. Esc/Hide drops
@@ -540,18 +478,6 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         {
             host.Images.Show(imageBlock, host.ScreenSession.Images);
             host._replStore.DamageAll();
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
-        // Slash shortcut: typing '/' on an empty composer opens the command
-        // palette directly, skipping manual entry.
-        if (key.Key == KeyCode.Char
-            && key.Modifiers.AcceptsTypedChar()
-            && (char)key.Character.Value == '/'
-            && host._composer.Buffer.IsEmpty)
-        {
-            host.Commands.OpenSlashPalette();
             host._wake.Writer.TryWrite(null);
             return;
         }
@@ -619,6 +545,52 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             var resolved = host._keyMap.Resolve(uiKey, host._replStore.State);
             if (resolved != ChatAction.None)
             {
+                // Host-effect chords (#3615): the keymap is the single source of
+                // "which key does what", but these actions are impure — open a
+                // palette, hand the terminal to $EDITOR — so the HOST runs them
+                // and the reducer stays a pure fold (no KeyActionRegistry entry).
+                switch (resolved)
+                {
+                    case ChatAction.TogglePalette:
+                        if (host._palette.Visible)
+                            host._palette.Hide();
+                        else
+                            host.Commands.OpenCommandPalette();
+                        host._wake.Writer.TryWrite(null);
+                        return;
+
+                    case ChatAction.JumpPalette:
+                        // #857 jump-frame behavior unchanged: only the jump frame
+                        // toggles closed; any other visible frame (ctrl+p's list,
+                        // /tree) survives a Ctrl+J. The bare-LF alias stays on the
+                        // keymap for hosts that do not use this loop.
+                        if (host._palette.Visible && host._palette.CurrentBreadcrumb == JumpCommand.Breadcrumb)
+                            host._palette.Hide();
+                        else
+                            await host.Commands.ExecutePaletteItemAsync(
+                                new CommandItem(JumpCommand.CommandId, JumpCommandTitle), ct).ConfigureAwait(false);
+                        host._wake.Writer.TryWrite(null);
+                        return;
+
+                    case ChatAction.OpenExternalEditor when key.EventType == KeyEventType.Press:
+                        // Press-only so a held chord cannot spawn several children.
+                        await host.OpenExternalEditorAsync(ct).ConfigureAwait(false);
+                        host._wake.Writer.TryWrite(null);
+                        return;
+
+                    case ChatAction.OpenSlashPalette:
+                        // The chord opens the palette only while the composer is
+                        // empty. With text already typed '/' stays an ordinary
+                        // character: fall through to the composer below instead.
+                        if (host._composer.Buffer.IsEmpty)
+                        {
+                            host.Commands.OpenSlashPalette();
+                            host._wake.Writer.TryWrite(null);
+                            return;
+                        }
+                        break;
+                }
+
                 var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
                 // The one exception to the sink-the-effect rule above: the strip
                 // actions are effect-driven, because the reducer resolves the

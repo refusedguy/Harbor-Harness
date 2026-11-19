@@ -56,6 +56,13 @@ public sealed class ChatKeyMap
         // '?' — toggle help panel. Listed before the coarse Alt+char slot entry
         // below so Alt+'?' keeps resolving here, as the old shell overrides did.
         new(ChatAction.HelpPanel, "help", new Binding(UiKeyCode.Char, KeyModifierSet.None, '?')),
+        // '/' — open the slash-command palette. A host-effect action (#3615):
+        // the REPL opens the palette only while its composer is empty; with
+        // text already typed the same press falls through as an ordinary Char.
+        // Guarded like the old shell's AcceptsTypedChar check so a Ctrl/Alt
+        // chord carrying '/' stays an input key instead of opening the palette.
+        new(ChatAction.OpenSlashPalette, "slash", new Binding(UiKeyCode.Char, KeyModifierSet.None, '/'))
+        { Guard = SlashPlainChar },
 
         // ── tab strip (#389) ─────────────────────────────────────────────
         // Ctrl+Tab / Ctrl+Shift+Tab — next / previous open tab. Listed BEFORE
@@ -121,6 +128,13 @@ public sealed class ChatKeyMap
         new(ChatAction.JumpPalette, "jump worktree",
             new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'j'),
             new Binding(UiKeyCode.Char, KeyModifierSet.None, '\n')),
+        // Ctrl+P / Ctrl+E — host-effect chords (#3615). Listed before the
+        // coarse Ctrl+char tab-slot entry at the end of this table (that entry
+        // matches any Ctrl+char but only claims digits via its guard), so the
+        // central table stays the single source for "which key does what":
+        // no shell adds its own key→action branch for these chords.
+        new(ChatAction.TogglePalette, "palette", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'p')),
+        new(ChatAction.OpenExternalEditor, "editor", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'e')),
         // ── tab quick slots (#1173) ────────────────────────────────────────
         // Ctrl+1..Ctrl+9 — focus the Nth tab. The null-character binding
         // matches any Ctrl+char, so this entry sits AFTER every specific
@@ -201,6 +215,13 @@ public sealed class ChatKeyMap
     /// <summary>Previous-direction twin of <see cref="TabStripUnreadNext" />.</summary>
     private static bool TabStripUnreadPrevious(UiKey key, UiState? state) =>
         key.Mods.HasFlag(KeyModifierSet.Shift) && TabStripOpen(state);
+
+    /// <summary>
+    ///     '/' is a shortcut only while typing text: a command modifier turns it
+    ///     back into an ordinary input character, exactly as the REPL's old
+    ///     <c>AcceptsTypedChar</c> slash check did (#3615).
+    /// </summary>
+    private static bool SlashPlainChar(UiKey key, UiState? _) => key.Mods.AcceptsTypedChar();
 
     /// <summary>
     ///     Digit guard for the Ctrl+1..Ctrl+9 quick-slot entry (#1173): the
