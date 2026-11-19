@@ -214,8 +214,16 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new OutputLimitToolDecorator(
             new ReadTool(lf.CreateLogger<ReadTool>(), lspService),
             lf.CreateLogger<OutputLimitToolDecorator>()));
-        tb.AddTool(lf => new WriteTool(lf.CreateLogger<WriteTool>()));
-        tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>(), lspService));
+        // #3107: wrap the two filesystem-writing tools so the current file
+        // bytes are captured as a rewind pre-image BEFORE each write. The
+        // decorator lives here (the composition root) because it is the only
+        // layer allowed to name both the tools and the rewind store.
+        tb.AddTool(lf => new FileHistoryToolDecorator(
+            new WriteTool(lf.CreateLogger<WriteTool>()),
+            lf.CreateLogger<FileHistoryToolDecorator>()));
+        tb.AddTool(lf => new FileHistoryToolDecorator(
+            new EditTool(lf.CreateLogger<EditTool>(), lspService),
+            lf.CreateLogger<FileHistoryToolDecorator>()));
         // #1590: BashTool доходит до OS-процессов только через Proxy-шов — здесь
         // production SystemProcessProxy; тесты подменяют его сценарием.
         tb.AddTool(lf => new OutputLimitToolDecorator(
