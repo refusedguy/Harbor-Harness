@@ -158,7 +158,7 @@ public static class RuleImporter
     ///     dropping duplicate file names (first occurrence wins).
     /// </summary>
     /// <param name="files">The files to convert.</param>
-    /// <returns>The converted sections in input order, or the first conversion error.</returns>
+    /// <returns>The converted sections in input order, or the combined conversion errors.</returns>
     public static Result<IReadOnlyList<ImportedRuleSection>> ImportMany(
         IReadOnlyList<LegacyRuleFile> files)
     {
@@ -167,28 +167,19 @@ public static class RuleImporter
             return Result.Failure<IReadOnlyList<ImportedRuleSection>>("The rule file list is required.");
         }
 
-        var sections = new List<ImportedRuleSection>(files.Count);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Result<ImportedRuleSection>[] conversions = files
+            .Where(file => seen.Add(
+                string.IsNullOrWhiteSpace(file.FileName)
+                    ? string.Empty
+                    : Path.GetFileName(file.FileName.Trim())))
+            .Select(Import)
+            .ToArray();
 
-        foreach (LegacyRuleFile file in files)
-        {
-            string name = string.IsNullOrWhiteSpace(file.FileName)
-                ? string.Empty
-                : Path.GetFileName(file.FileName.Trim());
-
-            if (seen.Add(name))
-            {
-                Result<ImportedRuleSection> converted = Import(file);
-                if (converted.IsFailure)
-                {
-                    return converted.ConvertFailure<IReadOnlyList<ImportedRuleSection>>();
-                }
-
-                sections.Add(converted.Value);
-            }
-        }
-
-        return Result.Success<IReadOnlyList<ImportedRuleSection>>(sections);
+        return Result.Combine(conversions.Cast<Result>().ToArray())
+            .Map(() => (IReadOnlyList<ImportedRuleSection>)conversions
+                .Select(conversion => conversion.Value)
+                .ToArray());
     }
 
     /// <summary>
