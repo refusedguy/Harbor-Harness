@@ -679,6 +679,11 @@ public sealed class CellForgeWidgetAxisRules
             // canonical token on a line naming the marker, so it describes the
             // decision rather than teaching plugin authors the contract.
             "docs/DESIGN_FAQ.md",
+            // A packaging guide names ITuiPlugin in its "refused axes" table
+            // and says the seam is closed, but without the canonical token on
+            // the marker line: it records the decision for plugin authors
+            // rather than teaching the view-seam recipe.
+            "docs/HOWTO_PACKAGE_PLUGIN.md",
             // A delivered-checklist row for the contract, not an instruction.
             "docs/ROADMAP.md",
             // A historical note about a freeze test that once overrode a member.
