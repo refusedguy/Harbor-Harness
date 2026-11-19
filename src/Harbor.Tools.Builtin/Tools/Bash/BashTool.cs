@@ -282,7 +282,7 @@ public sealed partial class BashTool : ITool
         };
 
         Result<IProcessHandle> started = _processes.Start(spec);
-        if (started.IsFailure) return Result.Failure<string>(started.Error);
+        if (!started.IsSuccess) return started.ConvertFailure<string>();
         using var process = started.Value;
 
         var refs = new List<string>();
@@ -318,7 +318,7 @@ public sealed partial class BashTool : ITool
                 $"Git base detection failed: 'git for-each-ref' exited with {process.ExitCode}.");
 
         string? baseBranch = GitBaseDetector.Detect(
-            refs, new[] { "trunk" }.Concat(GitBaseDetector.DefaultCandidates));
+            refs, GitBaseDetector.DefaultCandidates.Concat(new[] { "trunk" }));
         return baseBranch is null
             ? Result.Failure<string>("Git base detection failed: no default base branch found in repository refs.")
             : Result.Success(baseBranch);

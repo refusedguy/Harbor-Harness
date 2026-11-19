@@ -29,9 +29,11 @@ public class ToolGlueSpikeTests
             "Execute a shell command. Output is captured and returned. Commands run in the current working directory. Use `cwd` to override.");
         await Assert.That(tool.ExecutionMode).IsEqualTo(ExecutionMode.Sequential);
         await Assert.That(tool.PromptSnippet).IsEqualTo("bash: Execute shell commands");
-        await Assert.That(tool.PromptGuidelines.Count).IsEqualTo(3);
+        await Assert.That(tool.PromptGuidelines.Count).IsEqualTo(4);
         await Assert.That(tool.PromptGuidelines[0]).IsEqualTo(
             "Prefer dedicated tools (read, edit, glob, grep) for file operations");
+        await Assert.That(tool.PromptGuidelines[3]).IsEqualTo(
+            "Use $HARBOR_GIT_BASE instead of hard-coding main/master as a git diff/log base");
     }
 
     [Test]
