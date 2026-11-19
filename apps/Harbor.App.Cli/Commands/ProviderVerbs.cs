@@ -210,7 +210,7 @@ internal static class ProviderOptionRunner
             return 1;
         }
 
-        ModelInfo? selected = Find(models.Value, id.Value, modelId);
+        ModelInfo? selected = ResolveModel(models.Value, id.Value.Value, modelId);
         if (selected is null)
         {
             Console.Error.WriteLine($"models preflight: no model '{modelId}' for provider '{providerId}'.");
@@ -229,15 +229,39 @@ internal static class ProviderOptionRunner
         return outcome.IsFailure ? 1 : 0;
     }
 
-    private static ModelInfo? Find(IReadOnlyList<ModelInfo> models, ProviderId providerId, string modelId)
+    /// <summary>
+    ///     Resolve one model from the aggregated catalog through the shared
+    ///     <see cref="ModelCatalogSearch" /> primitive (#3793). The primitive
+    ///     filters by provider and by an id/name substring; preflight needs the
+    ///     old strict equality on the id, so the exact match is picked from the
+    ///     returned page before mapping back to the rich <see cref="ModelInfo" />.
+    /// </summary>
+    private static ModelInfo? ResolveModel(IReadOnlyList<ModelInfo> models, string providerId, string modelId)
     {
-        foreach (ModelInfo model in models)
+        if (!ModelCatalogSearch.TryCreate(
+                modelId, providerId, ModelCatalogSearch.DefaultLimit, 0, out var query))
+            return null;
+
+        ModelSearchPage page = ModelCatalogSearch.Search(
+            models.Select(m => new ModelSearchEntry(m.Id, m.ProviderId, m.DisplayName)).ToArray(),
+            query);
+
+        ModelSearchEntry? exact = null;
+        foreach (ModelSearchEntry entry in page.Items)
         {
-            if (!string.Equals(model.ProviderId, providerId.Value, StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase)) return model;
+            if (string.Equals(entry.Id, modelId, StringComparison.OrdinalIgnoreCase))
+            {
+                exact = entry;
+                break;
+            }
         }
 
-        return null;
+        if (exact is null) return null;
+        ModelSearchEntry match = exact.Value;
+        return models.TryFirst(m =>
+                string.Equals(m.ProviderId, providerId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(m.Id, match.Id, StringComparison.OrdinalIgnoreCase))
+            .GetValueOrDefault();
     }
 }
 
