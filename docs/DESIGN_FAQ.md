@@ -50,12 +50,13 @@ not supported under AOT. See
 
 ## Why is `ITuiPlugin` a closed seam?
 
-The contract is still collected, but the host never calls `RegisterTui`, so a
-view registered through it is never painted. Keeping a dead extension point
-alive would be worse than removing it: it teaches plugin authors a path that
-cannot work. A panel a plugin actually contributes uses `ITuiPanelPlugin` and
-`IPanelRegistry` instead; a cell-level widget is built in-tree by the renderer
-that owns the layout. See [plugin development](./PLUGIN_DEVELOPMENT.md) and
+`ITuiPlugin` is a closed seam (#564). The contract is still collected, but the
+host never calls `RegisterTui`, so a view registered through it is never
+painted. Keeping a dead extension point alive would be worse than removing it:
+it teaches plugin authors a path that cannot work. A panel a plugin actually
+contributes uses `ITuiPanelPlugin` and `IPanelRegistry` instead; a cell-level
+widget is built in-tree by the renderer that owns the layout. See
+[plugin development](./PLUGIN_DEVELOPMENT.md) and
 [ADR-013](./adr/ADR-013-cellforge-widget-axis-internal-contract.md).
 
 ## Why do only two renderers ship, and why did SharpConsoleUI leave the product?

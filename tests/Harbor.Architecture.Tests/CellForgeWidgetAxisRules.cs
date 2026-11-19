@@ -648,6 +648,8 @@ public sealed class CellForgeWidgetAxisRules
             "CLAUDE.md",
             "README.md",
             "docs/EXAMPLES.md",
+            // States the closure in its "Why is ITuiPlugin a closed seam?" section.
+            "docs/DESIGN_FAQ.md",
             "docs/PLUGIN_DEVELOPMENT.md",
             "docs/PLUGIN_SYSTEM.md",
         }.ToFrozenSet(StringComparer.Ordinal);
