@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Components.DialogContent">
+
+    <!--
+        Generic declarative form for the three modal dialogs (confirm, prompt,
+        alert). The host supplies data and commands through DialogContent.Bind;
+        this tree owns no C# layout code. Children stay in the fixed order
+        message → optional input → actions so every dialog paints the same
+        shape: PART_Cancel precedes PART_Ok in the reference snapshot.
+    -->
+    <StackPanel Name="PART_Root" Margin="16" Spacing="12">
+        <TextBlock Name="PART_Message"
+                   Text="{Binding Message, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                   TextWrapping="Wrap" />
+
+        <TextBox Name="PART_Input"
+                 Text="{Binding InputText, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}"
+                 PlaceholderText="{Binding Message, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                 IsVisible="{Binding ShowInput, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+
+        <StackPanel Name="PART_Actions"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    HorizontalAlignment="Right">
+            <Button Name="PART_Cancel"
+                    Content="{Binding CancelLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    Command="{Binding CancelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    IsVisible="{Binding ShowCancel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+            <Button Name="PART_Ok"
+                    Content="{Binding OkLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    Classes="hds-primary"
+                    Command="{Binding OkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>
