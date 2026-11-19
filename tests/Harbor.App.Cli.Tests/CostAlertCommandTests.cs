@@ -102,7 +102,7 @@ public class CostAlertCommandTests
         new("session-1", SessionMetadata.Empty with { Cost = costUsd });
 
     private static async Task<List<string>> DispatchAsync(
-        SlashCommandDispatcher dispatcher, string input, IConfigStore config)
+        SlashCommandDispatcher dispatcher, string input, JsonConfigStore config)
     {
         var lines = new List<string>();
         SlashCommandOutcome outcome = await dispatcher.HandleCoreAsync(
