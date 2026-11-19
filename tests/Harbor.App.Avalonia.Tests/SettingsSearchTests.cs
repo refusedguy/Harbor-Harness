@@ -1,10 +1,11 @@
 // SettingsSearchTests.cs — K29: the Settings search filter.
 //
-// The view binds IsVisible through SettingsSectionVisibleConverter and the
-// view-model computes the no-results flag through SettingsSearch.HasMatches.
-// Both call the same pure methods, so this file pins the matching behaviour
-// that keeps the two in step. No Avalonia app is stood up: there is no window,
-// no config store and no dispatcher in the code under test.
+// SettingsView filters SettingsSections.All through SettingsSearch.IsMatch
+// before handing the list to the Accordion, and the view-model computes the
+// no-results flag through SettingsSearch.HasMatches. Both call the same pure
+// methods, so this file pins the matching behaviour that keeps the two in
+// step. No Avalonia app is stood up: there is no window, no config store and
+// no dispatcher in the code under test.
 
 using Harbor.App.Avalonia.ViewModels;
 using TUnit;

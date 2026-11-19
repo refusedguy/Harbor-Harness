@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.App.Cli.Hosting;
+using Harbor.Tools.Builtin;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -35,50 +36,135 @@ internal static class ProviderVerbs
         return 0;
     }
 
-    internal static async Task<int> RunListModelsAsync(ILogger logger, string? providerId)
+    internal static async Task<int> RunListModelsAsync(
+        ILogger logger,
+        string? providerId,
+        string? query = null,
+        int? limit = null,
+        int? offset = null,
+        IProviderRegistry? registry = null)
     {
         ProviderVerbsLog.ListingModels(logger, providerId ?? "(all)");
-        using var host = HostBuilder.Build();
-        var providers = host.Services.GetRequiredService<IProviderRegistry>();
+        using var host = registry is null ? HostBuilder.Build() : null;
+        registry ??= host!.Services.GetRequiredService<IProviderRegistry>();
+
+        IReadOnlyList<ModelInfo> catalog;
+        string? providerFilter = null;
+        string? text = query;
+
         if (!string.IsNullOrEmpty(providerId))
         {
-            var pidResult = ProviderId.TryCreate(providerId);
+            Result<ProviderId> pidResult = ProviderId.TryCreate(providerId);
             if (pidResult.IsFailure)
             {
                 Console.Error.WriteLine(pidResult.Error);
                 return 1;
             }
-            var clientResult = providers.GetClient(pidResult.Value);
-            if (clientResult.IsFailure)
+
+            if (ContainsProvider(registry.GetRegisteredProviderIds(), pidResult.Value))
             {
-                Console.Error.WriteLine(clientResult.Error);
+                // A registered provider keeps the original, client-scoped fetch.
+                var clientResult = registry.GetClient(pidResult.Value);
+                if (clientResult.IsFailure)
+                {
+                    Console.Error.WriteLine(clientResult.Error);
+                    return 1;
+                }
+                Result<IReadOnlyList<ModelInfo>> modelsResult =
+                    await clientResult.Value.GetModelsAsync().ConfigureAwait(false);
+                if (modelsResult.IsFailure)
+                {
+                    Console.Error.WriteLine(modelsResult.Error);
+                    return 1;
+                }
+                catalog = modelsResult.Value;
+                providerFilter = pidResult.Value.Value;
+            }
+            else
+            {
+                // #3110: a well-formed but unregistered token is a text query, so
+                // `harbor models opus` searches the whole catalog by name/id.
+                text ??= providerId;
+                Result<IReadOnlyList<ModelInfo>> allResult =
+                    await registry.GetAllModelsAsync().ConfigureAwait(false);
+                if (allResult.IsFailure)
+                {
+                    Console.Error.WriteLine(allResult.Error);
+                    return 1;
+                }
+                catalog = allResult.Value;
+            }
+        }
+        else
+        {
+            Result<IReadOnlyList<ModelInfo>> allResult =
+                await registry.GetAllModelsAsync().ConfigureAwait(false);
+            if (allResult.IsFailure)
+            {
+                Console.Error.WriteLine(allResult.Error);
                 return 1;
             }
-            var modelsResult = await clientResult.Value.GetModelsAsync().ConfigureAwait(false);
-            if (modelsResult.IsFailure)
-            {
-                Console.Error.WriteLine(modelsResult.Error);
-                return 1;
-            }
-            ProviderVerbsLog.FoundModels(logger, modelsResult.Value.Count, providerId);
-            Console.WriteLine($"Models for {providerId}:");
-            foreach (var m in modelsResult.Value) Console.WriteLine($"  {m.Id} — {m.DisplayName}");
-            return 0;
+            catalog = allResult.Value;
         }
-        var allResult = await providers.GetAllModelsAsync().ConfigureAwait(false);
-        if (allResult.IsFailure)
+
+        if (providerFilter is not null)
+            ProviderVerbsLog.FoundModels(logger, catalog.Count, providerFilter);
+        else
+            ProviderVerbsLog.FoundTotalModels(logger, catalog.Count);
+
+        ModelSearchPage page = SearchModels(catalog, text, providerFilter, limit, offset);
+        PrintModelPage(page, providerFilter);
+        return page.Items.Count == 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    ///     #3110: the real consumer of <see cref="ModelCatalogSearch" />. Projects
+    ///     the provider catalog onto the leaf's self-contained entry type, then
+    ///     applies its validated filter and bounded pagination. Pure over its
+    ///     inputs so behavior can be asserted without a host.
+    /// </summary>
+    internal static ModelSearchPage SearchModels(
+        IReadOnlyList<ModelInfo> models,
+        string? text,
+        string? provider,
+        int? limit,
+        int? offset)
+    {
+        var entries = new ModelSearchEntry[models.Count];
+        for (int i = 0; i < models.Count; i++)
         {
-            Console.Error.WriteLine(allResult.Error);
-            return 1;
+            ModelInfo model = models[i];
+            entries[i] = new ModelSearchEntry(model.Id, model.ProviderId, model.DisplayName);
         }
-        ProviderVerbsLog.FoundTotalModels(logger, allResult.Value.Count);
-        Console.WriteLine($"All models ({allResult.Value.Count}):");
-        foreach (var g in allResult.Value.GroupBy(m => m.ProviderId))
+
+        if (!ModelCatalogSearch.TryCreate(text, provider, limit, offset, out ModelSearchQuery query))
+            return new ModelSearchPage([], 0, 0, false);
+
+        return ModelCatalogSearch.Search(entries, query);
+    }
+
+    private static bool ContainsProvider(IReadOnlyList<ProviderId> ids, ProviderId id)
+    {
+        foreach (ProviderId candidate in ids)
+            if (candidate == id) return true;
+        return false;
+    }
+
+    private static void PrintModelPage(ModelSearchPage page, string? provider)
+    {
+        Console.WriteLine(provider is null
+            ? $"Models ({page.TotalMatched} matched):"
+            : $"Models for {provider} ({page.TotalMatched} matched):");
+
+        foreach (ModelSearchEntry item in page.Items)
+            Console.WriteLine($"  {item.Id} — {item.DisplayName}");
+
+        if (page.HasMore)
         {
-            Console.WriteLine($"\n{g.Key}:");
-            foreach (var m in g) Console.WriteLine($"  {m.Id} — {m.DisplayName}");
+            int nextOffset = page.Offset + page.Items.Count;
+            int remaining = page.TotalMatched - nextOffset;
+            Console.WriteLine($"  ... {remaining} more (offset {nextOffset}).");
         }
-        return 0;
     }
 }
 
@@ -180,7 +266,7 @@ internal static class ProviderOptionRunner
             return 1;
         }
 
-        ModelInfo? selected = Find(models.Value, id.Value, modelId);
+        ModelInfo? selected = ResolveModel(models.Value, id.Value.Value, modelId);
         if (selected is null)
         {
             Console.Error.WriteLine($"models preflight: no model '{modelId}' for provider '{providerId}'.");
@@ -199,15 +285,39 @@ internal static class ProviderOptionRunner
         return outcome.IsFailure ? 1 : 0;
     }
 
-    private static ModelInfo? Find(IReadOnlyList<ModelInfo> models, ProviderId providerId, string modelId)
+    /// <summary>
+    ///     Resolve one model from the aggregated catalog through the shared
+    ///     <see cref="ModelCatalogSearch" /> primitive (#3793). The primitive
+    ///     filters by provider and by an id/name substring; preflight needs the
+    ///     old strict equality on the id, so the exact match is picked from the
+    ///     returned page before mapping back to the rich <see cref="ModelInfo" />.
+    /// </summary>
+    private static ModelInfo? ResolveModel(IReadOnlyList<ModelInfo> models, string providerId, string modelId)
     {
-        foreach (ModelInfo model in models)
+        if (!ModelCatalogSearch.TryCreate(
+                modelId, providerId, ModelCatalogSearch.DefaultLimit, 0, out var query))
+            return null;
+
+        ModelSearchPage page = ModelCatalogSearch.Search(
+            models.Select(m => new ModelSearchEntry(m.Id, m.ProviderId, m.DisplayName)).ToArray(),
+            query);
+
+        ModelSearchEntry? exact = null;
+        foreach (ModelSearchEntry entry in page.Items)
         {
-            if (!string.Equals(model.ProviderId, providerId.Value, StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase)) return model;
+            if (string.Equals(entry.Id, modelId, StringComparison.OrdinalIgnoreCase))
+            {
+                exact = entry;
+                break;
+            }
         }
 
-        return null;
+        if (exact is null) return null;
+        ModelSearchEntry match = exact.Value;
+        return models.TryFirst(m =>
+                string.Equals(m.ProviderId, providerId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(m.Id, match.Id, StringComparison.OrdinalIgnoreCase))
+            .GetValueOrDefault();
     }
 }
 

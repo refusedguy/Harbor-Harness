@@ -34,6 +34,9 @@ public class ProviderConfigTests
                         "modelsRefreshHours": 24,
                         "modelsPath": "data",
                         "timeout": 120,
+                        // #3838: deliberately left in the fixture to prove the
+                        // source-gen context ignores this dead key. The bundled
+                        // providers/*.json no longer carry it.
                         "retries": 3
                       }
                       """;
@@ -54,6 +57,72 @@ public class ProviderConfigTests
         {
             if (File.Exists(path)) File.Delete(path);
         }
+    }
+
+    /// <summary>
+    ///     #3838: "retries" is a dead key. ProviderConfig has no Retries
+    ///     property, the source-gen context ignores unknown members, and retry
+    ///     is owned by RetryLlmClientWiring.WithTransientRetry — not by JSON.
+    ///     Removing the key from the bundled providers/*.json must therefore be
+    ///     a no-op: the deserialized config (and everything the retry wiring
+    ///     reads from it) is identical with and without it.
+    /// </summary>
+    [Test]
+    public async Task LoadFromJson_DeadRetriesKey_DoesNotChangeConfig()
+    {
+        // One payload, with the dead key injected by a single-line replace: no
+        // second copy of the JSON for the duplication gate to flag.
+        const string withoutRetries = """
+                                      {
+                                        "id": "kilocode",
+                                        "displayName": "Kilo Code Gateway",
+                                        "baseUrl": "https://api.kilo.ai/api/gateway",
+                                        "authType": "bearer",
+                                        "authEnvVar": "KILO_API_KEY",
+                                        "modelsRefreshHours": 12,
+                                        "timeout": 120
+                                      }
+                                      """;
+        string withRetries = withoutRetries.Replace(
+            "\"timeout\": 120",
+            "\"timeout\": 120,\n  \"retries\": 3");
+
+        var withResult = ProviderConfig.LoadFromJson(withRetries);
+        var withoutResult = ProviderConfig.LoadFromJson(withoutRetries);
+
+        await Assert.That(withResult).IsSuccessful();
+        await Assert.That(withoutResult).IsSuccessful();
+
+        var withConfig = withResult.Value;
+        var withoutConfig = withoutResult.Value;
+
+        await Assert.That(withConfig.Id).IsEqualTo(withoutConfig.Id);
+        await Assert.That(withConfig.DisplayName).IsEqualTo(withoutConfig.DisplayName);
+        await Assert.That(withConfig.Description).IsEqualTo(withoutConfig.Description);
+        await Assert.That(withConfig.BaseUrl).IsEqualTo(withoutConfig.BaseUrl);
+        await Assert.That(withConfig.ApiType).IsEqualTo(withoutConfig.ApiType);
+        await Assert.That(withConfig.ApiVersion).IsNull();
+        await Assert.That(withoutConfig.ApiVersion).IsNull();
+        await Assert.That(withConfig.AuthType).IsEqualTo(withoutConfig.AuthType);
+        await Assert.That(withConfig.AuthHeader).IsNull();
+        await Assert.That(withoutConfig.AuthHeader).IsNull();
+        await Assert.That(withConfig.AuthEnvVar).IsEqualTo(withoutConfig.AuthEnvVar);
+        await Assert.That(withConfig.ModelsUrl).IsNull();
+        await Assert.That(withoutConfig.ModelsUrl).IsNull();
+        await Assert.That(withConfig.ModelsRefreshHours).IsEqualTo(withoutConfig.ModelsRefreshHours);
+        await Assert.That(withConfig.ModelsPath).IsNull();
+        await Assert.That(withoutConfig.ModelsPath).IsNull();
+        await Assert.That(withConfig.Timeout).IsEqualTo(withoutConfig.Timeout);
+        await Assert.That(withConfig.ModelMapping).IsNull();
+        await Assert.That(withoutConfig.ModelMapping).IsNull();
+        await Assert.That(withConfig.Models).IsNull();
+        await Assert.That(withoutConfig.Models).IsNull();
+        await Assert.That(withConfig.Headers).IsNull();
+        await Assert.That(withoutConfig.Headers).IsNull();
+        await Assert.That(withConfig.Capabilities).IsNull();
+        await Assert.That(withoutConfig.Capabilities).IsNull();
+        await Assert.That(withConfig.Quirks).IsNull();
+        await Assert.That(withoutConfig.Quirks).IsNull();
     }
 
     [Test]

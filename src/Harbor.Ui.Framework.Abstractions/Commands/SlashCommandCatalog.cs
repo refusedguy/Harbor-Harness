@@ -94,6 +94,7 @@ public static class SlashCommandCatalog
         new("auth", "Manage provider API keys", ["key", "api-key"], Group: GroupConfig),
         new("config", "Show the active configuration", [], Group: GroupConfig),
         new("permissions", "Inspect or edit permission rules", [], Group: GroupConfig),
+        new("cost-alert", "Set the session cost warning threshold", [], ["off", "1.00", "5.00", "10.00"], Group: GroupConfig),
 
         new("model", "Switch the active LLM model", ["m"], Group: GroupRuntime),
         new("agent", "Switch the active agent", ["mode", "a"], Group: GroupRuntime),

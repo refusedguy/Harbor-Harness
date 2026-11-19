@@ -3,7 +3,9 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Hosting;
+using Harbor.Application.Sessions;
 using Harbor.Storage.Jsonl;
+using Harbor.Tools.Builtin;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -11,7 +13,7 @@ namespace Harbor.App.Cli.Commands;
 
 /// <summary>
 ///     <c>harbor sessions</c> family: list (default), rename, retitle, export, export-zip, import,
-///     search, usage, revert, checkpoint, checkpoints, rewind, tree, fork, maintenance.
+///     search, usage, revert, checkpoint, checkpoints, rewind, tree, fork, merge-back, maintenance.
 ///     Extracted from <c>Program</c> (#176);
 ///     rename persists a new title via ISessionStore.UpdateAsync,
 ///     export/import round-trip one session through the portable line payload
@@ -59,11 +61,14 @@ internal static class SessionsVerb
                 return await RunTreeSessionsAsync();
             case "fork":
                 return await RunForkSessionAsync(logger, args.Skip(1).ToArray());
+            case "merge-back":
+            case "merge":
+                return await RunMergeBackSessionAsync(logger, args.Skip(1).ToArray());
             case "maintenance":
                 return await SessionMaintenanceVerb.RunAsync(logger, args.Skip(1).ToArray(), CancellationToken.None).ConfigureAwait(false);
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|retitle|export|export-zip|export-md|export-json|import|search|usage|revert|checkpoint|checkpoints|rewind|tree|fork|maintenance]
+                                        Usage: harbor sessions [list|rename|retitle|export|export-zip|export-md|export-json|import|search|usage|revert|checkpoint|checkpoints|rewind|tree|fork|merge-back|maintenance]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions retitle <id>           regenerate a title from the first user message
@@ -83,6 +88,7 @@ internal static class SessionsVerb
                                           sessions rewind <id> <checkpoint-id>  rewind session to the checkpoint (records a trail marker)
                                           sessions tree                   show fork/branch lineage as an indented tree
                                           sessions fork <id> <message-id>            branch a NEW session copying messages up to and including the given one
+                                          sessions merge-back <fork-id> <message-id> merge the fork's delta into its parent from the given boundary (alias: merge)
                                           sessions maintenance [--older-than-days N] [--keep-recent N] [--apply]
                                                                           plan stale-session cleanup; dry run unless --apply is passed
                                         """);
@@ -184,12 +190,21 @@ internal static class SessionsVerb
 
         string sessionId = args[0];
         string path = args.Length > 1 ? args[1] : $"harbor-session-{sessionId}.jsonl";
+        string? rawSwitch = Environment.GetEnvironmentVariable(SessionExportEligibility.EnvironmentVariableName);
         using var host = HostBuilder.Build();
         var porter = host.Services.GetRequiredService<ISessionPorter>();
-        await using var output = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+        var store = host.Services.GetRequiredService<ISessionStore>();
 
-        var exported = await porter.ExportAsync(host.Services.GetRequiredService<ISessionStore>(), sessionId, output)
-            .ConfigureAwait(false);
+        // #3399: the kill switch is evaluated BEFORE the destination file is
+        // opened or the store is read. A refused export never creates or
+        // truncates the target file, and the refusal reason rides the Result.
+        var exported = await SessionExportEligibility.Guard(
+            async () =>
+            {
+                await using var output = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+                return await porter.ExportAsync(store, sessionId, output).ConfigureAwait(false);
+            },
+            rawSwitch).ConfigureAwait(false);
         if (exported.IsFailure)
         {
             SessionsVerbLog.ExportFailed(logger, exported.Error);
@@ -649,6 +664,62 @@ internal static class SessionsVerb
         Console.WriteLine($"Forked session {sessionId} → {forked.Value.ForkId}: copied {forked.Value.Copied} message(s) up to '{messageId}'.");
         return 0;
     }
+
+    /// <summary>
+    ///     <c>harbor sessions merge-back &lt;fork-id&gt; &lt;message-id&gt;</c> —
+    ///     merge only the fork's post-boundary delta into the parent recorded on
+    ///     the fork. The service writes nothing when a base message conflicts;
+    ///     this verb reports all three versions so the caller can resolve them.
+    /// </summary>
+    internal static async Task<int> RunMergeBackSessionAsync(ILogger logger, string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions merge-back <fork-session-id> <message-id>
+                                      Merge the fork's messages AFTER the given boundary into its parent.
+                                      A conflict on a base message blocks the whole merge: nothing is written.
+                                    """);
+            return 2;
+        }
+
+        string forkId = args[0];
+        string boundaryId = args[1];
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        var mergeBack = host.Services.GetRequiredService<SessionMergeBackService>();
+        var runner = new SessionMergeBackRunner(store, mergeBack);
+
+        var merged = await runner.MergeBackAsync(forkId, boundaryId).ConfigureAwait(false);
+        if (merged.IsFailure)
+        {
+            SessionsVerbLog.MergeBackFailed(logger, merged.Error);
+            Console.Error.WriteLine(merged.Error);
+            return 1;
+        }
+
+        SessionMergeBackRunner.MergeBackOutcome outcome = merged.Value;
+        if (outcome.HasConflicts)
+        {
+            Console.Error.WriteLine(
+                $"Merge-back {outcome.Relation.SourceSessionId} → {outcome.Relation.TargetSessionId} " +
+                $"at '{outcome.Relation.SourcePoint}' blocked by {outcome.Conflicts.Count} conflict(s); " +
+                "nothing was written to the parent.");
+            foreach (MergeBackConflict conflict in outcome.Conflicts)
+            {
+                Console.Error.WriteLine(
+                    $"  {conflict.MessageId}: base='{conflict.BaseText}' " +
+                    $"parent='{conflict.TargetText}' fork='{conflict.SourceText}'");
+            }
+
+            return 0;
+        }
+
+        Console.WriteLine(
+            $"Merged {outcome.Relation.SourceSessionId} → {outcome.Relation.TargetSessionId} " +
+            $"at '{outcome.Relation.SourcePoint}': applied {outcome.AppliedCount} message(s).");
+        return 0;
+    }
 }
 
 /// <summary>
@@ -778,4 +849,7 @@ internal static partial class SessionsVerbLog
 
     [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "sessions maintenance: delete {SessionId} failed: {Error}")]
     public static partial void MaintenanceDeleteFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Error, Message = "Merge-back failed: {Error}")]
+    public static partial void MergeBackFailed(ILogger logger, string error);
 }

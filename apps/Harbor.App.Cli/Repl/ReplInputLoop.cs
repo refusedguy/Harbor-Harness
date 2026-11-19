@@ -1,6 +1,7 @@
 using System.Linq;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Attachments;
 using Harbor.Tui.CellForge.Capabilities;
@@ -10,6 +11,7 @@ using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging;
 // #436: same shared-name pins as Harbor.Tui.CellForge/GlobalUsings.cs — the
 // Rendering vocabulary keeps its historical meaning in this file; engine-typed
@@ -66,6 +68,19 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
     /// </summary>
     private bool _markupSendInFlight;
 
+    /// <summary>
+    ///     #3111: durable, session-scoped prompt store. The composer owns the
+    ///     readline walk (draft save/restore), but its rail is in-memory and
+    ///     survives a session switch unchanged. This store is the session
+    ///     boundary: submits are recorded against the active <see cref="SessionId"/>
+    ///     and the rail is refilled from it whenever that id changes, so Up/Down
+    ///     can only ever recall prompts from the conversation being viewed.
+    /// </summary>
+    private readonly SessionPromptHistory _promptHistory = new();
+
+    /// <summary>Last session id the composer rail was populated for.</summary>
+    private string? _promptHistorySessionId;
+
     // ── Input routing ──────────────────────────────────────────────────────
 
     /// <summary>
@@ -97,6 +112,10 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // Any user input can mutate composer, palette, scroll or selection —
         // the next frame takes the conservative full-scan path.
         host._replStore.DamageAll();
+        // #3111: a session switch is observed on the next input event. Refill
+        // the composer rail first, so the Up/Down in this very event walks the
+        // prompts of the session it now belongs to (never the previous one).
+        SyncPromptHistoryForSession();
         switch (evt.Kind)
         {
             case InputEventKind.Key:
@@ -422,68 +441,6 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
-        // Command palette: ctrl+p toggles; a visible palette claims keys first
-        // so Enter/Esc/letters never leak into the approval gate or composer.
-        if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
-            && char.ToLowerInvariant((char)key.Character.Value) == 'p')
-        {
-            if (host._palette.Visible)
-            {
-                host._palette.Hide();
-            }
-            else
-            {
-                host.Commands.OpenCommandPalette();
-            }
-
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
-        // Jump palette: ctrl+j toggles the /jump frame, dispatched through the
-        // catalog exactly as the ctrl+p block above dispatches its own palette
-        // (#857). This chord is intercepted HERE, ahead of the store
-        // dual-write further down, because ChatKeyMap's `ChatAction.JumpPalette`
-        // is the panel-plane route: it toggles a `Center`-placed
-        // IPanelProvider whose OnKey no host can reach, so it resolved and
-        // painted nothing. Claiming the key here gives Ctrl+J a route that
-        // exists, without adding a second input path — and the bare-LF alias
-        // stays on the keymap for the desktop host, which is not this loop.
-        if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
-            && char.ToLowerInvariant((char)key.Character.Value) == 'j')
-        {
-            // Only the jump frame itself toggles closed. Any other visible
-            // frame (ctrl+p's command list, /tree) is somebody else's palette
-            // and must survive a Ctrl+J.
-            if (host._palette.Visible && host._palette.CurrentBreadcrumb == JumpCommand.Breadcrumb)
-            {
-                host._palette.Hide();
-            }
-            else
-            {
-                await host.Commands.ExecutePaletteItemAsync(
-                    new CommandItem(JumpCommand.CommandId, JumpCommandTitle), ct).ConfigureAwait(false);
-            }
-
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
-        // External editor (issue #2495): Ctrl+E hands the terminal to
-        // $VISUAL / $EDITOR. Press-only so a held chord cannot spawn several
-        // children; the scope restores raw mode and forces a full repaint in
-        // its own finally. Claimed here, ahead of the palette and composer,
-        // so the chord never leaks into the prompt as a character.
-        if (key.Key == KeyCode.Char
-            && key.Modifiers == KeyModifiers.Ctrl
-            && key.EventType == KeyEventType.Press
-            && char.ToLowerInvariant((char)key.Character.Value) == 'e')
-        {
-            await host.OpenExternalEditorAsync(ct).ConfigureAwait(false);
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
         if (host._palette.Visible && host._palette.HandleKey(key))
         {
             // Frame-carried continuations: no host-side stacks. Esc/Hide drops
@@ -521,18 +478,6 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         {
             host.Images.Show(imageBlock, host.ScreenSession.Images);
             host._replStore.DamageAll();
-            host._wake.Writer.TryWrite(null);
-            return;
-        }
-
-        // Slash shortcut: typing '/' on an empty composer opens the command
-        // palette directly, skipping manual entry.
-        if (key.Key == KeyCode.Char
-            && key.Modifiers.AcceptsTypedChar()
-            && (char)key.Character.Value == '/'
-            && host._composer.Buffer.IsEmpty)
-        {
-            host.Commands.OpenSlashPalette();
             host._wake.Writer.TryWrite(null);
             return;
         }
@@ -600,6 +545,52 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             var resolved = host._keyMap.Resolve(uiKey, host._replStore.State);
             if (resolved != ChatAction.None)
             {
+                // Host-effect chords (#3615): the keymap is the single source of
+                // "which key does what", but these actions are impure — open a
+                // palette, hand the terminal to $EDITOR — so the HOST runs them
+                // and the reducer stays a pure fold (no KeyActionRegistry entry).
+                switch (resolved)
+                {
+                    case ChatAction.TogglePalette:
+                        if (host._palette.Visible)
+                            host._palette.Hide();
+                        else
+                            host.Commands.OpenCommandPalette();
+                        host._wake.Writer.TryWrite(null);
+                        return;
+
+                    case ChatAction.JumpPalette:
+                        // #857 jump-frame behavior unchanged: only the jump frame
+                        // toggles closed; any other visible frame (ctrl+p's list,
+                        // /tree) survives a Ctrl+J. The bare-LF alias stays on the
+                        // keymap for hosts that do not use this loop.
+                        if (host._palette.Visible && host._palette.CurrentBreadcrumb == JumpCommand.Breadcrumb)
+                            host._palette.Hide();
+                        else
+                            await host.Commands.ExecutePaletteItemAsync(
+                                new CommandItem(JumpCommand.CommandId, JumpCommandTitle), ct).ConfigureAwait(false);
+                        host._wake.Writer.TryWrite(null);
+                        return;
+
+                    case ChatAction.OpenExternalEditor when key.EventType == KeyEventType.Press:
+                        // Press-only so a held chord cannot spawn several children.
+                        await host.OpenExternalEditorAsync(ct).ConfigureAwait(false);
+                        host._wake.Writer.TryWrite(null);
+                        return;
+
+                    case ChatAction.OpenSlashPalette:
+                        // The chord opens the palette only while the composer is
+                        // empty. With text already typed '/' stays an ordinary
+                        // character: fall through to the composer below instead.
+                        if (host._composer.Buffer.IsEmpty)
+                        {
+                            host.Commands.OpenSlashPalette();
+                            host._wake.Writer.TryWrite(null);
+                            return;
+                        }
+                        break;
+                }
+
                 var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
                 // The one exception to the sink-the-effect rule above: the strip
                 // actions are effect-driven, because the reducer resolves the
@@ -644,6 +635,10 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             }
 
             case ComposerAction.Submitted:
+                // #3111: record BEFORE SubmitAsync — it calls TakeText(), which
+                // clears the buffer. The text still in the buffer here is the
+                // exact line the user submitted, keyed to the live session.
+                RecordSubmittedPrompt(_promptHistory, host.SessionModel.Id, host._composer.Buffer.SnapshotText());
                 await host.Pipeline.SubmitAsync(ct).ConfigureAwait(false);
                 break;
 
@@ -915,6 +910,57 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         host.Bridge.AppendSystemLine($"⧉ скопировано {text.Length} симв.");
         host._selection.Clear();
         host._wake.Writer.TryWrite(null);
+    }
+
+    // ── #3111: session-scoped prompt history ────────────────────────────────
+
+    /// <summary>
+    ///     Rebinds the composer rail when the active session changed. Called
+    ///     on every input event so every switch path (palette, quick-switch
+    ///     chord, new session) is covered in one place — no edit to the switch
+    ///     manager itself. The rail is cleared first, so an unrecoverable
+    ///     prompt from the previous conversation cannot leak into the new one.
+    /// </summary>
+    private void SyncPromptHistoryForSession()
+    {
+        string sessionId = host.SessionModel.Id;
+        if (string.Equals(_promptHistorySessionId, sessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _promptHistorySessionId = sessionId;
+        PopulatePromptHistory(host._composer, _promptHistory, sessionId);
+    }
+
+    /// <summary>
+    ///     Records a submitted line against its session. Trims like the
+    ///     composer rail does, so the two stay in step; blank lines are ignored
+    ///     by <see cref="SessionPromptHistory.Record" /> itself.
+    /// </summary>
+    internal static void RecordSubmittedPrompt(SessionPromptHistory store, string sessionId, string text) =>
+        store.Record(SessionId.Create(sessionId), text?.Trim());
+
+    /// <summary>
+    ///     Refills the composer's readline rail from the session store. Reads
+    ///     through <see cref="SessionPromptHistory.At" /> (index from newest)
+    ///     and pushes oldest-first, so the rail's newest entry is the last
+    ///     prompt submitted in this session — exactly what Up recalls first.
+    ///     Internal for the session-isolation behavior test.
+    /// </summary>
+    internal static void PopulatePromptHistory(ComposerController composer, SessionPromptHistory store, string sessionId)
+    {
+        composer.History.Clear();
+        var id = SessionId.Create(sessionId);
+        int count = store.Count(id);
+        for (int indexFromNewest = count - 1; indexFromNewest >= 0; indexFromNewest--)
+        {
+            string? entry = store.At(id, indexFromNewest);
+            if (entry is not null)
+            {
+                composer.History.Push(entry);
+            }
+        }
     }
 }
 

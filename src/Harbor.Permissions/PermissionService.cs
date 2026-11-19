@@ -26,6 +26,13 @@ public sealed class PermissionService : IPermissionService
     private readonly Func<IReadOnlyList<IArgSafetyPolicy>>? _safetyPolicies;
 
     /// <summary>
+    ///     Session-wide overlay applied to the ruleset verdict on every check
+    ///     (#3411). <see langword="null" /> keeps the ruleset-only evaluation for
+    ///     callers that have no session scope.
+    /// </summary>
+    private readonly SessionPermissionOverlay? _overlay;
+
+    /// <summary>
     ///     Persisted user decisions (A2): agent name → rule key ("toolName:argPath") → the
     ///     rule recorded when the user answered a prompt with "always". Consulted before
     ///     prompting and merged into <see cref="GetRuleset" /> so the decision survives
@@ -70,6 +77,11 @@ public sealed class PermissionService : IPermissionService
     ///     is guarded without editing any list. When <see langword="null" />, each
     ///     agent ruleset's own <c>SafetyPolicies</c> is used.
     /// </param>
+    /// <param name="overlay">
+    ///     Optional session-wide overlay (#3411). When supplied, its session
+    ///     decisions are applied on top of the agent's ruleset verdict on every
+    ///     check. When <see langword="null" />, the ruleset verdict stands alone.
+    /// </param>
     public PermissionService(
         IAgentRegistry agents,
         ILogger<PermissionService> logger,
@@ -77,7 +89,8 @@ public sealed class PermissionService : IPermissionService
         string? workspaceRoot = null,
         IPermissionConfigStore? configStore = null,
         IEnumerable<IPathExtractionPolicy>? pathPolicies = null,
-        Func<IReadOnlyList<IArgSafetyPolicy>>? safetyPolicies = null)
+        Func<IReadOnlyList<IArgSafetyPolicy>>? safetyPolicies = null,
+        SessionPermissionOverlay? overlay = null)
     {
         _agents = agents;
         _logger = logger;
@@ -86,6 +99,7 @@ public sealed class PermissionService : IPermissionService
         _configStore = configStore;
         _pathPolicies = ResolvePolicies(pathPolicies);
         _safetyPolicies = safetyPolicies;
+        _overlay = overlay;
 
         // #82: never block the ctor on IO (sync-over-async deadlocks under any
         // SynchronizationContext). The persisted-permissions load runs in the
@@ -111,9 +125,10 @@ public sealed class PermissionService : IPermissionService
         IPermissionConfigStore? configStore = null,
         IEnumerable<IPathExtractionPolicy>? pathPolicies = null,
         Func<IReadOnlyList<IArgSafetyPolicy>>? safetyPolicies = null,
+        SessionPermissionOverlay? overlay = null,
         CancellationToken ct = default)
     {
-        var service = new PermissionService(agents, logger, userAsker, workspaceRoot, configStore, pathPolicies, safetyPolicies);
+        var service = new PermissionService(agents, logger, userAsker, workspaceRoot, configStore, pathPolicies, safetyPolicies, overlay);
         await service.EnsureLoadedAsync(ct).ConfigureAwait(false);
         return service;
     }
@@ -165,7 +180,15 @@ public sealed class PermissionService : IPermissionService
         // #557: the safety policies are the ones derived from the tools that
         // actually registered, not a static name list — so a path-taking tool that
         // nobody remembered to list is still guarded.
-        var action = agent.Permission.Evaluate(toolName, extraction.ArgPath, _safetyPolicies?.Invoke());
+        var baseline = agent.Permission.Evaluate(toolName, extraction.ArgPath, _safetyPolicies?.Invoke());
+        // #3411: the session overlay is applied on top of the ruleset verdict.
+        // The ruleset keeps using the live safety policies from the tool registry
+        // (#557); the overlay contributes the session deny/allow and mode. A
+        // session deny therefore overrides a base allow without weakening the
+        // traversal and destructive-command guards.
+        var action = _overlay is not null
+            ? _overlay.ApplyTo(baseline, toolName, extraction.ArgPath)
+            : baseline;
 
         // Workspace confinement (A1/A2): a path that resolves outside the workspace root —
         // or the process working directory when no explicit root is configured — must never

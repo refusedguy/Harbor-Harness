@@ -89,6 +89,48 @@ public static class SessionExportEligibility
         return decision is not ExportSwitchDecision.Invalid;
     }
 
+    /// <summary>
+    ///     Resolves the switch into a <see cref="Result" /> that carries the
+    ///     refusal reason on failure (#3399). Pure: the caller supplies the raw
+    ///     value, so no environment state is read here.
+    /// </summary>
+    /// <param name="raw">The value to classify.</param>
+    /// <returns>
+    ///     Success only when export is allowed; otherwise a failure whose error
+    ///     names the switch and the value that blocked the export.
+    /// </returns>
+    public static Result EnsureAllowed(string? raw)
+    {
+        ExportSwitchDecision decision = Classify(raw);
+        return decision switch
+        {
+            ExportSwitchDecision.Enabled => Result.Success(),
+            ExportSwitchDecision.Disabled => Result.Failure(
+                $"Session export is disabled by {EnvironmentVariableName}='{raw}'."),
+            _ => Result.Failure(
+                $"Session export is blocked: {EnvironmentVariableName} has an unrecognised value '{raw}'; "
+                + "expected 1/true/yes/on or 0/false/no/off."),
+        };
+    }
+
+    /// <summary>
+    ///     Runs <paramref name="export" /> only when export is allowed (#3399).
+    ///     A refused export returns the eligibility failure WITHOUT invoking
+    ///     the delegate, so no session data is read or written for an
+    ///     ineligible export. The delegate is the real export operation; the
+    ///     call site passes the raw switch value it obtained from configuration
+    ///     or the process environment.
+    /// </summary>
+    /// <param name="export">The export operation to guard.</param>
+    /// <param name="raw">The switch value to classify.</param>
+    /// <returns>The export result, or the eligibility refusal.</returns>
+    public static async Task<Result> Guard(Func<Task<Result>> export, string? raw)
+    {
+        ArgumentNullException.ThrowIfNull(export);
+        Result gate = EnsureAllowed(raw);
+        return gate.IsFailure ? gate : await export().ConfigureAwait(false);
+    }
+
     private static bool IsOneOf(string value, string first, string second, string third, string fourth) =>
         string.Equals(value, first, StringComparison.OrdinalIgnoreCase)
         || string.Equals(value, second, StringComparison.OrdinalIgnoreCase)

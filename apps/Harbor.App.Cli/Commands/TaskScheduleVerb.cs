@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using ConsoleAppFramework;
+using Harbor.Tools.Builtin;
 
 namespace Harbor.App.Cli.Commands;
 
@@ -466,6 +467,23 @@ internal static class WebhookSignature
 /// <summary>Dispatch for <c>harbor task</c>. Only this class touches the file system.</summary>
 internal static class TaskScheduleVerb
 {
+    /// <summary>
+    ///     Resolves a schedule argument to its next fire instant (#3114). A
+    ///     relative delay ("30s", "2h") or an absolute ISO 8601 timestamp is
+    ///     handled by <see cref="WakeupScheduleParser" /> through
+    ///     <see cref="WakeupSchedule.ComputeAt" />; anything else stays a cron
+    ///     expression and uses <see cref="CronExpression.NextAfter" />.
+    ///     Internal for the schedule behavior test (InternalsVisibleTo).
+    /// </summary>
+    internal static Result<DateTimeOffset?> ResolveNextFire(string schedule, DateTimeOffset now)
+    {
+        WakeupSchedule? wakeup = WakeupScheduleParser.Parse(schedule);
+        if (wakeup is not null)
+            return Result.Success<DateTimeOffset?>(wakeup.Value.ComputeAt(now));
+
+        return CronExpression.Parse(schedule).Map(cron => cron.NextAfter(now));
+    }
+
     internal static int Run(string[] args)
     {
         Result<TaskRequest> parsed = TaskArgs.Parse(args);
@@ -487,10 +505,10 @@ internal static class TaskScheduleVerb
 
         if (request.Action == "schedule")
         {
-            Result<CronExpression> cron = CronExpression.Parse(request.Cron);
-            if (cron.IsFailure)
+            Result<DateTimeOffset?> nextFire = ResolveNextFire(request.Cron, DateTimeOffset.UtcNow);
+            if (nextFire.IsFailure)
             {
-                Console.Error.WriteLine(cron.Error);
+                Console.Error.WriteLine(nextFire.Error);
                 return 1;
             }
             if (tasks.Exists(t => t.Name == request.Name))
@@ -512,9 +530,8 @@ internal static class TaskScheduleVerb
                 return 1;
             }
 
-            DateTimeOffset? next = cron.Value.NextAfter(DateTimeOffset.UtcNow);
             Console.Out.WriteLine(
-                $"Scheduled '{request.Name}' ({request.Cron}); next fire {(next?.ToString("O", CultureInfo.InvariantCulture) ?? "never")}.");
+                $"Scheduled '{request.Name}' ({request.Cron}); next fire {(nextFire.Value?.ToString("O", CultureInfo.InvariantCulture) ?? "never")}.");
             return 0;
         }
 
@@ -550,14 +567,13 @@ internal static class TaskScheduleVerb
             return 0;
         }
 
-        Result<CronExpression> parsedCron = CronExpression.Parse(tasks[index].Cron);
-        if (parsedCron.IsFailure)
+        Result<DateTimeOffset?> nextFireForTask = ResolveNextFire(tasks[index].Cron, DateTimeOffset.UtcNow);
+        if (nextFireForTask.IsFailure)
         {
-            Console.Error.WriteLine(parsedCron.Error);
+            Console.Error.WriteLine(nextFireForTask.Error);
             return 1;
         }
-        DateTimeOffset? nextFire = parsedCron.Value.NextAfter(DateTimeOffset.UtcNow);
-        Console.Out.WriteLine(nextFire?.ToString("O", CultureInfo.InvariantCulture) ?? "never");
+        Console.Out.WriteLine(nextFireForTask.Value?.ToString("O", CultureInfo.InvariantCulture) ?? "never");
         return 0;
     }
 }

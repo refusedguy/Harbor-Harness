@@ -83,6 +83,15 @@ public sealed class JsonConfigStore : IConfigStore
         }
     }
 
+    // #3393: the config path is caller-supplied, so treat it as untrusted at
+    // this boundary. A parent-directory segment would let a read or write
+    // step outside the directory the path names. Both guards run before any
+    // File/Directory call, so a rejected path never reaches the file system.
+    private Result ValidateConfigPath()
+        => ConfigPathGuard.ClassifyContainment(_configPath) == ConfigPathProtection.DirectoryEscape
+            ? Result.Failure($"config path leaves its directory: '{_configPath}'")
+            : Result.Success();
+
     // rop-final-mile B2 / §4.6: only File/Deserialize throw; everything
     // downstream is Result-native. Error texts preserved: "config.json is
     // empty", normalize-error passthrough, "config.json is corrupt: …" for
@@ -90,6 +99,9 @@ public sealed class JsonConfigStore : IConfigStore
     // failure log instead of two exception-shaped ones.
     private Result<HarborConfig> LoadCore()
     {
+        Result pathCheck = ValidateConfigPath();
+        if (pathCheck.IsFailure) return pathCheck.ConvertFailure<HarborConfig>();
+
         if (!File.Exists(_configPath))
         {
             if (_logger is not null) JsonConfigStoreLog.ConfigFileNotFound(_logger);
@@ -129,6 +141,11 @@ public sealed class JsonConfigStore : IConfigStore
     {
         lock (_lock)
         {
+            // #3393: reject an escaping path before Directory/File is touched;
+            // the same guard LoadCore applies on the read side.
+            Result pathCheck = ValidateConfigPath();
+            if (pathCheck.IsFailure) return Task.FromResult(pathCheck);
+
             // #881: the store VALIDATED on read and not on write. `LoadCore`
             // ends in `.Bind(config => config.Validate())`; this method used to
             // serialize whatever it was handed, so `UpdateAsync` — which loads,

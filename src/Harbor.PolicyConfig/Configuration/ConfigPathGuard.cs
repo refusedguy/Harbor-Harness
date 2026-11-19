@@ -19,6 +19,9 @@ public enum ConfigPathProtection
 
     /// <summary>The path names a known Harbor config file in the current directory.</summary>
     KnownConfigFileName,
+
+    /// <summary>The path walks up with a <c>..</c> segment and leaves its directory.</summary>
+    DirectoryEscape,
 }
 
 /// <summary>
@@ -94,6 +97,47 @@ public static class ConfigPathGuard
     /// </summary>
     /// <param name="path">The path to classify.</param>
     public static bool CanPersistAlways(string? path) => !IsProtected(path);
+
+    /// <summary>
+    ///     Returns <see cref="ConfigPathProtection.DirectoryEscape" /> when the
+    ///     path contains a parent-directory (<c>..</c>) segment, or
+    ///     <see cref="ConfigPathProtection.None" /> otherwise.
+    /// </summary>
+    /// <remarks>
+    ///     This is the containment half of config-path protection, for callers
+    ///     that are about to touch the file system. A config store accepts an
+    ///     explicit path override; a <c>..</c> segment in that override lets the
+    ///     caller step outside the directory the path names, so it must be
+    ///     refused before any read or write. Unlike <see cref="Classify" /> this
+    ///     check never reports <see cref="ConfigPathProtection.HarborSettingsDirectory" />
+    ///     or <see cref="ConfigPathProtection.KnownConfigFileName" />: those mark
+    ///     Harbor's own settings, which a config store is expected to manage.
+    ///     The check is pure and does not resolve symlinks or the working
+    ///     directory.
+    /// </remarks>
+    /// <param name="path">The config path a caller wants to read or write.</param>
+    public static ConfigPathProtection ClassifyContainment(string? path)
+        => HasParentSegment(path) ? ConfigPathProtection.DirectoryEscape : ConfigPathProtection.None;
+
+    private static bool HasParentSegment(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+
+        string value = path.Trim();
+        int segmentStart = 0;
+        for (int i = 0; i <= value.Length; i++)
+        {
+            bool isSeparator = i == value.Length || value[i] == '/' || value[i] == '\\';
+            if (!isSeparator)
+                continue;
+
+            if (i - segmentStart == 2 && value[segmentStart] == '.' && value[segmentStart + 1] == '.')
+                return true;
+
+            segmentStart = i + 1;
+        }
+        return false;
+    }
 
     private static bool HasSegment(string path, string segment)
     {

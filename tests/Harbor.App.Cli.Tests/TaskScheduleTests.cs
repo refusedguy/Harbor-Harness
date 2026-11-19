@@ -174,6 +174,27 @@ public class TaskScheduleTests
     }
 
     [Test]
+    public async Task ResolveNextFire_WiresWakeupParserIntoTaskSchedule()
+    {
+        DateTimeOffset now = new(2026, 11, 19, 10, 0, 0, TimeSpan.Zero);
+
+        Result<DateTimeOffset?> after30s = TaskScheduleVerb.ResolveNextFire("30s", now);
+        await Assert.That(after30s.IsSuccess).IsTrue();
+        await Assert.That(after30s.Value!.Value).IsEqualTo(now.AddSeconds(30));
+
+        Result<DateTimeOffset?> after2h = TaskScheduleVerb.ResolveNextFire("2h", now);
+        await Assert.That(after2h.IsSuccess).IsTrue();
+        await Assert.That(after2h.Value!.Value).IsEqualTo(now.AddHours(2));
+
+        var absolute = new DateTimeOffset(2026, 11, 20, 9, 30, 0, TimeSpan.Zero);
+        Result<DateTimeOffset?> atDate = TaskScheduleVerb.ResolveNextFire("2026-11-20T09:30:00+00:00", now);
+        await Assert.That(atDate.IsSuccess).IsTrue();
+        await Assert.That(atDate.Value!.Value).IsEqualTo(absolute);
+
+        await Assert.That(TaskScheduleVerb.ResolveNextFire("999999999d", now).IsFailure).IsTrue();
+    }
+
+    [Test]
     public async Task WebhookSignature_SignIsStableAndVerifyAcceptsIt()
     {
         byte[] payload = Encoding.UTF8.GetBytes("{\"event\":\"task.fire\"}");

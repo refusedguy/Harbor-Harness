@@ -15,7 +15,13 @@ internal sealed class StreamCoalescer
     private readonly StatusViewModel _status;
     private readonly CommitTickPacer _pacer = new();
     private readonly Queue<PendingLine> _pending = new();
-    private readonly StringBuilder _incoming = new();
+
+    // #3363: the delta accumulator and the visible-source gate are markdown
+    // buffers, not raw StringBuilders. `_incoming` holds only the current
+    // partial line (the #489 invariant below); `_visible` holds the tail that
+    // is still an open Markdown construct and releases it once it closes.
+    private readonly MarkdownStreamBuffer _incoming = new();
+    private readonly MarkdownStreamBuffer _visible = new();
     private readonly StringBuilder _streamSource = new();
     private StreamingMarkdownBlock? _stream;
     private StreamingThinkingBlock? _thinkStream;
@@ -106,13 +112,32 @@ internal sealed class StreamCoalescer
             return;
         }
 
-        _stream.Push(text);
         _streamSource.Append(text);
+
+        // Only the prefix with no half-open fence/bold/link reaches the
+        // renderer. The withheld tail stays in _visible and is prepended to
+        // the next push when its closing marker arrives (or released at the
+        // flush/completion boundary), so no streamed token ever flickers.
+        _visible.Append(text);
+        string safe = _visible.SafePrefix();
+        if (safe.Length == 0)
+        {
+            return;
+        }
+
+        string all = _visible.Flush();
+        if (safe.Length < all.Length)
+        {
+            _visible.Append(all.AsSpan(safe.Length));
+        }
+
+        _stream.Push(safe);
     }
 
     public void StartStream()
     {
         _incoming.Clear();
+        _visible.Clear();
         _streamSource.Clear();
         _pending.Clear();
         NewlineScanChars = 0;
@@ -163,8 +188,7 @@ internal sealed class StreamCoalescer
             return; // hot path: partial-line deltas allocate nothing
         }
 
-        var rest = _incoming.ToString();
-        _incoming.Clear();
+        string rest = _incoming.Flush();
 
         int consumed = 0;
         while (true)
@@ -367,8 +391,7 @@ internal sealed class StreamCoalescer
     {
         if (_incoming.Length > 0)
         {
-            PushToStream(_incoming.ToString());
-            _incoming.Clear();
+            PushToStream(_incoming.Flush());
         }
 
         if (_thinkingIncoming.Length > 0 && _thinkStream is not null)
@@ -380,6 +403,15 @@ internal sealed class StreamCoalescer
         while (_pending.Count > 0)
         {
             PushToStream(_pending.Dequeue().Text);
+        }
+
+        // #3363: a terminal flush releases whatever the safe-prefix gate was
+        // still holding, so the live block shows the full answer before it is
+        // committed, including a construct whose closing marker never came.
+        string held = _visible.Flush();
+        if (held.Length > 0)
+        {
+            _stream?.Push(held);
         }
 
         if (_stream is not null)

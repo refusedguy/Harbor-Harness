@@ -1,14 +1,10 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using CommunityToolkit.Mvvm.Input;
+using Harbor.App.Avalonia.Views.Components;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
-using HorizontalAlignment = Avalonia.Layout.HorizontalAlignment;
-using Orientation = Avalonia.Layout.Orientation;
-using Thickness = Avalonia.Thickness;
-using TextWrapping = Avalonia.Media.TextWrapping;
 
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
@@ -97,16 +93,15 @@ public sealed class DialogService : IDialogService
             CanResize = false,
             ShowInTaskbar = false
         };
-        var text = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16) };
-        var ok = new Button { Content = okLabel, Classes = { "Primary" }, Padding = new Thickness(20, 6) };
-        var cancel = new Button { Content = cancelLabel, Padding = new Thickness(20, 6) };
         var result = false;
-        ok.Click += (_, _) => { result = true; dialog.Close(); };
-        cancel.Click += (_, _) => dialog.Close();
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(16) };
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(ok);
-        dialog.Content = new StackPanel { Margin = new Thickness(0), Children = { text, buttons } };
+        var content = new DialogContent();
+        content.Bind(new DialogFormData(
+            Message: message,
+            OkLabel: okLabel,
+            CancelLabel: cancelLabel,
+            OkCommand: new RelayCommand(() => { result = true; dialog.Close(); }),
+            CancelCommand: new RelayCommand(() => dialog.Close())));
+        dialog.Content = content;
         await dialog.ShowDialog(window);
         DialogServiceLog.ConfirmResult(_logger, title, result);
         return result;
@@ -127,19 +122,15 @@ public sealed class DialogService : IDialogService
             CanResize = false,
             ShowInTaskbar = false
         };
-        var box = new TextBox { Text = defaultValue, PlaceholderText = message };
-        var ok = new Button { Content = "OK", Classes = { "Primary" }, Padding = new Thickness(20, 6) };
-        var cancel = new Button { Content = "Cancel", Padding = new Thickness(20, 6) };
-        ok.Click += (_, _) => dialog.Close(box.Text);
-        cancel.Click += (_, _) => dialog.Close(null);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(ok);
-        var panel = new StackPanel { Margin = new Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(box);
-        panel.Children.Add(buttons);
-        dialog.Content = panel;
+        var content = new DialogContent();
+        content.Bind(new DialogFormData(
+            Message: message,
+            OkLabel: "OK",
+            CancelLabel: "Cancel",
+            InputText: defaultValue,
+            OkCommand: new RelayCommand(() => dialog.Close(content.InputText)),
+            CancelCommand: new RelayCommand(() => dialog.Close(null))));
+        dialog.Content = content;
         string? result = await dialog.ShowDialog<string?>(window);
         DialogServiceLog.PromptResult(_logger, title, result);
         return result;
@@ -160,11 +151,12 @@ public sealed class DialogService : IDialogService
             CanResize = false,
             ShowInTaskbar = false
         };
-        var text = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16) };
-        var ok = new Button { Content = okLabel, Classes = { "Primary" }, Padding = new Thickness(20, 6), HorizontalAlignment = HorizontalAlignment.Right };
-        ok.Click += (_, _) => dialog.Close();
-        var panel = new StackPanel { Margin = new Thickness(0), Children = { text, ok } };
-        dialog.Content = panel;
+        var content = new DialogContent();
+        content.Bind(new DialogFormData(
+            Message: message,
+            OkLabel: okLabel,
+            OkCommand: new RelayCommand(() => dialog.Close())));
+        dialog.Content = content;
         await dialog.ShowDialog(window);
         DialogServiceLog.AlertShown(_logger, title);
     }

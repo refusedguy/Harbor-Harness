@@ -27,6 +27,14 @@ public sealed class OllamaLlmClient : ILlmClient
 {
     private const string DefaultBaseUrl = "http://localhost:11434";
 
+    // #3404: legacy calls share the stream's index→id map with native ones,
+    // but live in a disjoint key range so a wire `index` can never alias them.
+    private const int LegacyCallIndexBase = 1_000_000;
+
+    // Stateless and thread-safe — every field of the parser is a local. One
+    // instance keeps the recovery path allocation-free on plain text chunks.
+    private static readonly LegacyToolCallParser LegacyParser = new();
+
     // Pre-computed base URL — avoids per-request string manipulation.
     private readonly string _baseUrl;
     private readonly OllamaConfig _config;
@@ -484,7 +492,7 @@ public sealed class OllamaLlmClient : ILlmClient
                     // allocated one per property per line, and a line is what
                     // every token of every answer arrives as (see
                     // Utf8JsonReaderExtensions.PropertyName).
-                    string prop = ChunkPropertyName(ref reader);
+                    string prop = Utf8JsonReaderExtensions.PropertyName(ref reader, MatchChunkProperty(reader.ValueSpan));
                     if (!reader.Read())
                         throw new JsonException("Truncated line: property without value.");
                     HandleValue(ref reader, depth, prop, inMessage, inTc, inFunction,
@@ -493,6 +501,25 @@ public sealed class OllamaLlmClient : ILlmClient
                         ref content, ref tcIndex, ref tcWireId, ref tcName, ref tcArgs,
                         ref done, ref inputTokens, ref outputTokens);
                     break;
+            }
+        }
+
+        // #3404: a model with no native tool-call support encodes the call in
+        // the message text ($ command / known fences). Recover it BEFORE the
+        // standard text mapping so the agent sees a real ToolCall, not the
+        // raw encoding. Native tool_calls win when both are present: the text
+        // is then just narrative and must stay visible.
+        if (!string.IsNullOrEmpty(content) && !events.Exists(static e => e is ToolCallStartEvent))
+        {
+            string text = content!;
+            if (HasLegacyMarker(text))
+            {
+                var recovered = LegacyParser.Parse(text);
+                if (recovered.Count > 0)
+                {
+                    EmitLegacyCalls(events, indexToId, recovered);
+                    content = null; // the text WAS the call, not an answer
+                }
             }
         }
 
@@ -505,17 +532,31 @@ public sealed class OllamaLlmClient : ILlmClient
         return events;
     }
 
+    /// <summary>Cheap scan before the full legacy parse — keeps plain-text
+    /// chunks (every token of an ordinary answer) allocation-free.</summary>
+    private static bool HasLegacyMarker(string text) =>
+        text.Contains('$') || text.Contains("```", StringComparison.Ordinal);
+
     /// <summary>
-    ///     The name of the property the reader is on, as one of the literals
-    ///     this client dispatches on — or <see cref="string.Empty" /> for a
-    ///     name it does not know. The table is matched against the RAW bytes
-    ///     of the name, so the dispatch allocates nothing; the literals are
-    ///     interned, so the comparisons are the same ones the old path made.
+    ///     Turn recovered legacy calls into the same event pair a native
+    ///     tool call emits. Ids are stable per recovered ordinal via the
+    ///     stream's index→id map (disjoint key range), so a repeated call in
+    ///     a later chunk coalesces instead of spawning a duplicate.
     /// </summary>
-    private static string ChunkPropertyName(ref Utf8JsonReader reader)
+    private static void EmitLegacyCalls(
+        List<LlmEvent> events, Dictionary<int, string> indexToId,
+        IReadOnlyList<EmulatedToolCall> calls)
     {
-        string? known = MatchChunkProperty(reader.ValueSpan);
-        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
+        for (int i = 0; i < calls.Count; i++)
+        {
+            EmulatedToolCall call = calls[i];
+            int key = LegacyCallIndexBase + i;
+            string id = indexToId.GetValueOrDefault(key) ?? $"legacy{i}";
+            indexToId[key] = id;
+
+            events.Add(new ToolCallStartEvent(id, call.ToolName));
+            events.Add(new ToolCallDeltaEvent(id, call.ArgumentsJson));
+        }
     }
 
     /// <summary>

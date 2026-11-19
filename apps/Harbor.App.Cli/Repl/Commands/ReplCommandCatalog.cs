@@ -12,6 +12,16 @@ internal sealed class ReplCommandCatalog
 {
     private readonly Dictionary<string, IReplCommand> _byId = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    ///     The single threshold store set by <c>/cost-alert</c> and read by the
+    ///     frame loop when a stats snapshot arrives (#3109). Injectable so the
+    ///     dispatcher and the REPL palette command share one instance.
+    /// </summary>
+    public CostAlertMonitor CostAlerts { get; }
+
+    public ReplCommandCatalog(CostAlertMonitor? costAlerts = null) =>
+        CostAlerts = costAlerts ?? new CostAlertMonitor();
+
     public void Register(IReplCommand command)
     {
         Ensure.NotNull(command);
@@ -38,9 +48,15 @@ internal sealed class ReplCommandCatalog
     ///     Validator behind <c>/attach</c> (issue #386). Null in tests and
     ///     catalog-only checks — the command then builds a default reader.
     /// </param>
-    public static ReplCommandCatalog CreateDefault(ImageAttachmentReader? attachmentReader = null)
+    /// <param name="costAlerts">
+    ///     Threshold store shared with the dispatcher (#3109). Null in tests
+    ///     creates a private one, so catalog checks stay independent.
+    /// </param>
+    public static ReplCommandCatalog CreateDefault(
+        ImageAttachmentReader? attachmentReader = null,
+        CostAlertMonitor? costAlerts = null)
     {
-        var catalog = new ReplCommandCatalog();
+        var catalog = new ReplCommandCatalog(costAlerts);
         catalog.Register(new AttachCommand(attachmentReader));
         catalog.Register(new HelpCommand());
         catalog.Register(new SetupCommand());
@@ -65,6 +81,7 @@ internal sealed class ReplCommandCatalog
         catalog.Register(new TuiCommand());
         catalog.Register(new StorageCommand());
         catalog.Register(new NewSessionCommand());
+        catalog.Register(new CostAlertCommand(catalog.CostAlerts));
         return catalog;
     }
 }

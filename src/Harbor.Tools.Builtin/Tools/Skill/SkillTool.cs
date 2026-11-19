@@ -142,7 +142,11 @@ public sealed partial class SkillTool : ITool
             ? sEl.GetString()!.ToLowerInvariant()
             : "any";
 
-        if (!IsSafeName(name))
+        // #3415: the dedicated grammar guard is the one admission check before
+        // any IO. A skill name is a single path segment, and the guard's segment
+        // grammar refuses separators, a leading dot and non-ASCII characters,
+        // so a crafted '../..' can never escape the skills root below.
+        if (!SkillPathValidator.IsSafeSegment(name))
             return ToolResult.Error(
                 $"Invalid skill name '{name}': use the plain skill name (letters, digits, '-', '_', '.').",
                 new { name });
@@ -189,22 +193,6 @@ public sealed partial class SkillTool : ITool
             : body;
         SkillToolLog.SkillLoaded(_logger, name, foundScope, body.Length);
         return ToolResult.Success(content, new { name, scope = foundScope, chars = body.Length, truncated });
-    }
-
-    /// <summary>Plain file/dir names only — no separators, no parent traversal.</summary>
-    internal static bool IsSafeName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
-            return false;
-        for (int i = 0; i < name.Length; i++)
-        {
-            char c = name[i];
-            bool ok = char.IsLetterOrDigit(c) || c is '-' or '_' or '.';
-            if (!ok)
-                return false;
-        }
-
-        return !name.Contains("..", StringComparison.Ordinal);
     }
 
     private async Task<SkillRoots> ResolveRootsAsync(

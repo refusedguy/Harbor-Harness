@@ -24,18 +24,21 @@ public sealed class DevFileWatcher : IDisposable
     private readonly PeriodicTimer _timer;
     private readonly CancellationTokenSource _stop;
     private readonly Task _loop;
+    private readonly Action<ReloadCommitResult>? _onCommit;
     private int _disposed;
 
     /// <summary>Creates a watcher, publishes the initial tree and starts polling.</summary>
-    /// <param name="filePath">The watched <c>.harbor-ui</c> file.</param>
+    /// <param name="filePath">The watched <c>.harbor-ui</c> or <c>.cs</c> file.</param>
     /// <param name="pipeline">Pipeline whose source reader targets the same file.</param>
     /// <param name="timeProvider">Clock for ticks and stamps; defaults to the system clock.</param>
     /// <param name="pollInterval">Scan cadence; defaults to 250 ms.</param>
+    /// <param name="onCommit">Optional observer for each initialization or reload decision.</param>
     public DevFileWatcher(
         string filePath,
         DevReloadPipeline pipeline,
         TimeProvider? timeProvider = null,
-        TimeSpan? pollInterval = null)
+        TimeSpan? pollInterval = null,
+        Action<ReloadCommitResult>? onCommit = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(pipeline);
@@ -48,7 +51,8 @@ public sealed class DevFileWatcher : IDisposable
         _timeProvider = timeProvider ?? TimeProvider.System;
         _timer = new PeriodicTimer(pollInterval ?? DevReloadTiming.PollInterval, _timeProvider);
         _stop = new CancellationTokenSource();
-        InitialResult = pipeline.Initialize(_readStamp());
+        _onCommit = onCommit;
+        InitialResult = Observe(pipeline.Initialize(_readStamp()));
         _loop = Task.Run(LoopAsync, CancellationToken.None);
     }
 
@@ -69,7 +73,7 @@ public sealed class DevFileWatcher : IDisposable
         try
         {
             while (await _timer.WaitForNextTickAsync(_stop.Token).ConfigureAwait(false))
-                _pipeline.Poll(_readStamp(), _timeProvider.GetUtcNow());
+                Observe(_pipeline.Poll(_readStamp(), _timeProvider.GetUtcNow()));
         }
         catch (OperationCanceledException)
         {
@@ -79,6 +83,12 @@ public sealed class DevFileWatcher : IDisposable
         {
             // Disposing the timer can race the cancellation above.
         }
+    }
+
+    private ReloadCommitResult Observe(ReloadCommitResult result)
+    {
+        _onCommit?.Invoke(result);
+        return result;
     }
 
     /// <summary>Stops polling. The published tree is left untouched.</summary>
