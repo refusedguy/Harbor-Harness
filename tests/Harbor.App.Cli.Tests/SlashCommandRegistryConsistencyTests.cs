@@ -7,6 +7,7 @@ using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Harbor.TestKit;
+using Harbor.Desktop.Abstractions.Commands;
 using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -183,7 +184,7 @@ public class SlashCommandRegistryConsistencyTests
         string help = string.Join(" ", written);
         foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
         {
-            await Assert.That(help).Contains($"{def.Invocation}[{def.SourceLabel}]");
+            await Assert.That(help).Contains($"{def.Invocation}[{CommandNameHumanizer.Humanize(def.SourceLabel)}]");
         }
     }
 

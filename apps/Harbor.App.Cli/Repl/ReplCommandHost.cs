@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Desktop.Abstractions.Commands;
 using Harbor.Ui.Framework.Commands;
 using Microsoft.Extensions.Logging;
 
@@ -32,9 +33,9 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
     internal void OpenCommandPalette()
     {
         var items = host._catalog.GetAll()
-            .Select(c => new CommandItem(c.Id, c.Title, c.Description, string.Empty, c.Group))
+            .Select(c => new CommandItem(c.Id, CommandNameHumanizer.Humanize(c.Id), c.Description, string.Empty, c.Group))
             .ToList();
-        items.Add(new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2", "General"));
+        items.Add(new CommandItem("exit", CommandNameHumanizer.Humanize("exit"), "quit harbor", "ctrl+c ×2", "General"));
         host._palette.PushFrame(new PaletteFrame(
             "Commands",
             "",
@@ -48,7 +49,7 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
         var commands = GetDispatcher().GetRegisteredCommands();
         var items = commands.Select(cmd => new CommandItem(
             Id: cmd.Name,
-            Title: cmd.Name,
+            Title: CommandNameHumanizer.Humanize(cmd.Name),
             Detail: cmd.Description,
             Shortcut: cmd.Usage,
             // #462: the group comes from the shared registry, so this list cannot

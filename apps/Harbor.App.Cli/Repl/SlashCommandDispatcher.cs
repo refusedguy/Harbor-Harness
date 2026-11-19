@@ -12,6 +12,7 @@ using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Skills;
 using Harbor.Terminal.Abstractions;
+using Harbor.Desktop.Abstractions.Commands;
 using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;
@@ -367,7 +368,7 @@ internal sealed class SlashCommandDispatcher
             // in the same line instead of being indistinguishable from a builtin.
             ctx.Writer("Commands: " + string.Join(
                 " ",
-                SlashCommandCatalog.All.Select(d => $"{d.Invocation}[{d.SourceLabel}]")));
+                SlashCommandCatalog.All.Select(d => $"{d.Invocation}[{CommandNameHumanizer.Humanize(d.SourceLabel)}]")));
             return Task.FromResult(Result.Success());
         });
 
