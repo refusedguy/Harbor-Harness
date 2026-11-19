@@ -1,9 +1,9 @@
 // CompactionResultValidator.cs — #2680 F039: decide whether a compaction LLM
 // reply is fit to become the session's summary. The helper is a pure function
-// over a string: it starts no process, calls no LLM, reads no store and changes
-// no product path. It is the classification half of F039 — the part that tells
-// a caller "accept this summary" or "this reply was empty/truncated, retry" —
-// leaving the chunking and summarization wiring for a separate slice.
+// over a string: it starts no process, calls no LLM and reads no store. #3391
+// wires it into CompactionService as the gate before the summary anchor is
+// built: a blank or visibly truncated reply is refused, so the caller reports
+// CompactionFailedEvent instead of persisting a broken snapshot.
 namespace Harbor.Application.Sessions;
 
 /// <summary>

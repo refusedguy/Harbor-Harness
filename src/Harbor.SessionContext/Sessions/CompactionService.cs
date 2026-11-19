@@ -557,13 +557,26 @@ public sealed class CompactionService(
 
             string summary = summaryOutcome.Value;
 
-            // F19: an empty summary (content filter, silent provider) used to be
-            // accepted as success — the anchor would then discard the ENTIRE
-            // compressed history and the model silently lost all memory of it.
-            if (summary.Length == 0)
+            // #3391: this is the single gate between a raw summarizer reply and
+            // the session's summary anchor. The previously-dead
+            // CompactionResultValidator classifies blank/no-content and visibly
+            // truncated replies BEFORE any CompactionResult (and therefore any
+            // snapshot) is built. Refusing here makes the caller publish
+            // CompactionFailedEvent instead of appending a broken anchor that
+            // would silently discard the whole compressed head. F19's empty
+            // case is a subset of this check; its text and log event stay intact.
+            CompactionResultKind kind = CompactionResultValidator.Classify(summary);
+            if (CompactionResultValidator.ShouldRetry(kind))
             {
-                CompactionServiceLog.EmptySummaryRefused(logger, sessionId);
-                return Result.Failure<CompactionResult>("Compaction produced an empty summary.");
+                if (kind == CompactionResultKind.Empty)
+                {
+                    CompactionServiceLog.EmptySummaryRefused(logger, sessionId);
+                    return Result.Failure<CompactionResult>("Compaction produced an empty summary.");
+                }
+
+                string reason = CompactionResultValidator.Describe(kind);
+                CompactionServiceLog.TruncatedSummaryRefused(logger, sessionId, reason);
+                return Result.Failure<CompactionResult>($"Compaction refused: {reason}");
             }
 
             int summaryTokens = tokenTracker.Estimate(summary);
@@ -1031,5 +1044,8 @@ internal static partial class CompactionServiceLog
 
     [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Transient summarization retry budget exhausted; falling back to truncation")]
     public static partial void SummaryRetryExhausted(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Warning, Message = "Compaction summary for session {SessionId} failed validation ({Reason}); refusing to persist a broken anchor")]
+    public static partial void TruncatedSummaryRefused(ILogger logger, string sessionId, string reason);
 
 }
