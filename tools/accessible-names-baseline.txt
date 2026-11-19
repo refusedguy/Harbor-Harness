@@ -14,8 +14,8 @@ apps/Harbor.App.Avalonia/Views/OnboardingWindow.axaml:247:ComboBox
 apps/Harbor.App.Avalonia/Views/OnboardingWindow.axaml:251:TextBox
 apps/Harbor.App.Avalonia/Views/ProviderBrowserView.axaml:27:ListBox
 apps/Harbor.App.Avalonia/Views/Shell/ComposerView.axaml:57:TextBox
-apps/Harbor.App.Avalonia/Views/Shell/SessionsFlyoutView.axaml:27:TextBox
-apps/Harbor.App.Avalonia/Views/Shell/SessionsFlyoutView.axaml:32:ListBox
+apps/Harbor.App.Avalonia/Views/Shell/SessionsFlyoutView.axaml:29:TextBox
+apps/Harbor.App.Avalonia/Views/Shell/SessionsFlyoutView.axaml:34:ListBox
 apps/Harbor.App.Avalonia/Views/Shell/StatusBarView.axaml:39:Button
 apps/Harbor.App.Avalonia/Views/Terminal/TerminalPaneControl.axaml:24:TextBox
 apps/Harbor.App.Avalonia/Views/Terminal/TerminalPaneControl.axaml:38:TextBox
