@@ -172,7 +172,11 @@ public class McpToolDiscoveryTests
         await Assert.That(tools.GetAllTools()).IsEmpty();
     }
 
+    // The second call depends on Process.HasExited observing the first child's
+    // exit; under parallel load that observation can be stale and the dead
+    // process is reused. Serialize this one test with other process spawns.
     [Test]
+    [NotInParallel("process-spawn")]
     public async Task Adapter_CrashReturnsFailure_NextCallRespawnsTheProcess()
     {
         // #2227 / McpRegistry.cs:605-627: the adapter holds the server name, and

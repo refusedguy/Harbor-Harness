@@ -163,6 +163,106 @@ internal static class McpJsonRpc
         return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
     }
 
+    /// <summary>
+    /// Build the client <c>initialize</c> params for #2661: declare roots
+    /// (<c>listChanged</c>) and elicitation as client capabilities. Same
+    /// AOT-safe construction as every other builder here — Utf8JsonWriter over
+    /// a pooled buffer, parsed once through the source-generated JsonElement
+    /// info — so no reflection and no string-interpolated JSON.
+    /// </summary>
+    public static JsonElement BuildInitializeParams(string protocolVersion = "2024-11-05")
+    {
+        var buffer = new ArrayBufferWriter<byte>(256);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("protocolVersion", protocolVersion);
+            writer.WritePropertyName("capabilities");
+            writer.WriteStartObject();
+            // roots: the client exposes its working directory and wants to be
+            // told when the server's root set should be refreshed.
+            writer.WritePropertyName("roots");
+            writer.WriteStartObject();
+            writer.WriteBoolean("listChanged", true);
+            writer.WriteEndObject();
+            // elicitation: an empty object is the spec's way of declaring the
+            // capability (slice 2 adds the responder behind it).
+            writer.WritePropertyName("elicitation");
+            writer.WriteStartObject();
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+            writer.WritePropertyName("clientInfo");
+            writer.WriteStartObject();
+            writer.WriteString("name", "harbor");
+            writer.WriteString("version", "1.0.0");
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
+    }
+
+    /// <summary>
+    /// Build a method-only JSON-RPC notification frame (no <c>id</c>). Used for
+    /// <c>notifications/initialized</c> and <c>notifications/roots/list_changed</c>.
+    /// </summary>
+    public static JsonElement BuildNotification(string method)
+    {
+        var buffer = new ArrayBufferWriter<byte>(96);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("jsonrpc", "2.0");
+            writer.WriteString("method", method);
+            writer.WriteEndObject();
+        }
+
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
+    }
+
+    /// <summary>Build a <c>roots/list</c> response containing one file:// root.</summary>
+    public static JsonElement BuildRootsListResult(string directory)
+    {
+        var buffer = new ArrayBufferWriter<byte>(256);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("roots");
+            writer.WriteStartArray();
+            writer.WriteStartObject();
+            writer.WriteString("uri", ToFileUri(directory));
+            writer.WriteEndObject();
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
+    }
+
+    /// <summary>Build a JSON-RPC response, echoing the server's id verbatim (number or string).</summary>
+    public static JsonElement BuildResponse(JsonElement id, JsonElement result)
+    {
+        var buffer = new ArrayBufferWriter<byte>(256);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("jsonrpc", "2.0");
+            writer.WritePropertyName("id");
+            id.WriteTo(writer);
+            writer.WritePropertyName("result");
+            result.WriteTo(writer);
+            writer.WriteEndObject();
+        }
+
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
+    }
+
+    private static string ToFileUri(string directory)
+    {
+        string full = string.IsNullOrEmpty(directory) ? Directory.GetCurrentDirectory() : Path.GetFullPath(directory);
+        return new Uri(full, UriKind.Absolute).AbsoluteUri;
+    }
+
     private static void WriteArgumentsOrEmpty(Utf8JsonWriter writer, JsonElement arguments)
     {
         if (arguments.ValueKind == JsonValueKind.Object)
