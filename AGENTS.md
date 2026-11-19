@@ -48,6 +48,25 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 9. Run `dotnet build` to make sure the project compiles.
 10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. Do not use `dotnet test` (see the MTP note in "Quick state" above for why, and for what is still unverified).
 
+## Read first by change type
+
+The ten steps above are the full onboarding route. Once you know what you are
+changing, this table gives the shortest one: the document that owns the rule and
+the check that fails if you break it. Cross-cutting changes still go through the
+full list.
+
+| If you are changing... | Read first | Gate that fails if you get it wrong |
+|---|---|---|
+| A `<ProjectReference>` in a `.csproj` | [docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md) §2 — allowed/forbidden matrix | `tests/Harbor.Architecture.Tests` |
+| A builtin tool or its safety declaration | [docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md) and [docs/EXAMPLES.md](./docs/EXAMPLES.md) §1 | `BuiltinToolSafetyDeclarationsTests` |
+| A renderer, view, or view model | [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) and [docs/ALTERNATIVE_UIS.md](./docs/ALTERNATIVE_UIS.md) | `tests/Harbor.Tui.Tests` |
+| A public API surface | [CLAUDE.md](./CLAUDE.md) | public-API freeze Roslyn analyzer (in the build) |
+| A new `tools/check-*.py` gate | [docs/CI_GATES.md](./docs/CI_GATES.md) | `tools/check-gate-policy.py` |
+| Markdown only | [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) §Documentation checks | `check-md-links` and `md-lint` |
+
+This table is a router, not a second rule set. Where it disagrees with the
+document it points at, that document wins.
+
 ## MCP preference
 
 Configured MCP servers are intentional — prefer them over raw alternatives when available:
@@ -130,7 +149,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 101 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 102 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 48 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
