@@ -12,9 +12,10 @@ using Harbor.Abstractions.Models;
 using Harbor.Hosting;
 using Harbor.Storage.Jsonl;
 using Harbor.TestKit;
+using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Harbor.Tools.Builtin.Tests;
+namespace Harbor.Hosting.Tests;
 
 public class FileHistoryCaptureTests
 {
