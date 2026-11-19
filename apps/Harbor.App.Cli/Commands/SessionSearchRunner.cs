@@ -57,11 +57,24 @@ public static class SessionSearchRunner
             return 1;
         }
 
+        IReadOnlyList<Session> sessions = listed.Value;
+        var state = SessionFacetedHistoryAdapter.Build(sessions, filter);
+        var byId = new Dictionary<string, Session>(sessions.Count, StringComparer.Ordinal);
+        for (int i = 0; i < sessions.Count; i++)
+        {
+            byId[sessions[i].Id] = sessions[i];
+        }
+
+        // State-only consumer. No Paint, no widget, plain-text output only.
+        // Visible() is the filtered session order and Cursor is the first row.
+        state.SetCursor(0);
+        var visible = state.Visible();
+
         int matches = 0;
         bool capped = false;
-        foreach (var session in listed.Value)
+        for (int i = state.Cursor; i < visible.Count; i++)
         {
-            if (!filter.Matches(session))
+            if (!byId.TryGetValue(visible[i].Id, out var session))
                 continue;
 
             var messages = await store.GetMessagesAsync(session.Id).ConfigureAwait(false);

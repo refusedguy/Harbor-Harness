@@ -198,6 +198,45 @@ public sealed class FacetedHistoryState
         return true;
     }
 
+    /// <summary>
+    /// Replaces every facet constraint in one step. State-only consumers that
+    /// parse a complete filter expression use this instead of toggling facets
+    /// one at a time. The cursor returns to the first result because the old
+    /// index has no meaning for the new constraint set.
+    /// </summary>
+    /// <returns>True when any constraint changed.</returns>
+    public bool ReplaceFacets(IReadOnlyList<FacetSelection> facets)
+    {
+        ArgumentNullException.ThrowIfNull(facets);
+
+        var next = new List<FacetSelection>(facets.Count);
+        for (int i = 0; i < facets.Count; i++)
+        {
+            next.Add(facets[i]);
+        }
+
+        bool changed = next.Count != _facets.Count;
+        if (!changed)
+        {
+            for (int i = 0; i < next.Count; i++)
+            {
+                if (!next[i].Equals(_facets[i]))
+                {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        _facets = next;
+        if (changed)
+        {
+            _cursor = 0;
+        }
+
+        return changed;
+    }
+
     /// <summary>Sets the cursor, clamped to the visible result count.</summary>
     /// <returns>True when the cursor moved.</returns>
     public bool SetCursor(int index)
