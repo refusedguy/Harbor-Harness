@@ -1781,3 +1781,28 @@ Issue остаётся OPEN; комментарий содержит тольк�
 
 - Полный текст, таблица U01-U06 и dependency order:
   [ADR-072](ADR-072-file-rewind-preimage-design.md).
+
+## ADR-076: issue #2665 (permission modes и session-wide Allow all edits) без общего slice
+
+Issue #2665 из `product-feature-gaps.md` (A01-A04, M17), Orca A01-A04 и T3code
+B1-B11 просит enum `{ Supervised, AutoAcceptEdits, Auto, FullAccess }` с
+`SessionPermissionOverlay`, approval-record с `SessionStatus.WaitingApproval` и
+веткой `DenyWithFeedback`, а также `not_resumable` для запроса после рестарта.
+Инвентаризация `origin/dev` (`72308740`), `gh pr list --search 2665 --state all`
+и `git log --all --grep=2665` показала, что PR и ADR по issue нет. `PermissionRuleset`
+и persist-decisions уже влиты; `CommonConfig.PermissionMode` это строка, а не
+рантайм-overlay; `WaitingApproval`, `DenyWithFeedback` и границы approval в
+`RunRecoveryPolicy` в дереве отсутствуют. Границы Orca A01-A04 и t3code B1 уже
+зафиксированы ADR-062 и ADR-050.
+
+Decided: код не писать. Существующий аналог правил не перевыводится. Четыре
+режима, overlay, approval-record и restart-ветка имеют разные контракты и
+критерии приёмки, поэтому не объединяются в общий PR. status-bar режим
+`AwaitingApproval` остаётся представлением, а не доменным состоянием. Гейты,
+пороги, golden и AOT-профиль не меняются. Issue остаётся OPEN; комментарий
+содержит только хеш коммита ADR. Пересмотр — по новому факту: владелец называет
+конкретную часть, потребителя контракта и измеримую цель. Номер 076 выбран,
+потому что 073, 074 и 075 закрепили за собой открытые PR #3002, #3001 и #2999.
+
+- Полный текст, таблица по четырём частям и условия пересмотра:
+  [ADR-076](ADR-076-permission-modes-session-overlay-verdict.md).
