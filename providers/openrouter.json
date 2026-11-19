@@ -30,7 +30,6 @@
     "reasoning": "auto"
   },
   "timeout": 120,
-  "retries": 3,
   "icon": "🛰️",
   "priority": 40
 }
