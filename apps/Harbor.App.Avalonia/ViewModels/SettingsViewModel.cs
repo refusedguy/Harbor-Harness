@@ -245,6 +245,39 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ProviderModelPickerViewModel? Picker { get; set; }
 
     /// <summary>
+    ///     #2681 G17: provider ids offered by the Settings picker. Read from the
+    ///     preset catalogue the onboarding wizard and <c>/providers</c> use, so a
+    ///     new <c>providers/*.json</c> reaches this ComboBox without a C# edit.
+    /// </summary>
+    public IReadOnlyList<string> AvailableProviderIds { get; } =
+        ProviderPresets.All.Select(static preset => preset.Id).ToArray();
+
+    /// <summary>
+    ///     #2681 G17: the ComboBox selection, kept separate from
+    ///     <see cref="DefaultProvider" />. An unset or hand-edited id is not in
+    ///     the catalogue; letting an unmatched ComboBox write null back would
+    ///     erase a persisted value that the config still considers valid.
+    /// </summary>
+    public string? SelectedProviderId
+    {
+        get => DefaultProvider is { Length: > 0 } id
+               && AvailableProviderIds.Contains(id, StringComparer.Ordinal)
+            ? id
+            : null;
+        set
+        {
+            if (value is not null && !string.Equals(value, DefaultProvider, StringComparison.Ordinal))
+            {
+                DefaultProvider = value;
+            }
+        }
+    }
+
+    /// <summary>Keep the picker in sync when the config is reset or loaded.</summary>
+    partial void OnDefaultProviderChanged(string value) =>
+        OnPropertyChanged(nameof(SelectedProviderId));
+
+    /// <summary>
     ///     Populate <see cref="ProviderConfigs" /> from the registry, attaching
     ///     the persisted API key (if any) and the resolved auth status.
     /// </summary>

@@ -146,6 +146,31 @@ public class ConfigDefaultsComeFromCoreTests
         }, new RecordingCommonStore(common), new RecordingAppStore(app));
     }
 
+    // ── #2681 G17: Settings provider picker ───────────────────────────────
+
+    /// <summary>
+    ///     G17: the provider ComboBox offers catalogue ids, while an unset or
+    ///     non-catalogue config survives an unmatched (null) selection instead
+    ///     of being silently overwritten with null.
+    /// </summary>
+    [Test]
+    public async Task ProviderPicker_OffersCatalogue_WithoutErasingUnmatchedConfig()
+    {
+        await InAvaloniaSessionAsync(async vm =>
+        {
+            await Assert.That(vm.AvailableProviderIds.Count > 0).IsTrue();
+            string id = vm.AvailableProviderIds[0];
+
+            vm.SelectedProviderId = null;
+            await Assert.That(vm.DefaultProvider == string.Empty).IsTrue();
+            await Assert.That(vm.SelectedProviderId is null).IsTrue();
+
+            vm.SelectedProviderId = id;
+            await Assert.That(vm.DefaultProvider).IsEqualTo(id);
+            await Assert.That(vm.SelectedProviderId).IsEqualTo(id);
+        }, new RecordingCommonStore(UnsetCommon()), new RecordingAppStore(UnsetApp()));
+    }
+
     // ── write path ────────────────────────────────────────────────────────
 
     [Test]

@@ -141,9 +141,14 @@
                         <StackPanel Spacing="4"
                                     IsVisible="{Binding SearchQuery, Converter={x:Static views:SettingsSectionVisibleConverter.Instance}, ConverterParameter={x:Static vm:SettingsSearch.DefaultProviderAliases}}">
                             <TextBlock Text="Default provider" Classes="Label" />
-                            <TextBox Text="{Binding DefaultProvider, Mode=TwoWay}"
-                                     AutomationProperties.Name="Default provider"
-                                     PlaceholderText="ollama, openai, anthropic, …" />
+                            <!-- #2681 G17: pick from the same provider catalogue the
+                                 wizard uses instead of free-form text. The VM's
+                                 SelectedProviderId seam keeps an unset/custom id
+                                 from being erased by an unmatched ComboBox. -->
+                            <ComboBox ItemsSource="{Binding AvailableProviderIds}"
+                                      SelectedItem="{Binding SelectedProviderId, Mode=TwoWay}"
+                                      AutomationProperties.Name="Default provider"
+                                      HorizontalAlignment="Stretch" />
                         </StackPanel>
 
                         <!-- Default model -->
