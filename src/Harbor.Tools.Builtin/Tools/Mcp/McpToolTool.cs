@@ -26,6 +26,12 @@ namespace Harbor.Tools.Builtin;
 [ToolParam("args", "object", Description = "Arguments object (e.g. {\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp\"}})")]
 public sealed partial class McpToolTool : ITool
 {
+    // #3405: the one mcp method that can fetch and register a new server is a
+    // marketplace install. Its source is a package spec, not a workspace path,
+    // so it is checked by MarketplaceInstallPolicy before the registry sees it.
+    private const string MarketplaceInstallMethod = "marketplace/install";
+    private const string MarketplaceSourceArg = "source";
+
     private readonly ILogger<McpToolTool> _logger;
     private readonly IMcpRegistry? _registry;
 
@@ -104,6 +110,26 @@ public sealed partial class McpToolTool : ITool
         var methodArgs = args.TryGetProperty("args", out var a) && a.ValueKind == JsonValueKind.Object
             ? a
             : default;
+
+        // #3405: an install from the marketplace is the only mcp method that
+        // can introduce a new server. Validate the source spec BEFORE the
+        // registry call so a traversal path, URL or malformed id is refused
+        // without any install having started. The safe spec is then forwarded
+        // unchanged to the registry as part of methodArgs.
+        if (string.Equals(method, MarketplaceInstallMethod, StringComparison.Ordinal))
+        {
+            string? source = methodArgs.ValueKind == JsonValueKind.Object
+                && methodArgs.TryGetProperty(MarketplaceSourceArg, out var sourceEl)
+                && sourceEl.ValueKind == JsonValueKind.String
+                    ? sourceEl.GetString()
+                    : null;
+
+            if (!MarketplaceInstallPolicy.TryParseSpec(source, out _, out _))
+            {
+                return ToolResult.Error(
+                    $"Refused marketplace install (server='{server}'): '{MarketplaceSourceArg}' must be a safe package id or id@version spec.");
+            }
+        }
 
         // #470: constructor-injected by the composition root. The per-call
         // lookup on the old service-provider field could never fire — the
