@@ -373,6 +373,39 @@ public class ProviderStreamTests
     }
 
     [Test]
+    public async Task Responses_FunctionArgsDelta_FallbackRulesPreserved()
+    {
+        // The shared ChunkStreamState.ResolveToolCallId keeps the Responses
+        // fallback rules: remembered call id wins; a delta with no wire
+        // output_index is "0"; a delta at an index with no preceding added
+        // event falls back to the bare index (not tc{index}).
+        var handler = new StubHttpMessageHandler(_ => Sse(
+            """{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_9","name":"bash"}}""",
+            """{"type":"response.function_call_arguments.delta","output_index":0,"delta":"A"}""",
+            """{"type":"response.function_call_arguments.delta","delta":"B"}""",
+            """{"type":"response.function_call_arguments.delta","output_index":7,"delta":"C"}""",
+            "[DONE]"));
+
+        var client = new OpenAILlmClient(
+            new HttpClient(handler),
+            new OpenAIConfig { ForceResponsesApi = true },
+            new TestAuthResolver(),
+            NullLogger<OpenAILlmClient>.Instance);
+
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
+            "o4-mini", [LlmUserMessage.Text("hello")], "", [])));
+
+        var deltas = events.OfType<ToolCallDeltaEvent>().ToList();
+        await Assert.That(deltas.Count).IsEqualTo(3);
+        // Remembered wire call id from output_item.added.
+        await Assert.That(deltas[0].Id).IsEqualTo("call_9");
+        // Missing wire output_index -> "0".
+        await Assert.That(deltas[1].Id).IsEqualTo("0");
+        // Index seen, but no added event remembered it -> bare index.
+        await Assert.That(deltas[2].Id).IsEqualTo("7");
+    }
+
+    [Test]
     public async Task Ollama_ToolCallWithoutId_FallsBackToPositionalId()
     {
         // #203 B8, NDJSON flavour: no wire id → positional tc{index},

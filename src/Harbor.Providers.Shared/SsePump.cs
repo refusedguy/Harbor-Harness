@@ -103,13 +103,19 @@ internal sealed class ChunkStreamState
 
     /// <summary>
     ///     Owner version of tool-call id resolution (ROP-A ПР.3). Wire id →
-    ///     remembered id → positional <c>tc{index}</c> fallback, counting the
-    ///     fallback as diagnosable (#203 B8) and remembering the winner for the
-    ///     index so later delta chunks coalesce onto the same id. Every
+    ///     remembered id → positional <c>{prefix}{index}</c> fallback, counting
+    ///     the fallback as diagnosable (#203 B8) and remembering the winner for
+    ///     the index so later delta chunks coalesce onto the same id. Every
     ///     provider emit funnels through here, so the policy lives in exactly
     ///     one place instead of being copied into each wire parser.
     /// </summary>
-    public string ResolveToolCallId(int index, string? wireId)
+    /// <param name="index">Tool-call output index.</param>
+    /// <param name="wireId">Wire call id carried by this chunk, when present.</param>
+    /// <param name="positionalPrefix">
+    ///     Prefix for the positional fallback. Default <c>tc</c> yields
+    ///     <c>tc{index}</c>; pass empty for the bare index (Responses API).
+    /// </param>
+    public string ResolveToolCallId(int index, string? wireId = null, string positionalPrefix = "tc")
     {
         // Only string wire ids count: servers send numeric ids, and the DOM
         // walk ignored those (ValueKind guard).
@@ -125,7 +131,9 @@ internal sealed class ChunkStreamState
         }
         else
         {
-            id = $"tc{index}";
+            id = string.IsNullOrEmpty(positionalPrefix)
+                ? index.ToString()
+                : $"{positionalPrefix}{index}";
             CountRemap();
         }
 
