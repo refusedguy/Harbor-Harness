@@ -62,6 +62,17 @@ public sealed partial class StatusBarViewModel : ReactiveViewModel
     [Reactive]
     private string _status = "idle";
 
+    /// <summary>
+    ///     Optional activity-derived status text (#3383). When a host wires an
+    ///     activity projection into the renderer, the single-line description
+    ///     of the current run replaces the lifecycle <see cref="Status"/> tail
+    ///     of <see cref="Formatted"/>. Null keeps the legacy lifecycle text, so
+    ///     hosts and golden frames that do not wire a projection are unchanged.
+    /// </summary>
+    [ObservableProperty]
+    [Reactive]
+    private string? _activityText;
+
     [ObservableProperty]
     [Reactive]
     private int _tokensIn;
@@ -116,7 +127,7 @@ public sealed partial class StatusBarViewModel : ReactiveViewModel
                 ? $" | ctx: {RequestTokens / 1000}k/{ContextPct}%"
                 : string.Empty;
             string queue = QueuedCount > 0 ? $" | queue: {QueuedCount}" : string.Empty;
-            return $"{head}{ctx} | {CostText} | {TokensIn}↑ {TokensOut}↓{queue} | {Status}";
+            return $"{head}{ctx} | {CostText} | {TokensIn}↑ {TokensOut}↓{queue} | {ActivityText ?? Status}";
         }
     }
 

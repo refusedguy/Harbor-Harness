@@ -63,6 +63,16 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     private readonly ISessionManager? _sessions;
 
     /// <summary>
+    ///     #3383: host-supplied projection of the <see cref="AgentEvent"/>
+    ///     stream into one status line. The composition root owns it because it
+    ///     wraps the Application-layer <c>ActivityProjection</c>, which this
+    ///     presentation assembly may not reference (Presentation → Application
+    ///     is forbidden). Null keeps the legacy lifecycle status text, so
+    ///     existing hosts and golden frames stay byte-identical.
+    /// </summary>
+    private readonly Func<AgentEvent, string?>? _projectActivity;
+
+    /// <summary>
     ///     #2639: one owner of stdin per renderer. Lazily created so a renderer
     ///     that never reads a line never parks a thread on the console.
     /// </summary>
@@ -140,8 +150,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         InputViewModel? inputVm = null,
         UiStore? store = null,
         ISessionManager? sessions = null,
-        PanelServices? panelServices = null)
-        : this(logger, null!, statusVm, chatVm, inputVm, store, sessions, panelServices, environmentLookup: null)
+        PanelServices? panelServices = null,
+        Func<AgentEvent, string?>? activityStatus = null)
+        : this(logger, null!, statusVm, chatVm, inputVm, store, sessions, panelServices, environmentLookup: null, activityStatus: activityStatus)
     {
     }
 
@@ -157,8 +168,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         InputViewModel? inputVm = null,
         UiStore? store = null,
         ISessionManager? sessions = null,
-        PanelServices? panelServices = null)
-        : this(logger, backend, statusVm, chatVm, inputVm, store, sessions, panelServices, environmentLookup: null)
+        PanelServices? panelServices = null,
+        Func<AgentEvent, string?>? activityStatus = null)
+        : this(logger, backend, statusVm, chatVm, inputVm, store, sessions, panelServices, environmentLookup: null, activityStatus: activityStatus)
     {
     }
 
@@ -179,9 +191,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         UiStore? store,
         ISessionManager? sessions,
         PanelServices? panelServices,
-        Func<string, string?>? environmentLookup)
+        Func<string, string?>? environmentLookup,
+        Func<AgentEvent, string?>? activityStatus = null)
         : base(logger)
     {
+        _projectActivity = activityStatus;
         // Issue #77: the DI-shared store is injected by the composition root
         // (TuiModule) so chat writes land in the same instance the
         // RendererPipeline restores from. Null keeps the previous behaviour
@@ -401,6 +415,16 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         // per-delta allocation budget (#466). Value-only changes become a
         // mutation batch and element state survives across frames.
         _ = _stateTree.Sync(ActiveStore.State);
+        // #3383: the activity projection is the status source when the host
+        // supplies one. It owns the event → status mapping, so the status bar's
+        // lifecycle switch only supplies the fallback text. Set this before the
+        // base fan-out renders the status bar placement, so the frame painted
+        // for THIS event already carries the projected line.
+        if (_projectActivity?.Invoke(@event) is { Length: > 0 } activity
+            && ViewModels.Get<StatusBarViewModel>("status-bar") is { } activityStatus)
+        {
+            activityStatus.ActivityText = activity;
+        }
         return base.RenderAsync(@event, ct);
     }
 

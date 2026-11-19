@@ -73,20 +73,38 @@ internal sealed class CellForgeTuiRendererFactory : ITuiRendererFactory
 
     public IReadOnlyList<string> Aliases => ["consoleex"];
 
-    public ITuiRenderer Create(IServiceProvider sp) =>
+    public ITuiRenderer Create(IServiceProvider sp)
+    {
+        // #3383: the Application-layer ActivityProjection is the status source
+        // for the canonical renderer. This composition root is the only layer
+        // allowed to see both that projection and the CellForge renderer
+        // (Presentation → Application is forbidden inside the renderer).
+        // One projection per renderer instance; the renderer itself feeds every
+        // AgentEvent to it from its RenderAsync frame tick.
+        var activity = new Harbor.Application.Agents.ActivityProjection();
         // Phase 2 adapter: CellForgeTuiRenderer serves the event-driven
         // path through the AnsiWriter SGR automaton. The interactive
         // raw-mode entry remains ReplRunner (ScreenSession), which
         // bypasses ITuiRenderer entirely.
         // Issue #77: chat writes must land in the DI-shared UiStore so
         // the pipeline restores them across renderer swaps.
-        new Harbor.Tui.CellForge.CellForgeTuiRenderer(
+        return new Harbor.Tui.CellForge.CellForgeTuiRenderer(
             sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
             store: sp.GetRequiredService<UiStore>(),
             // #470: one composition-time projection of the container into the
             // typed bag the panels read. The per-frame PanelContext carries this
             // value, never the IServiceProvider.
-            panelServices: Harbor.Ui.Framework.Panels.PanelServices.FromContainer(sp));
+            panelServices: Harbor.Ui.Framework.Panels.PanelServices.FromContainer(sp),
+            // The projection owns the event → status mapping; the renderer
+            // only paints what it returns. DescribeStatus() follows the active
+            // run from "running" to "done"/"failed" and returns null before the
+            // first AgentStart, leaving legacy status text in place.
+            activityStatus: evt =>
+            {
+                activity.Apply(evt);
+                return activity.DescribeStatus();
+            });
+    }
 }
 
 /// <summary>
