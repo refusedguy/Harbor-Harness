@@ -667,6 +667,10 @@ public sealed class CellForgeWidgetAxisRules
             "docs/ARCHITECTURE_LAYERS.md",
             // One §ARCH row about which project a plugin assembly may reference.
             "docs/CODE_PRINCIPLES_AUDIT.md",
+            // An entry in the sourced design FAQ answers why the seam is closed
+            // but does not carry the canonical closure token a teaching doc must
+            // state on the line that names the marker.
+            "docs/DESIGN_FAQ.md",
             // Already reports the seam as dead — a DIM example in §6.
             "docs/PATTERNS.md",
             // A delivered-checklist row for the contract, not an instruction.
