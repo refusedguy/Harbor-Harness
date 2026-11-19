@@ -22,6 +22,7 @@ public class ExperimentalFlagPolicyTests
         await Assert.That(name).IsEqualTo("HARBOR_EXPERIMENTAL_AGENT_MANAGER");
     }
 
+    [Test]
     [Arguments("lowercase")]
     [Arguments("TRAILING_")]
     [Arguments("HAS-DASH")]
@@ -41,6 +42,7 @@ public class ExperimentalFlagPolicyTests
             .IsEqualTo("HARBOR_EXPERIMENTAL_AOT2_MODE");
     }
 
+    [Test]
     [Arguments("1")]
     [Arguments("true")]
     [Arguments(" YES ")]
@@ -51,6 +53,7 @@ public class ExperimentalFlagPolicyTests
             .IsEqualTo(ExperimentalFlagDecision.Enabled);
     }
 
+    [Test]
     [Arguments("0")]
     [Arguments("false")]
     [Arguments("no")]
