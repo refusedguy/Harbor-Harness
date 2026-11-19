@@ -101,6 +101,33 @@ public class ChatKeyMapTests
     }
 
     [Test]
+    public async Task GlobalChords_ResolveToTheirHostEffectActions()
+    {
+        // #3615: Ctrl+P/J/E and '/' used to be hand-decoded in the REPL. They
+        // now live here, the single key→action table; the host runs the effect
+        // (open a palette, hand the terminal to $EDITOR) outside the reducer.
+        await Assert.That(Map.Resolve(UiKey.ForChar('p', KeyModifierSet.Ctrl)))
+            .IsEqualTo(ChatAction.TogglePalette);
+        await Assert.That(Map.Resolve(UiKey.ForChar('j', KeyModifierSet.Ctrl)))
+            .IsEqualTo(ChatAction.JumpPalette);
+        await Assert.That(Map.Resolve(UiKey.ForChar('e', KeyModifierSet.Ctrl)))
+            .IsEqualTo(ChatAction.OpenExternalEditor);
+        await Assert.That(Map.Resolve(UiKey.ForChar('/')))
+            .IsEqualTo(ChatAction.OpenSlashPalette);
+    }
+
+    [Test]
+    public async Task GlobalChords_DoNotInterceptOtherChars()
+    {
+        // Only the declared chords claim a press. Plain letters and an
+        // unclaimed Ctrl+char still reach the composer as ordinary Char.
+        await Assert.That(Map.Resolve(UiKey.ForChar('p'))).IsEqualTo(ChatAction.Char);
+        await Assert.That(Map.Resolve(UiKey.ForChar('e'))).IsEqualTo(ChatAction.Char);
+        await Assert.That(Map.Resolve(UiKey.ForChar('x'))).IsEqualTo(ChatAction.Char);
+        await Assert.That(Map.Resolve(UiKey.ForChar('/', KeyModifierSet.Ctrl))).IsEqualTo(ChatAction.Char);
+    }
+
+    [Test]
     public async Task CtrlAltK_ResolvesToWhichKey_BeforePanelSlot()
     {
         await Assert.That(Map.Resolve(UiKey.ForChar('k', KeyModifierSet.Ctrl | KeyModifierSet.Alt)))

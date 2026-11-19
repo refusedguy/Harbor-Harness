@@ -114,7 +114,23 @@ public enum ChatAction
     PreviousUnreadTab,
 
     /// <summary>Ctrl+1..Ctrl+9 — focus the Nth tab in tab order. Slot index comes from the key's Character.</summary>
-    ActivateTabSlot
+    ActivateTabSlot,
+
+    // ── host-effect chords (#3615) ──────────────────────────────────────────
+    // These resolve through ChatKeyMap like every other action, but the HOST
+    // executes them (open a palette, hand the terminal to $EDITOR) instead of
+    // the reducer: they are impure effects, so the reducer stays a pure fold.
+    // Deliberately absent from KeyActionRegistry — an unmapped store dispatch
+    // is a no-op; the REPL's host-effect switch is the single sink.
+
+    /// <summary>Ctrl+P — toggle the command palette.</summary>
+    TogglePalette,
+
+    /// <summary>Ctrl+E — hand the terminal to $VISUAL / $EDITOR (press only).</summary>
+    OpenExternalEditor,
+
+    /// <summary>'/' on an empty composer — open the slash-command palette.</summary>
+    OpenSlashPalette
 }
 
 /// <summary>
