@@ -13,7 +13,6 @@ using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging;
-using EngineInput = Harbor.Tui.CellForge.Input;
 // #436: same shared-name pins as Harbor.Tui.CellForge/GlobalUsings.cs — the
 // Rendering vocabulary keeps its historical meaning in this file; engine-typed
 // sites qualify through EngineCells.
