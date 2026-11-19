@@ -25,9 +25,14 @@ namespace Harbor.Application.Sessions;
 ///         message to resolve.
 ///     </para>
 ///     <para>
-///         Message comparison uses <see cref="RunRecovery.Fingerprint" />,
+///         Message comparison uses <see cref="UnfinishedRunDetector.Fingerprint" />,
 ///         which is session-id agnostic. Fork copies are re-stamped to the
 ///         child's session id, so record equality would report a false change.
+///     </para>
+///     <para>
+///         The reads ride one <c>Bind</c> chain: a failed read short-circuits
+///         without an <c>if (IsFailure) return</c> ladder, and no <c>.Value</c>
+///         is read anywhere in this service.
 ///     </para>
 /// </remarks>
 public sealed class SessionMergeBackService
@@ -61,21 +66,37 @@ public sealed class SessionMergeBackService
                 $"Unsupported merge-back strategy '{strategy}'. Only '{ThreeWayStrategy}' is supported.");
 
         Result<Session> sourceRes = await store.GetAsync(sourceSessionId, ct).ConfigureAwait(false);
-        if (sourceRes.IsFailure)
-            return sourceRes.ConvertFailure<SessionMergeBack>();
-        Session source = sourceRes.Value;
+        return await sourceRes
+            .Bind(source => LoadSourceAsync(store, source, fromMessageId, ct))
+            .ConfigureAwait(false);
+    }
 
+    private static async Task<Result<SessionMergeBack>> LoadSourceAsync(
+        ISessionStore store,
+        Session source,
+        string fromMessageId,
+        CancellationToken ct)
+    {
         string? parentId = source.ParentSessionId;
         if (parentId is null)
             return Result.Failure<SessionMergeBack>(
-                $"Session '{sourceSessionId}' is not a fork; it has no parent to merge into.");
+                $"Session '{source.Id}' is not a fork; it has no parent to merge into.");
 
-        Result<IReadOnlyList<AgentMessage>> sourceMsgsRes =
-            await store.GetMessagesAsync(sourceSessionId, ct).ConfigureAwait(false);
-        if (sourceMsgsRes.IsFailure)
-            return sourceMsgsRes.ConvertFailure<SessionMergeBack>();
-        IReadOnlyList<AgentMessage> sourceMessages = sourceMsgsRes.Value;
+        Result<IReadOnlyList<AgentMessage>> messages =
+            await store.GetMessagesAsync(source.Id, ct).ConfigureAwait(false);
+        return await messages
+            .Bind(list => LoadTargetAsync(store, source, list, fromMessageId, parentId, ct))
+            .ConfigureAwait(false);
+    }
 
+    private static async Task<Result<SessionMergeBack>> LoadTargetAsync(
+        ISessionStore store,
+        Session source,
+        IReadOnlyList<AgentMessage> sourceMessages,
+        string fromMessageId,
+        string parentId,
+        CancellationToken ct)
+    {
         int boundary = -1;
         for (int i = 0; i < sourceMessages.Count; i++)
         {
@@ -88,14 +109,26 @@ public sealed class SessionMergeBackService
 
         if (boundary < 0)
             return Result.Failure<SessionMergeBack>(
-                $"Message '{fromMessageId}' not found in fork '{sourceSessionId}'.");
+                $"Message '{fromMessageId}' not found in fork '{source.Id}'.");
 
-        Result<IReadOnlyList<AgentMessage>> targetMsgsRes =
+        Result<IReadOnlyList<AgentMessage>> target =
             await store.GetMessagesAsync(parentId, ct).ConfigureAwait(false);
-        if (targetMsgsRes.IsFailure)
-            return targetMsgsRes.ConvertFailure<SessionMergeBack>();
-        IReadOnlyList<AgentMessage> targetMessages = targetMsgsRes.Value;
+        return await target
+            .Bind(list => MergeCoreAsync(
+                store, source, sourceMessages, list, fromMessageId, parentId, boundary, ct))
+            .ConfigureAwait(false);
+    }
 
+    private static async Task<Result<SessionMergeBack>> MergeCoreAsync(
+        ISessionStore store,
+        Session source,
+        IReadOnlyList<AgentMessage> sourceMessages,
+        IReadOnlyList<AgentMessage> targetMessages,
+        string fromMessageId,
+        string parentId,
+        int boundary,
+        CancellationToken ct)
+    {
         var relation = new ThreadRelation(ThreadRelationKind.Fork, source.Id, fromMessageId, parentId);
 
         // Base = the fork's copied prefix. Its identities are the parent's at
@@ -105,7 +138,7 @@ public sealed class SessionMergeBackService
         for (int i = 0; i <= boundary; i++)
         {
             AgentMessage m = sourceMessages[i];
-            if (!baseFp.TryAdd(m.Id, RunRecovery.Fingerprint(m)))
+            if (!baseFp.TryAdd(m.Id, UnfinishedRunDetector.Fingerprint(m)))
                 return Result.Failure<SessionMergeBack>($"Duplicate message id '{m.Id}' in fork base.");
             baseText[m.Id] = Describe(m);
         }
@@ -115,7 +148,7 @@ public sealed class SessionMergeBackService
         for (int i = 0; i < targetMessages.Count; i++)
         {
             AgentMessage m = targetMessages[i];
-            targetFp[m.Id] = RunRecovery.Fingerprint(m);
+            targetFp[m.Id] = UnfinishedRunDetector.Fingerprint(m);
             targetText[m.Id] = Describe(m);
         }
 
@@ -142,7 +175,7 @@ public sealed class SessionMergeBackService
             {
                 // The parent already has this id. Identical content needs no
                 // write; different content is an identity collision.
-                if (!string.Equals(currentFp, RunRecovery.Fingerprint(m), StringComparison.Ordinal))
+                if (!string.Equals(currentFp, UnfinishedRunDetector.Fingerprint(m), StringComparison.Ordinal))
                     conflicts.Add(new MergeBackConflict(m.Id, Describe(m), targetText[m.Id], Describe(m)));
                 continue;
             }
@@ -151,11 +184,7 @@ public sealed class SessionMergeBackService
             appliedIds.Add(m.Id);
         }
 
-        if (conflicts.Count > 0)
-            return Result.Success(new SessionMergeBack(
-                relation, ThreeWayStrategy, 0, Array.Empty<string>(), conflicts));
-
-        if (delta.Count == 0)
+        if (conflicts.Count > 0 || delta.Count == 0)
             return Result.Success(new SessionMergeBack(
                 relation, ThreeWayStrategy, 0, Array.Empty<string>(), conflicts));
 
@@ -165,12 +194,10 @@ public sealed class SessionMergeBackService
         for (int i = 0; i < delta.Count; i++)
             copies[i] = delta[i].CloneForSession(parentId);
 
-        Result appended = await store.AppendMessagesBatchAsync(parentId, copies, ct).ConfigureAwait(false);
-        if (appended.IsFailure)
-            return appended.ConvertFailure<SessionMergeBack>();
-
-        return Result.Success(new SessionMergeBack(
-            relation, ThreeWayStrategy, copies.Length, appliedIds, conflicts));
+        return await store.AppendMessagesBatchAsync(parentId, copies, ct)
+            .Map(() => new SessionMergeBack(
+                relation, ThreeWayStrategy, copies.Length, appliedIds, conflicts))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
