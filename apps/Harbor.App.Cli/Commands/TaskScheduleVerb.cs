@@ -188,132 +188,6 @@ internal static class TaskArgs
     }
 }
 
-/// <summary>
-///     A five-field cron expression (minute hour day-of-month month weekday)
-///     with '*', single values, lists, ranges and steps. Pure: no clock is read
-///     inside <see cref="Parse" />, and <see cref="NextAfter" /> is given its
-///     reference time explicitly.
-/// </summary>
-internal sealed class CronExpression
-{
-    private readonly bool[] _minutes = new bool[60];
-    private readonly bool[] _hours = new bool[24];
-    private readonly bool[] _days = new bool[31];
-    private readonly bool[] _months = new bool[12];
-    private readonly bool[] _weekdays = new bool[7];
-
-    private CronExpression()
-    {
-    }
-
-    internal static Result<CronExpression> Parse(string expression)
-    {
-        if (string.IsNullOrWhiteSpace(expression))
-            return Result.Failure<CronExpression>("cron: empty expression.");
-
-        string[] fields = expression.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (fields.Length != 5)
-            return Result.Failure<CronExpression>("cron: expected 5 fields (minute hour day month weekday).");
-
-        var cron = new CronExpression();
-        Result r = Fill(fields[0], 0, 59, cron._minutes, "minute", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[1], 0, 23, cron._hours, "hour", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[2], 1, 31, cron._days, "day", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[3], 1, 12, cron._months, "month", false);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        r = Fill(fields[4], 0, 7, cron._weekdays, "weekday", true);
-        if (r.IsFailure) return r.ConvertFailure<CronExpression>();
-        return Result.Success(cron);
-    }
-
-    /// <summary>First matching minute strictly after <paramref name="from"/>, or null within four years.</summary>
-    internal DateTimeOffset? NextAfter(DateTimeOffset from)
-    {
-        var candidate = new DateTimeOffset(from.Year, from.Month, from.Day, from.Hour, from.Minute, 0, from.Offset)
-            .AddMinutes(1);
-        DateTimeOffset limit = candidate.AddYears(4);
-        while (candidate <= limit)
-        {
-            if (_months[candidate.Month - 1]
-                && _days[candidate.Day - 1]
-                && _weekdays[(int)candidate.DayOfWeek]
-                && _hours[candidate.Hour]
-                && _minutes[candidate.Minute])
-            {
-                return candidate;
-            }
-            candidate = candidate.AddMinutes(1);
-        }
-        return null;
-    }
-
-    private static Result Fill(string text, int min, int max, bool[] target, string fieldName, bool normalizeSeven)
-    {
-        foreach (string part in text.Split(','))
-        {
-            if (part.Length == 0)
-                return Result.Failure($"cron {fieldName}: empty list element.");
-
-            // Split with a count of two so a step is the only trailing piece.
-            // A counted split also keeps the cron grammar off the model-reference
-            // cut inventory (issue #678).
-            string[] halves = part.Split(new[] { '/' }, 2, StringSplitOptions.None);
-            string body = halves[0];
-            int step = 1;
-            if (halves.Length == 2)
-            {
-                if (!int.TryParse(halves[1], NumberStyles.None, CultureInfo.InvariantCulture, out step)
-                    || step < 1)
-                {
-                    return Result.Failure($"cron {fieldName}: invalid step '{halves[1]}'.");
-                }
-            }
-            if (body.Length == 0)
-                return Result.Failure($"cron {fieldName}: empty range.");
-
-            Result<(int Start, int End)> range = ParseRange(body, min, max, fieldName);
-            Result<bool> applied = range.Bind(r =>
-            {
-                if (r.Start < min || r.End > max || r.Start > r.End)
-                    return Result.Failure<bool>($"cron {fieldName}: value outside {min}..{max}.");
-
-                for (int value = r.Start; value <= r.End; value += step)
-                {
-                    int normalized = normalizeSeven && value == 7 ? 0 : value;
-                    target[normalized - min] = true;
-                }
-                return Result.Success(true);
-            });
-            if (applied.IsFailure)
-                return applied.ConvertFailure();
-        }
-        return Result.Success();
-    }
-
-    private static Result<(int Start, int End)> ParseRange(string body, int min, int max, string fieldName)
-    {
-        if (body == "*")
-            return Result.Success((Start: min, End: max));
-
-        int dash = body.IndexOf('-');
-        if (dash >= 0)
-        {
-            Result<int> a = ParseValue(body[..dash], fieldName);
-            Result<int> b = ParseValue(body[(dash + 1)..], fieldName);
-            return a.Bind(start => b.Map(end => (Start: start, End: end)));
-        }
-        return ParseValue(body, fieldName).Map(v => (Start: v, End: v));
-    }
-
-    private static Result<int> ParseValue(string text, string fieldName) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int value)
-            ? Result.Success(value)
-            : Result.Failure<int>($"cron {fieldName}: '{text}' is not a number.");
-}
-
 /// <summary>One persisted scheduled task.</summary>
 internal sealed record ScheduledTask(
     string Name,
@@ -468,11 +342,12 @@ internal static class WebhookSignature
 internal static class TaskScheduleVerb
 {
     /// <summary>
-    ///     Resolves a schedule argument to its next fire instant (#3114). A
-    ///     relative delay ("30s", "2h") or an absolute ISO 8601 timestamp is
+    ///     Resolves a schedule argument to its next fire instant (#3114, #3395).
+    ///     A relative delay ("30s", "2h") or an absolute ISO 8601 timestamp is
     ///     handled by <see cref="WakeupScheduleParser" /> through
-    ///     <see cref="WakeupSchedule.ComputeAt" />; anything else stays a cron
-    ///     expression and uses <see cref="CronExpression.NextAfter" />.
+    ///     <see cref="WakeupSchedule.ComputeAt" />; anything else is a cron
+    ///     expression parsed by <see cref="CronScheduleParser.Parse" /> and
+    ///     advanced with <see cref="CronSchedule.NextOccurrence" />.
     ///     Internal for the schedule behavior test (InternalsVisibleTo).
     /// </summary>
     internal static Result<DateTimeOffset?> ResolveNextFire(string schedule, DateTimeOffset now)
@@ -481,7 +356,10 @@ internal static class TaskScheduleVerb
         if (wakeup is not null)
             return Result.Success<DateTimeOffset?>(wakeup.Value.ComputeAt(now));
 
-        return CronExpression.Parse(schedule).Map(cron => cron.NextAfter(now));
+        CronSchedule? cron = CronScheduleParser.Parse(schedule);
+        if (cron is null)
+            return Result.Failure<DateTimeOffset?>($"cron: '{schedule}' is not a valid five-field expression.");
+        return Result.Success<DateTimeOffset?>(cron.NextOccurrence(now));
     }
 
     internal static int Run(string[] args)
