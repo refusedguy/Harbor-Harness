@@ -532,10 +532,12 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // Matches live there — this shell adds no key→action branches) and
         // dual-written to the TEA store as KeyInput. Intercepts above
         // (palette/leader/gates) consumed their keys first so they never
-        // pollute store input. The returned effect is sunk on purpose: submit
-        // executes through Pipeline.SubmitAsync on the composer buffer below,
-        // abort through HandleAbortGesture, quit through the Ctrl+C×2 gesture —
-        // running them from the store effect too would fire every gesture twice.
+        // pollute store input. Most returned effects are sunk on purpose:
+        // submit executes through Pipeline.SubmitAsync on the composer buffer
+        // below. Abort / quit are the exception — they run as host effects just
+        // below, where the resolved ChatAction is dispatched ONCE and the
+        // reducer's busy/idle decision is honoured. Falling through to the
+        // dispatch here as well would fire those effects twice.
         if (KeyEventMapper.TryMap(key, out var dto))
         {
             var uiKey = KeyEventAdapter.ToUiKey(dto);
@@ -589,15 +591,35 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                             return;
                         }
                         break;
+
+                    case ChatAction.Abort when host._composer.Buffer.IsEmpty:
+                    case ChatAction.Quit when !host._composer.Dictation.IsActive:
+                        // Ctrl+C on a non-empty composer is readline clear
+                        // (ComposerController owns that branch), and Escape
+                        // while dictating belongs to the cancel path below.
+                        // Otherwise both gestures mean "abort the running turn,
+                        // else quit" — the reducer's Quit fold. The host effect
+                        // runs in HandleAbortGesture, which returns before the
+                        // dispatch at the bottom of this block.
+                        HandleAbortGesture(resolved, uiKey);
+                        host._wake.Writer.TryWrite(null);
+                        return;
                 }
 
-                var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
-                // The one exception to the sink-the-effect rule above: the strip
-                // actions are effect-driven, because the reducer resolves the
-                // target session and the host performs the switch. Dropping the
-                // effect here would make Ctrl+Tab and Ctrl+W look like no-ops.
-                if (effect is TuiEffect.ActivateSession or TuiEffect.RequestOpenSession)
-                    host.Effects.Run(effect);
+                // Ctrl+C with a non-empty composer is readline clear: the composer
+                // owns that edit below and dispatching Abort would fold the
+                // transcript into a spurious abort state. Every other resolved
+                // action still dual-writes to the store as before.
+                if (resolved != ChatAction.Abort || host._composer.Buffer.IsEmpty)
+                {
+                    var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
+                    // The one exception to the sink-the-effect rule above: the strip
+                    // actions are effect-driven, because the reducer resolves the
+                    // target session and the host performs the switch. Dropping the
+                    // effect here would make Ctrl+Tab and Ctrl+W look like no-ops.
+                    if (effect is TuiEffect.ActivateSession or TuiEffect.RequestOpenSession)
+                        host.Effects.Run(effect);
+                }
             }
         }
 
@@ -640,10 +662,6 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 // exact line the user submitted, keyed to the live session.
                 RecordSubmittedPrompt(_promptHistory, host.SessionModel.Id, host._composer.Buffer.SnapshotText());
                 await host.Pipeline.SubmitAsync(ct).ConfigureAwait(false);
-                break;
-
-            case ComposerAction.Aborted:
-                HandleAbortGesture();
                 break;
 
             case ComposerAction.Edited:
@@ -861,34 +879,61 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         return candidate;
     }
 
-    /// <summary>First idle Ctrl+C hints, second one within the window quits.
-    /// While the agent runs, Ctrl+C aborts the current turn instead.</summary>
-    private void HandleAbortGesture()
+    /// <summary>
+    ///     Ctrl+C / Escape host effect. The reducer owns the busy split (Quit
+    ///     folds to abort while a turn runs, to quit when idle), so this host
+    ///     reads the resolved <see cref="ChatAction"/> only for the Ctrl+C
+    ///     confirmation window and no longer duplicates an <c>IsRunning()</c>
+    ///     branch. The first idle Ctrl+C hints, the second within the window
+    ///     quits (#49 PR1).
+    /// </summary>
+    private void HandleAbortGesture(ChatAction resolved, UiKey uiKey)
     {
-        if (host.Agent.IsRunning())
+        // Both gestures express "leave the turn, or the app when idle" — exactly
+        // the Quit fold in KeyActionRegistry. Dispatching Quit (not the resolved
+        // Abort, which always aborts even when idle) is what keeps the busy/idle
+        // decision in the reducer instead of a host IsRunning check.
+        var effect = host._replStore.Dispatch(new AppMsg.KeyInput(ChatAction.Quit, uiKey));
+
+        if (effect is TuiEffect.AbortAgent)
         {
             // #49 PR1: single cancellation ingress — the coordinator orders this
             // against any in-flight approval decision and unblocks its waiter.
             host.Coordinator.RequestCancel(host.Agent);
             host.Pipeline.AbortAndRestoreQueuedToComposer(); // abort drops the queue but returns the newest payload to the composer (O7 #1176) — never sent after a kill
-            host.Bridge.AppendSystemLine("^C — прерываю текущий ход…");
-            host._wake.Writer.TryWrite(null);
+            host.Bridge.AppendSystemLine(resolved == ChatAction.Abort
+                ? "^C — прерываю текущий ход…"
+                : "Esc — прерываю текущий ход…");
             return;
         }
 
-        long now = Environment.TickCount64;
-        if (now - host._lastIdleAbortMs <= QuitGestureWindowMs)
+        if (resolved == ChatAction.Abort)
         {
+            // The double-press window is the only timing this host still owns;
+            // the reducer has already decided this is an idle quit.
+            long now = Environment.TickCount64;
+            if (!IsSecondPressWithinWindow(now, host._lastIdleAbortMs))
+            {
+                host._lastIdleAbortMs = now;
+                host.Bridge.AppendSystemLine("^C — ещё раз для выхода");
+                return;
+            }
+
             ReplInputLoopLog.SecondIdleAbortQuitting(host.Log);
-            host._quitRequested = true;
-            host._wake.Writer.TryWrite(null);
-            return;
         }
 
-        host._lastIdleAbortMs = now;
-        host.Bridge.AppendSystemLine("^C — ещё раз для выхода");
-        host._wake.Writer.TryWrite(null);
+        host._quitRequested = true;
     }
+
+    /// <summary>
+    ///     The #49 PR1 double-press window as a pure predicate, so the timer
+    ///     decision is testable without a terminal. A negative
+    ///     <paramref name="lastPressMs"/> is the "no press yet" sentinel and
+    ///     never satisfies the window (CE-5: uptime arithmetic must not let the
+    ///     first Ctrl+C quit on its own).
+    /// </summary>
+    internal static bool IsSecondPressWithinWindow(long now, long lastPressMs) =>
+        lastPressMs >= 0 && now - lastPressMs <= QuitGestureWindowMs;
 
     /// <summary>Copy-on-select release (killer features §P6.4): extracts the
     /// selected text from the back buffer and ships it via OSC 52 — terminals

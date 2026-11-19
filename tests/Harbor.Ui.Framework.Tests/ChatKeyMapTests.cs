@@ -88,6 +88,25 @@ public class ChatKeyMapTests
     }
 
     [Test]
+    public async Task Quit_FoldOwnsTheBusySplit_TheQuitGestureHostReliesOnIt()
+    {
+        // #3619: the REPL quit gesture dispatches the resolved Quit action and
+        // lets the reducer pick abort vs quit. Ctrl+C and Escape both reach this
+        // fold, so the host no longer carries its own Agent.IsRunning() branch.
+        var escape = new UiKey(UiKeyCode.Escape);
+        var quit = Map.Resolve(escape);
+        await Assert.That(quit).IsEqualTo(ChatAction.Quit);
+
+        var idle = ChatAppReducer.Update(new UiState(), new AppMsg.KeyInput(quit, escape));
+        await Assert.That(idle.Effect).IsTypeOf<TuiEffect.QuitApp>();
+
+        var busy = ChatAppReducer.Update(
+            new UiState { Chat = new ChatDomainState { IsAgentRunning = true } },
+            new AppMsg.KeyInput(quit, escape));
+        await Assert.That(busy.Effect).IsTypeOf<TuiEffect.AbortAgent>();
+    }
+
+    [Test]
     public async Task QuestionMark_ResolvesToHelpPanel_InCoreTable()
     {
         await Assert.That(Map.Resolve(UiKey.ForChar('?'))).IsEqualTo(ChatAction.HelpPanel);
