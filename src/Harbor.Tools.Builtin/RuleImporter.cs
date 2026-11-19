@@ -158,7 +158,7 @@ public static class RuleImporter
     ///     dropping duplicate file names (first occurrence wins).
     /// </summary>
     /// <param name="files">The files to convert.</param>
-    /// <returns>The converted sections in input order, or the combined conversion errors.</returns>
+    /// <returns>The converted sections in input order, or the first conversion error.</returns>
     public static Result<IReadOnlyList<ImportedRuleSection>> ImportMany(
         IReadOnlyList<LegacyRuleFile> files)
     {
@@ -168,18 +168,26 @@ public static class RuleImporter
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        Result<ImportedRuleSection>[] conversions = files
-            .Where(file => seen.Add(
-                string.IsNullOrWhiteSpace(file.FileName)
-                    ? string.Empty
-                    : Path.GetFileName(file.FileName.Trim())))
-            .Select(Import)
-            .ToArray();
+        Result<IReadOnlyList<ImportedRuleSection>> accumulated =
+            Result.Success<IReadOnlyList<ImportedRuleSection>>(Array.Empty<ImportedRuleSection>());
 
-        return Result.Combine(conversions.Cast<Result>().ToArray())
-            .Map(() => (IReadOnlyList<ImportedRuleSection>)conversions
-                .Select(conversion => conversion.Value)
-                .ToArray());
+        foreach (LegacyRuleFile file in files)
+        {
+            string name = string.IsNullOrWhiteSpace(file.FileName)
+                ? string.Empty
+                : Path.GetFileName(file.FileName.Trim());
+
+            if (!seen.Add(name))
+            {
+                continue;
+            }
+
+            accumulated = accumulated.Bind(sections =>
+                Import(file).Map(section =>
+                    (IReadOnlyList<ImportedRuleSection>)sections.Append(section).ToArray()));
+        }
+
+        return accumulated;
     }
 
     /// <summary>
