@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
