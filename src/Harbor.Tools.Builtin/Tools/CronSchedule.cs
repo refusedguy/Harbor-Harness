@@ -39,11 +39,6 @@ public sealed class CronSchedule
 
     private const int SearchYears = 4;
 
-    private static readonly string[] MonthNames =
-        ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-
-    private static readonly string[] WeekdayNames = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
     private readonly bool[] _minutes;
     private readonly bool[] _hours;
     private readonly bool[] _days;
@@ -52,7 +47,7 @@ public sealed class CronSchedule
     private readonly bool _allDays;
     private readonly bool _allWeekdays;
 
-    private CronSchedule(
+    internal CronSchedule(
         string expression,
         bool[] minutes,
         bool[] hours,
@@ -138,6 +133,11 @@ public sealed class CronSchedule
 /// </remarks>
 public static class CronScheduleParser
 {
+    private static readonly string[] MonthNames =
+        ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+    private static readonly string[] WeekdayNames = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
     /// <summary>
     ///     Parses <paramref name="expression" />, or returns
     ///     <see langword="null" /> when it is not a valid five-field cron
