@@ -389,6 +389,11 @@ public sealed class OllamaLlmClient : ILlmClient
     /// </summary>
     internal static List<LlmEvent> MapNdjsonChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId, ChunkStreamState? state = null)
     {
+        // Bare-map callers (tests) have no stream state; wrap their map so the
+        // shared emitter resolves against the same id table. The live stream
+        // passes chunkState, whose IndexToId is this very map.
+        ChunkStreamState emitState = state ?? ChunkStreamState.FromMap(indexToId);
+
         var events = new List<LlmEvent>(capacity: 2);
         var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
 
@@ -470,7 +475,7 @@ public sealed class OllamaLlmClient : ILlmClient
                     }
                     else if (depth == 4 && inTc)
                     {
-                        EmitToolCall(events, indexToId, state, tcIndex, tcWireId, tcName, tcArgs);
+                        ProviderToolCallEmitter.Emit(events, emitState, tcIndex, tcWireId, tcName, tcArgs);
                         inTc = false;
                     }
                     else if (depth == 3 && inToolCalls && reader.TokenType == JsonTokenType.EndArray)
@@ -581,36 +586,6 @@ public sealed class OllamaLlmClient : ILlmClient
         var x when x.SequenceEqual("eval_count"u8) => "eval_count",
         _ => null
     };
-
-    private static void EmitToolCall(
-        List<LlmEvent> events, Dictionary<int, string> indexToId, ChunkStreamState? state,
-        int index, string? wireId, string? name, string? args)
-    {
-        // Stable id (ROP-A ПР.3): wire id → remembered id → positional fallback.
-        // #203 B8: the fallback is counted, never silent.
-        string? remembered = indexToId.GetValueOrDefault(index);
-        string id;
-        if (!string.IsNullOrEmpty(wireId))
-        {
-            id = wireId!;
-        }
-        else if (remembered is not null)
-        {
-            id = remembered;
-        }
-        else
-        {
-            id = $"tc{index}";
-            state?.CountRemap();
-        }
-
-        indexToId[index] = id;
-
-        if (!string.IsNullOrEmpty(name))
-            events.Add(new ToolCallStartEvent(id, name!));
-        if (!string.IsNullOrEmpty(args))
-            events.Add(new ToolCallDeltaEvent(id, args!));
-    }
 
     private static void HandleValue(
         ref Utf8JsonReader reader, int depth, string prop, bool inMessage, bool inTc, bool inFunction,

@@ -42,6 +42,11 @@ internal static class OpenAiWire
     /// </summary>
     public static List<LlmEvent> ParseChatChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId, ChunkStreamState? state = null)
     {
+        // The bare-map overload (tests, direct callers) has no stream state.
+        // Wrap the caller's map so the shared emitter still resolves against
+        // it; the hot path from TryParseChatChunkLine already passes a state.
+        ChunkStreamState emitState = state ?? ChunkStreamState.FromMap(indexToId);
+
         var events = new List<LlmEvent>(capacity: 2);
         var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
 
@@ -146,7 +151,7 @@ internal static class OpenAiWire
                     }
                     else if (depth == 6 && inTc)
                     {
-                        EmitToolCall(events, indexToId, state, tcIndex, tcWireId, tcName, tcArgs);
+                        ProviderToolCallEmitter.Emit(events, emitState, tcIndex, tcWireId, tcName, tcArgs);
                         inTc = false;
                     }
                     else if (depth == 5 && inToolCalls && reader.TokenType == JsonTokenType.EndArray)
@@ -266,41 +271,6 @@ internal static class OpenAiWire
         var x when x.SequenceEqual("completion_tokens"u8) => "completion_tokens",
         _ => null
     };
-
-    private static void EmitToolCall(
-        List<LlmEvent> events, Dictionary<int, string> indexToId, ChunkStreamState? state,
-        int index, string? wireId, string? name, string? args)
-    {
-        // Stable id (ROP-A ПР.3): wire id → remembered id → positional
-        // fallback. Never a fresh Guid per chunk — that broke coalescing.
-        // Only string wire ids count: servers send numeric ids, and the DOM
-        // walk ignored those (ValueKind guard).
-        // #203 B8: the positional fallback is diagnosable, not silent — the
-        // parse site counts it and warns once per stream, because an
-        // agent/store tool_call_id mismatch otherwise hides behind it.
-        string? remembered = indexToId.GetValueOrDefault(index);
-        string id;
-        if (!string.IsNullOrEmpty(wireId))
-        {
-            id = wireId!;
-        }
-        else if (remembered is not null)
-        {
-            id = remembered;
-        }
-        else
-        {
-            id = $"tc{index}";
-            state?.CountRemap();
-        }
-
-        indexToId[index] = id;
-
-        if (!string.IsNullOrEmpty(name))
-            events.Add(new ToolCallStartEvent(id, name!));
-        if (!string.IsNullOrEmpty(args))
-            events.Add(new ToolCallDeltaEvent(id, args!));
-    }
 
     private static void HandleValue(
         ref Utf8JsonReader reader, int depth, string prop,
