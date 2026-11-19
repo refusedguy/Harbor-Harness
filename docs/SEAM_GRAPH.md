@@ -154,10 +154,10 @@ Declared in [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abs
 - **Named by** 42 file(s) in 17 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia, Harbor.App.Avalonia.Tests, Harbor.App.Cli, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Hosting, Harbor.Hosting.Tests
 - **Registered in the container**: `IToolRegistry` → a factory (Singleton, [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs))
 - **Bypassed**: 2 direct construction(s) of the concrete type, 3 signature(s) naming the concrete type where the interface was the contract:
-  - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):189
-  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):201
-  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):188
+  - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):199
+  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):202
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):200
+  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):212
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):189
 
 ### `ILlmClient`
@@ -211,7 +211,7 @@ Declared in [`src/Harbor.Abstractions/Plugins/IPlugin.cs`](../src/Harbor.Abstrac
 What the graph finds that reading the code does not: interfaces with no implementation, seams nobody resolves from the container, and implementations nobody consumes.
 
 - **18 interface(s) declared under `src/` are named somewhere but have no implementation**: `IEventSubscriber`, `IHarborIdeClient`, `IProviderPlugin`, `IAgentPlugin`, `IPluginHost`, `ISessionOperationEventStore`, `IToolFactory`, `IRetryAfterHint`, `ISessionStorePlugin`, `ITuiBackendPlugin`, `IReversiblePluginLoadHost`, `IInteractiveTuiRenderer`, `IBindingScope`, `IInputHandler`, `ISgrByteSink`, `ICellDiffDecoder`, `IThemeWatcher`, `ITuiPanelPlugin`
-- **133 seam(s) with an implementation have no container registration**: `IAgentRegistryBuilder`, `IBackgroundTaskRegistry`, `ISubAgentRunner`, `IEventBus`, `IEventBusMiddleware`, `IEventBusQueueMetrics`, `IProcessHandle`, `IUserQuestionService`, `ILspService`, `INotificationProcessRunner`, `IPlugin`, `IToolPlugin`, `ILlmClient`, `IProviderFactory`, `IProviderHealthCheck`, `IProviderRegistryBuilder`, `ICompactionEventStore`, `ITokenEstimator`, `ISessionCheckpointStore`, `ISessionFeedbackStore` …
+- **132 seam(s) with an implementation have no container registration**: `IAgentRegistryBuilder`, `IBackgroundTaskRegistry`, `ISubAgentRunner`, `IEventBus`, `IEventBusMiddleware`, `IEventBusQueueMetrics`, `IProcessHandle`, `IUserQuestionService`, `ILspService`, `INotificationProcessRunner`, `IPlugin`, `IToolPlugin`, `ILlmClient`, `IProviderFactory`, `IProviderHealthCheck`, `IProviderRegistryBuilder`, `ICompactionEventStore`, `ITokenEstimator`, `ISessionCheckpointStore`, `ISessionFeedbackStore` …
   That is a census of the `AddSingleton<T>` calls, not a verdict on reachability: a seam can also be resolved through a registry rather than the container. `ILlmClient` is reached through `IProviderRegistry`, not through DI.
 - No door of a declared route answers `Result.Success` without registering anything (the #1758 shape).
 - Every declared route verdict agrees with what the route's door body does.
