@@ -14,7 +14,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// rather than the predicates splits them:
 ///
 ///   TEXT BUFFER — a rune can be appended to something the user is filling in.
-///     - <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:347</c>   composer body          (Ctrl|Meta|Alt)
+///     - <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:264</c>   composer body          (Ctrl|Meta|Alt)
 ///     - <c>DialogOverlay.cs:666</c>       reject reason, prompt, multiline (Ctrl|Meta|Alt)
 ///     - <c>FilePickerView.cs:172</c>, <c>CommandPaletteView.cs:276</c>  (None or Shift)
 ///     - <c>QuestionFormView.cs:571</c>    custom answer         (!= None)  <-- the defect

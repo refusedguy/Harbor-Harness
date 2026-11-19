@@ -555,7 +555,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     /// one of the <c>!= KeyModifiers.None</c> sites (#785).
     /// <para>
     /// On the custom row every printable rune is answer text, so the gate is
-    /// the composer's (<c>ComposerController.cs:173</c>):
+    /// the composer's (<c>ComposerController.cs:264</c>):
     /// <c>Ctrl|Meta|Alt</c> are command modifiers and are refused, while
     /// <c>Shift</c> is a case-shaper and passes — real encoders deliver a
     /// capital as the capital rune PLUS <c>Shift</c>, so refusing the modifier
