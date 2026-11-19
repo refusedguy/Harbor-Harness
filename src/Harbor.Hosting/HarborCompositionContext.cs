@@ -68,6 +68,18 @@ public sealed class HarborCompositionContext
 
     public ILogger Logger { get; }
 
+    /// <summary>
+    ///     #3387: the single in-process command-receipt store. The tool registry
+    ///     is built eagerly in <c>AddHarborRegistries</c>, before the container
+    ///     exists, so BashTool cannot wait for DI to hand it the store. One
+    ///     instance is created here and shared by both sides: CoreModule
+    ///     publishes it as <c>ICommandReceiptStore</c>, and the eager tool
+    ///     composition binds its receipt writer to it. Two stores would mean
+    ///     two different answers to "was this command already recorded".
+    /// </summary>
+    public Harbor.Application.Agents.ICommandReceiptStore CommandReceiptStore { get; } =
+        new Harbor.Application.Agents.InMemoryCommandReceiptStore();
+
     /// <summary>Eagerly loaded common config (loaded once, §3.4 of di-design). Apps may override via AfterConfiguration.</summary>
     public CommonConfig Common { get; set; } = new();
 
