@@ -80,6 +80,9 @@ internal static class MarkupModuleResolver
         }
 
         var names = parsed.Keys.OrderBy(static name => name, StringComparer.Ordinal).ToArray();
+        var identifiers = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var path in names)
+            identifiers[path] = parsed[path].Identifier;
 
         // Resolve each raw import against the set of known modules. A missing
         // target is a finding, not an exception: one broken import must not
@@ -93,8 +96,8 @@ internal static class MarkupModuleResolver
             var imports = new List<SpecImport>();
             foreach (var import in item.Parse.Imports)
             {
-                var resolved = MarkupPaths.Resolve(path, import.Path);
-                if (!parsed.ContainsKey(resolved))
+                var resolved = MarkupPaths.ResolveKnown(path, import.Path, identifiers);
+                if (resolved is null)
                 {
                     findings.Add(new GraphFinding(
                         MarkupDiagnostics.MissingImportId,
@@ -161,12 +164,10 @@ internal static class MarkupModuleResolver
         }
         while (propagated);
 
-        var identifiers = new Dictionary<string, string>(StringComparer.Ordinal);
         var modules = new List<ResolvedModule>();
         foreach (var path in names)
         {
             var item = parsed[path];
-            identifiers[path] = item.Identifier;
             modules.Add(new ResolvedModule(
                 path,
                 item.Identifier,
@@ -201,8 +202,7 @@ internal static class MarkupModuleResolver
         if (module.ImportResolutions.TryGetValue(rawPath, out var declared))
             return declared;
 
-        var direct = MarkupPaths.Resolve(modulePath, rawPath);
-        return identifiers.ContainsKey(direct) ? direct : null;
+        return MarkupPaths.ResolveKnown(modulePath, rawPath, identifiers);
     }
 
     /// <summary>Checksum over every source in the graph, in stable name order.</summary>
@@ -347,5 +347,25 @@ internal static class MarkupPaths
         }
 
         return string.Join("/", segments);
+    }
+
+    /// <summary>
+    ///     Finds the module an import names. Markup may write paths relative to
+    ///     the importing file (<c>"Shared.harbor-ui"</c>) or relative to the
+    ///     project root (<c>"Fixtures/Shared.harbor-ui"</c>). The file-relative
+    ///     candidate wins when both resolve, which keeps nested imports local;
+    ///     the root-relative fallback makes project paths deterministic.
+    /// </summary>
+    internal static string? ResolveKnown(
+        string importingPath,
+        string rawPath,
+        IReadOnlyDictionary<string, string> identifiers)
+    {
+        var fileRelative = Resolve(importingPath, rawPath);
+        if (identifiers.ContainsKey(fileRelative))
+            return fileRelative;
+
+        var rootRelative = Normalize(rawPath);
+        return identifiers.ContainsKey(rootRelative) ? rootRelative : null;
     }
 }

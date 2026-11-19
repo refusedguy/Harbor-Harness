@@ -178,6 +178,11 @@ public sealed class ModelRefSingleParserTests
             + "slash-separated by definition. It splits on '/' to produce crumbs and appends "
             + "'/' to a Windows drive root; neither operation parses a 'provider/model' "
             + "reference. Listed because the matcher is textual, not semantic.",
+        ["src/Harbor.Tui.CellForge.CodeGen/MarkupModuleResolver.cs"] =
+            "NOT A REFERENCE. #3083 normalizes .harbor-ui import paths: it splits a filesystem "
+            + "path on '/' to collapse '.' and '..' segments before matching module names. "
+            + "The slash separates path segments, not a 'provider/model' reference. Listed "
+            + "because the matcher is textual, not semantic.",
     };
 
     /// <summary>
