@@ -80,7 +80,7 @@ public sealed class StateTreeView
 
     /// <summary>Projects <paramref name="state"/> into the retained tree.</summary>
     /// <returns>False when the applier rejected a batch; the previous tree stays.</returns>
-    public bool Sync(in UiState state)
+    public bool Sync(UiState state)
     {
         return SyncResolved(key => key switch
         {
