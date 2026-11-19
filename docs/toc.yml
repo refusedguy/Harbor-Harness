@@ -60,6 +60,8 @@
   href: CONTRIB_BOUNDARY_MEASUREMENT.md
 - name: Contract Domains
   href: CONTRACT_DOMAINS.md
+- name: Daily Builds
+  href: DAILY_BUILDS.md
 - name: Ddmin Shrink Contract
   href: DDMIN_SHRINK_CONTRACT.md
 - name: Demo Gifs
