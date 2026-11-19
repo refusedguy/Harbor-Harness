@@ -21,57 +21,60 @@ namespace Harbor.Hosting;
 ///     Wraps a filesystem-writing tool so that its target's pre-image is
 ///     captured through <see cref="FileHistoryTracker.TrackBeforeWrite" />
 ///     before the tool is allowed to touch the file (#3107). All contract
-///     members forward to the inner tool, so descriptors, the #557 safety
+///     members forward to the wrapped tool, so descriptors, the #557 safety
 ///     policy derivation and registry name resolution see nothing new.
 /// </summary>
 /// <remarks>
 ///     The tracker is created per call and owns no shared mutable state, so
-///     the decorator preserves the inner tool's thread-safety guarantee.
+///     the decorator preserves the wrapped tool's thread-safety guarantee.
 ///     Capture is active only when the context carries an explicit working
 ///     directory (the production case: <c>session.Session.Directory</c>);
 ///     a context without one degrades to a plain pass-through.
 /// </remarks>
 public sealed class FileHistoryToolDecorator : ITool
 {
-    private readonly ITool _inner;
-    private readonly ILogger<FileHistoryToolDecorator> _logger;
+    private readonly ITool _preImageTarget;
+    private readonly ILogger<FileHistoryToolDecorator> _preImageLog;
 
-    /// <summary>Wrap <paramref name="inner" /> with pre-image capture.</summary>
-    public FileHistoryToolDecorator(ITool inner, ILogger<FileHistoryToolDecorator> logger)
+    /// <summary>Wrap <paramref name="target" /> with pre-image capture.</summary>
+    public FileHistoryToolDecorator(ITool target, ILogger<FileHistoryToolDecorator> log)
     {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _preImageTarget = target ?? throw new ArgumentNullException(nameof(target));
+        _preImageLog = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    /// <inheritdoc />
-    public ToolName Name => _inner.Name;
+    /// <summary>The wrapped tool's name, used in capture diagnostics.</summary>
+    private string TargetName() => _preImageTarget.Name.Value;
 
     /// <inheritdoc />
-    public string DisplayName => _inner.DisplayName;
+    public Result ValidateArguments(JsonElement args) => _preImageTarget.ValidateArguments(args);
 
     /// <inheritdoc />
-    public string Glyph => _inner.Glyph;
+    public ToolName Name => _preImageTarget.Name;
 
     /// <inheritdoc />
-    public string Description => _inner.Description;
+    public string DisplayName => _preImageTarget.DisplayName;
 
     /// <inheritdoc />
-    public JsonDocument ParameterSchema => _inner.ParameterSchema;
+    public string Glyph => _preImageTarget.Glyph;
 
     /// <inheritdoc />
-    public ExecutionMode ExecutionMode => _inner.ExecutionMode;
+    public string Description => _preImageTarget.Description;
 
     /// <inheritdoc />
-    public ToolSafetyProfile SafetyProfile => _inner.SafetyProfile;
+    public JsonDocument ParameterSchema => _preImageTarget.ParameterSchema;
 
     /// <inheritdoc />
-    public string? PromptSnippet => _inner.PromptSnippet;
+    public ExecutionMode ExecutionMode => _preImageTarget.ExecutionMode;
 
     /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines => _inner.PromptGuidelines;
+    public ToolSafetyProfile SafetyProfile => _preImageTarget.SafetyProfile;
 
     /// <inheritdoc />
-    public Result ValidateArguments(JsonElement args) => _inner.ValidateArguments(args);
+    public string? PromptSnippet => _preImageTarget.PromptSnippet;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> PromptGuidelines => _preImageTarget.PromptGuidelines;
 
     /// <inheritdoc />
     public async Task<ToolResult> ExecuteAsync(
@@ -83,7 +86,7 @@ public sealed class FileHistoryToolDecorator : ITool
         if (rejection is not null)
             return ToolResult.Error(rejection);
 
-        return await _inner.ExecuteAsync(args, context, cancellationToken).ConfigureAwait(false);
+        return await _preImageTarget.ExecuteAsync(args, context, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -95,28 +98,29 @@ public sealed class FileHistoryToolDecorator : ITool
     {
         if (string.IsNullOrWhiteSpace(context.WorkingDirectory)
             || args.ValueKind != JsonValueKind.Object
-            || !args.TryGetProperty("path", out JsonElement pathElement)
-            || pathElement.ValueKind != JsonValueKind.String)
+            || !args.TryGetProperty("path", out JsonElement rawPathElement)
+            || rawPathElement.ValueKind != JsonValueKind.String)
         {
             return null;
         }
 
-        string rawPath = pathElement.GetString()!;
-        string root = Path.GetFullPath(context.WorkingDirectory!);
-        var resolved = ToolPaths.ResolveAgainst(root, rawPath);
-        if (resolved.IsFailure)
-            return resolved.Error;
+        string rawPath = rawPathElement.GetString()!;
+        string workspaceRoot = Path.GetFullPath(context.WorkingDirectory!);
+        var resolution = ToolPaths.ResolveAgainst(workspaceRoot, rawPath);
+        if (resolution.IsFailure)
+            return resolution.Error;
+        string fullPath = resolution.Value;
 
         try
         {
-            string relative = Path.GetRelativePath(root, resolved.Value);
-            var blobs = new RewindBlobStore(Path.Combine(root, ".rewind", context.SessionId));
-            var tracker = new FileHistoryTracker(root, blobs);
+            string relative = Path.GetRelativePath(workspaceRoot, fullPath);
+            var blobs = new RewindBlobStore(Path.Combine(workspaceRoot, ".rewind", context.SessionId));
+            var tracker = new FileHistoryTracker(workspaceRoot, blobs);
             FileHistoryTrackResult track = tracker.TrackBeforeWrite(relative);
 
             if (track.IsRejected)
             {
-                FileHistoryToolDecoratorLog.FileHistoryRejected(_logger, _inner.Name.Value, track.Reason!);
+                FileHistoryToolDecoratorLog.FileHistoryRejected(_preImageLog, TargetName(), track.Reason!);
                 return $"Pre-image capture refused the write: {track.Reason}";
             }
 
@@ -126,7 +130,7 @@ public sealed class FileHistoryToolDecorator : ITool
         {
             // Fail closed: a write whose pre-image could not be stored must not
             // reach the disk, otherwise a rewind would have nothing to restore.
-            FileHistoryToolDecoratorLog.FileHistoryCaptureFailed(_logger, ex, _inner.Name.Value);
+            FileHistoryToolDecoratorLog.FileHistoryCaptureFailed(_preImageLog, ex, TargetName());
             return $"Pre-image capture failed: {ex.Message}";
         }
     }
