@@ -143,7 +143,7 @@ public class SessionFacetedHistoryAdapterTests
 
         await Assert.That(exit).IsEqualTo(0);
         string expected =
-            $"[Bug Triage] {session.Id} · user · msg-1 · 2026-06-15 12:00:00\n" +
+            $"[Bug Triage] {session.Id} · user · msg-1 @ 2026-06-15 12:00:00\n" +
             "    …needle in text…\n" +
             "\n" +
             "1 match(es) for 'needle'.\n";
