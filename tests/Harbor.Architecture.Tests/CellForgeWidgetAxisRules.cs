@@ -690,6 +690,12 @@ public sealed class CellForgeWidgetAxisRules
             "docs/ROP-API-INVENTORY.md",
             // Generated coverage table listing documented public members.
             "docs/XML_DOC_AUDIT.md",
+            // The out-of-process plugin packaging HOWTO names ITuiPlugin once to
+            // say the TUI axis is refused "everywhere"; it carries neither the
+            // canonical closure token nor teaching intent, so it only describes
+            // the seam. Classifying it here keeps the perimeter guard honest
+            // without muffling a doc that now names the marker.
+            "docs/HOWTO_PACKAGE_PLUGIN.md",
             // Component file table for the load host.
             "src/Harbor.Plugins.Host/README.md",
             // Component file table for the assembly declaring ITuiPlugin. The
