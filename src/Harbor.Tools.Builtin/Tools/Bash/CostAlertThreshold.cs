@@ -28,7 +28,7 @@ namespace Harbor.Tools.Builtin;
 public sealed record CostAlertThreshold
 {
     /// <summary>The largest amount accepted from configuration.</summary>
-    public const decimal MaxAmountUsd = 1_000_000m;
+    public const decimal MaxAmountUsd = 1_000m * 1_000m;
 
     private static readonly string[] DisabledWords = ["off", "none", "disabled"];
 
