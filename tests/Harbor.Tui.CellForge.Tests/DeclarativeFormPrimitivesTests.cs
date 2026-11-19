@@ -104,7 +104,9 @@ public class DeclarativeFormPrimitivesTests
 
         await Assert.That(form.Descriptors.Count).IsEqualTo(2);
         await Assert.That(form.IsValid()).IsFalse();
-        await Assert.That(form.Errors().Count).IsEqualTo(2);
+        // The cross-field rule accepts two empty values, so only the required
+        // rule reports an error on the initial state.
+        await Assert.That(form.Errors().Count).IsEqualTo(1);
 
         form.SetValue("term", "abc");
         form.SetValue("repeat", "abd");
