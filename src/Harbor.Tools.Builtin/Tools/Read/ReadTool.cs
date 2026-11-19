@@ -75,7 +75,7 @@ public sealed partial class ReadTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        string path = args.GetProperty("path").GetString()!;
+        string path = JsonArgs.GetString(args, "path")!;
         int? offset = JsonArgs.GetInt(args, "offset");
         int? limit = JsonArgs.GetInt(args, "limit");
 
