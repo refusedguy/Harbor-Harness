@@ -145,7 +145,7 @@ public sealed class FileRewinder
         if (preImage is null)
             return RewindRestoreResult.Failed(
                 RewindRestoreOutcome.MissingBlob,
-                $"pre-image blob not found: '{entry.PreImageBlobHash}'");
+                $"pre-image blob is absent for hash '{entry.PreImageBlobHash}'");
 
         File.WriteAllBytes(full, preImage);
         return RewindRestoreResult.Restored;
