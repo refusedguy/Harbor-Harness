@@ -408,3 +408,23 @@ override Harbor.Abstractions.Models.CacheReuseMetrics.GetHashCode() -> int
 override Harbor.Abstractions.Models.CacheReuseMetrics.ToString() -> string!
 static Harbor.Abstractions.Models.CacheReuseMetrics.operator !=(Harbor.Abstractions.Models.CacheReuseMetrics? left, Harbor.Abstractions.Models.CacheReuseMetrics? right) -> bool
 static Harbor.Abstractions.Models.CacheReuseMetrics.operator ==(Harbor.Abstractions.Models.CacheReuseMetrics? left, Harbor.Abstractions.Models.CacheReuseMetrics? right) -> bool
+Harbor.Abstractions.Models.ProviderCapabilities
+Harbor.Abstractions.Models.ProviderCapabilities.<Clone>$() -> Harbor.Abstractions.Models.ProviderCapabilities!
+Harbor.Abstractions.Models.ProviderCapabilities.EmitsTodoList.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.Equals(Harbor.Abstractions.Models.ProviderCapabilities? other) -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.Intersect(Harbor.Abstractions.Models.ProviderCapabilities! other) -> Harbor.Abstractions.Models.ProviderCapabilities!
+Harbor.Abstractions.Models.ProviderCapabilities.IsEmpty.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.ProviderCapabilities(bool supportsStreaming = false, bool supportsToolCalls = false, bool supportsInterrupt = false, bool supportsSteer = false, bool supportsNativeFork = false, bool supportsRollback = false, bool emitsTodoList = false, bool supportsPromptCaching = false, string? version = null) -> void
+Harbor.Abstractions.Models.ProviderCapabilities.SupportsInterrupt.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.SupportsNativeFork.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.SupportsPromptCaching.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.SupportsRollback.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.SupportsSteer.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.SupportsStreaming.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.SupportsToolCalls.get -> bool
+Harbor.Abstractions.Models.ProviderCapabilities.Version.get -> string?
+override Harbor.Abstractions.Models.ProviderCapabilities.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ProviderCapabilities.GetHashCode() -> int
+override Harbor.Abstractions.Models.ProviderCapabilities.ToString() -> string!
+static Harbor.Abstractions.Models.ProviderCapabilities.operator !=(Harbor.Abstractions.Models.ProviderCapabilities? left, Harbor.Abstractions.Models.ProviderCapabilities? right) -> bool
+static Harbor.Abstractions.Models.ProviderCapabilities.operator ==(Harbor.Abstractions.Models.ProviderCapabilities? left, Harbor.Abstractions.Models.ProviderCapabilities? right) -> bool
