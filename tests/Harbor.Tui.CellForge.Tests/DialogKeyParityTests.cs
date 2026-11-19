@@ -46,7 +46,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// 2. <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:264</c> types a char only when
 ///    <c>(mods & (Ctrl|Meta|Alt)) == 0</c>; <c>DiffViewerOverlay.cs:407</c>
 ///    refuses <c>Control|Alt</c> and lets <c>Shift</c> through;
-///    <c>ApprovalGateView.cs:256</c> refuses any modifier.
+///    <c>ApprovalGateView.cs:275</c> refuses any modifier.
 ///    <c>DialogOverlay</c>'s kitty overload copies the composer gate
 ///    verbatim at line 632 — and the legacy overload cannot, because
 ///    <c>ConsoleKeyInfo.Modifiers</c> is read NOWHERE in the file. That

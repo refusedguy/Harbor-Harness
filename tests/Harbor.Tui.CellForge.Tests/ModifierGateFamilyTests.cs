@@ -21,8 +21,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///
 ///   COMMAND ONLY — no buffer; runes are navigation (h/j/k/l) or a 3-letter
 ///   vote (y/n/a). Shift changes nothing a user could want here.
-///     - <c>ApprovalGateView.cs:254</c>    y/n/a + Enter/Escape
-// check-doc-cites: record-drift ApprovalGateView.cs:254 now="if (!key.Modifiers.IsUnmodified())" [#947: written over `if (key.Modifiers != KeyModifiers.None)`; repair deferred to the owner's symbol-rename decision] -->
+///     - <c>ApprovalGateView.cs:275</c>    y/n/a + Enter/Escape
 ///     - <c>TreeView.cs:296</c>, <c>Tabs.cs:143</c>, <c>ToolCardTracker.cs:748</c>
 ///     - <c>DiffViewerOverlay.cs:407</c>, <c>ImageViewerOverlay.cs:128</c>
 ///

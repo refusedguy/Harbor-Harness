@@ -73,6 +73,51 @@ public class ApprovalGateViewTests
         await Assert.That(pending.IsPending).IsTrue();
     }
 
+    // #3432: the five keys now come from the gate's "approval" KeyContext, but
+    // the observable contract is unchanged. Pin every binding, the no-modifier
+    // gate, the one-shot decision and the audit stamp painted afterwards.
+    [Test]
+    public async Task HandleKey_ApprovalContext_BindingsGuardAndStamp()
+    {
+        (KeyEvent Key, ApprovalChoice Choice)[] votes =
+        [
+            (KeyEvent.Char(new Rune('y')), ApprovalChoice.Approve),
+            (KeyEvent.Simple(KeyCode.Enter), ApprovalChoice.Approve),
+            (KeyEvent.Char(new Rune('n')), ApprovalChoice.Deny),
+            (KeyEvent.Simple(KeyCode.Escape), ApprovalChoice.Deny),
+            (KeyEvent.Char(new Rune('a')), ApprovalChoice.AlwaysAllow),
+        ];
+
+        foreach ((KeyEvent key, ApprovalChoice expected) in votes)
+        {
+            var gate = new ApprovalGateView("bash", "ls -la");
+            await Assert.That(gate.HandleKey(key)).IsTrue();
+            await Assert.That(gate.Decision).IsEqualTo(expected);
+
+            // The same gesture with a modifier is not consumed and leaves the gate pending.
+            var modified = new ApprovalGateView("bash", "ls -la");
+            KeyEvent modifiedKey = key.Key == KeyCode.Char
+                ? KeyEvent.Char(key.Character, KeyModifiers.Ctrl)
+                : KeyEvent.Simple(key.Key, KeyModifiers.Ctrl);
+            await Assert.That(modified.HandleKey(modifiedKey)).IsFalse();
+            await Assert.That(modified.IsPending).IsTrue();
+
+            // A late decision cannot rewrite an already resolved gate.
+            await Assert.That(gate.HandleKey(KeyEvent.Simple(KeyCode.Escape))).IsFalse();
+            await Assert.That(gate.Decision).IsEqualTo(expected);
+
+            var buffer = TestRender.Buffer(40, 3);
+            gate.Paint(TestRender.Ctx(buffer));
+            string stamp = expected switch
+            {
+                ApprovalChoice.Approve => "approved",
+                ApprovalChoice.Deny => "denied",
+                _ => "approved (always)",
+            };
+            await Assert.That(TestRender.Art(buffer)).Contains(stamp);
+        }
+    }
+
     [Test]
     public async Task CheapEstimate_MatchesMeasure_ForColdBlock()
     {

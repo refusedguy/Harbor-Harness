@@ -243,9 +243,11 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
 
     /// <summary>
     /// Routes one key event to the OLDEST pending gate BEFORE composer input.
-    /// Consumed keys always wake the frame pipeline (decision stamps repaint).
-    /// Returns false while no gate is armed or the key is not one of y/n/a/
-    /// Enter/Escape — callers fall through to normal routing.
+    /// The y/n/a/Enter/Escape gesture-to-decision map lives in the gate's own
+    /// <c>approval</c> KeyContext (see <see cref="ApprovalGateView.HandleKey"/>);
+    /// this router only owns queue/coordinator sequencing. Consumed keys always
+    /// wake the frame pipeline (decision stamps repaint). Returns false while no
+    /// gate is armed or the key is unbound. Callers fall through to routing.
     /// </summary>
     public bool TryRouteApprovalKey(in KeyEvent key)
     {

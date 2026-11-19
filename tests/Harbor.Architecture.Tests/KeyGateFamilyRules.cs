@@ -376,6 +376,12 @@ public class KeyGateFamilyRules
         // nothing, Shift included — so Command, not Buffer.
         new("KeyBindings(capture)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Input/KeyBindings.cs"),
 
+        // #3432: the shared-layer port of the declarative key-context primitive.
+        // KeyGesture.Matches judges the rune (exact modifiers, exact rune), so it
+        // is a routed site like KeyBindings above, with no buffer, so Command. The
+        // gate's own context maps these votes to decisions in ApprovalGateView.
+        new("KeyContext", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Input/KeyContext.cs"),
+
         // BindingsMap per-scope table (T6, #1188, epic #1155): the scope-level
         // gesture-to-action map behind BindingsChain's focus-to-app merge.
         // Same shape as KeyBindings above — no buffer anywhere on this path,
