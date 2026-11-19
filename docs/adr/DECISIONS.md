@@ -1687,3 +1687,21 @@ Issue остаётся OPEN; комментарий содержит тольк�
 
 - Полный текст, таблица по четырём частям и условия пересмотра:
   [ADR-068](ADR-068-pr-watch-iforge-client-verdict.md).
+
+## ADR-069: отчёт gpui declarative devtools (#2700), post-verdict по влитому #2765
+
+Issue #2700 — self-contained отчёт по devtools для декларативного UI. ADR-034
+зафиксировал вердикт на базе `09a673bc` и оставил PR #2765 единственным
+in-flight slice, не предрешая его исход. Проверка через `gh pr view` и
+`git merge-base --is-ancestor` на базе `origin/dev` (`56608667`) подтвердила
+merge `192ed9a0` в `dev`: debounce, burst coalescing и atomic publication
+watcher'а в дереве. Остальные идеи отчёта влиты или owner-decided.
+
+Decided: код не писать. Влитый #2765 не перевыводится, остальные идеи не
+открываются заново, sentinel slot discovery остаётся за ADR-034. Гейты,
+пороги, golden и AOT-профиль не меняются. Issue остаётся OPEN; комментарий
+содержит только хеш коммита ADR. Пересмотр по новому факту: владелец
+представляет compiled-template дизайн, которому нужен runtime slot discovery.
+
+- Полный текст и ссылка на влитый slice:
+  [ADR-069](ADR-069-gpui-declarative-devtools-post-verdict.md).
