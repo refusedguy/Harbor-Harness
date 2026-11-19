@@ -10,7 +10,6 @@ using KeyContext = Harbor.Tui.CellForge.Input.KeyContext;
 using KeyGesture = Harbor.Tui.CellForge.Input.KeyGesture;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
-using Harbor.Ui.Framework.ViewModels;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -126,7 +125,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 
     // #3629: the same BCL-only policies the desktop palette uses. They live
     // across Show/Hide so usage ranking and query history survive reopening.
-    private readonly CommandPalettePolicies _policies = new();
+    private readonly global::Harbor.Ui.Framework.ViewModels.CommandPalettePolicies _policies = new();
 
     private IReadOnlyList<CommandItem> _commands = [];
     private List<CommandItem> _results = [];
@@ -485,7 +484,8 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 
             double score = query.Length == 0
                 ? 0d
-                : CommandPalettePolicies.WeightedScore(Score, item.Title, item.Detail, item.Group, query);
+                : global::Harbor.Ui.Framework.ViewModels.CommandPalettePolicies.WeightedScore(
+                    Score, item.Title, item.Detail, item.Group, query);
             bucket.Add((item, score, i));
         }
 
