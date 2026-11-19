@@ -46,26 +46,6 @@
     <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
       <OutputItemType>Analyzer</OutputItemType>
     </ProjectReference>
-    <!--
-      #3084: the State -> Tree envelope consumes the generator's produced
-      BuildRoot. The generator runs in the compiler and emits its contract,
-      declarations and BuildRoot into THIS compilation, so StateTreeView calls
-      them without reflection. The reference follows the same shape as the
-      markup test project uses; the generator's own types are never bound here.
-    -->
-    <ProjectReference Include="..\Harbor.Tui.CellForge.CodeGen\Harbor.Tui.CellForge.CodeGen.csproj">
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <!--
-      The product view template. TargetPath is the project-relative cache key
-      the generator uses to name the emitted HarborUi_* partial class.
-    -->
-    <AdditionalFiles Include="Generic\StateTree.harbor-ui">
-      <TargetPath>Generic/StateTree.harbor-ui</TargetPath>
-    </AdditionalFiles>
   </ItemGroup>
 
   <ItemGroup>

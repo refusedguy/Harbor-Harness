@@ -158,30 +158,9 @@ public sealed class StateTreeView
         _states.EndFrame();
     }
 
-    /// <summary>
-    ///     Runs the compiled template body. A dev-reload swap slot is global
-    ///     and Debug-only; the product tree must be the compiled template, not
-    ///     a swap left installed by another fixture.
-    /// </summary>
-    private static void BuildCompiledRoot(RootSink sink)
-    {
-#if DEBUG
-        var installed = RootBuilderOverride.Current;
-        if (installed is not null)
-            RootBuilderOverride.Clear();
-        try
-        {
-            HarborUi_Generic_StateTree_harbor_ui.BuildRoot(sink);
-        }
-        finally
-        {
-            if (installed is not null)
-                RootBuilderOverride.Current = installed;
-        }
-#else
-        HarborUi_Generic_StateTree_harbor_ui.BuildRoot(sink);
-#endif
-    }
+    /// <summary>Runs the checked-in BuildRoot body emitted by the generator.</summary>
+    private static void BuildCompiledRoot(RootSink sink) =>
+        HarborUi_Generic_StateTree_harbor_ui.BuildRoot(sink.Begin, sink.TestId, sink.Text, sink.End);
 
     private static bool SameShape(List<TreeNode> fresh, List<TreeNode> old)
     {
@@ -259,7 +238,7 @@ public sealed class StateTreeView
     }
 
     /// <summary>Receives the generated sequence-numbered calls into a tree.</summary>
-    private sealed class RootSink : ICellForgeRoot
+    private sealed class RootSink
     {
         private readonly Func<string, string> _resolve;
         private readonly Stack<TreeNode> _stack = new();
@@ -268,7 +247,7 @@ public sealed class StateTreeView
 
         internal List<TreeNode> Nodes { get; } = [];
 
-        public void Begin(int sequence)
+        internal void Begin(int sequence)
         {
             var node = new TreeNode(sequence, IdOf(sequence));
             Nodes.Add(node);
@@ -277,19 +256,19 @@ public sealed class StateTreeView
             _stack.Push(node);
         }
 
-        public void TestId(int sequence, string testId)
+        internal void TestId(int sequence, string testId)
         {
             if (_stack.Count > 0)
                 _stack.Peek().TestId = testId;
         }
 
-        public void Text(int sequence, string text)
+        internal void Text(int sequence, string text)
         {
             if (_stack.Count > 0)
                 _stack.Peek().Text = _resolve(text);
         }
 
-        public void End()
+        internal void End()
         {
             if (_stack.Count > 0)
                 _stack.Pop();
