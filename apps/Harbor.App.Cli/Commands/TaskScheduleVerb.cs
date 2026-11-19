@@ -11,17 +11,21 @@ namespace Harbor.App.Cli.Commands;
 /// <summary>CAF handler for the <c>harbor task</c> verb (#2674 G11).</summary>
 internal static class CafTaskCommands
 {
-    /// <summary>Schedule, list, remove and probe cron-driven tasks.</summary>
+    /// <summary>Schedule, list, remove, probe cron-driven tasks and fire a webhook delivery.</summary>
     /// <param name="cron">Five-field cron expression for 'schedule'.</param>
     /// <param name="prompt">Prompt to fire for 'schedule'.</param>
-    /// <param name="name">Stable task name for 'schedule'.</param>
+    /// <param name="name">Stable task name for 'schedule'/'fire'.</param>
     /// <param name="webhook">Optional https webhook target for 'schedule'.</param>
-    /// <param name="args">Subcommand tail: schedule, list, remove or next.</param>
+    /// <param name="payload">Raw webhook body for 'fire'.</param>
+    /// <param name="signature">Signature header for 'fire'.</param>
+    /// <param name="args">Subcommand tail: schedule, list, remove, next or fire.</param>
     public static Task<int> TaskVerb(
         string? cron = null,
         string? prompt = null,
         string? name = null,
         string? webhook = null,
+        string? payload = null,
+        string? signature = null,
         [Argument] params string[] args)
     {
         // CAF binds dash-led tokens to the typed parameters above. Re-appending
@@ -31,6 +35,8 @@ internal static class CafTaskCommands
         if (prompt is not null) { tail.Add("--prompt"); tail.Add(prompt); }
         if (name is not null) { tail.Add("--name"); tail.Add(name); }
         if (webhook is not null) { tail.Add("--webhook"); tail.Add(webhook); }
+        if (payload is not null) { tail.Add("--payload"); tail.Add(payload); }
+        if (signature is not null) { tail.Add("--signature"); tail.Add(signature); }
         return Task.FromResult(TaskScheduleVerb.Run([.. tail]));
     }
 }
@@ -41,7 +47,9 @@ internal sealed record TaskRequest(
     string Name,
     string Cron,
     string Prompt,
-    string? Webhook);
+    string? Webhook,
+    string? Payload = null,
+    string? Signature = null);
 
 /// <summary>
 ///     Pure argument parsing for <c>harbor task</c>. No clock, no file and no
@@ -56,7 +64,8 @@ internal static class TaskArgs
         "usage: harbor task schedule --cron '<minute hour day month weekday>' --prompt TEXT [--name NAME] [--webhook URL]\n" +
         "       harbor task list\n" +
         "       harbor task remove <name>\n" +
-        "       harbor task next <name>";
+        "       harbor task next <name>\n" +
+        "       harbor task fire <name> --payload TEXT --signature HEADER";
 
     internal static Result<TaskRequest> Parse(string[] args)
     {
@@ -64,7 +73,7 @@ internal static class TaskArgs
             return Result.Failure<TaskRequest>(Usage);
 
         string action = args[0];
-        if (action is not ("schedule" or "list" or "remove" or "next"))
+        if (action is not ("schedule" or "list" or "remove" or "next" or "fire"))
             return Result.Failure<TaskRequest>($"task: unknown subcommand '{args[0]}'. {Usage}");
 
         var flags = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -74,7 +83,7 @@ internal static class TaskArgs
             string token = args[i];
             if (token.StartsWith("--", StringComparison.Ordinal))
             {
-                if (token is not ("--cron" or "--prompt" or "--name" or "--webhook"))
+                if (token is not ("--cron" or "--prompt" or "--name" or "--webhook" or "--payload" or "--signature"))
                     return Result.Failure<TaskRequest>($"task: unknown flag '{token}'. {Usage}");
                 if (flags.ContainsKey(token))
                     return Result.Failure<TaskRequest>($"task: duplicate flag '{token}'.");
@@ -90,10 +99,14 @@ internal static class TaskArgs
 
         bool isSchedule = action == "schedule";
         bool isList = action == "list";
+        bool isFire = action == "fire";
         foreach (string flag in flags.Keys)
         {
-            if (!isSchedule)
-                return Result.Failure<TaskRequest>($"task {action}: flag '{flag}' is only valid for 'schedule'.");
+            bool allowed = isSchedule
+                ? flag is "--cron" or "--prompt" or "--name" or "--webhook"
+                : isFire && (flag is "--name" or "--payload" or "--signature");
+            if (!allowed)
+                return Result.Failure<TaskRequest>($"task {action}: flag '{flag}' is not valid for '{action}'.");
         }
 
         int expectedPositional = isSchedule || isList ? 0 : 1;
@@ -142,6 +155,22 @@ internal static class TaskArgs
             }
 
             return Result.Success(new TaskRequest(action, name, cron, prompt, webhook));
+        }
+
+        if (isFire)
+        {
+            string? payload = flags.GetValueOrDefault("--payload");
+            if (string.IsNullOrEmpty(payload))
+                return Result.Failure<TaskRequest>("task fire: --payload is required.");
+            string? signature = flags.GetValueOrDefault("--signature");
+            if (string.IsNullOrEmpty(signature))
+                return Result.Failure<TaskRequest>("task fire: --signature is required.");
+            string fireName = positional[0];
+            Result fireNameValidation = ValidateName(fireName);
+            if (fireNameValidation.IsFailure)
+                return fireNameValidation.ConvertFailure<TaskRequest>();
+            return Result.Success(new TaskRequest(
+                action, fireName, string.Empty, string.Empty, null, payload, signature));
         }
 
         string targetName = positional[0];
@@ -362,7 +391,36 @@ internal static class TaskScheduleVerb
         return Result.Success<DateTimeOffset?>(cron.NextOccurrence(now));
     }
 
-    internal static int Run(string[] args)
+    /// <summary>
+    ///     Check an inbound webhook proof before a task is launched (#3380).
+    ///     The shared secret is a deployment setting, not part of the delivery,
+    ///     so an unset secret fails closed: no delivery can be authenticated
+    ///     without one. The constant-time comparison lives in
+    ///     <see cref="WebhookSignature.Verify" />; this gate only decides whether
+    ///     the proof is usable and turns a mismatch into a diagnosable failure.
+    /// </summary>
+    internal static Result VerifyWebhookDelivery(string? secret, byte[] payload, string? header)
+    {
+        if (string.IsNullOrEmpty(secret))
+            return Result.Failure("task fire: webhook secret is not configured.");
+        if (string.IsNullOrEmpty(header))
+            return Result.Failure("task fire: webhook signature header is missing.");
+        return WebhookSignature.Verify(secret, payload, header)
+            ? Result.Success()
+            : Result.Failure("task fire: invalid webhook signature.");
+    }
+
+    internal static int Run(string[] args) => Run(
+        args,
+        TaskStore.DefaultPath,
+        Environment.GetEnvironmentVariable("HARBOR_WEBHOOK_SECRET"));
+
+    /// <summary>
+    ///     Dispatch overload with an explicit store path and webhook secret.
+    ///     The behavior test uses it to drive a real delivery through a temp
+    ///     store without touching the user's tasks.json or the process env.
+    /// </summary>
+    internal static int Run(string[] args, string path, string? webhookSecret)
     {
         Result<TaskRequest> parsed = TaskArgs.Parse(args);
         if (parsed.IsFailure)
@@ -372,7 +430,6 @@ internal static class TaskScheduleVerb
         }
 
         TaskRequest request = parsed.Value;
-        string path = TaskStore.DefaultPath;
         Result<IReadOnlyList<ScheduledTask>> loaded = TaskStore.Load(path);
         if (loaded.IsFailure)
         {
@@ -430,6 +487,23 @@ internal static class TaskScheduleVerb
         {
             Console.Error.WriteLine($"task '{request.Name}' not found.");
             return 1;
+        }
+
+        if (request.Action == "fire")
+        {
+            // #3380: an inbound webhook never launches its task until the HMAC
+            // proof over the exact body has been checked. Verify against the
+            // raw delivery bytes, before any dispatch side effect.
+            byte[] payload = Encoding.UTF8.GetBytes(request.Payload!);
+            Result proof = VerifyWebhookDelivery(webhookSecret, payload, request.Signature);
+            if (proof.IsFailure)
+            {
+                Console.Error.WriteLine(proof.Error);
+                return 1;
+            }
+
+            Console.Out.WriteLine($"Fired '{request.Name}': {tasks[index].Prompt}");
+            return 0;
         }
 
         if (request.Action == "remove")
