@@ -1,6 +1,5 @@
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-using EngineInput = Harbor.Tui.CellForge.Input;
 
 namespace Harbor.Tui.CellForge.Tests;
 
