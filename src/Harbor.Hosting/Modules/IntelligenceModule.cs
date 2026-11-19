@@ -30,6 +30,11 @@ internal static class IntelligenceModule
         // core. Order matters: first Handles win, legacy fallback is terminal.
         services.AddSingleton<IPathExtractionPolicy>(PathArgExtractionPolicy.Instance);
         services.AddSingleton<IPathExtractionPolicy>(LegacyArgExtractionPolicy.Instance);
+        // #3411: one process-wide overlay is the entry point for every permission
+        // check. Session decisions and the permission mode live here; the default
+        // Supervised mode with no recorded decisions leaves ruleset behavior as it
+        // was. Session code reaches the same instance through DI.
+        services.AddSingleton<SessionPermissionOverlay>();
         services.AddSingleton<IPermissionService>(sp => new PermissionService(
             sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
             sp.GetRequiredService<ILogger<PermissionService>>(),
@@ -40,7 +45,8 @@ internal static class IntelligenceModule
             // tool declares on ITool.SafetyProfile — not a static name list. Read
             // through a delegate so a tool registered later (a plugin, a hot reload)
             // is guarded from its very first permission check.
-            safetyPolicies: () => sp.GetRequiredService<IToolRegistry>().SafetyPolicies));
+            safetyPolicies: () => sp.GetRequiredService<IToolRegistry>().SafetyPolicies,
+            overlay: sp.GetRequiredService<SessionPermissionOverlay>()));
         // #49 PR1: runtime-owned approval/cancellation coordinator — the single
         // ingress for run cancellation and the linearization point for gate
         // decisions vs cancel. Stateless w.r.t. the agent (takes IAgentRunner

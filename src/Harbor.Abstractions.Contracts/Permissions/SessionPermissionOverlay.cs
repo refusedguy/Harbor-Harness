@@ -134,6 +134,26 @@ public sealed class SessionPermissionOverlay
         ArgumentNullException.ThrowIfNull(baseRuleset);
         ArgumentException.ThrowIfNullOrEmpty(permission);
         ArgumentException.ThrowIfNullOrEmpty(argPath);
+        return ApplyTo(baseRuleset.Evaluate(permission, argPath), permission, argPath);
+    }
+
+    /// <summary>
+    ///     Apply this overlay's session decisions to a baseline verdict already
+    ///     computed from the static ruleset (issue #3411). A caller that must
+    ///     evaluate the ruleset with its own argument-safety policies computes
+    ///     the baseline and passes it here; the session layer is the same one
+    ///     <see cref="Evaluate(PermissionRuleset, string, string)" /> applies.
+    /// </summary>
+    /// <param name="baseline">The verdict from the static ruleset.</param>
+    /// <param name="permission">The tool name (or a category name).</param>
+    /// <param name="argPath">The argument path or command string.</param>
+    /// <returns>The effective action after the session layer.</returns>
+    public PermissionAction ApplyTo(PermissionAction baseline, string permission, string argPath)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(permission);
+        // The path normalizer returns an empty string when the argument resolves
+        // to the workspace root itself, so an empty path is a valid matching input.
+        ArgumentNullException.ThrowIfNull(argPath);
 
         PermissionRule[] snapshot;
         PermissionMode mode;
@@ -155,9 +175,8 @@ public sealed class SessionPermissionOverlay
             }
         }
 
-        // The static ruleset's decision is authoritative when it is not Ask:
+        // The baseline ruleset decision is authoritative when it is not Ask:
         // a ruleset Deny cannot be undone by the mode or a session Allow.
-        PermissionAction baseline = baseRuleset.Evaluate(permission, argPath);
         if (baseline != PermissionAction.Ask) return baseline;
 
         // An explicit session Allow comes next.

@@ -74,6 +74,25 @@ public class PermissionServiceTests
     }
 
     [Test]
+    public async Task CheckAsync_OverlayDeny_OverridesBaseAllow()
+    {
+        // #3411: the live service evaluates through the session overlay. A
+        // session deny must beat a ruleset allow before the asker is reached.
+        var agent = AgentFixtures.AgentWithRuleset(
+            new PermissionRule("read", "*", PermissionAction.Allow));
+        var registry = new AgentRegistry();
+        registry.Register(agent);
+        var overlay = new SessionPermissionOverlay();
+        overlay.DenyForSession("read", "secret.txt");
+        var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, overlay: overlay);
+
+        var result = await svc.CheckAsync("code", "read", TestArgs.FromPairs(("path", "secret.txt")));
+
+        await Assert.That(result).IsSuccessful();
+        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
+    }
+
+    [Test]
     public async Task CheckAsync_AskRule_DelegatesToUserAsker()
     {
         var agent = AgentFixtures.AgentWithRuleset(
