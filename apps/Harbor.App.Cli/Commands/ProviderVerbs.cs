@@ -1,9 +1,11 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Dsl;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.App.Cli.Hosting;
 using Harbor.Tools.Builtin;
+using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -16,19 +18,20 @@ namespace Harbor.App.Cli.Commands;
 /// </summary>
 internal static class ProviderVerbs
 {
-    internal static async Task<int> RunListProvidersAsync(ILogger logger)
+    internal static async Task<int> RunListProvidersAsync(
+        ILogger logger,
+        IProviderRegistry? registry = null,
+        PanelDescriptorProjector? projector = null)
     {
         ProviderVerbsLog.ListingProviders(logger);
-        using var host = HostBuilder.Build();
-        var providers = host.Services.GetRequiredService<IProviderRegistry>();
-        var ids = providers.GetRegisteredProviderIds();
+        using var host = registry is null ? HostBuilder.Build() : null;
+        registry ??= host!.Services.GetRequiredService<IProviderRegistry>();
+        projector ??= ProviderListPanelDescriptor.CreateProjector();
+        var ids = registry.GetRegisteredProviderIds();
         ProviderVerbsLog.FoundProviders(logger, ids.Count);
-        Console.WriteLine($"Providers ({ids.Count}):");
-        foreach (var id in ids)
-        {
-            var r = providers.GetClient(id);
-            Console.WriteLine($"  [{(r.IsSuccess ? "OK" : "FAIL")}] {id}");
-        }
+        var state = ProviderListState.From(registry, ids);
+        var lines = (IReadOnlyList<string>)projector.Project(state)!;
+        foreach (var line in lines) Console.WriteLine(line);
         await Task.CompletedTask;
         return 0;
     }
@@ -162,6 +165,59 @@ internal static class ProviderVerbs
             int remaining = page.TotalMatched - nextOffset;
             Console.WriteLine($"  ... {remaining} more (offset {nextOffset}).");
         }
+    }
+}
+
+/// <summary>One provider row in the list verb's projected state.</summary>
+/// <param name="Id">Provider id as printed in the CLI.</param>
+/// <param name="Available">Whether the registry could create a client for it.</param>
+internal sealed record ProviderListRow(string Id, bool Available);
+
+/// <summary>Immutable input to the panel descriptor that renders the provider list.</summary>
+/// <param name="Rows">Rows in registry order, which the CLI prints unchanged.</param>
+internal sealed record ProviderListState(IReadOnlyList<ProviderListRow> Rows)
+{
+    /// <summary>Snapshots the registry ids and their client-creation results.</summary>
+    /// <param name="registry">Registry to query.</param>
+    /// <param name="ids">Ids to snapshot, in print order.</param>
+    internal static ProviderListState From(IProviderRegistry registry, IReadOnlyList<ProviderId> ids)
+    {
+        var rows = new List<ProviderListRow>(ids.Count);
+        foreach (var id in ids)
+            rows.Add(new ProviderListRow(id.Value, registry.GetClient(id).IsSuccess));
+        return new ProviderListState(rows);
+    }
+}
+
+/// <summary>
+///     Builds the <c>providers</c> verb's lines from a <see cref="ProviderListState" />.
+///     Registered as a global rule so the projector resolves it through
+///     <see cref="IPanelDescriptor.Match" /> without naming a type at runtime.
+/// </summary>
+internal sealed class ProviderListPanelDescriptor : IPanelDescriptor
+{
+    /// <inheritdoc />
+    public Type StateType => typeof(ProviderListState);
+
+    /// <inheritdoc />
+    public bool Match(object state) => state is ProviderListState;
+
+    /// <inheritdoc />
+    public object? Build(object state)
+    {
+        var list = (ProviderListState)state;
+        var lines = new List<string>(list.Rows.Count + 1) { $"Providers ({list.Rows.Count}):" };
+        foreach (var row in list.Rows)
+            lines.Add($"  [{(row.Available ? "OK" : "FAIL")}] {row.Id}");
+        return lines;
+    }
+
+    /// <summary>Creates a projector with this descriptor as its global rule.</summary>
+    internal static PanelDescriptorProjector CreateProjector()
+    {
+        var registry = new PanelDescriptorRegistry();
+        registry.AddGlobal(new ProviderListPanelDescriptor());
+        return new PanelDescriptorProjector(registry);
     }
 }
 
