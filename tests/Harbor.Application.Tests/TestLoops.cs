@@ -70,6 +70,29 @@ public static class TestLoops
             NullLogger<AgentLoop>.Instance);
     }
 
+    /// <summary>
+    ///     #3384: a loop composed with a real agent-message board, so a test can
+    ///     assert the messages the run published. The production path supplies
+    ///     the same port from the composition root (CoreModule).
+    /// </summary>
+    public static AgentLoop CreateWithBoard(ScriptedLlmClient client, IAgentBoard board)
+    {
+        var agents = new FakeAgentRegistry(TestAgents.AllowAll());
+        return new AgentLoop(
+            new FakeProviderRegistry(client),
+            new FakeToolRegistry(),
+            agents,
+            new StubSystemPromptBuilder(),
+            new FakeCompactionService(),
+            new FakeTokenTracker(),
+            new RetryPolicy(),
+            new FakeEventBus(),
+            new PermissionService(agents, NullLogger<PermissionService>.Instance),
+            new MessageConverter(),
+            NullLogger<AgentLoop>.Instance,
+            agentBoard: board);
+    }
+
     public static AgentLoop Create(ScriptedLlmClient client, FakeToolRegistry tools)
     {
         var agent = TestAgents.AllowAll();

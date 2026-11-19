@@ -5,6 +5,7 @@
 // AOT-safe and golden-neutral. A future persistence adapter can replay the
 // messages this board hands back.
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Agents;
 
 namespace Harbor.Tools.Builtin;
 
@@ -93,10 +94,30 @@ public sealed record AgentBoardMessage(
 ///         targeted message is pending only for the session named at post time.
 ///     </para>
 /// </remarks>
-public sealed class AgentBoard
+public sealed class AgentBoard : IAgentBoard
 {
     /// <summary>Hard cap on retained messages; the oldest terminal entry is evicted first.</summary>
     public const int MaxMessages = 256;
+
+    /// <summary>
+    ///     #3384: the Domain-facing half of the board. The loop posts a kind as
+    ///     text; this is the one place that maps it to the typed
+    ///     <see cref="AgentBoardMessageKind" /> the board stores, so the
+    ///     companions stay behind the board's own boundary.
+    /// </summary>
+    bool IAgentBoard.Post(string kind, string sourceSession, string? targetSession, string body)
+    {
+        AgentBoardMessageKind parsed = kind switch
+        {
+            "ask" => AgentBoardMessageKind.Ask,
+            "result" => AgentBoardMessageKind.Result,
+            "hold" => AgentBoardMessageKind.Hold,
+            "veto" => AgentBoardMessageKind.Veto,
+            _ => AgentBoardMessageKind.Info,
+        };
+
+        return Post(parsed, sourceSession, targetSession, body).IsSuccess;
+    }
 
     private readonly object _gate = new();
     private readonly List<AgentBoardMessage> _messages = new();

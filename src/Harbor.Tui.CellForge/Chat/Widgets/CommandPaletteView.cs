@@ -6,6 +6,8 @@ using Harbor.Tui.CellForge.Rendering;
 // input vocabulary, while KeyContext/KeyGesture live in the engine vocabulary.
 // Name the engine namespace so the two never get mixed up at a call site (#3628).
 using EngineInput = Harbor.Tui.CellForge.Input;
+using KeyContext = Harbor.Tui.CellForge.Input.KeyContext;
+using KeyGesture = Harbor.Tui.CellForge.Input.KeyGesture;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 
