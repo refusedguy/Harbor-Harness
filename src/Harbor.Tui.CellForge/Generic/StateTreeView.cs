@@ -41,9 +41,16 @@ public sealed class StateTreeView
     private readonly ElementStateStore _states = new();
     private readonly List<TreeNode> _nodes = [];
     private readonly List<TreeNode> _lines = [];
+    private readonly Func<string, string> _resolveSnapshot;
     private string[] _lastOps = [];
+    private string _focus = string.Empty;
+    private string _mode = string.Empty;
     private int _lastMutationCount;
     private bool _built;
+    private bool _hasSnapshot;
+
+    /// <summary>Creates an empty view over the compiled product template.</summary>
+    public StateTreeView() => _resolveSnapshot = ResolveSnapshot;
 
     /// <summary>Revision of the retained element tree after the last sync.</summary>
     public int Revision => _applier.Revision;
@@ -78,24 +85,46 @@ public sealed class StateTreeView
     private static ElementId IdOf(int sequence) =>
         ElementId.Root.Child("s" + (sequence + 1).ToString(CultureInfo.InvariantCulture));
 
-    /// <summary>Projects <paramref name="state"/> into the retained tree.</summary>
+    /// <summary>
+    ///     Projects <paramref name="state"/> into the retained tree. Token
+    ///     deltas leave the projected strings untouched, so the common case is
+    ///     a reference comparison and no allocation at all.
+    /// </summary>
     /// <returns>False when the applier rejected a batch; the previous tree stays.</returns>
     public bool Sync(UiState state)
     {
-        return SyncResolved(key => key switch
+        string focus = state.Ui.FocusedPanelId ?? string.Empty;
+        string mode = state.Ui.Input.Text ?? string.Empty;
+        if (_hasSnapshot
+            && string.Equals(focus, _focus, StringComparison.Ordinal)
+            && string.Equals(mode, _mode, StringComparison.Ordinal))
         {
-            "focus" => state.Ui.FocusedPanelId ?? state.Ui.Focus.ToString(),
-            "mode" => state.Ui.Input.Text,
-            _ => key,
-        });
+            return true;
+        }
+
+        _focus = focus;
+        _mode = mode;
+        bool applied = SyncResolvedCore(_resolveSnapshot);
+        if (applied)
+            _hasSnapshot = true;
+        return applied;
     }
+
+    private string ResolveSnapshot(string key) => key switch
+    {
+        "focus" => _focus,
+        "mode" => _mode,
+        _ => key,
+    };
 
     /// <summary>
     ///     Same reconciliation with an explicit text resolver. Used by hosts
     ///     that own a projection other than <see cref="UiState"/> and by the
     ///     regression tests, which vary one slot at a time.
     /// </summary>
-    public bool SyncResolved(Func<string, string> resolve)
+    public bool SyncResolved(Func<string, string> resolve) => SyncResolvedCore(resolve);
+
+    private bool SyncResolvedCore(Func<string, string> resolve)
     {
         ArgumentNullException.ThrowIfNull(resolve);
 

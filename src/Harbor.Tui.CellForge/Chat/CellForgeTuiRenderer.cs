@@ -56,9 +56,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     private readonly UiStore _store;
     // #3084: the product view : State -> Tree envelope. Reconciled from the
-    // same UiState the projectors read, on the live frame tick. It owns its
-    // retained tree and element state and never writes into the painted frame,
-    // so existing golden frames stay byte-identical.
+    // newest store state on the render pass. It owns its retained tree and
+    // element state and never writes into the painted frame, so existing
+    // golden frames stay byte-identical.
     private readonly StateTreeView _stateTree = new();
     private readonly ISessionManager? _sessions;
 
@@ -362,6 +362,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         // before any placement paints, so the widgets a view reads are the
         // ones this event's state produced (#466).
         _ = PumpProjection();
+        // #3084: run the generated BuildRoot over the newest state on the render
+        // pass. This stays out of the coalesced widget projection, which has a
+        // per-delta allocation budget (#466). Value-only changes become a
+        // mutation batch and element state survives across frames.
+        _ = _stateTree.Sync(ActiveStore.State);
         return base.RenderAsync(@event, ct);
     }
 
@@ -389,14 +394,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     internal void ProjectStateIntoWidgets(UiState state)
     {
         _ = Projectors.Project(ChatScreenProjector.ChatScreenId, state);
-        // #3084: run the generated BuildRoot over this state. The reconciliation
-        // is a pure function of state; value-only changes become a mutation batch
-        // and element state (focus/scroll) survives across ticks.
-        _ = _stateTree.Sync(state);
     }
 
     /// <summary>
-    ///     The State -> Tree envelope reconciled on every frame tick (#3084).
+    ///     The State -> Tree envelope reconciled on every render pass (#3084).
     ///     Test/diagnostic seam; the renderer never paints its tree into the
     ///     chat frame.
     /// </summary>
