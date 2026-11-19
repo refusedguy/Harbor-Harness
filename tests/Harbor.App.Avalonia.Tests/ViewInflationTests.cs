@@ -9,6 +9,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
+using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -97,6 +98,25 @@ public class ViewInflationTests
         await Assert.That(panel is VirtualizingStackPanel).IsTrue()
             .Because($"SessionsFlyout_List must realize only visible rows; its ItemsPanel built "
                      + $"{panel?.GetType().Name ?? "null"}.");
+    }
+
+    [Test]
+    public async Task TokenUsageView_BarChart_IsVirtualized()
+    {
+        // #2681 G81: the bar chart holds up to 50 fixed-width turn bars behind a
+        // horizontal ScrollViewer. With a plain StackPanel every bar is realized
+        // on first paint, so the panel the ItemsControl actually builds at
+        // runtime has to be the virtualizing one, oriented horizontally.
+        var view = new Views.TokenUsageView();
+        ItemsControl chart = view.GetLogicalDescendants().OfType<ItemsControl>().Single();
+
+        Panel? panel = chart.ItemsPanel?.Build();
+
+        await Assert.That(panel is VirtualizingStackPanel).IsTrue()
+            .Because($"TokenUsage bar chart must realize only visible bars; its ItemsPanel built "
+                     + $"{panel?.GetType().Name ?? "null"}.");
+        await Assert.That((panel as VirtualizingStackPanel)?.Orientation).IsEqualTo(Orientation.Horizontal)
+            .Because("the chart scrolls along X; a vertical virtualizing panel would clip the bars.");
     }
 
     [Test]

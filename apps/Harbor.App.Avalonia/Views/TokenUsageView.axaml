@@ -50,7 +50,13 @@
                     <ItemsControl ItemsSource="{Binding Bars}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
+                                <!-- #2681 G81: the chart keeps up to 50 turn bars,
+                                     each a fixed-width Grid. A plain StackPanel
+                                     realizes all of them on first paint; the
+                                     virtualizing panel realizes only the visible
+                                     slice and keeps the horizontal scroll range
+                                     via its Orientation property. -->
+                                <VirtualizingStackPanel Orientation="Horizontal" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
