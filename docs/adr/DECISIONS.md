@@ -1736,3 +1736,25 @@ Decided: код не писать. Влитый #2765 не перевыводи�
 
 - Полный текст и ссылка на влитый slice:
   [ADR-069](ADR-069-gpui-declarative-devtools-post-verdict.md).
+
+## ADR-071: issue #2662 (execution graph и command receipts) без общего slice
+
+Issue #2662 просит `ExecutionNode { nodeId, runId, kind }`,
+`ICommandReceiptStore`, запись receipt и события в одной sqlite-транзакции,
+`RunAttempt` с причиной и `CompletionBarrier` до `AgentEndEvent`. Критерий
+приёмки: повтор `commandId` не создаёт побочных эффектов, порядок событий
+зафиксирован golden-тестом. Инвентаризация `origin/dev` (`27c312f7`) и
+`gh pr list --search 2662` показала, что граф исполнения уже влит отдельными
+item #2673 A3 (PR #2863, `a72c5786`) и A9 (PR #2871, `1006894c`), а
+`ICommandReceiptStore`, `RunAttempt` и `CompletionBarrier` в дереве отсутствуют.
+
+Decided: код не писать. Влитый граф не перевыводится. Receipt store и барьер
+имеют разные контракты и разные критерии приёмки, поэтому не объединяются в
+один PR. Гейты, пороги, golden и AOT-профиль не меняются. Issue остаётся OPEN;
+комментарий содержит только хеш коммита ADR. Пересмотр — по новому факту:
+владелец называет конкретную часть, потребителя контракта и измеримую цель.
+Номер 071 выбран, потому что пока PR был открыт, 069 и 070 закрепили за другими
+issue.
+
+- Полный текст, таблица по трём частям и условия пересмотра:
+  [ADR-071](ADR-071-execution-graph-command-receipts-verdict.md).
